@@ -111,4 +111,58 @@ EXCEPTION WHEN insufficient_privilege THEN NULL;
 END $$;
 RESET ROLE;
 
+-- 8. Masters (20271108000400): active masters that already used the org's chat are readers too.
+-- mA: master with a row in org A (manually marked unread, older mark) -> written.
+-- mB: master whose only row is in org B -> not written in org A.
+-- mI: inactive master with a row in org A -> not written.
+-- mN: active master with no rows anywhere -> not written.
+-- u2 is a team member AND a master -> exactly one row (UNION, no duplicate).
+INSERT INTO public.master_users(user_id, is_active) VALUES
+  ('d1000000-0000-0000-0000-00000000000a', true),
+  ('d2000000-0000-0000-0000-00000000000b', true),
+  ('d3000000-0000-0000-0000-0000000000a1', false),
+  ('d4000000-0000-0000-0000-0000000000a2', true),
+  ('c2000000-0000-0000-0000-000000000002', true);
+INSERT INTO public.conversation_read_state(organization_id, user_id, conversation_key, last_read_at, updated_at, marked_unread) VALUES
+  ('a0000000-0000-0000-0000-00000000000a', 'd1000000-0000-0000-0000-00000000000a', 'whatsapp:1a000000-0000-0000-0000-000000000001:5548999990001', '2026-10-05 09:30:00+00', '2026-10-05 09:30:00+00', true),
+  ('b0000000-0000-0000-0000-00000000000b', 'd2000000-0000-0000-0000-00000000000b', 'whatsapp:1b000000-0000-0000-0000-000000000001:5548999990001', '2026-10-05 09:00:00+00', '2026-10-05 09:00:00+00', false),
+  ('a0000000-0000-0000-0000-00000000000a', 'd3000000-0000-0000-0000-0000000000a1', 'whatsapp:1a000000-0000-0000-0000-000000000001:5548999990001', '2026-10-05 09:00:00+00', '2026-10-05 09:00:00+00', false);
+
+SET ROLE service_role;
+INSERT INTO results VALUES ('read_m3_masters', public.apply_external_conversation_read('a0000000-0000-0000-0000-00000000000a', '1a000000-0000-0000-0000-000000000001', ARRAY['m3']));
+INSERT INTO results VALUES ('replay_m3_masters', public.apply_external_conversation_read('a0000000-0000-0000-0000-00000000000a', '1a000000-0000-0000-0000-000000000001', ARRAY['m3']));
+RESET ROLE;
+
+DO $$
+DECLARE
+  k_a constant text := 'whatsapp:1a000000-0000-0000-0000-000000000001:5548999990001';
+  mark3 constant timestamptz := '2026-10-05 10:10:00+00';
+BEGIN
+  -- u1, u2 (members) + mA (master that used the chat) = 3 rows; u2 is not duplicated by being a master too.
+  ASSERT (SELECT n FROM results WHERE step = 'read_m3_masters') = 3, 'members u1,u2 + master mA must be written, nobody else';
+  ASSERT (SELECT last_read_at FROM public.conversation_read_state
+          WHERE user_id = 'd1000000-0000-0000-0000-00000000000a' AND conversation_key = k_a) = mark3,
+         'master that used the org chat must reach the message timestamp';
+  ASSERT (SELECT marked_unread FROM public.conversation_read_state
+          WHERE user_id = 'd1000000-0000-0000-0000-00000000000a' AND conversation_key = k_a),
+         'master manual marked_unread must stay true';
+  ASSERT (SELECT count(*) FROM public.conversation_read_state
+          WHERE user_id = 'c2000000-0000-0000-0000-000000000002' AND conversation_key = k_a) = 1,
+         'member that is also master keeps a single row';
+
+  -- masters that did not use org A's chat, inactive masters and unrelated users are never written in org A.
+  ASSERT NOT EXISTS (SELECT 1 FROM public.conversation_read_state
+                     WHERE organization_id = 'a0000000-0000-0000-0000-00000000000a'
+                       AND user_id IN ('d2000000-0000-0000-0000-00000000000b', 'd4000000-0000-0000-0000-0000000000a2')),
+         'master without a row in org A must not be written';
+  ASSERT (SELECT last_read_at FROM public.conversation_read_state
+          WHERE user_id = 'd3000000-0000-0000-0000-0000000000a1') = '2026-10-05 09:00:00+00',
+         'inactive master must not advance';
+  ASSERT (SELECT count(*) FROM public.conversation_read_state WHERE user_id = 'd2000000-0000-0000-0000-00000000000b') = 1,
+         'master row in org B must be untouched and not duplicated into org A';
+
+  -- replay is a no-op, mark never regresses.
+  ASSERT (SELECT n FROM results WHERE step = 'replay_m3_masters') = 0, 'replay must write 0 rows';
+END $$;
+
 SELECT 'CONTRACT_OK' AS result;

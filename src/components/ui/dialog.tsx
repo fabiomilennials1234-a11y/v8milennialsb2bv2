@@ -3,6 +3,7 @@ import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { X } from "lucide-react";
 
 import { cn } from "@/lib/utils";
+import { LAYER_CLASS } from "./layers";
 import { ignoreToasterInteraction } from "./outside-toaster";
 
 const Dialog = DialogPrimitive.Root;
@@ -20,7 +21,8 @@ const DialogOverlay = React.forwardRef<
   <DialogPrimitive.Overlay
     ref={ref}
     className={cn(
-      "fixed inset-0 z-50 bg-black/80 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0",
+      "fixed inset-0 bg-black/80 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0",
+      LAYER_CLASS.modalOverlay,
       className,
     )}
     {...props}
@@ -29,18 +31,16 @@ const DialogOverlay = React.forwardRef<
 DialogOverlay.displayName = DialogPrimitive.Overlay.displayName;
 
 /**
- * `overlayClassName` existe para o caso em que o `z-50` padrão perde.
+ * Camadas: overlay `modalOverlay` (50) e conteúdo `modalContent` (51), da
+ * escala de `ui/layers.ts` — o mesmo degrau da `Sheet`.
  *
- * O overlay é irmão do conteúdo dentro do mesmo portal, então subir só o
- * `className` deixa o escurecido para trás — e um diálogo pintado acima de um
- * overlay que ficou abaixo do painel é meio conserto. Quem sobe, sobe os dois.
- * O caso conhecido é o `SheetContent`, que é `z-[51]`: qualquer diálogo aberto
- * de dentro de uma folha (o painel do Negócio no celular) nasce ATRÁS dela,
- * invisível, e ainda assim é ele quem recebe o toque — porque o Radix põe a
- * camada de baixo em `pointer-events: none`. A convenção do repo para "acima
- * da folha" é `z-[60]`, a mesma de `ui/alert-dialog.tsx`.
- *
- * Opcional e sem default novo: omitir mantém exatamente o comportamento antigo.
+ * `overlayClassName` existe para o diálogo ANINHADO: aberto de dentro de uma
+ * folha (o painel do Negócio no celular), ele empata com o `z-[51]` dela e só
+ * vence pela ordem do DOM — e o overlay dele, a 50, fica abaixo da folha, sem
+ * escurecê-la. A convenção do repo é subir os DOIS para `z-[60]` (acima da
+ * folha, no degrau `popper`, abaixo do AlertDialog). O overlay é irmão do
+ * conteúdo dentro do mesmo portal: subir só o `className` deixa o escurecido
+ * para trás. Quem sobe, sobe os dois.
  */
 const DialogContent = React.forwardRef<
   React.ElementRef<typeof DialogPrimitive.Content>,
@@ -53,7 +53,8 @@ const DialogContent = React.forwardRef<
     <DialogPrimitive.Content
       ref={ref}
       className={cn(
-        "fixed left-[50%] top-[50%] z-50 grid w-full max-w-lg translate-x-[-50%] translate-y-[-50%] gap-4 border border-card-border bg-card p-6 shadow-relevo-alto duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[state=closed]:slide-out-to-left-1/2 data-[state=closed]:slide-out-to-top-[48%] data-[state=open]:slide-in-from-left-1/2 data-[state=open]:slide-in-from-top-[48%] sm:rounded-panel",
+        "fixed left-[50%] top-[50%] grid w-full max-w-lg translate-x-[-50%] translate-y-[-50%] gap-4 border border-card-border bg-card p-6 shadow-relevo-alto duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[state=closed]:slide-out-to-left-1/2 data-[state=closed]:slide-out-to-top-[48%] data-[state=open]:slide-in-from-left-1/2 data-[state=open]:slide-in-from-top-[48%] sm:rounded-panel",
+        LAYER_CLASS.modalContent,
         // Mobile: bottom-sheet — ancora embaixo, full-width, altura limitada com
         // scroll (botão de salvar sempre alcançável), safe-area, slide de baixo.
         "max-sm:left-0 max-sm:right-0 max-sm:top-auto max-sm:bottom-0 max-sm:translate-x-0 max-sm:translate-y-0 max-sm:max-w-full max-sm:max-h-[92dvh] max-sm:overflow-y-auto max-sm:rounded-t-2xl max-sm:rounded-b-none max-sm:pb-[calc(1.5rem+env(safe-area-inset-bottom))] max-sm:data-[state=open]:slide-in-from-bottom-4 max-sm:data-[state=closed]:slide-out-to-bottom-4",

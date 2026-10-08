@@ -35,3 +35,13 @@ describe("MessageDocument", () => {
     expect(screen.queryByText(/\.enc/)).toBeNull();
   });
 });
+
+describe("MessageDocument — blob carregado sob demanda", () => {
+  it("blob ganha download com o nome real; URL pública não", () => {
+    const { unmount } = render(<MessageDocument src="blob:abc" fileName="Pedido.pdf" isOutgoing={false} />);
+    expect(screen.getByRole("link").getAttribute("download")).toBe("Pedido.pdf");
+    unmount();
+    render(<MessageDocument src={HASH_URL} fileName="Pedido.pdf" isOutgoing={false} />);
+    expect(screen.getByRole("link").hasAttribute("download")).toBe(false);
+  });
+});

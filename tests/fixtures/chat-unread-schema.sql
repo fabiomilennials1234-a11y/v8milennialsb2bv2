@@ -2,6 +2,7 @@
 DO $$ BEGIN IF to_regclass('public.organizations') IS NOT NULL THEN RAISE EXCEPTION 'fixture requires empty preview'; END IF; END $$;
 CREATE TABLE organizations(id uuid PRIMARY KEY, chat_restrict_to_owner boolean DEFAULT false);
 CREATE TABLE team_members(id uuid, user_id uuid, organization_id uuid, is_active boolean);
+CREATE TABLE master_users(user_id uuid, is_active boolean NOT NULL DEFAULT true);
 CREATE FUNCTION get_my_organization_ids() RETURNS SETOF uuid LANGUAGE sql STABLE AS $$ SELECT organization_id FROM public.team_members WHERE user_id=auth.uid() AND is_active $$;
 CREATE FUNCTION is_master_user() RETURNS boolean LANGUAGE sql STABLE AS $$ SELECT false $$;
 CREATE FUNCTION is_user_admin() RETURNS boolean LANGUAGE sql STABLE AS $$ SELECT false $$;

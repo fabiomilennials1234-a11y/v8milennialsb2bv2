@@ -682,17 +682,13 @@ export const DealCardPanel = memo(function DealCardPanel() {
    * mantém o `DealCard` sem nada além de desenho. É a mesma forma do
    * `AdicionarProdutoDialog`, e forma repetida é o que se lê rápido.
    *
-   * ── `z-[60]` NÃO é enfeite ────────────────────────────────────────────────
+   * ── Camada: a escala de `ui/layers.ts`, sem override ───────────────────
    * Ser irmão resolve o roubo de foco por ANINHAMENTO; não resolve a ordem de
-   * PINTURA. No celular o painel é um `Sheet`, e `SheetContent` carrega
-   * `z-[51]` (ui/sheet.tsx) enquanto o overlay e o conteúdo do `AlertDialog`
-   * são `z-50` (ui/alert-dialog.tsx). Portalizados como irmãos no mesmo
-   * contexto de empilhamento, 51 vence 50 e a confirmação nasce ATRÁS do
-   * painel — modal, com o resto em `pointer-events: none`, sem Esc no celular.
-   * Ou seja: tela travada, saída só por recarregar a página. No desktop passa
-   * despercebido porque `DialogContent` também é `z-50` e o desempate cai na
-   * ordem do DOM. Subir os dois acima de 51 conserta o celular sem mexer em
-   * primitivo compartilhado.
+   * PINTURA. No celular o painel é um `Sheet` (`z-[51]`). Este diálogo já
+   * passou `z-[60]` nos dois (overlay e caixa) para não nascer atrás dele;
+   * hoje o próprio `AlertDialog` é `z-[70]`/`z-[71]` por padrão, acima de
+   * gaveta, diálogo e listas. Um override aqui só o REBAIXARIA para o degrau
+   * das listas — por isso não há nenhum.
    *
    * ── O texto diz o que REALMENTE acontece ─────────────────────────────────
    * A versão anterior prometia "histórico e outros negócios intactos". Meia
@@ -703,11 +699,7 @@ export const DealCardPanel = memo(function DealCardPanel() {
    */
   const dialogoExclusao = data ? (
     <AlertDialog open={confirmandoExclusao} onOpenChange={setConfirmandoExclusao}>
-      <AlertDialogContent
-        overlayClassName="z-[60]"
-        className="z-[60]"
-        data-testid="deal-card-excluir-dialogo"
-      >
+      <AlertDialogContent data-testid="deal-card-excluir-dialogo">
         <AlertDialogHeader>
           <AlertDialogTitle>Excluir "{data.titulo}"?</AlertDialogTitle>
           <AlertDialogDescription>
