@@ -28,7 +28,17 @@ import {
   Building2,
   Gauge,
   UserX,
+  Wallet,
+  Receipt,
+  TrendingUp,
+  ShoppingBag,
+  SlidersHorizontal,
+  BadgeDollarSign,
 } from "lucide-react";
+import { formatBRL } from "@/lib/format";
+import { useCostSettings, useOrgFinance, usePlanPricing } from "../hooks/useOrgFinance";
+import { costsConfigured, orgFinance, sumFinance, type OrgFinance } from "../lib/org-finance";
+import { CostSettingsDialog, MonthlyFeeDialog } from "../components/org/OrgFinanceDialogs";
 import { KpiRow, KpiTile } from "@/components/ui/bento";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
@@ -104,8 +114,10 @@ const BAND_CHIP = {
 } as const;
 
 export default function MasterOrganizations() {
-  const { isOutbounder } = useMasterAuth();
+  const { isOutbounder, isFullMaster } = useMasterAuth();
   const [search, setSearch] = useState("");
+  const [feeOrg, setFeeOrg] = useState<MasterOrganization | null>(null);
+  const [costsOpen, setCostsOpen] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
   const [billingOverrideOpen, setBillingOverrideOpen] = useState(false);
   const [suspensionOrg, setSuspensionOrg] = useState<MasterOrganization | null>(null);
@@ -195,6 +207,37 @@ export default function MasterOrganizations() {
   const fichaOrg = (baseOrgs ?? []).find((o) => o.id === fichaId) ?? null;
   const sinaisCarregando = isLoading || !signals;
 
+  // Financeiro: só master pleno (as RPCs recusam outbounder).
+  const { data: finFacts, isError: finFactsErro } = useOrgFinance();
+  const { data: costSettings, isError: custosErro } = useCostSettings();
+  const { data: plans, isError: planosErro } = usePlanPricing();
+  // Sem a migration aplicada a RPC falha: some com o financeiro em vez de carregar para sempre.
+  const finDisponivel = isFullMaster && !finFactsErro && !custosErro && !planosErro;
+  const financeiro = useMemo(() => {
+    const m = new Map<string, OrgFinance>();
+    if (!isFullMaster || !finFacts || !costSettings || !plans || !signals) return m;
+    for (const o of baseOrgs ?? []) {
+      m.set(
+        o.id,
+        orgFinance({
+          facts: finFacts.get(o.id),
+          plan: o.subscription_plan ? plans.get(o.subscription_plan) : undefined,
+          users: signals.get(o.id)?.members_active ?? 0,
+          settings: costSettings,
+          inUse: emUso.has(o.id),
+          orgsInUse: emUso.size,
+        }),
+      );
+    }
+    return m;
+  }, [isFullMaster, finFacts, costSettings, plans, signals, baseOrgs, emUso]);
+  const finCarregando = financeiro.size === 0 && !!(baseOrgs ?? []).length;
+  // Os números seguem o seletor de uso e o recorte; a busca não mexe neles.
+  const totais = sumFinance(
+    (recortadas ?? []).map((o) => financeiro.get(o.id)).filter((f): f is OrgFinance => !!f),
+  );
+  const custosOk = costsConfigured(costSettings);
+
   const handleCreate = async () => {
     if (!newOrgName || !newOrgSlug) return;
     await createOrg.mutateAsync({
@@ -259,10 +302,18 @@ export default function MasterOrganizations() {
             : "Plano, uso, usuários e saúde de cada cliente. Clique numa org para abrir a ficha."
         }
         actions={
-          <Button onClick={() => setCreateOpen(true)}>
-            <Plus className="w-4 h-4" />
-            Nova organização
-          </Button>
+          <div className="flex items-center gap-2">
+            {finDisponivel && (
+              <Button variant="outline" onClick={() => setCostsOpen(true)}>
+                <SlidersHorizontal className="w-4 h-4" />
+                Custos
+              </Button>
+            )}
+            <Button onClick={() => setCreateOpen(true)}>
+              <Plus className="w-4 h-4" />
+              Nova organização
+            </Button>
+          </div>
         }
       />
 
@@ -293,6 +344,57 @@ export default function MasterOrganizations() {
         />
         <KpiTile label="Nota média" value={notaMedia} icon={Gauge} tone="gold" note="de 100, orgs ativas" loading={sinaisCarregando} />
       </KpiRow>
+
+      {finDisponivel && (
+        <KpiRow cols={4}>
+          <KpiTile
+            label="Receita Torque / mês"
+            value={formatBRL(totais.feeCents / 100)}
+            icon={Wallet}
+            tone="info"
+            loading={finCarregando}
+            note={
+              totais.estimadas > 0
+                ? `${totais.contratos} por contrato · ${totais.estimadas} estimadas pela tabela`
+                : `${totais.contratos} por contrato`
+            }
+          />
+          <KpiTile
+            label="Custo / mês"
+            value={formatBRL(totais.costCents / 100)}
+            icon={Receipt}
+            tone={custosOk ? "neutral" : "warn"}
+            loading={finCarregando}
+            note={
+              !custosOk ? (
+                <button type="button" className="font-semibold text-warning-strong hover:underline" onClick={() => setCostsOpen(true)}>
+                  Configure os custos
+                </button>
+              ) : totais.llmSemCambio ? (
+                "sem câmbio: LLM fora da conta"
+              ) : (
+                "chips + LLM + infra rateada"
+              )
+            }
+          />
+          <KpiTile
+            label="Margem"
+            value={formatBRL(totais.marginCents / 100)}
+            icon={TrendingUp}
+            tone={totais.marginCents >= 0 ? "good" : "bad"}
+            loading={finCarregando}
+            note={totais.marginPct === null ? "sem receita no recorte" : `${Math.round(totais.marginPct * 100)}% da receita`}
+          />
+          <KpiTile
+            label="Vendas dos clientes · 30 d"
+            value={formatBRL(totais.clientRevenue30d)}
+            icon={ShoppingBag}
+            tone="gold"
+            loading={finCarregando}
+            note="vendas líquidas registradas no Torque"
+          />
+        </KpiRow>
+      )}
 
       <div className="flex flex-wrap items-center gap-3">
         <Segmented
@@ -344,12 +446,19 @@ export default function MasterOrganizations() {
             <TableHeader>
               <TableRow>
                 <TableHead>Organização</TableHead>
-                <TableHead className="max-sm:hidden">Tipo</TableHead>
+                <TableHead className={finDisponivel ? "max-2xl:hidden" : "max-sm:hidden"}>Tipo</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead className="max-md:hidden">Plano</TableHead>
                 <TableHead>Saúde</TableHead>
                 <TableHead className="max-lg:hidden">Usuários</TableHead>
                 <TableHead className="max-lg:hidden">Último login</TableHead>
+                {finDisponivel && (
+                  <>
+                    <TableHead className="max-md:hidden text-right">Mensalidade</TableHead>
+                    <TableHead className="max-lg:hidden text-right">Margem</TableHead>
+                    <TableHead className="max-xl:hidden text-right">Vendas 30 d</TableHead>
+                  </>
+                )}
                 <TableHead className="w-[100px] max-sm:w-14">
                   <span className="max-sm:sr-only">Ações</span>
                 </TableHead>
@@ -368,7 +477,7 @@ export default function MasterOrganizations() {
                         </p>
                       </div>
                     </TableCell>
-                    <TableCell className="max-sm:hidden">
+                    <TableCell className={finDisponivel ? "max-2xl:hidden" : "max-sm:hidden"}>
                       <Badge variant={org.org_type === "outbound" ? "info" : "soft"}>
                         {org.org_type === "outbound" ? "Outbound" : "CRM"}
                       </Badge>
@@ -388,6 +497,7 @@ export default function MasterOrganizations() {
                     <TableCell className="max-lg:hidden text-sm text-muted-foreground">
                       <LastLoginCell at={signals?.get(org.id)?.last_login_at ?? null} known={!!signals?.get(org.id)} />
                     </TableCell>
+                    {finDisponivel && <FinanceCells fin={financeiro.get(org.id)} />}
                     <TableCell onClick={(e) => e.stopPropagation()}>
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
@@ -412,6 +522,12 @@ export default function MasterOrganizations() {
                             <Eye className="w-4 h-4 mr-2" />
                             Abrir ficha
                           </DropdownMenuItem>
+                          {finDisponivel && (
+                            <DropdownMenuItem onClick={() => setFeeOrg(org)}>
+                              <BadgeDollarSign className="w-4 h-4 mr-2" />
+                              Definir mensalidade
+                            </DropdownMenuItem>
+                          )}
                           {!isOutbounder && (
                             <>
                               <DropdownMenuSeparator />
@@ -568,6 +684,14 @@ export default function MasterOrganizations() {
         </SheetContent>
       </Sheet>
 
+      <MonthlyFeeDialog
+        org={feeOrg}
+        finance={feeOrg ? financeiro.get(feeOrg.id) : undefined}
+        notes={feeOrg ? finFacts?.get(feeOrg.id)?.fee_notes ?? null : null}
+        onOpenChange={(open) => !open && setFeeOrg(null)}
+      />
+      <CostSettingsDialog open={costsOpen} onOpenChange={setCostsOpen} settings={costSettings} />
+
       {/* Billing Override Modal */}
       <BillingOverrideModal
         open={billingOverrideOpen}
@@ -654,6 +778,65 @@ function HealthChip({ health }: { health: OrgHealth | undefined }) {
         <span className="text-[10px] font-bold uppercase tracking-wide text-warning-strong">limite</span>
       )}
     </span>
+  );
+}
+
+const brl = (cents: number) => formatBRL(cents / 100);
+
+function FinanceCells({ fin }: { fin: OrgFinance | undefined }) {
+  if (!fin) {
+    return (
+      <>
+        <TableCell className="max-md:hidden text-right text-muted-foreground">—</TableCell>
+        <TableCell className="max-lg:hidden text-right text-muted-foreground">—</TableCell>
+        <TableCell className="max-xl:hidden text-right text-muted-foreground">—</TableCell>
+      </>
+    );
+  }
+  const { cost } = fin;
+  const custoDetalhe = [
+    `chips ${brl(cost.chipsCents)}`,
+    cost.llmCents === null ? "LLM sem câmbio" : `LLM ${brl(cost.llmCents)}`,
+    `infra ${brl(cost.infraCents)}`,
+  ].join(" · ");
+
+  return (
+    <>
+      <TableCell className="max-md:hidden text-right tabular-nums">
+        {fin.feeSource === "sem_plano" ? (
+          <span className="text-muted-foreground">—</span>
+        ) : (
+          <span className="inline-flex flex-col items-end">
+            <span className="font-medium">{brl(fin.feeCents)}</span>
+            {fin.feeSource === "tabela" && (
+              <span className="text-[10px] uppercase tracking-wide text-muted-foreground" title="Sem contrato gravado: preço de lista do plano">
+                tabela
+              </span>
+            )}
+          </span>
+        )}
+      </TableCell>
+      <TableCell className="max-lg:hidden text-right tabular-nums" title={custoDetalhe}>
+        <span className="inline-flex flex-col items-end">
+          <span className={cn("font-medium", fin.marginCents < 0 ? "text-destructive" : "text-success-strong")}>
+            {brl(fin.marginCents)}
+          </span>
+          <span className="text-xs text-muted-foreground">custo {brl(cost.totalCents)}</span>
+        </span>
+      </TableCell>
+      <TableCell className="max-xl:hidden text-right tabular-nums">
+        {fin.clientSales30d > 0 ? (
+          <span className="inline-flex flex-col items-end">
+            <span className="font-medium">{formatBRL(fin.clientRevenue30d)}</span>
+            <span className="text-xs text-muted-foreground">
+              {fin.clientSales30d} venda{fin.clientSales30d > 1 ? "s" : ""}
+            </span>
+          </span>
+        ) : (
+          <span className="text-muted-foreground">—</span>
+        )}
+      </TableCell>
+    </>
   );
 }
 
