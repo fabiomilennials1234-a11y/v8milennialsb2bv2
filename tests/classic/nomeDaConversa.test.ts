@@ -13,7 +13,7 @@ import {
   nomeDaConversa,
   nomeDoPainelDeContexto,
   type FontesDoNomeCodContatoLead,
-} from "./nomeDaConversa";
+} from "@/modules/communication/lib/nomeDaConversa";
 
 type FontesDoNomeDaConversa = FontesDoNomeCodContatoLead;
 

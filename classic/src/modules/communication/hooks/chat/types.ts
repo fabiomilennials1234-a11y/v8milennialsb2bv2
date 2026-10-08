@@ -6,7 +6,7 @@
  */
 
 import { rotuloDeIdentificadorOculto } from "../../lib/identificadorOculto";
-import { nomeComLeadPrimeiro } from "../../lib/nomeDaConversa";
+import { nomeCodContatoLead, nomeComLeadPrimeiro } from "../../lib/nomeDaConversa";
 
 export interface ReplyContext { messageId: string; text: string; direction: "incoming" | "outgoing"; }
 
@@ -118,6 +118,10 @@ export interface ChatContact {
   unread_count: number;
   lead_id: string | null;
   lead_name: string | null;
+  /** `leads.erp_code` do lead (Chamado 82c50502 — nome "Cód - Contato - Lead"). */
+  lead_erp_code?: string | null;
+  /** `lead_phones.label` do telefone desta conversa ("José Luiz - Compras"). */
+  lead_contact_label?: string | null;
   /** ID do registro em whatsapp_conversations (null se nunca teve ação) */
   conversation_id: string | null;
   /** Se a conversa está arquivada */
@@ -343,9 +347,24 @@ export function interlocutorDaChave(chave: string | null | undefined): string | 
  */
 export function contactLabel(
   c: InboxContact,
-  opcoes?: { nomeDoLeadPrimeiro?: boolean },
+  opcoes?: { nomeDoLeadPrimeiro?: boolean; nomeCodContatoLead?: boolean },
 ): string {
   if (c.channel === "whatsapp") {
+    // Flag `chat_nome_cod_contato_lead` (Chamado 82c50502): "Cód - Contato -
+    // Lead", a mesma função do topo e do painel. Vence `chat_nome_do_lead`.
+    // Grupo fica com a regra de sempre.
+    if (opcoes?.nomeCodContatoLead && !c.is_group) {
+      return (
+        nomeCodContatoLead({
+          pushName: c.push_name,
+          savedContactName: c.saved_contact_name,
+          nomeDoLead: c.lead_name,
+          telefone: c.phone_number,
+          erpCode: c.lead_erp_code,
+          contato: c.lead_contact_label,
+        }) || "Contato"
+      );
+    }
     // Flag `chat_nome_do_lead`: `leads.name` primeiro, a mesma regra do topo e
     // do painel. Grupo fica com a regra de sempre.
     if (opcoes?.nomeDoLeadPrimeiro && !c.is_group) {

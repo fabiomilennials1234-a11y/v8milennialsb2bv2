@@ -8,7 +8,7 @@
  */
 import { describe, expect, it } from "vitest";
 
-import { contactLabel, type ChatContact, type SocialContact } from "./types";
+import { contactLabel, type ChatContact, type SocialContact } from "@/modules/communication/hooks/chat/types";
 
 const whatsapp = (over: Partial<ChatContact>): ChatContact => ({
   channel: "whatsapp",
@@ -192,7 +192,7 @@ describe("contactLabel — flag chat_nome_cod_contato_lead (Chamado 82c50502)", 
   });
 
   it("lista e topo dão o MESMO nome (uma função só)", async () => {
-    const { nomeDaConversa } = await import("../../lib/nomeDaConversa");
+    const { nomeDaConversa } = await import("@/modules/communication/lib/nomeDaConversa");
     const topo = nomeDaConversa(
       {
         pushName: cliente.push_name,

@@ -320,3 +320,17 @@ export { CompareceuModal } from "./components/leads/funnel-contexts/modals/Compa
 export { useVentimaisExportDetails } from "./hooks/useVentimaisExportDetails";
 
 export { useCustomFieldCatalogue, useCustomFieldReferences } from './hooks/useCustomFieldCatalogue';
+
+// Chamado 82c50502 — contatos nomeados do lead (lead_phones).
+export {
+  useLeadPhones,
+  useNomearContatoDoTelefone,
+  useDefinirTelefoneDoNegocio,
+  leadPhonesKey,
+} from "./hooks/useLeadPhones";
+export {
+  agruparPorContato,
+  rotuloDoTelefone,
+  type LeadPhone,
+  type ContatoDoLead,
+} from "./lib/lead-phones";

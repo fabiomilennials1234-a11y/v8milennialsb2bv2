@@ -90,10 +90,130 @@ index abe343f8e..7b233248c 100644
    try {
      const regs = (await env.serviceWorker?.getRegistrations()) ?? [];
 diff --git a/classic/src/integrations/supabase/types.ts b/classic/src/integrations/supabase/types.ts
-index 8b757e586..e90d46696 100644
+index 8b757e586..e483a386c 100644
 --- a/classic/src/integrations/supabase/types.ts
 +++ b/classic/src/integrations/supabase/types.ts
-@@ -18841,6 +18841,7 @@ export type Database = {
+@@ -7023,6 +7023,7 @@ export type Database = {
+           expected_close_date: string | null
+           id: string
+           last_activity_at: string | null
++          lead_phone_id: string | null
+           loss_reason: string | null
+           loss_reason_id: string | null
+           metadata: Json | null
+@@ -7051,6 +7052,7 @@ export type Database = {
+           expected_close_date?: string | null
+           id?: string
+           last_activity_at?: string | null
++          lead_phone_id?: string | null
+           loss_reason?: string | null
+           loss_reason_id?: string | null
+           metadata?: Json | null
+@@ -7079,6 +7081,7 @@ export type Database = {
+           expected_close_date?: string | null
+           id?: string
+           last_activity_at?: string | null
++          lead_phone_id?: string | null
+           loss_reason?: string | null
+           loss_reason_id?: string | null
+           metadata?: Json | null
+@@ -7097,6 +7100,13 @@ export type Database = {
+           won?: boolean | null
+         }
+         Relationships: [
++          {
++            foreignKeyName: "deals_lead_phone_id_fkey"
++            columns: ["lead_phone_id"]
++            isOneToOne: false
++            referencedRelation: "lead_phones"
++            referencedColumns: ["id"]
++          },
+           {
+             foreignKeyName: "deals_company_id_fkey"
+             columns: ["company_id"]
+@@ -9186,6 +9196,81 @@ export type Database = {
+           },
+         ]
+       }
++      lead_phones: {
++        Row: {
++          created_at: string
++          created_by: string | null
++          deleted_at: string | null
++          deleted_by: string | null
++          erp_phone_id: string | null
++          id: string
++          is_primary: boolean
++          is_whatsapp: boolean | null
++          label: string | null
++          label_locked: boolean
++          lead_id: string
++          normalized_phone: string | null
++          organization_id: string
++          phone: string
++          phone_digits: string | null
++          source: string
++          updated_at: string
++        }
++        Insert: {
++          created_at?: string
++          created_by?: string | null
++          deleted_at?: string | null
++          deleted_by?: string | null
++          erp_phone_id?: string | null
++          id?: string
++          is_primary?: boolean
++          is_whatsapp?: boolean | null
++          label?: string | null
++          label_locked?: boolean
++          lead_id: string
++          normalized_phone?: string | null
++          organization_id: string
++          phone: string
++          phone_digits?: never
++          source: string
++          updated_at?: string
++        }
++        Update: {
++          created_at?: string
++          created_by?: string | null
++          deleted_at?: string | null
++          deleted_by?: string | null
++          erp_phone_id?: string | null
++          id?: string
++          is_primary?: boolean
++          is_whatsapp?: boolean | null
++          label?: string | null
++          label_locked?: boolean
++          lead_id?: string
++          normalized_phone?: string | null
++          organization_id?: string
++          phone?: string
++          phone_digits?: never
++          source?: string
++          updated_at?: string
++        }
++        Relationships: [
++          {
++            foreignKeyName: "lead_phones_lead_id_fkey"
++            columns: ["lead_id"]
++            isOneToOne: false
++            referencedRelation: "leads"
++            referencedColumns: ["id"]
++          },
++          {
++            foreignKeyName: "lead_phones_organization_id_fkey"
++            columns: ["organization_id"]
++            isOneToOne: false
++            referencedRelation: "organizations"
++            referencedColumns: ["id"]
++          },
++        ]
++      }
+       lead_products: {
+         Row: {
+           avg_cycle_days: number | null
+@@ -18841,6 +18926,7 @@ export type Database = {
            is_group: boolean
            lead_id: string | null
            media_expired: boolean
@@ -101,7 +221,7 @@ index 8b757e586..e90d46696 100644
            media_url: string | null
            message_id: string
            message_type: string
-@@ -18873,6 +18874,7 @@ export type Database = {
+@@ -18873,6 +18959,7 @@ export type Database = {
            is_group?: boolean
            lead_id?: string | null
            media_expired?: boolean
@@ -109,7 +229,7 @@ index 8b757e586..e90d46696 100644
            media_url?: string | null
            message_id: string
            message_type?: string
-@@ -18905,6 +18907,7 @@ export type Database = {
+@@ -18905,6 +18992,7 @@ export type Database = {
            is_group?: boolean
            lead_id?: string | null
            media_expired?: boolean
@@ -117,6 +237,93 @@ index 8b757e586..e90d46696 100644
            media_url?: string | null
            message_id?: string
            message_type?: string
+@@ -20221,6 +20309,7 @@ export type Database = {
+           p_meeting_date?: string
+           p_notes?: string
+           p_owner_id?: string
++          p_lead_phone_id?: string
+           p_pipe: string
+           p_source?: string
+           p_stage: string
+@@ -20274,6 +20363,7 @@ export type Database = {
+         Args: {
+           p_idempotency_key?: string
+           p_lead_id: string
++          p_lead_phone_id?: string
+           p_notes?: string
+           p_org: string
+           p_owner_id?: string
+@@ -20541,6 +20631,10 @@ export type Database = {
+         Args: { p_lead_id: string; p_org: string; p_patch: Json }
+         Returns: Json
+       }
++      aplicar_telefones_do_erp: {
++        Args: { p_ops: Json; p_organization_id: string }
++        Returns: Json
++      }
+       apply_erp_lead_classification: {
+         Args: { p_limit?: number; p_organization_id: string }
+         Returns: {
+@@ -20986,6 +21080,15 @@ export type Database = {
+         Returns: undefined
+       }
+       close_resolved_support_tickets: { Args: never; Returns: number }
++      contatos_das_conversas: {
++        Args: { p_pairs: Json }
++        Returns: {
++          label: string
++          lead_id: string
++          lead_phone_id: string
++          normalized_phone: string
++        }[]
++      }
+       convert_campaign_rule_to_workflow: {
+         Args: { p_rule_id: string }
+         Returns: string
+@@ -21181,6 +21284,10 @@ export type Database = {
+         }
+         Returns: Json
+       }
++      definir_telefone_do_negocio: {
++        Args: { p_deal_id: string; p_lead_phone_id: string }
++        Returns: string
++      }
+       delete_pipeline: { Args: { p_pipeline_id: string }; Returns: Json }
+       delete_pipeline_stage: {
+         Args: { p_destination_stage_id?: string; p_stage_id: string }
+@@ -21529,6 +21636,10 @@ export type Database = {
+         Returns: number
+       }
+       fn_seed_default_dashboard: { Args: { p_org_id: string }; Returns: Json }
++      fn_telefone_do_lead_valido: {
++        Args: { p_lead_id: string; p_lead_phone_id: string }
++        Returns: boolean
++      }
+       fn_varredura_avisos_followups: { Args: never; Returns: number }
+       fn_varredura_avisos_reuniao_proxima: { Args: never; Returns: number }
+       fn_voip_apply_vps_event: {
+@@ -23127,6 +23238,10 @@ export type Database = {
+         Args: { p_organization_id: string }
+         Returns: string
+       }
++      nomear_contato_do_telefone: {
++        Args: { p_label: string; p_lead_id: string; p_phone: string }
++        Returns: Database["public"]["Tables"]["lead_phones"]["Row"]
++      }
+       normalize_br_mobile: { Args: { digits: string }; Returns: string }
+       normalize_brazilian_phone: { Args: { phone: string }; Returns: string }
+       oraculo_metricas: {
+@@ -23231,6 +23346,10 @@ export type Database = {
+       restore_lead: { Args: { p_lead_id: string }; Returns: undefined }
+       restore_leads_bulk: { Args: { p_lead_ids: string[] }; Returns: number }
+       rollback_import_batch: { Args: { p_batch_id: string }; Returns: Json }
++      salvar_telefones_do_lead: {
++        Args: { p_lead_id: string; p_phones: Json }
++        Returns: Database["public"]["Tables"]["lead_phones"]["Row"][]
++      }
+       save_document_content: {
+         Args: { p_content: string; p_doc_id: string }
+         Returns: undefined
 diff --git a/classic/src/lib/analytics.ts b/classic/src/lib/analytics.ts
 index 9650d31ea..ccdced535 100644
 --- a/classic/src/lib/analytics.ts
@@ -380,42 +587,55 @@ index 7aee76ec7..b35d7f031 100644
    return useQuery({
      queryKey: ["pipeline_stages", family, organizationId],
 diff --git a/classic/src/modules/communication/components/chat/ChatShellWithContext.tsx b/classic/src/modules/communication/components/chat/ChatShellWithContext.tsx
-index 03a54f8e6..d61b00594 100644
+index 03a54f8e6..b735a7aba 100644
 --- a/classic/src/modules/communication/components/chat/ChatShellWithContext.tsx
 +++ b/classic/src/modules/communication/components/chat/ChatShellWithContext.tsx
-@@ -31,7 +31,8 @@ import { Loader2, WifiOff, UserPlus } from "lucide-react";
+@@ -31,7 +31,9 @@ import { Loader2, WifiOff, UserPlus } from "lucide-react";
  import { toast } from "sonner";
  import { normalizePhone } from "@/lib/normalizePhone";
  import { definirConversaAberta, useFeatureFlag } from "@/modules/platform";
 -import { nomeDaConversa } from "@/modules/communication/lib/nomeDaConversa";
 +import { useNomeDoLeadPrimeiro } from "@/modules/communication/hooks/chat/useNomeDoLeadPrimeiro";
++import { useContatoDaConversa, useNomeCodContatoLead } from "@/modules/communication/hooks/chat/useNomeCodContatoLead";
 +import { nomeComLeadPrimeiro, nomeDaConversa } from "@/modules/communication/lib/nomeDaConversa";
  import { useResolveChatDeepLink } from "@/modules/communication/hooks/chat/useResolveChatDeepLink";
  import { computeNeedsDeepLinkResolve } from "@/modules/communication/lib/computeNeedsDeepLinkResolve";
  import { resolvePendingDeepLink } from "@/modules/communication/lib/resolvePendingDeepLink";
-@@ -211,6 +212,8 @@ function ChatView({
+@@ -211,6 +213,16 @@ function ChatView({
     * que segurar a thread inteira num skeleton esperando a flag.
     */
    const { enabled: nomeDoWhatsappPrimeiro } = useFeatureFlag("chat_nome_do_whatsapp");
 +  // `chat_nome_do_lead`: o `leads.name` manda no topo, na lista e no painel.
 +  const nomeDoLeadPrimeiro = useNomeDoLeadPrimeiro();
++  // `chat_nome_cod_contato_lead` (Chamado 82c50502): "Cód - Contato - Lead",
++  // a mesma função da lista e do painel. Vence `chat_nome_do_lead`.
++  const nomeCodContato = useNomeCodContatoLead();
++  const { data: fontesDoContato } = useContatoDaConversa(
++    effectiveLeadId,
++    phoneNumber,
++    nomeCodContato && !selectedContact?.is_group,
++  );
  
    // O sino não anuncia a conversa que já está sendo lida (#1891). Publicar
    // daqui é o único ponto que sabe qual lead está aberto.
-@@ -307,7 +310,11 @@ function ChatView({
+@@ -306,8 +318,15 @@ function ChatView({
+       nomeDoLead: effectiveLeadName,
        savedContactName: selectedContact?.saved_contact_name,
        telefone: phoneNumber ?? null,
-     },
--    { nomeDoWhatsappPrimeiro },
++      erpCode: fontesDoContato?.erpCode ?? selectedContact?.lead_erp_code ?? null,
++      contato: fontesDoContato?.contato ?? selectedContact?.lead_contact_label ?? null,
++    },
 +    {
 +      nomeDoWhatsappPrimeiro,
 +      // Grupo fica com a regra de sempre.
 +      nomeDoLeadPrimeiro: nomeDoLeadPrimeiro && !selectedContact?.is_group,
-+    },
++      nomeCodContatoLead: nomeCodContato && !selectedContact?.is_group,
+     },
+-    { nomeDoWhatsappPrimeiro },
    );
  
    // A lista já afirmou que existe mensagem com este contato. Se a thread volta
-@@ -784,6 +791,9 @@ export function ChatShellWithContext() {
+@@ -784,6 +803,9 @@ export function ChatShellWithContext() {
     * argumento) e a lista refaz a busca — uma vez, no load.
     */
    const { enabled: abasDeGrupos } = useFeatureFlag("chat_abas_de_grupos");
@@ -425,10 +645,11 @@ index 03a54f8e6..d61b00594 100644
  
    // Mobile tem header próprio (all/unread/grupos + vendedor) e ignora o resto do
    // estado persistido — empurrar essas dimensões pro servidor sumiria com
-@@ -1501,6 +1511,16 @@ export function ChatShellWithContext() {
+@@ -1501,6 +1523,17 @@ export function ChatShellWithContext() {
                  leadId={selectedContact?.lead_id ?? undefined}
                  phoneNumber={telefoneSelecionado ?? undefined}
                  pushName={selectedContact?.push_name ?? null}
++                ehGrupo={!!selectedContact?.is_group}
 +                nomeDaConversa={
 +                  nomeDoLeadPrimeiro && selectedContact && !selectedContact.is_group
 +                    ? nomeComLeadPrimeiro({
@@ -713,14 +934,16 @@ index 1fee64edb..4314d9e22 100644
        // não dispara mais o arquivo direto pro cliente.
        setPendingAttachment({ data: base64, name: file.name, mime: file.type });
 diff --git a/classic/src/modules/communication/components/chat/context-panel/ContextPanel.tsx b/classic/src/modules/communication/components/chat/context-panel/ContextPanel.tsx
-index bae373207..1a0369f84 100644
+index bae373207..e16a4829f 100644
 --- a/classic/src/modules/communication/components/chat/context-panel/ContextPanel.tsx
 +++ b/classic/src/modules/communication/components/chat/context-panel/ContextPanel.tsx
-@@ -21,11 +21,17 @@ import { ContextPanelTabInfo } from "./ContextPanelTabInfo";
+@@ -21,11 +21,24 @@ import { ContextPanelTabInfo } from "./ContextPanelTabInfo";
  import { ContextPanelTabHistory } from "./ContextPanelTabHistory";
  import { ContextPanelTabAI } from "./ContextPanelTabAI";
  import { telefoneParaExibicao } from "@/modules/communication/lib/identificadorOculto";
-+import { nomeDoPainelDeContexto } from "@/modules/communication/lib/nomeDaConversa";
++import { nomeCodContatoLead, nomeDoPainelDeContexto } from "@/modules/communication/lib/nomeDaConversa";
++import { useContatoDaConversa, useNomeCodContatoLead } from "@/modules/communication/hooks/chat/useNomeCodContatoLead";
++import { FalandoCom } from "./FalandoCom";
  
  export interface ContextPanelProps {
    leadId?: string;
@@ -731,114 +954,283 @@ index bae373207..1a0369f84 100644
 +   * Ausente = comportamento de sempre.
 +   */
 +  nomeDaConversa?: string | null;
++  /**
++   * Conversa de grupo: a regra `Cód - Contato - Lead` (flag
++   * `chat_nome_cod_contato_lead`) e o bloco "Falando com" não valem para grupo.
++   */
++  ehGrupo?: boolean;
    onClose?: () => void;
    /**
     * O que dizer quando não há NEM telefone NEM lead para abrir o painel.
-@@ -75,6 +81,7 @@ export function ContextPanel({
+@@ -75,6 +88,8 @@ export function ContextPanel({
    leadId,
    phoneNumber,
    pushName,
 +  nomeDaConversa,
++  ehGrupo = false,
    placeholder,
    identitySlot,
  }: ContextPanelProps) {
-@@ -123,7 +130,12 @@ export function ContextPanel({
+@@ -93,6 +108,12 @@ export function ContextPanel({
+   const leadLoading = loadingByPhone || loadingById;
+   const activeLeadId = lead?.id ?? leadId ?? null;
+ 
++  // Flag `chat_nome_cod_contato_lead` (Chamado 82c50502): o painel resolve o
++  // lead por conta própria e monta o nome com a MESMA função da lista e do topo.
++  // Só WhatsApp (há telefone) e não grupo.
++  const nomeCodContato = useNomeCodContatoLead() && !!phoneNumber && !ehGrupo;
++  const { data: fontesDoContato } = useContatoDaConversa(activeLeadId, phoneNumber, nomeCodContato);
++
+   if (!phoneNumber && !leadId) {
+     return (
+       <div className="flex flex-col h-full bg-background border-l border-border/60">
+@@ -122,8 +143,24 @@ export function ContextPanel({
+   // Instagram não tem nenhum. "Contato" é o fim da fila.
    // A queda para `phoneNumber` passa pelo mesmo filtro do resto do chat: LID e
    // canal viram rótulo, telefone segue igual. Ver `lib/identificadorOculto.ts`.
++  const nomeCodContatoDoPainel =
++    nomeCodContato && lead?.name?.trim()
++      ? nomeCodContatoLead({
++          pushName: pushName ?? null,
++          nomeDoLead: lead.name,
++          telefone: phoneNumber ?? null,
++          erpCode: fontesDoContato?.erpCode ?? (lead as { erp_code?: string | null }).erp_code ?? null,
++          contato: fontesDoContato?.contato ?? null,
++        })
++      : null;
    const displayName =
 -    lead?.name || pushName || telefoneParaExibicao(phoneNumber) || "Contato";
 +    nomeDoPainelDeContexto({
 +      leadName: lead?.name,
-+      nomeDaConversa,
++      nomeDaConversa: nomeCodContatoDoPainel ?? nomeDaConversa,
 +      pushName,
 +      telefoneExibicao: telefoneParaExibicao(phoneNumber),
++      nomeCodContatoLead: !!nomeCodContatoDoPainel,
 +    });
    const initials = displayName.slice(0, 2).toUpperCase();
    const score =
      typeof lead?.qualification_score === "number" ? lead.qualification_score : 0;
+@@ -168,6 +205,10 @@ export function ContextPanel({
+         </div>
+       </div>
+ 
++      {nomeCodContato && activeLeadId && phoneNumber && (
++        <FalandoCom leadId={activeLeadId} telefone={phoneNumber} />
++      )}
++
+       {identitySlot}
+ 
+       {/* Tabs */}
+diff --git a/classic/src/modules/communication/components/chat/context-panel/FalandoCom.tsx b/classic/src/modules/communication/components/chat/context-panel/FalandoCom.tsx
+new file mode 100644
+index 000000000..9959934eb
+--- /dev/null
++++ b/classic/src/modules/communication/components/chat/context-panel/FalandoCom.tsx
+@@ -0,0 +1,111 @@
++/**
++ * "Falando com" — o contato do telefone desta conversa (Chamado 82c50502).
++ *
++ * O cliente da Café Jurerê tem vários contatos ("José Luiz - Compras",
++ * "Recepção"), cada um com o seu número. Aqui o vendedor vê com quem está
++ * falando, nomeia o contato quando o número ainda não tem nome (o nome fica
++ * travado: o ERP não mexe mais) e abre conversa com outro contato do mesmo
++ * cliente — pelo `AbrirConversaButton`, que continua sendo o único caminho.
++ */
++import { useState } from "react";
++import { Check, Loader2, MessageCircle, Pencil, X } from "lucide-react";
++import { toast } from "sonner";
++import { Button } from "@/components/ui/button";
++import { Input } from "@/components/ui/input";
++import { useLeadPhones, useNomearContatoDoTelefone, rotuloDoTelefone } from "@/modules/leads";
++import { AbrirConversaButton } from "../AbrirConversaButton";
++import { normalizarTelefoneBr } from "@/modules/communication/lib/normalizarTelefoneBr";
++
++const ROTULO = "text-[10.5px] font-bold uppercase tracking-[.08em] text-muted-foreground";
++
++export function FalandoCom({ leadId, telefone }: { leadId: string; telefone: string }) {
++  const { data: telefones = [], isLoading } = useLeadPhones(leadId);
++  const nomear = useNomearContatoDoTelefone(leadId);
++  const [editando, setEditando] = useState(false);
++  const [rascunho, setRascunho] = useState("");
++
++  const daConversa = normalizarTelefoneBr(telefone);
++  const atual = telefones.find((t) => t.normalizedPhone === daConversa) ?? null;
++  const outros = telefones.filter((t) => t.normalizedPhone !== daConversa);
++
++  const abrir = () => {
++    setRascunho(atual?.label ?? "");
++    setEditando(true);
++  };
++
++  const salvar = async () => {
++    try {
++      await nomear.mutateAsync({ phone: telefone, label: rascunho });
++      setEditando(false);
++    } catch (e) {
++      toast.error(e instanceof Error ? e.message : "Não foi possível nomear o contato");
++    }
++  };
++
++  return (
++    <section className="mx-3 mt-3 flex flex-col gap-2 rounded-[14px] border border-border/60 bg-card px-3 py-2.5" data-testid="falando-com">
++      <h3 className={ROTULO}>Falando com</h3>
++
++      {isLoading ? (
++        <Loader2 className="size-3.5 animate-spin text-muted-foreground" aria-label="Carregando contatos" />
++      ) : editando ? (
++        <div className="flex items-center gap-1.5">
++          <Input
++            autoFocus
++            value={rascunho}
++            onChange={(e) => setRascunho(e.target.value)}
++            onKeyDown={(e) => {
++              if (e.key === "Enter") void salvar();
++              if (e.key === "Escape") setEditando(false);
++            }}
++            placeholder="Nome do contato (ex.: José Luiz - Compras)"
++            aria-label="Nome do contato"
++            className="h-8 text-[12.5px]"
++          />
++          <Button size="icon" variant="ghost" className="size-8" onClick={salvar} disabled={nomear.isPending} aria-label="Salvar nome">
++            {nomear.isPending ? <Loader2 className="size-3.5 animate-spin" aria-hidden /> : <Check className="size-3.5" aria-hidden />}
++          </Button>
++          <Button size="icon" variant="ghost" className="size-8" onClick={() => setEditando(false)} aria-label="Cancelar">
++            <X className="size-3.5" aria-hidden />
++          </Button>
++        </div>
++      ) : (
++        <div className="flex items-center justify-between gap-2">
++          <span className={atual?.label ? "truncate text-[13px] font-bold" : "text-[13px] text-muted-foreground"}>
++            {atual?.label ?? "Sem nome"}
++          </span>
++          <button
++            type="button"
++            onClick={abrir}
++            className="inline-flex shrink-0 items-center gap-1 rounded-md px-1.5 py-0.5 text-[11.5px] font-semibold text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
++            data-testid="falando-com-nomear"
++          >
++            <Pencil className="size-3" aria-hidden />
++            {atual?.label ? "Renomear" : "Nomear contato"}
++          </button>
++        </div>
++      )}
++
++      {outros.length > 0 && (
++        <div className="flex flex-col gap-1 border-t border-border/60 pt-2">
++          <span className={ROTULO}>Outros contatos do cliente</span>
++          <ul className="flex flex-col">
++            {outros.map((t) => (
++              <li key={t.id}>
++                <AbrirConversaButton
++                  leadId={leadId}
++                  phone={t.phone}
++                  variant="ghost"
++                  className="h-auto w-full justify-start gap-2 px-1.5 py-1 text-left text-[12.5px] font-normal"
++                >
++                  <MessageCircle className="size-3.5 shrink-0 text-muted-foreground" aria-hidden />
++                  <span className="truncate">{rotuloDoTelefone(t)}</span>
++                </AbrirConversaButton>
++              </li>
++            ))}
++          </ul>
++        </div>
++      )}
++    </section>
++  );
++}
 diff --git a/classic/src/modules/communication/components/chat/list/ConversationList.tsx b/classic/src/modules/communication/components/chat/list/ConversationList.tsx
-index c95456994..0ffb073de 100644
+index c95456994..1782acc80 100644
 --- a/classic/src/modules/communication/components/chat/list/ConversationList.tsx
 +++ b/classic/src/modules/communication/components/chat/list/ConversationList.tsx
-@@ -27,6 +27,7 @@ import {
+@@ -27,6 +27,8 @@ import {
    type InboxContact,
  } from "@/modules/communication/hooks/chat/types";
  import { ConversationListItem, contactDisplayName } from "./ConversationListItem";
 +import { useNomeDoLeadPrimeiro } from "@/modules/communication/hooks/chat/useNomeDoLeadPrimeiro";
++import { useNomeCodContatoLead } from "@/modules/communication/hooks/chat/useNomeCodContatoLead";
  import { SeletorDeCaixas } from "./SeletorDeCaixas";
  import type { CaixaDaLinha } from "@/modules/communication/lib/caixaUnificada";
  import type { NaoLidasDaCaixa } from "@/modules/communication/hooks/chat/useNaoLidasPorCaixa";
-@@ -191,6 +192,7 @@ export function ConversationList({
+@@ -191,6 +193,8 @@ export function ConversationList({
  }: ConversationListProps) {
    const scrollAreaRef = useRef<HTMLDivElement | null>(null);
    const { isMobile } = useViewport();
 +  const nomeDoLeadPrimeiro = useNomeDoLeadPrimeiro();
++  const nomeCodContato = useNomeCodContatoLead();
    const [mobileFilter, setMobileFilter] = useState<MobileChatFilter>("all");
  
    // A caixa que o header MOBILE nomeia. Com várias marcadas é a primeira da
-@@ -272,8 +274,8 @@ export function ConversationList({
+@@ -272,8 +276,8 @@ export function ConversationList({
      if (universo.length === 0) return universo;
      const q = searchQuery.trim().toLowerCase();
      if (!q) return universo;
 -    return universo.filter((c) => contactDisplayName(c).toLowerCase().includes(q));
 -  }, [isSocialBox, modoUnificado, contacts, searchQuery]);
-+    return universo.filter((c) => contactDisplayName(c, nomeDoLeadPrimeiro).toLowerCase().includes(q));
-+  }, [isSocialBox, modoUnificado, contacts, searchQuery, nomeDoLeadPrimeiro]);
++    return universo.filter((c) => contactDisplayName(c, nomeDoLeadPrimeiro, nomeCodContato).toLowerCase().includes(q));
++  }, [isSocialBox, modoUnificado, contacts, searchQuery, nomeDoLeadPrimeiro, nomeCodContato]);
  
    // ── Desktop: engine puro. Mobile: header próprio (all/unread/groups + vendedor).
    const whatsappFiltered = useMemo(() => {
 diff --git a/classic/src/modules/communication/components/chat/list/ConversationListItem.tsx b/classic/src/modules/communication/components/chat/list/ConversationListItem.tsx
-index 1d479a533..6468bd9ac 100644
+index 1d479a533..e54183010 100644
 --- a/classic/src/modules/communication/components/chat/list/ConversationListItem.tsx
 +++ b/classic/src/modules/communication/components/chat/list/ConversationListItem.tsx
-@@ -49,6 +49,7 @@ import {
+@@ -49,6 +49,8 @@ import {
  import { ChannelBadge } from "../ChannelBadge";
  import { instanceColor } from "../bubble/utils/instanceColor";
  import { getAvatarGradient } from "./avatarGradient";
 +import { useNomeDoLeadPrimeiro } from "@/modules/communication/hooks/chat/useNomeDoLeadPrimeiro";
++import { useNomeCodContatoLead } from "@/modules/communication/hooks/chat/useNomeCodContatoLead";
  import type { CaixaDaLinha } from "@/modules/communication/lib/caixaUnificada";
  
  // ─── Helpers ──────────────────────────────────────────────────────────────────
-@@ -58,8 +59,8 @@ import type { CaixaDaLinha } from "@/modules/communication/lib/caixaUnificada";
+@@ -58,8 +60,12 @@ import type { CaixaDaLinha } from "@/modules/communication/lib/caixaUnificada";
   * nomear conversa de cada canal — este export continua existindo porque a lista
   * e a linha do mobile já o importam por este nome.
   */
 -export function contactDisplayName(c: InboxContact): string {
 -  return contactLabel(c);
-+export function contactDisplayName(c: InboxContact, nomeDoLeadPrimeiro?: boolean): string {
-+  return contactLabel(c, { nomeDoLeadPrimeiro });
++export function contactDisplayName(
++  c: InboxContact,
++  nomeDoLeadPrimeiro?: boolean,
++  nomeCodContatoLead?: boolean,
++): string {
++  return contactLabel(c, { nomeDoLeadPrimeiro, nomeCodContatoLead });
  }
  
  export function formatContactTime(timestamp: string): string {
-@@ -300,7 +301,8 @@ export function ConversationListItem({
+@@ -300,7 +306,9 @@ export function ConversationListItem({
    caixa,
    tambemEm,
  }: ConversationListItemProps) {
 -  const displayName = contactDisplayName(contact);
 +  const nomeDoLeadPrimeiro = useNomeDoLeadPrimeiro();
-+  const displayName = contactDisplayName(contact, nomeDoLeadPrimeiro);
++  const nomeCodContato = useNomeCodContatoLead();
++  const displayName = contactDisplayName(contact, nomeDoLeadPrimeiro, nomeCodContato);
    const avatarGradient = getAvatarGradient(contactAvatarSeed(contact));
    const key = contactKey(contact);
    // Ações de conversa (arquivar/excluir/etiquetar) vivem em
 diff --git a/classic/src/modules/communication/components/chat/list/MobileConversationRow.tsx b/classic/src/modules/communication/components/chat/list/MobileConversationRow.tsx
-index 72a92dbad..e105658d1 100644
+index 72a92dbad..a977de084 100644
 --- a/classic/src/modules/communication/components/chat/list/MobileConversationRow.tsx
 +++ b/classic/src/modules/communication/components/chat/list/MobileConversationRow.tsx
-@@ -10,6 +10,7 @@ import { cn } from "@/lib/utils";
+@@ -10,6 +10,8 @@ import { cn } from "@/lib/utils";
  import { contactKey, isWhatsAppContact, type InboxContact } from "@/modules/communication/hooks/chat/types";
  import { ChannelBadge } from "../ChannelBadge";
  import { contactDisplayName, formatContactTime } from "./ConversationListItem";
 +import { useNomeDoLeadPrimeiro } from "@/modules/communication/hooks/chat/useNomeDoLeadPrimeiro";
++import { useNomeCodContatoLead } from "@/modules/communication/hooks/chat/useNomeCodContatoLead";
  
  // ─── Props ───────────────────────────────────────────────────────────────────
  
-@@ -33,7 +34,8 @@ export function MobileConversationRow({
+@@ -33,7 +35,9 @@ export function MobileConversationRow({
    stageName,
    stageColor,
  }: MobileConversationRowProps) {
 -  const name = contactDisplayName(contact);
 +  const nomeDoLeadPrimeiro = useNomeDoLeadPrimeiro();
-+  const name = contactDisplayName(contact, nomeDoLeadPrimeiro);
++  const nomeCodContato = useNomeCodContatoLead();
++  const name = contactDisplayName(contact, nomeDoLeadPrimeiro, nomeCodContato);
    const initials = (name.replace("@", "").charAt(0) || "?").toUpperCase();
    const hasUnread = contact.unread_count > 0 && !isSelected;
    const key = contactKey(contact);
@@ -1318,6 +1710,103 @@ index 000000000..29dbc18c8
 +  h = fmix32(h ^ alto);
 +  return h;
 +}
+diff --git a/classic/src/modules/communication/hooks/chat/shared/enriquecerContatos.ts b/classic/src/modules/communication/hooks/chat/shared/enriquecerContatos.ts
+index b710d0cf4..583c0b6e4 100644
+--- a/classic/src/modules/communication/hooks/chat/shared/enriquecerContatos.ts
++++ b/classic/src/modules/communication/hooks/chat/shared/enriquecerContatos.ts
+@@ -34,6 +34,7 @@ import {
+   type ChunkedResult,
+ } from "@/shared/supabase/selectInChunks";
+ import type { ChatContact, ChatContactTag } from "../types";
++import { normalizarTelefoneBr } from "../../../lib/normalizarTelefoneBr";
+ 
+ /**
+  * A linha do join de etiqueta, dos dois lados.
+@@ -55,6 +56,33 @@ interface LinhaDeEtiqueta {
+   tags: ChatContactTag;
+ }
+ 
++/** Pares por chamada de `contatos_das_conversas` — o teto da RPC. */
++const PARES_POR_CHAMADA = 500;
++
++/**
++ * Nome do contato (`lead_phones.label`) do telefone de CADA conversa — Chamado
++ * 82c50502. Uma chamada por página (em lotes de 500 pares), nunca uma por
++ * conversa. Só WhatsApp, não grupo, com lead.
++ */
++async function buscarContatosDasConversas(
++  contatos: ChatContact[],
++): Promise<Map<string, string>> {
++  const pares = contatos
++    .filter((c) => c.channel === "whatsapp" && !c.is_group && c.lead_id && c.phone_number)
++    .map((c) => ({ lead_id: c.lead_id as string, phone: c.phone_number }));
++  const porChave = new Map<string, string>();
++  for (let i = 0; i < pares.length; i += PARES_POR_CHAMADA) {
++    const { data, error } = await supabase.rpc("contatos_das_conversas", {
++      p_pairs: pares.slice(i, i + PARES_POR_CHAMADA),
++    });
++    if (error) throw error;
++    for (const row of (data ?? []) as Array<{ lead_id: string; normalized_phone: string; label: string | null }>) {
++      if (row.label) porChave.set(`${row.lead_id}:${row.normalized_phone}`, row.label);
++    }
++  }
++  return porChave;
++}
++
+ export interface OpcoesDeEnriquecimento {
+   /**
+    * O filtro do inbox está recortando por etiqueta. Quando `true`, a falha do
+@@ -97,11 +125,11 @@ export async function enriquecerContatos(
+     ),
+   ];
+ 
+-  const [leadNameRows, leadTagRows, convTagRows] = await Promise.all([
++  const [leadNameRows, leadTagRows, convTagRows, contatosDasConversas] = await Promise.all([
+     soft(
+-      selectInChunks<{ id: string; name: string | null }>(
++      selectInChunks<{ id: string; name: string | null; erp_code: string | null }>(
+         leadIds,
+-        (chunk) => supabase.from("leads").select("id, name").in("id", chunk),
++        (chunk) => supabase.from("leads").select("id, name, erp_code").in("id", chunk),
+         IN_CHUNK_SIZE,
+       ),
+       "leads",
+@@ -134,10 +162,19 @@ export async function enriquecerContatos(
+       ),
+       "conversation_tags",
+     ),
++    // Acessório como o nome: falha vira "sem contato" e o nome cai em "Cód - Lead".
++    buscarContatosDasConversas(contatos).catch((e) => {
++      console.error('[inbox] enriquecimento "contatos_das_conversas" falhou', e);
++      return new Map<string, string>();
++    }),
+   ]);
+ 
+   const leadNameMap = new Map<string, string>();
+-  for (const row of leadNameRows) if (row.name) leadNameMap.set(row.id, row.name);
++  const leadErpCodeMap = new Map<string, string>();
++  for (const row of leadNameRows) {
++    if (row.name) leadNameMap.set(row.id, row.name);
++    if (row.erp_code) leadErpCodeMap.set(row.id, row.erp_code);
++  }
+ 
+   const leadTagsMap = new Map<string, ChatContactTag[]>();
+   for (const row of leadTagRows) {
+@@ -155,7 +192,13 @@ export async function enriquecerContatos(
+   }
+ 
+   for (const c of contatos) {
+-    if (c.lead_id) c.lead_name = leadNameMap.get(c.lead_id) ?? null;
++    if (c.lead_id) {
++      c.lead_name = leadNameMap.get(c.lead_id) ?? null;
++      c.lead_erp_code = leadErpCodeMap.get(c.lead_id) ?? null;
++      c.lead_contact_label = c.phone_number
++        ? contatosDasConversas.get(`${c.lead_id}:${normalizarTelefoneBr(c.phone_number)}`) ?? null
++        : null;
++    }
+     const tagIds = new Set<string>();
+     const merged: ChatContactTag[] = [];
+     for (const t of (c.lead_id ? leadTagsMap.get(c.lead_id) : undefined) || [])
 diff --git a/classic/src/modules/communication/hooks/chat/shared/realtimeUpdate.ts b/classic/src/modules/communication/hooks/chat/shared/realtimeUpdate.ts
 new file mode 100644
 index 000000000..d0aca73e1
@@ -1405,14 +1894,14 @@ index 8feeb5b50..a63f8be8c 100644
    throw new SendRetriesExhausted();
  }
 diff --git a/classic/src/modules/communication/hooks/chat/types.ts b/classic/src/modules/communication/hooks/chat/types.ts
-index eccb97e9e..71f51e52b 100644
+index eccb97e9e..e068440b5 100644
 --- a/classic/src/modules/communication/hooks/chat/types.ts
 +++ b/classic/src/modules/communication/hooks/chat/types.ts
 @@ -6,6 +6,7 @@
   */
  
  import { rotuloDeIdentificadorOculto } from "../../lib/identificadorOculto";
-+import { nomeComLeadPrimeiro } from "../../lib/nomeDaConversa";
++import { nomeCodContatoLead, nomeComLeadPrimeiro } from "../../lib/nomeDaConversa";
  
  export interface ReplyContext { messageId: string; text: string; direction: "incoming" | "outgoing"; }
  
@@ -1430,16 +1919,42 @@ index eccb97e9e..71f51e52b 100644
    status: string;
    lead_id: string | null;
    timestamp: string;
-@@ -334,8 +341,23 @@ export function interlocutorDaChave(chave: string | null | undefined): string |
+@@ -111,6 +118,10 @@ export interface ChatContact {
+   unread_count: number;
+   lead_id: string | null;
+   lead_name: string | null;
++  /** `leads.erp_code` do lead (Chamado 82c50502 — nome "Cód - Contato - Lead"). */
++  lead_erp_code?: string | null;
++  /** `lead_phones.label` do telefone desta conversa ("José Luiz - Compras"). */
++  lead_contact_label?: string | null;
+   /** ID do registro em whatsapp_conversations (null se nunca teve ação) */
+   conversation_id: string | null;
+   /** Se a conversa está arquivada */
+@@ -334,8 +345,38 @@ export function interlocutorDaChave(chave: string | null | undefined): string |
   * um rótulo genérico — dois contatos sem nome precisam continuar distinguíveis
   * na lista.
   */
 -export function contactLabel(c: InboxContact): string {
 +export function contactLabel(
 +  c: InboxContact,
-+  opcoes?: { nomeDoLeadPrimeiro?: boolean },
++  opcoes?: { nomeDoLeadPrimeiro?: boolean; nomeCodContatoLead?: boolean },
 +): string {
    if (c.channel === "whatsapp") {
++    // Flag `chat_nome_cod_contato_lead` (Chamado 82c50502): "Cód - Contato -
++    // Lead", a mesma função do topo e do painel. Vence `chat_nome_do_lead`.
++    // Grupo fica com a regra de sempre.
++    if (opcoes?.nomeCodContatoLead && !c.is_group) {
++      return (
++        nomeCodContatoLead({
++          pushName: c.push_name,
++          savedContactName: c.saved_contact_name,
++          nomeDoLead: c.lead_name,
++          telefone: c.phone_number,
++          erpCode: c.lead_erp_code,
++          contato: c.lead_contact_label,
++        }) || "Contato"
++      );
++    }
 +    // Flag `chat_nome_do_lead`: `leads.name` primeiro, a mesma regra do topo e
 +    // do painel. Grupo fica com a regra de sempre.
 +    if (opcoes?.nomeDoLeadPrimeiro && !c.is_group) {
@@ -1488,6 +2003,74 @@ index bb01d8031..5ee0295ff 100644
    });
  
    const queryOficiais = useQuery({
+diff --git a/classic/src/modules/communication/hooks/chat/useNomeCodContatoLead.ts b/classic/src/modules/communication/hooks/chat/useNomeCodContatoLead.ts
+new file mode 100644
+index 000000000..6441b0714
+--- /dev/null
++++ b/classic/src/modules/communication/hooks/chat/useNomeCodContatoLead.ts
+@@ -0,0 +1,62 @@
++import { useQuery } from "@tanstack/react-query";
++import { supabase } from "@/integrations/supabase/client";
++import { useFeatureFlag } from "@/modules/platform/hooks/useFeatureFlag";
++
++/**
++ * Flag por org `chat_nome_cod_contato_lead` (Chamado 82c50502): toda conversa
++ * de cliente (WhatsApp, não grupo) se chama `Cód - Contato - Lead` na lista, no
++ * cabeçalho e no painel (ver `nomeCodContatoLead`). Vence `chat_nome_do_lead`,
++ * que vence `chat_nome_do_whatsapp`.
++ *
++ * Fail-closed enquanto a flag carrega. É o ÚNICO lugar do código que conhece a
++ * chave.
++ */
++export function useNomeCodContatoLead(): boolean {
++  return useFeatureFlag("chat_nome_cod_contato_lead").enabled === true;
++}
++
++export interface FontesDoContatoDaConversa {
++  nomeDoLead: string | null;
++  erpCode: string | null;
++  /** `lead_phones.label` do telefone da conversa. */
++  contato: string | null;
++  /** `lead_phones.id` do telefone da conversa, quando ele já está no lead. */
++  leadPhoneId: string | null;
++}
++
++/**
++ * Nome do lead, código do ERP e nome do contato do telefone DESTA conversa —
++ * para o cabeçalho e o painel, que resolvem o lead por conta própria. A lista
++ * recebe os mesmos campos em lote (`enriquecerContatos`); a regra de montar o
++ * nome é uma só (`nomeCodContatoLead`).
++ */
++export function useContatoDaConversa(
++  leadId: string | null | undefined,
++  telefone: string | null | undefined,
++  enabled: boolean,
++) {
++  return useQuery({
++    queryKey: ["contatos-das-conversas", "uma", leadId ?? null, telefone ?? null],
++    enabled: enabled && !!leadId && !!telefone,
++    staleTime: 30_000,
++    queryFn: async (): Promise<FontesDoContatoDaConversa> => {
++      const [leadRes, contatoRes] = await Promise.all([
++        supabase.from("leads").select("name, erp_code").eq("id", leadId!).maybeSingle(),
++        // Chamado NO objeto: `const rpc = supabase.rpc` perde o receiver.
++        supabase.rpc("contatos_das_conversas", { p_pairs: [{ lead_id: leadId!, phone: telefone! }] }),
++      ]);
++      if (leadRes.error) throw leadRes.error;
++      // Sem o nome do contato a conversa ainda se chama "Cód - Lead": não derruba.
++      const linha = contatoRes.error
++        ? null
++        : ((contatoRes.data ?? []) as Array<{ label: string | null; lead_phone_id: string }>)[0] ?? null;
++      const lead = leadRes.data as { name: string | null; erp_code: string | null } | null;
++      return {
++        nomeDoLead: lead?.name ?? null,
++        erpCode: lead?.erp_code ?? null,
++        contato: linha?.label ?? null,
++        leadPhoneId: linha?.lead_phone_id ?? null,
++      };
++    },
++  });
++}
 diff --git a/classic/src/modules/communication/hooks/chat/useNomeDoLeadPrimeiro.ts b/classic/src/modules/communication/hooks/chat/useNomeDoLeadPrimeiro.ts
 new file mode 100644
 index 000000000..228e1f4b4
@@ -2574,10 +3157,18 @@ index 000000000..b8aaa4f8d
 +  }));
 +}
 diff --git a/classic/src/modules/communication/lib/nomeDaConversa.ts b/classic/src/modules/communication/lib/nomeDaConversa.ts
-index 3512f30c7..396846dea 100644
+index 3512f30c7..b420c582f 100644
 --- a/classic/src/modules/communication/lib/nomeDaConversa.ts
 +++ b/classic/src/modules/communication/lib/nomeDaConversa.ts
-@@ -39,6 +39,33 @@ export interface FontesDoNomeDaConversa {
+@@ -26,6 +26,7 @@
+  */
+ 
+ import { rotuloDeIdentificadorOculto } from "./identificadorOculto";
++import { withErpCode } from "@/shared/format/erp-code";
+ 
+ export interface FontesDoNomeDaConversa {
+   /** `whatsapp_conversation_summary.last_push_name` — o perfil do interlocutor. */
+@@ -39,13 +40,93 @@ export interface FontesDoNomeDaConversa {
  export interface OpcoesDoNomeDaConversa {
    /** Flag por org `chat_nome_do_whatsapp`. Ausente = comportamento de sempre. */
    nomeDoWhatsappPrimeiro?: boolean;
@@ -2587,6 +3178,57 @@ index 3512f30c7..396846dea 100644
 +   * duas vierem. Ausente = comportamento de sempre.
 +   */
 +  nomeDoLeadPrimeiro?: boolean;
++  /**
++   * Flag por org `chat_nome_cod_contato_lead` (Chamado 82c50502): o nome é
++   * `Cód - Contato - Lead` (ver `nomeCodContatoLead`). Vence as outras duas.
++   * Ausente = comportamento de sempre.
++   */
++  nomeCodContatoLead?: boolean;
++}
++
++export interface FontesDoNomeCodContatoLead extends FontesDoNomeDaConversa {
++  /** `leads.erp_code` do lead da conversa. */
++  erpCode?: string | null;
++  /** `lead_phones.label` do telefone DESTA conversa ("José Luiz - Compras"). */
++  contato?: string | null;
++}
++
++/** Remove o código do ERP digitado no começo do nome ("6627 - Fernando"), com o mesmo separador frouxo de `withErpCode`. */
++function semCodigoNoInicio(nome: string, codigo: string): string {
++  if (!codigo) return nome;
++  const escapado = codigo.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
++  return nome.replace(new RegExp(`^${escapado}\\s*[-–:]\\s*`), "").trim() || nome;
++}
++
++const comparavel = (s: string) =>
++  s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, " ").trim().toLowerCase();
++
++/**
++ * A regra da flag `chat_nome_cod_contato_lead` (decisão do CTO, 08/10/2026),
++ * UMA só para lista, cabeçalho e painel: **`Cód - Contato - Lead`**.
++ *
++ * - Sem nome de contato no telefone da conversa: `Cód - Lead`.
++ * - Sem código: `Contato - Lead`.
++ * - Código já digitado no nome do lead ("6627 - Fernando Porto") não se repete:
++ *   o `withErpCode` existente é idempotente, e o contato entra DEPOIS do código.
++ * - Contato igual ao nome do lead (caixa, acento e espaço não contam): não se
++ *   repete.
++ * - Conversa sem lead: a regra de `nomeComLeadPrimeiro`.
++ *
++ * Só exibição: nada disto é gravado em `leads.name` — disparo, Copilot e
++ * `{{nome}}` seguem com o nome puro. Quem chama é responsável por NÃO usar isto
++ * em grupo nem em canal que não seja WhatsApp.
++ */
++export function nomeCodContatoLead(fontes: FontesDoNomeCodContatoLead): string {
++  const lead = fontes.nomeDoLead?.trim();
++  if (!lead) return nomeComLeadPrimeiro(fontes);
++  const codigo = (fontes.erpCode ?? "").trim();
++  const contato = fontes.contato?.trim();
++  const leadSemCodigo = semCodigoNoInicio(lead, codigo);
++  if (!contato || comparavel(contato) === comparavel(leadSemCodigo) || comparavel(contato) === comparavel(lead)) {
++    return withErpCode(lead, codigo);
++  }
++  return withErpCode(`${contato} - ${leadSemCodigo}`, codigo);
 +}
 +
 +/**
@@ -2611,15 +3253,17 @@ index 3512f30c7..396846dea 100644
  }
  
  export function nomeDaConversa(
-@@ -46,6 +73,7 @@ export function nomeDaConversa(
+-  fontes: FontesDoNomeDaConversa,
++  fontes: FontesDoNomeCodContatoLead,
    opcoes: OpcoesDoNomeDaConversa = {},
  ): string {
    const { pushName, nomeDoLead } = fontes;
++  if (opcoes.nomeCodContatoLead) return nomeCodContatoLead(fontes);
 +  if (opcoes.nomeDoLeadPrimeiro) return nomeComLeadPrimeiro(fontes);
    if (fontes.savedContactName?.trim()) return fontes.savedContactName.trim();
    // A ÚLTIMA queda deixa de ser o identificador cru: quando ele é um LID ou um
    // canal, o cabeçalho passava a se chamar `210028246085780`. Só a queda muda —
-@@ -60,3 +88,25 @@ export function nomeDaConversa(
+@@ -60,3 +141,32 @@ export function nomeDaConversa(
  
    return nomeDoLead ?? pushName ?? telefone ?? "";
  }
@@ -2636,7 +3280,14 @@ index 3512f30c7..396846dea 100644
 +  nomeDaConversa?: string | null;
 +  pushName?: string | null;
 +  telefoneExibicao?: string | null;
++  /**
++   * Flag `chat_nome_cod_contato_lead`: o painel mostra o MESMO nome do topo e
++   * da lista (`nomeDaConversa` já resolvido por `nomeCodContatoLead`), e não o
++   * `leads.name` cru.
++   */
++  nomeCodContatoLead?: boolean;
 +}): string {
++  if (fontes.nomeCodContatoLead && fontes.nomeDaConversa?.trim()) return fontes.nomeDaConversa.trim();
 +  return (
 +    fontes.leadName?.trim() ||
 +    fontes.nomeDaConversa ||
@@ -2644,6 +3295,24 @@ index 3512f30c7..396846dea 100644
 +    fontes.telefoneExibicao ||
 +    "Contato"
 +  );
++}
+diff --git a/classic/src/modules/communication/lib/normalizarTelefoneBr.ts b/classic/src/modules/communication/lib/normalizarTelefoneBr.ts
+new file mode 100644
+index 000000000..b6688e446
+--- /dev/null
++++ b/classic/src/modules/communication/lib/normalizarTelefoneBr.ts
+@@ -0,0 +1,12 @@
++/**
++ * Espelho de `public.normalize_brazilian_phone`: só dígitos, sem o 55, com o 9
++ * no celular de 8 dígitos. É a chave de `lead_phones.normalized_phone` e de
++ * `whatsapp_conversation_summary.normalized_phone` — comparar com qualquer
++ * outra forma faria "5548999750303" e "48999750303" parecerem números distintos.
++ */
++export function normalizarTelefoneBr(phone: string | null | undefined): string {
++  let d = (phone ?? "").replace(/\D/g, "");
++  if (d.length >= 12 && d.startsWith("55")) d = d.slice(2);
++  if (d.length === 10) d = `${d.slice(0, 2)}9${d.slice(2)}`;
++  return d;
 +}
 diff --git a/classic/src/modules/communication/lib/whatsappMediaUrl.ts b/classic/src/modules/communication/lib/whatsappMediaUrl.ts
 new file mode 100644
@@ -3433,6 +4102,27 @@ index e11df9df7..dcc812ebf 100644
  }
  
  export interface ItemNovoDoNegocio {
+diff --git a/classic/src/modules/leads/components/lead-card/LeadCardNewDeal.tsx b/classic/src/modules/leads/components/lead-card/LeadCardNewDeal.tsx
+index 65bfe657e..cfbd2ac92 100644
+--- a/classic/src/modules/leads/components/lead-card/LeadCardNewDeal.tsx
++++ b/classic/src/modules/leads/components/lead-card/LeadCardNewDeal.tsx
+@@ -51,7 +51,7 @@ export function LeadCardNewDeal({
+   const { usePipePropostaByLeadId } = usePipeOps();
+   const { data: proposta } = usePipePropostaByLeadId(alvo);
+ 
+-  const { options, isCreating, criar } = useAbrirNegocio({
++  const { options, phones, isCreating, criar } = useAbrirNegocio({
+     leadId,
+     organizationId,
+     pipelines: pipelines as PipelineStatus[],
+@@ -62,6 +62,7 @@ export function LeadCardNewDeal({
+   return (
+     <NewDealDialog
+       options={options}
++      phones={phones}
+       isCreating={isCreating}
+       onCreate={criar}
+       open={open}
 diff --git a/classic/src/modules/leads/components/lead-detail/hooks/useLeadDetailRealtime.ts b/classic/src/modules/leads/components/lead-detail/hooks/useLeadDetailRealtime.ts
 index 980e2d02f..0a165192b 100644
 --- a/classic/src/modules/leads/components/lead-detail/hooks/useLeadDetailRealtime.ts
@@ -3508,7 +4198,7 @@ index 980e2d02f..0a165192b 100644
      table: "pipeline_entries",
      filter: leadIdFilter,
 diff --git a/classic/src/modules/leads/components/lead-detail/modal/pipes/CrossPipePanel.tsx b/classic/src/modules/leads/components/lead-detail/modal/pipes/CrossPipePanel.tsx
-index 5d78ff0e6..823994129 100644
+index 5d78ff0e6..63ed7715b 100644
 --- a/classic/src/modules/leads/components/lead-detail/modal/pipes/CrossPipePanel.tsx
 +++ b/classic/src/modules/leads/components/lead-detail/modal/pipes/CrossPipePanel.tsx
 @@ -1,4 +1,6 @@
@@ -3526,7 +4216,31 @@ index 5d78ff0e6..823994129 100644
    const { data: pipelines = [], isLoading } = useLeadAllPipelines(leadId);
    // Metadados do negócio (valor, tempo parado, funil-alvo) — mesma fonte que a
    // coluna "Negócios" da lista, então as duas telas contam a mesma coisa.
-@@ -384,6 +387,7 @@ export const CrossPipePanel = memo(function CrossPipePanel({
+@@ -265,6 +268,7 @@ export const CrossPipePanel = memo(function CrossPipePanel({
+   // logo depois de criar.
+   const {
+     options: dealOptions,
++    phones: dealPhones,
+     isCreating,
+     criar: handleCreateDeal,
+   } = useAbrirNegocio({
+@@ -345,6 +349,7 @@ export const CrossPipePanel = memo(function CrossPipePanel({
+           <RegisterHistoricalSalesDialog key={leadId} leadId={leadId} disabled={!canEditField.allowed} />
+           <NewDealDialog
+             options={dealOptions}
++            phones={dealPhones}
+             isCreating={isCreating}
+             onCreate={handleCreateDeal}
+             size="md"
+@@ -375,6 +380,7 @@ export const CrossPipePanel = memo(function CrossPipePanel({
+         <RegisterHistoricalSalesDialog key={leadId} leadId={leadId} disabled={!canEditField.allowed} />
+         <NewDealDialog
+           options={dealOptions}
++          phones={dealPhones}
+           isCreating={isCreating}
+           onCreate={handleCreateDeal}
+         />
+@@ -384,6 +390,7 @@ export const CrossPipePanel = memo(function CrossPipePanel({
        {historicalSales.length > 0 && <ul aria-label="Vendas históricas" className="flex flex-col gap-2">
          {historicalSales.map(sale => <li key={sale.id} className="flex flex-wrap items-center justify-between gap-2 rounded-md border p-3 text-sm">
            <span>{sale.title}</span><span className="font-medium text-success">Ganho · {formatBRL(sale.value)}</span>
@@ -3534,6 +4248,232 @@ index 5d78ff0e6..823994129 100644
          </li>)}
        </ul>}
  
+diff --git a/classic/src/modules/leads/components/lead-detail/modal/pipes/NewDealDialog.tsx b/classic/src/modules/leads/components/lead-detail/modal/pipes/NewDealDialog.tsx
+index 16753845c..24e461f16 100644
+--- a/classic/src/modules/leads/components/lead-detail/modal/pipes/NewDealDialog.tsx
++++ b/classic/src/modules/leads/components/lead-detail/modal/pipes/NewDealDialog.tsx
+@@ -68,7 +68,22 @@ export interface NewDealOption {
+   disabledReason?: string;
+ }
+ 
++/**
++ * Um telefone do lead, já com o rótulo pronto ("José Luiz - Compras · (17)
++ * 98125-7650"). O diálogo continua sem banco: quem abre entrega a lista.
++ */
++export interface NewDealPhoneOption {
++  id: string;
++  label: string;
++}
++
+ export interface NewDealValues {
++  /**
++   * Com qual telefone (contato) do lead é o negócio — Chamado 82c50502. Com 2+
++   * telefones a escolha é obrigatória e não há pré-seleção; com 1, é esse; sem
++   * telefone, null.
++   */
++  leadPhoneId: string | null;
+   stageId: string;
+   ownerId: string | null;
+   saleValue: number | null;
+@@ -96,6 +111,11 @@ interface NewDealDialogProps {
+   onOpenChange?: (open: boolean) => void;
+   /** Sem gatilho próprio — o botão que abre vive fora. */
+   hideTrigger?: boolean;
++  /**
++   * Telefones do lead. Com 2+, o diálogo exige "Com quem é este negócio" antes
++   * de criar — chutar o principal é como se fala com a pessoa errada.
++   */
++  phones?: NewDealPhoneOption[];
+ }
+ 
+ /** "1.234,56" e "1234.56" viram 1234.56; lixo vira null. */
+@@ -117,6 +137,7 @@ export const NewDealDialog = memo(function NewDealDialog({
+   open: openProp,
+   onOpenChange,
+   hideTrigger = false,
++  phones = [],
+ }: NewDealDialogProps) {
+   const [openInterno, setOpenInterno] = useState(false);
+   const controlado = openProp !== undefined;
+@@ -131,7 +152,9 @@ export const NewDealDialog = memo(function NewDealDialog({
+   const [valueRaw, setValueRaw] = useState("");
+   const [meetingDate, setMeetingDate] = useState("");
+   const [notes, setNotes] = useState("");
++  const [leadPhoneId, setLeadPhoneId] = useState<string>("");
+   const [submitting, setSubmitting] = useState(false);
++  const precisaEscolherTelefone = phones.length >= 2;
+ 
+   // Devolve o array já filtrado por `is_active`, não um resultado de query.
+   const members = useResponsibleMembers();
+@@ -160,6 +183,8 @@ export const NewDealDialog = memo(function NewDealDialog({
+     setValueRaw("");
+     setMeetingDate("");
+     setNotes("");
++    // Sem pré-seleção com 2+: a escolha é do vendedor, não do sistema.
++    setLeadPhoneId("");
+   }, [enabled, currentMember]);
+ 
+   /**
+@@ -195,13 +220,15 @@ export const NewDealDialog = memo(function NewDealDialog({
+     setStageId(option.stages[0]?.id ?? "");
+   };
+ 
+-  const canSubmit = Boolean(selected && stageId) && !submitting && !isCreating;
++  const telefoneOk = !precisaEscolherTelefone || phones.some((p) => p.id === leadPhoneId);
++  const canSubmit = Boolean(selected && stageId) && telefoneOk && !submitting && !isCreating;
+ 
+   const handleSubmit = async () => {
+     if (!selected || !stageId || submitting) return;
+     setSubmitting(true);
+     try {
+       await onCreate(selected, {
++        leadPhoneId: precisaEscolherTelefone ? leadPhoneId : (phones[0]?.id ?? null),
+         stageId,
+         ownerId: ownerId || null,
+         saleValue: selected.supportsValue ? parseBRLInput(valueRaw) : null,
+@@ -317,6 +344,35 @@ export const NewDealDialog = memo(function NewDealDialog({
+ 
+           {selected && (
+             <>
++              {precisaEscolherTelefone && (
++                <div className="space-y-1.5">
++                  <Label htmlFor="new-deal-phone" className="text-[12px] text-muted-foreground">
++                    Com quem é este negócio
++                  </Label>
++                  <Select value={leadPhoneId} onValueChange={setLeadPhoneId}>
++                    <SelectTrigger
++                      id="new-deal-phone"
++                      data-testid="new-deal-phone"
++                      aria-invalid={!telefoneOk}
++                    >
++                      <SelectValue placeholder="Escolha o contato" />
++                    </SelectTrigger>
++                    <SelectContent className="z-[70]">
++                      {phones.map((p) => (
++                        <SelectItem key={p.id} value={p.id} data-testid={`new-deal-phone-${p.id}`}>
++                          {p.label}
++                        </SelectItem>
++                      ))}
++                    </SelectContent>
++                  </Select>
++                  {!telefoneOk && (
++                    <p className="text-[11px] text-muted-foreground/70">
++                      O lead tem {phones.length} telefones. A conversa e os links do negócio usam o escolhido.
++                    </p>
++                  )}
++                </div>
++              )}
++
+               <div className="grid grid-cols-2 gap-3">
+                 <div className="space-y-1.5">
+                   <Label htmlFor="new-deal-stage" className="text-[12px] text-muted-foreground">
+diff --git a/classic/src/modules/leads/components/lead-detail/modal/pipes/useAbrirNegocio.ts b/classic/src/modules/leads/components/lead-detail/modal/pipes/useAbrirNegocio.ts
+index 8862ae720..f93a8c736 100644
+--- a/classic/src/modules/leads/components/lead-detail/modal/pipes/useAbrirNegocio.ts
++++ b/classic/src/modules/leads/components/lead-detail/modal/pipes/useAbrirNegocio.ts
+@@ -1,6 +1,10 @@
+ import { useCallback, useMemo } from "react";
+ import { toast } from "sonner";
+ 
++import { supabase } from "@/integrations/supabase/client";
++import { useLeadPhones } from "../../../../hooks/useLeadPhones";
++import { mensagemDoErroDeTelefone, rotuloDoTelefone } from "../../../../lib/lead-phones";
++
+ import {
+   assertMemberInOrg,
+   useAddLeadToStandardPipe,
+@@ -11,7 +15,7 @@ import {
+ import { usePipeOps } from "../../../../pipe-ops";
+ import { useLogLeadAction } from "@/shared/hooks/useLogLeadAction";
+ import { notifyError } from "@/shared/errors";
+-import type { NewDealOption, NewDealValues } from "./NewDealDialog";
++import type { NewDealOption, NewDealPhoneOption, NewDealValues } from "./NewDealDialog";
+ import {
+   buildNewDealOptions,
+   resolveNewDealTarget,
+@@ -45,6 +49,8 @@ export interface UseAbrirNegocioInput {
+ 
+ export interface AbrirNegocioApi {
+   options: NewDealOption[];
++  /** Telefones do lead para "Com quem é este negócio" (Chamado 82c50502). */
++  phones: NewDealPhoneOption[];
+   isCreating: boolean;
+   criar: (option: NewDealOption, values: NewDealValues) => Promise<void>;
+ }
+@@ -61,6 +67,11 @@ export function useAbrirNegocio({
+   const addStandard = useAddLeadToStandardPipe();
+   const addCustom = useAddLeadToCustomPipe();
+   const logAction = useLogLeadAction();
++  const { data: telefones } = useLeadPhones(leadId);
++  const phones = useMemo<NewDealPhoneOption[]>(
++    () => (telefones ?? []).map((t) => ({ id: t.id, label: rotuloDoTelefone(t) })),
++    [telefones],
++  );
+ 
+   const options = useMemo(
+     () => buildNewDealOptions(pipelines, { canAdd, vendaFechada }),
+@@ -84,6 +95,7 @@ export function useAbrirNegocio({
+           saleValue: values.saleValue ?? null,
+           meetingDate: values.meetingDate ?? null,
+           notes: values.notes ?? null,
++          leadPhoneId: values.leadPhoneId ?? null,
+         });
+         void logAction({
+           leadId,
+@@ -98,7 +110,12 @@ export function useAbrirNegocio({
+         });
+         toast.success(`Negócio aberto em ${pipe.label}`);
+       } catch (err) {
+-        notifyError(err, { fallback: "Não foi possível criar o negócio." });
++        const msg = (err as { message?: string } | null)?.message;
++        if (msg === "lead_phone_required" || msg === "lead_phone_invalid") {
++          toast.error(mensagemDoErroDeTelefone({ message: msg }));
++        } else {
++          notifyError(err, { fallback: "Não foi possível criar o negócio." });
++        }
+         // Repropaga: o modal segura o rascunho digitado em vez de fechar como
+         // se tivesse dado certo.
+         throw err;
+@@ -123,13 +140,30 @@ export function useAbrirNegocio({
+           if (!organizationId) throw new Error("Organização não encontrada");
+           await assertMemberInOrg(ownerInOrg, organizationId);
+         }
+-        await addCustom.mutateAsync({
++        const entry = await addCustom.mutateAsync({
+           lead_id: leadId,
+           pipeline_id: pipe.pipelineId,
+           stage_id: stageId,
+           ...(ownerInOrg ? { assigned_to: ownerInOrg } : {}),
+           ...(values.notes ? { notes: values.notes } : {}),
+         });
++        // Funil custom não passa por `abrir_negocio`: a posição nasce primeiro
++        // e o negócio é materializado aqui, já com o telefone escolhido
++        // (Chamado 82c50502). `garantir_negocio_da_entrada` é idempotente.
++        const entryId = (entry as { id?: string } | null | undefined)?.id;
++        if (values.leadPhoneId && entryId) {
++          const { data: dealId, error: dealErr } = await supabase.rpc("garantir_negocio_da_entrada", {
++            p_entry_id: entryId,
++          });
++          if (dealErr) throw dealErr;
++          if (dealId) {
++            const { error: phoneErr } = await supabase.rpc("definir_telefone_do_negocio", {
++              p_deal_id: dealId as string,
++              p_lead_phone_id: values.leadPhoneId,
++            });
++            if (phoneErr) throw phoneErr;
++          }
++        }
+         void logAction({
+           leadId,
+           action: "pipe_added",
+@@ -163,6 +197,7 @@ export function useAbrirNegocio({
+ 
+   return {
+     options,
++    phones,
+     isCreating: addStandard.isPending || addCustom.isPending,
+     criar,
+   };
 diff --git a/classic/src/modules/leads/components/leads/LeadsStatsV2.tsx b/classic/src/modules/leads/components/leads/LeadsStatsV2.tsx
 index 682a48186..4e49cb8f6 100644
 --- a/classic/src/modules/leads/components/leads/LeadsStatsV2.tsx
@@ -3670,6 +4610,155 @@ index 8011e8662..f0861b1c0 100644
    useRealtimeSubscription("pipeline_entries", ["client-portfolio", "leads-deals"]);
    useRealtimeSubscription("pipeline_stages", ["client-portfolio", "leads-deals"]);
    useRealtimeSubscription("pipelines", ["client-portfolio", "leads-deals"]);
+diff --git a/classic/src/modules/leads/hooks/useLeadAllPipelines.ts b/classic/src/modules/leads/hooks/useLeadAllPipelines.ts
+index 6aeb2f49c..423a8184b 100644
+--- a/classic/src/modules/leads/hooks/useLeadAllPipelines.ts
++++ b/classic/src/modules/leads/hooks/useLeadAllPipelines.ts
+@@ -328,6 +328,11 @@ export interface AddLeadToStandardPipeVars {
+   /** Só `confirmacao` — os lembretes D-5/D-3/D-1 dependem deste carimbo. */
+   meetingDate?: string | null;
+   notes?: string | null;
++  /**
++   * Com qual telefone do lead é o negócio (Chamado 82c50502). A RPC exige quando
++   * o lead tem 2+ telefones e o clique é humano (`lead_phone_required`).
++   */
++  leadPhoneId?: string | null;
+ }
+ 
+ export function useAddLeadToStandardPipe() {
+@@ -343,6 +348,7 @@ export function useAddLeadToStandardPipe() {
+       saleValue,
+       meetingDate,
+       notes,
++      leadPhoneId,
+     }: AddLeadToStandardPipeVars) => {
+       if (!teamMember?.organization_id) throw new Error("Organização não encontrada");
+ 
+@@ -416,6 +422,7 @@ export function useAddLeadToStandardPipe() {
+           // NULL de propósito — 'human' por omissão etiquetaria como humano tudo
+           // que esquecesse de informar.
+           p_source: "human",
++          p_lead_phone_id: leadPhoneId ?? null,
+         } as never);
+         if (error) throw error;
+       } else if (pipeType === "upsell") {
+diff --git a/classic/src/modules/leads/hooks/useLeadPhones.ts b/classic/src/modules/leads/hooks/useLeadPhones.ts
+new file mode 100644
+index 000000000..8805f287b
+--- /dev/null
++++ b/classic/src/modules/leads/hooks/useLeadPhones.ts
+@@ -0,0 +1,111 @@
++import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
++import { supabase } from "@/integrations/supabase/client";
++import {
++  leadPhoneFromRow,
++  mensagemDoErroDeTelefone,
++  ordenarTelefones,
++  type LeadPhone,
++  type LeadPhoneRow,
++} from "../lib/lead-phones";
++
++/**
++ * Telefones (contatos nomeados) do lead — Chamado 82c50502.
++ *
++ * Leitura direta em `lead_phones` (RLS herda a visibilidade do lead). Escrita
++ * SEMPRE pelas RPCs: `salvar_telefones_do_lead` (lista completa, soft delete do
++ * que saiu, troca de principal via `leads.phone`), `nomear_contato_do_telefone`
++ * e `definir_telefone_do_negocio`.
++ */
++export const leadPhonesKey = (leadId: string | null) => ["lead-phones", leadId] as const;
++
++const SELECT = "id, phone, normalized_phone, label, label_locked, is_primary, is_whatsapp, source";
++
++export function useLeadPhones(leadId: string | null, enabled = true) {
++  return useQuery({
++    queryKey: leadPhonesKey(leadId),
++    enabled: enabled && !!leadId,
++    staleTime: 30_000,
++    queryFn: async (): Promise<LeadPhone[]> => {
++      const { data, error } = await supabase
++        .from("lead_phones")
++        .select(SELECT)
++        .eq("lead_id", leadId!)
++        .is("deleted_at", null);
++      if (error) throw error;
++      return ordenarTelefones(((data ?? []) as LeadPhoneRow[]).map(leadPhoneFromRow));
++    },
++  });
++}
++
++export interface TelefoneEditado {
++  id?: string;
++  phone: string;
++  label: string | null;
++  isPrimary: boolean;
++}
++
++/** Invalida tudo que mostra telefone ou nome de contato. */
++function invalidarTelefones(qc: ReturnType<typeof useQueryClient>, leadId: string | null) {
++  return Promise.all([
++    qc.invalidateQueries({ queryKey: leadPhonesKey(leadId) }),
++    // A ficha (telefone principal) e o chat (nome "Cód - Contato - Lead").
++    qc.invalidateQueries({ queryKey: ["lead-detail", leadId] }),
++    qc.invalidateQueries({ queryKey: ["contatos-das-conversas"] }),
++    qc.invalidateQueries({ queryKey: ["whatsapp-contacts"] }),
++  ]);
++}
++
++export function useSalvarTelefonesDoLead(leadId: string | null) {
++  const qc = useQueryClient();
++  return useMutation({
++    mutationFn: async (telefones: TelefoneEditado[]): Promise<void> => {
++      if (!leadId) throw new Error("Lead não encontrado. Atualize a ficha.");
++      // Chamado NO objeto: `const rpc = supabase.rpc` perde o receiver.
++      const { error } = await supabase.rpc("salvar_telefones_do_lead", {
++        p_lead_id: leadId,
++        p_phones: telefones.map((t) => ({
++          ...(t.id ? { id: t.id } : {}),
++          phone: t.phone.trim(),
++          label: t.label?.trim() || null,
++          is_primary: t.isPrimary,
++        })),
++      });
++      if (error) throw new Error(mensagemDoErroDeTelefone(error));
++    },
++    onSettled: () => invalidarTelefones(qc, leadId),
++  });
++}
++
++export function useNomearContatoDoTelefone(leadId: string | null) {
++  const qc = useQueryClient();
++  return useMutation({
++    mutationFn: async ({ phone, label }: { phone: string; label: string | null }): Promise<void> => {
++      if (!leadId) throw new Error("Lead não encontrado. Atualize a ficha.");
++      const { error } = await supabase.rpc("nomear_contato_do_telefone", {
++        p_lead_id: leadId,
++        p_phone: phone,
++        p_label: label?.trim() || null,
++      } as never);
++      if (error) throw new Error(mensagemDoErroDeTelefone(error, "Não foi possível nomear o contato"));
++    },
++    onSettled: () => invalidarTelefones(qc, leadId),
++  });
++}
++
++export function useDefinirTelefoneDoNegocio() {
++  const qc = useQueryClient();
++  return useMutation({
++    mutationFn: async ({ dealId, leadPhoneId }: { dealId: string; leadPhoneId: string }): Promise<void> => {
++      const { error } = await supabase.rpc("definir_telefone_do_negocio", {
++        p_deal_id: dealId,
++        p_lead_phone_id: leadPhoneId,
++      });
++      if (error) throw new Error(mensagemDoErroDeTelefone(error, "Não foi possível escolher o telefone do negócio"));
++    },
++    onSettled: () =>
++      Promise.all([
++        qc.invalidateQueries({ queryKey: ["deal-card-extras"] }),
++        qc.invalidateQueries({ queryKey: ["deal-lead-phone"] }),
++      ]),
++  });
++}
 diff --git a/classic/src/modules/leads/hooks/useLeads.ts b/classic/src/modules/leads/hooks/useLeads.ts
 index 6e79c168c..60705c9a9 100644
 --- a/classic/src/modules/leads/hooks/useLeads.ts
@@ -4181,6 +5270,28 @@ index 983a5d070..231244d08 100644
          "upsell-clients", "upsell-orders", "upsell_clients", "upsell_orders", "carteira_orders", "portfolio-clients", "portfolio-kpis",
          "portfolio-trends", "lead-timeline", "leads-sales-metrics", "metrics-studio",
        ].map(key => queryClient.invalidateQueries({ queryKey: [key] })));
+diff --git a/classic/src/modules/leads/index.ts b/classic/src/modules/leads/index.ts
+index 389232bfd..22e260f33 100644
+--- a/classic/src/modules/leads/index.ts
++++ b/classic/src/modules/leads/index.ts
+@@ -320,3 +320,17 @@ export { CompareceuModal } from "./components/leads/funnel-contexts/modals/Compa
+ export { useVentimaisExportDetails } from "./hooks/useVentimaisExportDetails";
+ 
+ export { useCustomFieldCatalogue, useCustomFieldReferences } from './hooks/useCustomFieldCatalogue';
++
++// Chamado 82c50502 — contatos nomeados do lead (lead_phones).
++export {
++  useLeadPhones,
++  useNomearContatoDoTelefone,
++  useDefinirTelefoneDoNegocio,
++  leadPhonesKey,
++} from "./hooks/useLeadPhones";
++export {
++  agruparPorContato,
++  rotuloDoTelefone,
++  type LeadPhone,
++  type ContatoDoLead,
++} from "./lib/lead-phones";
 diff --git a/classic/src/modules/leads/lib/capped-count.ts b/classic/src/modules/leads/lib/capped-count.ts
 new file mode 100644
 index 000000000..8bead654d
@@ -4304,6 +5415,129 @@ index 000000000..8bead654d
 +    return { lastPage, hasNext: page < lastPage };
 +  }
 +  return { lastPage: null, hasNext: shown === pageSize };
++}
+diff --git a/classic/src/modules/leads/lib/lead-phones.ts b/classic/src/modules/leads/lib/lead-phones.ts
+new file mode 100644
+index 000000000..aefea4cdd
+--- /dev/null
++++ b/classic/src/modules/leads/lib/lead-phones.ts
+@@ -0,0 +1,117 @@
++import { formatPhoneBR } from "@/shared/format/phone";
++
++/**
++ * Telefones do lead, cada um com o nome do contato (Chamado 82c50502, ADR-0039).
++ *
++ * `leads.phone` continua sendo o principal; `lead_phones` espelha o principal e
++ * guarda os demais. "Contato" na tela é o agrupamento por `label` dentro do
++ * lead — não existe tabela de pessoa (97% dos contatos nomeados do ERP têm um
++ * telefone só).
++ */
++export interface LeadPhone {
++  id: string;
++  phone: string;
++  normalizedPhone: string | null;
++  label: string | null;
++  labelLocked: boolean;
++  isPrimary: boolean;
++  isWhatsApp: boolean | null;
++  source: "crm" | "erp";
++}
++
++export interface LeadPhoneRow {
++  id: string;
++  phone: string;
++  normalized_phone: string | null;
++  label: string | null;
++  label_locked: boolean;
++  is_primary: boolean;
++  is_whatsapp: boolean | null;
++  source: string;
++}
++
++export function leadPhoneFromRow(row: LeadPhoneRow): LeadPhone {
++  return {
++    id: row.id,
++    phone: row.phone,
++    normalizedPhone: row.normalized_phone,
++    label: row.label,
++    labelLocked: row.label_locked,
++    isPrimary: row.is_primary,
++    isWhatsApp: row.is_whatsapp,
++    source: row.source === "erp" ? "erp" : "crm",
++  };
++}
++
++/** Principal primeiro, depois por nome do contato, sem nome por último. */
++export function ordenarTelefones(phones: LeadPhone[]): LeadPhone[] {
++  return [...phones].sort((a, b) => {
++    if (a.isPrimary !== b.isPrimary) return a.isPrimary ? -1 : 1;
++    if (!a.label !== !b.label) return a.label ? -1 : 1;
++    return (a.label ?? "").localeCompare(b.label ?? "", "pt-BR");
++  });
++}
++
++/** "José Luiz - Compras · (17) 98125-7650" — ou só o número, sem nome. */
++export function rotuloDoTelefone(phone: Pick<LeadPhone, "label" | "phone">): string {
++  const numero = formatPhoneBR(phone.phone);
++  return phone.label ? `${phone.label} · ${numero}` : numero;
++}
++
++export interface ContatoDoLead {
++  /** null = telefones sem nome de contato. */
++  nome: string | null;
++  telefones: LeadPhone[];
++}
++
++const chaveDoNome = (nome: string | null) =>
++  (nome ?? "").normalize("NFD").replace(/[̀-ͯ]/g, "").trim().toLowerCase();
++
++/**
++ * Agrupa por nome do contato (normalizado: caixa e acento não separam a mesma
++ * pessoa). O ERP manda "José Luiz - Compras" com fixo e celular: é UM contato
++ * com dois telefones. Grupo do principal primeiro; sem nome por último.
++ */
++export function agruparPorContato(phones: LeadPhone[]): ContatoDoLead[] {
++  const grupos = new Map<string, ContatoDoLead>();
++  for (const p of ordenarTelefones(phones)) {
++    const chave = chaveDoNome(p.label);
++    const g = grupos.get(chave);
++    if (g) g.telefones.push(p);
++    else grupos.set(chave, { nome: p.label, telefones: [p] });
++  }
++  return [...grupos.values()].sort((a, b) => {
++    const pa = a.telefones.some((t) => t.isPrimary);
++    const pb = b.telefones.some((t) => t.isPrimary);
++    if (pa !== pb) return pa ? -1 : 1;
++    if (!a.nome !== !b.nome) return a.nome ? -1 : 1;
++    return 0;
++  });
++}
++
++/**
++ * Recusas das RPCs de telefone (mensagem curta do banco → texto da tela).
++ * Nunca expõe o outro lead que já usa o número.
++ */
++const RECUSAS: Record<string, string> = {
++  label_required: "Dê um nome ao contato do telefone novo",
++  phone_invalid: "Telefone inválido — use DDD e número",
++  phone_duplicated: "O mesmo telefone aparece duas vezes",
++  primary_required: "Escolha o telefone principal",
++  primary_duplicated: "Só um telefone pode ser o principal",
++  lead_phone_invalid: "Este telefone não é mais deste lead. Atualize a ficha.",
++  lead_phone_required: "Escolha com quem é este negócio",
++  lead_not_found: "Lead não encontrado. Atualize a ficha.",
++};
++
++export function mensagemDoErroDeTelefone(
++  error: { code?: string; message?: string } | null | undefined,
++  fallback = "Não foi possível salvar os telefones",
++): string {
++  const msg = error?.message ?? "";
++  if (RECUSAS[msg]) return RECUSAS[msg];
++  // idx_leads_org_phone_unique: o número escolhido como principal já é o
++  // principal de OUTRO lead da organização.
++  if (error?.code === "23505") return "Este número já é o principal de outro lead da organização";
++  return fallback;
 +}
 diff --git a/classic/src/modules/leads/lib/lead-realtime-relevance.ts b/classic/src/modules/leads/lib/lead-realtime-relevance.ts
 new file mode 100644

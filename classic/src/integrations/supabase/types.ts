@@ -7023,6 +7023,7 @@ export type Database = {
           expected_close_date: string | null
           id: string
           last_activity_at: string | null
+          lead_phone_id: string | null
           loss_reason: string | null
           loss_reason_id: string | null
           metadata: Json | null
@@ -7051,6 +7052,7 @@ export type Database = {
           expected_close_date?: string | null
           id?: string
           last_activity_at?: string | null
+          lead_phone_id?: string | null
           loss_reason?: string | null
           loss_reason_id?: string | null
           metadata?: Json | null
@@ -7079,6 +7081,7 @@ export type Database = {
           expected_close_date?: string | null
           id?: string
           last_activity_at?: string | null
+          lead_phone_id?: string | null
           loss_reason?: string | null
           loss_reason_id?: string | null
           metadata?: Json | null
@@ -7097,6 +7100,13 @@ export type Database = {
           won?: boolean | null
         }
         Relationships: [
+          {
+            foreignKeyName: "deals_lead_phone_id_fkey"
+            columns: ["lead_phone_id"]
+            isOneToOne: false
+            referencedRelation: "lead_phones"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "deals_company_id_fkey"
             columns: ["company_id"]
@@ -9179,6 +9189,81 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "lead_origins_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      lead_phones: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          deleted_at: string | null
+          deleted_by: string | null
+          erp_phone_id: string | null
+          id: string
+          is_primary: boolean
+          is_whatsapp: boolean | null
+          label: string | null
+          label_locked: boolean
+          lead_id: string
+          normalized_phone: string | null
+          organization_id: string
+          phone: string
+          phone_digits: string | null
+          source: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          deleted_by?: string | null
+          erp_phone_id?: string | null
+          id?: string
+          is_primary?: boolean
+          is_whatsapp?: boolean | null
+          label?: string | null
+          label_locked?: boolean
+          lead_id: string
+          normalized_phone?: string | null
+          organization_id: string
+          phone: string
+          phone_digits?: never
+          source: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          deleted_by?: string | null
+          erp_phone_id?: string | null
+          id?: string
+          is_primary?: boolean
+          is_whatsapp?: boolean | null
+          label?: string | null
+          label_locked?: boolean
+          lead_id?: string
+          normalized_phone?: string | null
+          organization_id?: string
+          phone?: string
+          phone_digits?: never
+          source?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lead_phones_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "leads"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lead_phones_organization_id_fkey"
             columns: ["organization_id"]
             isOneToOne: false
             referencedRelation: "organizations"
@@ -20224,6 +20309,7 @@ export type Database = {
           p_meeting_date?: string
           p_notes?: string
           p_owner_id?: string
+          p_lead_phone_id?: string
           p_pipe: string
           p_source?: string
           p_stage: string
@@ -20277,6 +20363,7 @@ export type Database = {
         Args: {
           p_idempotency_key?: string
           p_lead_id: string
+          p_lead_phone_id?: string
           p_notes?: string
           p_org: string
           p_owner_id?: string
@@ -20542,6 +20629,10 @@ export type Database = {
       }
       api_update_lead: {
         Args: { p_lead_id: string; p_org: string; p_patch: Json }
+        Returns: Json
+      }
+      aplicar_telefones_do_erp: {
+        Args: { p_ops: Json; p_organization_id: string }
         Returns: Json
       }
       apply_erp_lead_classification: {
@@ -20989,6 +21080,15 @@ export type Database = {
         Returns: undefined
       }
       close_resolved_support_tickets: { Args: never; Returns: number }
+      contatos_das_conversas: {
+        Args: { p_pairs: Json }
+        Returns: {
+          label: string
+          lead_id: string
+          lead_phone_id: string
+          normalized_phone: string
+        }[]
+      }
       convert_campaign_rule_to_workflow: {
         Args: { p_rule_id: string }
         Returns: string
@@ -21183,6 +21283,10 @@ export type Database = {
           p_valor?: number
         }
         Returns: Json
+      }
+      definir_telefone_do_negocio: {
+        Args: { p_deal_id: string; p_lead_phone_id: string }
+        Returns: string
       }
       delete_pipeline: { Args: { p_pipeline_id: string }; Returns: Json }
       delete_pipeline_stage: {
@@ -21532,6 +21636,10 @@ export type Database = {
         Returns: number
       }
       fn_seed_default_dashboard: { Args: { p_org_id: string }; Returns: Json }
+      fn_telefone_do_lead_valido: {
+        Args: { p_lead_id: string; p_lead_phone_id: string }
+        Returns: boolean
+      }
       fn_varredura_avisos_followups: { Args: never; Returns: number }
       fn_varredura_avisos_reuniao_proxima: { Args: never; Returns: number }
       fn_voip_apply_vps_event: {
@@ -23130,6 +23238,10 @@ export type Database = {
         Args: { p_organization_id: string }
         Returns: string
       }
+      nomear_contato_do_telefone: {
+        Args: { p_label: string; p_lead_id: string; p_phone: string }
+        Returns: Database["public"]["Tables"]["lead_phones"]["Row"]
+      }
       normalize_br_mobile: { Args: { digits: string }; Returns: string }
       normalize_brazilian_phone: { Args: { phone: string }; Returns: string }
       oraculo_metricas: {
@@ -23234,6 +23346,10 @@ export type Database = {
       restore_lead: { Args: { p_lead_id: string }; Returns: undefined }
       restore_leads_bulk: { Args: { p_lead_ids: string[] }; Returns: number }
       rollback_import_batch: { Args: { p_batch_id: string }; Returns: Json }
+      salvar_telefones_do_lead: {
+        Args: { p_lead_id: string; p_phones: Json }
+        Returns: Database["public"]["Tables"]["lead_phones"]["Row"][]
+      }
       save_document_content: {
         Args: { p_content: string; p_doc_id: string }
         Returns: undefined

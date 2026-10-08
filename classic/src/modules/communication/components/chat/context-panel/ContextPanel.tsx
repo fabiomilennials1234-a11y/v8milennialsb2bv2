@@ -21,7 +21,9 @@ import { ContextPanelTabInfo } from "./ContextPanelTabInfo";
 import { ContextPanelTabHistory } from "./ContextPanelTabHistory";
 import { ContextPanelTabAI } from "./ContextPanelTabAI";
 import { telefoneParaExibicao } from "@/modules/communication/lib/identificadorOculto";
-import { nomeDoPainelDeContexto } from "@/modules/communication/lib/nomeDaConversa";
+import { nomeCodContatoLead, nomeDoPainelDeContexto } from "@/modules/communication/lib/nomeDaConversa";
+import { useContatoDaConversa, useNomeCodContatoLead } from "@/modules/communication/hooks/chat/useNomeCodContatoLead";
+import { FalandoCom } from "./FalandoCom";
 
 export interface ContextPanelProps {
   leadId?: string;
@@ -32,6 +34,11 @@ export interface ContextPanelProps {
    * Ausente = comportamento de sempre.
    */
   nomeDaConversa?: string | null;
+  /**
+   * Conversa de grupo: a regra `Cód - Contato - Lead` (flag
+   * `chat_nome_cod_contato_lead`) e o bloco "Falando com" não valem para grupo.
+   */
+  ehGrupo?: boolean;
   onClose?: () => void;
   /**
    * O que dizer quando não há NEM telefone NEM lead para abrir o painel.
@@ -82,6 +89,7 @@ export function ContextPanel({
   phoneNumber,
   pushName,
   nomeDaConversa,
+  ehGrupo = false,
   placeholder,
   identitySlot,
 }: ContextPanelProps) {
@@ -99,6 +107,12 @@ export function ContextPanel({
   const lead = leadByPhone ?? leadById ?? null;
   const leadLoading = loadingByPhone || loadingById;
   const activeLeadId = lead?.id ?? leadId ?? null;
+
+  // Flag `chat_nome_cod_contato_lead` (Chamado 82c50502): o painel resolve o
+  // lead por conta própria e monta o nome com a MESMA função da lista e do topo.
+  // Só WhatsApp (há telefone) e não grupo.
+  const nomeCodContato = useNomeCodContatoLead() && !!phoneNumber && !ehGrupo;
+  const { data: fontesDoContato } = useContatoDaConversa(activeLeadId, phoneNumber, nomeCodContato);
 
   if (!phoneNumber && !leadId) {
     return (
@@ -129,12 +143,23 @@ export function ContextPanel({
   // Instagram não tem nenhum. "Contato" é o fim da fila.
   // A queda para `phoneNumber` passa pelo mesmo filtro do resto do chat: LID e
   // canal viram rótulo, telefone segue igual. Ver `lib/identificadorOculto.ts`.
+  const nomeCodContatoDoPainel =
+    nomeCodContato && lead?.name?.trim()
+      ? nomeCodContatoLead({
+          pushName: pushName ?? null,
+          nomeDoLead: lead.name,
+          telefone: phoneNumber ?? null,
+          erpCode: fontesDoContato?.erpCode ?? (lead as { erp_code?: string | null }).erp_code ?? null,
+          contato: fontesDoContato?.contato ?? null,
+        })
+      : null;
   const displayName =
     nomeDoPainelDeContexto({
       leadName: lead?.name,
-      nomeDaConversa,
+      nomeDaConversa: nomeCodContatoDoPainel ?? nomeDaConversa,
       pushName,
       telefoneExibicao: telefoneParaExibicao(phoneNumber),
+      nomeCodContatoLead: !!nomeCodContatoDoPainel,
     });
   const initials = displayName.slice(0, 2).toUpperCase();
   const score =
@@ -179,6 +204,10 @@ export function ContextPanel({
           )}
         </div>
       </div>
+
+      {nomeCodContato && activeLeadId && phoneNumber && (
+        <FalandoCom leadId={activeLeadId} telefone={phoneNumber} />
+      )}
 
       {identitySlot}
 

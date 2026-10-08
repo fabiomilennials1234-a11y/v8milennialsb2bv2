@@ -68,7 +68,22 @@ export interface NewDealOption {
   disabledReason?: string;
 }
 
+/**
+ * Um telefone do lead, já com o rótulo pronto ("José Luiz - Compras · (17)
+ * 98125-7650"). O diálogo continua sem banco: quem abre entrega a lista.
+ */
+export interface NewDealPhoneOption {
+  id: string;
+  label: string;
+}
+
 export interface NewDealValues {
+  /**
+   * Com qual telefone (contato) do lead é o negócio — Chamado 82c50502. Com 2+
+   * telefones a escolha é obrigatória e não há pré-seleção; com 1, é esse; sem
+   * telefone, null.
+   */
+  leadPhoneId: string | null;
   stageId: string;
   ownerId: string | null;
   saleValue: number | null;
@@ -96,6 +111,11 @@ interface NewDealDialogProps {
   onOpenChange?: (open: boolean) => void;
   /** Sem gatilho próprio — o botão que abre vive fora. */
   hideTrigger?: boolean;
+  /**
+   * Telefones do lead. Com 2+, o diálogo exige "Com quem é este negócio" antes
+   * de criar — chutar o principal é como se fala com a pessoa errada.
+   */
+  phones?: NewDealPhoneOption[];
 }
 
 /** "1.234,56" e "1234.56" viram 1234.56; lixo vira null. */
@@ -117,6 +137,7 @@ export const NewDealDialog = memo(function NewDealDialog({
   open: openProp,
   onOpenChange,
   hideTrigger = false,
+  phones = [],
 }: NewDealDialogProps) {
   const [openInterno, setOpenInterno] = useState(false);
   const controlado = openProp !== undefined;
@@ -131,7 +152,9 @@ export const NewDealDialog = memo(function NewDealDialog({
   const [valueRaw, setValueRaw] = useState("");
   const [meetingDate, setMeetingDate] = useState("");
   const [notes, setNotes] = useState("");
+  const [leadPhoneId, setLeadPhoneId] = useState<string>("");
   const [submitting, setSubmitting] = useState(false);
+  const precisaEscolherTelefone = phones.length >= 2;
 
   // Devolve o array já filtrado por `is_active`, não um resultado de query.
   const members = useResponsibleMembers();
@@ -160,6 +183,8 @@ export const NewDealDialog = memo(function NewDealDialog({
     setValueRaw("");
     setMeetingDate("");
     setNotes("");
+    // Sem pré-seleção com 2+: a escolha é do vendedor, não do sistema.
+    setLeadPhoneId("");
   }, [enabled, currentMember]);
 
   /**
@@ -195,13 +220,15 @@ export const NewDealDialog = memo(function NewDealDialog({
     setStageId(option.stages[0]?.id ?? "");
   };
 
-  const canSubmit = Boolean(selected && stageId) && !submitting && !isCreating;
+  const telefoneOk = !precisaEscolherTelefone || phones.some((p) => p.id === leadPhoneId);
+  const canSubmit = Boolean(selected && stageId) && telefoneOk && !submitting && !isCreating;
 
   const handleSubmit = async () => {
     if (!selected || !stageId || submitting) return;
     setSubmitting(true);
     try {
       await onCreate(selected, {
+        leadPhoneId: precisaEscolherTelefone ? leadPhoneId : (phones[0]?.id ?? null),
         stageId,
         ownerId: ownerId || null,
         saleValue: selected.supportsValue ? parseBRLInput(valueRaw) : null,
@@ -317,6 +344,35 @@ export const NewDealDialog = memo(function NewDealDialog({
 
           {selected && (
             <>
+              {precisaEscolherTelefone && (
+                <div className="space-y-1.5">
+                  <Label htmlFor="new-deal-phone" className="text-[12px] text-muted-foreground">
+                    Com quem é este negócio
+                  </Label>
+                  <Select value={leadPhoneId} onValueChange={setLeadPhoneId}>
+                    <SelectTrigger
+                      id="new-deal-phone"
+                      data-testid="new-deal-phone"
+                      aria-invalid={!telefoneOk}
+                    >
+                      <SelectValue placeholder="Escolha o contato" />
+                    </SelectTrigger>
+                    <SelectContent className="z-[70]">
+                      {phones.map((p) => (
+                        <SelectItem key={p.id} value={p.id} data-testid={`new-deal-phone-${p.id}`}>
+                          {p.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {!telefoneOk && (
+                    <p className="text-[11px] text-muted-foreground/70">
+                      O lead tem {phones.length} telefones. A conversa e os links do negócio usam o escolhido.
+                    </p>
+                  )}
+                </div>
+              )}
+
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5">
                   <Label htmlFor="new-deal-stage" className="text-[12px] text-muted-foreground">

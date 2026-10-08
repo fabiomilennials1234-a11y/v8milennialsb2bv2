@@ -26,6 +26,7 @@
  */
 
 import { rotuloDeIdentificadorOculto } from "./identificadorOculto";
+import { withErpCode } from "@/shared/format/erp-code";
 
 export interface FontesDoNomeDaConversa {
   /** `whatsapp_conversation_summary.last_push_name` — o perfil do interlocutor. */
@@ -45,6 +46,57 @@ export interface OpcoesDoNomeDaConversa {
    * duas vierem. Ausente = comportamento de sempre.
    */
   nomeDoLeadPrimeiro?: boolean;
+  /**
+   * Flag por org `chat_nome_cod_contato_lead` (Chamado 82c50502): o nome é
+   * `Cód - Contato - Lead` (ver `nomeCodContatoLead`). Vence as outras duas.
+   * Ausente = comportamento de sempre.
+   */
+  nomeCodContatoLead?: boolean;
+}
+
+export interface FontesDoNomeCodContatoLead extends FontesDoNomeDaConversa {
+  /** `leads.erp_code` do lead da conversa. */
+  erpCode?: string | null;
+  /** `lead_phones.label` do telefone DESTA conversa ("José Luiz - Compras"). */
+  contato?: string | null;
+}
+
+/** Remove o código do ERP digitado no começo do nome ("6627 - Fernando"), com o mesmo separador frouxo de `withErpCode`. */
+function semCodigoNoInicio(nome: string, codigo: string): string {
+  if (!codigo) return nome;
+  const escapado = codigo.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return nome.replace(new RegExp(`^${escapado}\\s*[-–:]\\s*`), "").trim() || nome;
+}
+
+const comparavel = (s: string) =>
+  s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, " ").trim().toLowerCase();
+
+/**
+ * A regra da flag `chat_nome_cod_contato_lead` (decisão do CTO, 08/10/2026),
+ * UMA só para lista, cabeçalho e painel: **`Cód - Contato - Lead`**.
+ *
+ * - Sem nome de contato no telefone da conversa: `Cód - Lead`.
+ * - Sem código: `Contato - Lead`.
+ * - Código já digitado no nome do lead ("6627 - Fernando Porto") não se repete:
+ *   o `withErpCode` existente é idempotente, e o contato entra DEPOIS do código.
+ * - Contato igual ao nome do lead (caixa, acento e espaço não contam): não se
+ *   repete.
+ * - Conversa sem lead: a regra de `nomeComLeadPrimeiro`.
+ *
+ * Só exibição: nada disto é gravado em `leads.name` — disparo, Copilot e
+ * `{{nome}}` seguem com o nome puro. Quem chama é responsável por NÃO usar isto
+ * em grupo nem em canal que não seja WhatsApp.
+ */
+export function nomeCodContatoLead(fontes: FontesDoNomeCodContatoLead): string {
+  const lead = fontes.nomeDoLead?.trim();
+  if (!lead) return nomeComLeadPrimeiro(fontes);
+  const codigo = (fontes.erpCode ?? "").trim();
+  const contato = fontes.contato?.trim();
+  const leadSemCodigo = semCodigoNoInicio(lead, codigo);
+  if (!contato || comparavel(contato) === comparavel(leadSemCodigo) || comparavel(contato) === comparavel(lead)) {
+    return withErpCode(lead, codigo);
+  }
+  return withErpCode(`${contato} - ${leadSemCodigo}`, codigo);
 }
 
 /**
@@ -69,10 +121,11 @@ export function nomeComLeadPrimeiro(fontes: FontesDoNomeDaConversa): string {
 }
 
 export function nomeDaConversa(
-  fontes: FontesDoNomeDaConversa,
+  fontes: FontesDoNomeCodContatoLead,
   opcoes: OpcoesDoNomeDaConversa = {},
 ): string {
   const { pushName, nomeDoLead } = fontes;
+  if (opcoes.nomeCodContatoLead) return nomeCodContatoLead(fontes);
   if (opcoes.nomeDoLeadPrimeiro) return nomeComLeadPrimeiro(fontes);
   if (fontes.savedContactName?.trim()) return fontes.savedContactName.trim();
   // A ÚLTIMA queda deixa de ser o identificador cru: quando ele é um LID ou um
@@ -101,7 +154,14 @@ export function nomeDoPainelDeContexto(fontes: {
   nomeDaConversa?: string | null;
   pushName?: string | null;
   telefoneExibicao?: string | null;
+  /**
+   * Flag `chat_nome_cod_contato_lead`: o painel mostra o MESMO nome do topo e
+   * da lista (`nomeDaConversa` já resolvido por `nomeCodContatoLead`), e não o
+   * `leads.name` cru.
+   */
+  nomeCodContatoLead?: boolean;
 }): string {
+  if (fontes.nomeCodContatoLead && fontes.nomeDaConversa?.trim()) return fontes.nomeDaConversa.trim();
   return (
     fontes.leadName?.trim() ||
     fontes.nomeDaConversa ||

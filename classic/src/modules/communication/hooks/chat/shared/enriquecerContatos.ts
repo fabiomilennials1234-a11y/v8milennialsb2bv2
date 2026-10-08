@@ -34,6 +34,7 @@ import {
   type ChunkedResult,
 } from "@/shared/supabase/selectInChunks";
 import type { ChatContact, ChatContactTag } from "../types";
+import { normalizarTelefoneBr } from "../../../lib/normalizarTelefoneBr";
 
 /**
  * A linha do join de etiqueta, dos dois lados.
@@ -53,6 +54,33 @@ interface LinhaDeEtiqueta {
   lead_id?: string;
   conversation_id?: string;
   tags: ChatContactTag;
+}
+
+/** Pares por chamada de `contatos_das_conversas` — o teto da RPC. */
+const PARES_POR_CHAMADA = 500;
+
+/**
+ * Nome do contato (`lead_phones.label`) do telefone de CADA conversa — Chamado
+ * 82c50502. Uma chamada por página (em lotes de 500 pares), nunca uma por
+ * conversa. Só WhatsApp, não grupo, com lead.
+ */
+async function buscarContatosDasConversas(
+  contatos: ChatContact[],
+): Promise<Map<string, string>> {
+  const pares = contatos
+    .filter((c) => c.channel === "whatsapp" && !c.is_group && c.lead_id && c.phone_number)
+    .map((c) => ({ lead_id: c.lead_id as string, phone: c.phone_number }));
+  const porChave = new Map<string, string>();
+  for (let i = 0; i < pares.length; i += PARES_POR_CHAMADA) {
+    const { data, error } = await supabase.rpc("contatos_das_conversas", {
+      p_pairs: pares.slice(i, i + PARES_POR_CHAMADA),
+    });
+    if (error) throw error;
+    for (const row of (data ?? []) as Array<{ lead_id: string; normalized_phone: string; label: string | null }>) {
+      if (row.label) porChave.set(`${row.lead_id}:${row.normalized_phone}`, row.label);
+    }
+  }
+  return porChave;
 }
 
 export interface OpcoesDeEnriquecimento {
@@ -97,11 +125,11 @@ export async function enriquecerContatos(
     ),
   ];
 
-  const [leadNameRows, leadTagRows, convTagRows] = await Promise.all([
+  const [leadNameRows, leadTagRows, convTagRows, contatosDasConversas] = await Promise.all([
     soft(
-      selectInChunks<{ id: string; name: string | null }>(
+      selectInChunks<{ id: string; name: string | null; erp_code: string | null }>(
         leadIds,
-        (chunk) => supabase.from("leads").select("id, name").in("id", chunk),
+        (chunk) => supabase.from("leads").select("id, name, erp_code").in("id", chunk),
         IN_CHUNK_SIZE,
       ),
       "leads",
@@ -134,10 +162,19 @@ export async function enriquecerContatos(
       ),
       "conversation_tags",
     ),
+    // Acessório como o nome: falha vira "sem contato" e o nome cai em "Cód - Lead".
+    buscarContatosDasConversas(contatos).catch((e) => {
+      console.error('[inbox] enriquecimento "contatos_das_conversas" falhou', e);
+      return new Map<string, string>();
+    }),
   ]);
 
   const leadNameMap = new Map<string, string>();
-  for (const row of leadNameRows) if (row.name) leadNameMap.set(row.id, row.name);
+  const leadErpCodeMap = new Map<string, string>();
+  for (const row of leadNameRows) {
+    if (row.name) leadNameMap.set(row.id, row.name);
+    if (row.erp_code) leadErpCodeMap.set(row.id, row.erp_code);
+  }
 
   const leadTagsMap = new Map<string, ChatContactTag[]>();
   for (const row of leadTagRows) {
@@ -155,7 +192,13 @@ export async function enriquecerContatos(
   }
 
   for (const c of contatos) {
-    if (c.lead_id) c.lead_name = leadNameMap.get(c.lead_id) ?? null;
+    if (c.lead_id) {
+      c.lead_name = leadNameMap.get(c.lead_id) ?? null;
+      c.lead_erp_code = leadErpCodeMap.get(c.lead_id) ?? null;
+      c.lead_contact_label = c.phone_number
+        ? contatosDasConversas.get(`${c.lead_id}:${normalizarTelefoneBr(c.phone_number)}`) ?? null
+        : null;
+    }
     const tagIds = new Set<string>();
     const merged: ChatContactTag[] = [];
     for (const t of (c.lead_id ? leadTagsMap.get(c.lead_id) : undefined) || [])
