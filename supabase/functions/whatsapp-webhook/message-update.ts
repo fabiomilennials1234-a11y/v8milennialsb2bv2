@@ -182,17 +182,26 @@ export async function applyMessageUpdate(db: SupabaseClient, instance: Instance,
     // Best-effort: it only moves unread markers, so a slow/missing RPC is logged and the
     // webhook still answers 200 — throwing would turn every own read into a 500 retry storm.
     let failure: string | undefined;
+    let rowsWritten: number | null = null;
     try {
-      const { error } = await db.rpc("apply_external_conversation_read", {
+      const { data: written, error } = await db.rpc("apply_external_conversation_read", {
         p_org: instance.organization_id, p_instance: instance.id, p_message_ids: ids,
       });
       if (error) failure = error.code || "rpc_error";
+      else if (typeof written === "number") rowsWritten = written;
     } catch (err) {
       failure = err instanceof Error ? err.name : "rpc_exception";
     }
     if (failure) await logRuntime({ organizationId: instance.organization_id, module: "webhook",
       action: "uazapi_external_read_failed", status: "error", errorMessage: failure,
       payloadSnapshot: { instance_id: instance.id, message_count: rawIds.length } });
+    // Observability for Chamado 6ebb4b73: the RPC is silent for ids it does not know and for
+    // conversations already read, so without this a receipt that arrived but changed nothing is
+    // indistinguishable from a receipt that never arrived. Counts only, no ids/phones.
+    // rows_written = 0 → unknown ids or already read; absent log → the provider sent no receipt.
+    else await logRuntime({ organizationId: instance.organization_id, module: "webhook",
+      action: "uazapi_external_read_applied", status: "success",
+      payloadSnapshot: { instance_id: instance.id, message_count: rawIds.length, rows_written: rowsWritten } });
   }
   if (receipt && data.fromMe !== true) {
     const predecessors = receiptPredecessors(receipt);

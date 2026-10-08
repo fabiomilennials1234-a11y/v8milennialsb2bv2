@@ -521,7 +521,20 @@ describe("external read sync (own-number ReadReceipt, Chamado 6ebb4b73)", () => 
     });
     expect(fetchMock.mock.calls.some(([, init]) => init.method === "PATCH")).toBe(false);
     expect(completeQuotePresentations).not.toHaveBeenCalled();
-    expect(logRuntime).not.toHaveBeenCalled();
+    expect(logRuntime).toHaveBeenCalledOnce();
+    const entry = logRuntime.mock.calls[0][0] as Record<string, unknown>;
+    expect(entry).toMatchObject({ organizationId: "org-a", module: "webhook",
+      action: "uazapi_external_read_applied", status: "success",
+      payloadSnapshot: { instance_id: "instance-a", message_count: 2, rows_written: 8 } });
+    expect(JSON.stringify(entry)).not.toMatch(/5511|message-a|message-b/);
+  });
+
+  it("logs rows_written=0 when the receipt arrives but changes nothing (unknown ids / already read)", async () => {
+    fetchMock.mockImplementation(async () => json(0));
+    await applyMessageUpdate(db, instance, ownRead("Read"));
+    expect(logRuntime).toHaveBeenCalledOnce();
+    expect(logRuntime.mock.calls[0][0]).toMatchObject({
+      action: "uazapi_external_read_applied", payloadSnapshot: { rows_written: 0 } });
   });
 
   it.each([
