@@ -1,6 +1,7 @@
 import { InstanceProvisioningUncertainError, provisionWhatsAppInstance } from "../_shared/instance-provisioning.ts";
 import { requestGroupCapture } from "../_shared/uazapi-webhook-policy.ts";
 import { UazapiIngressWriteGuardError } from "../_shared/uazapi-ingress-write-guard.ts";
+import { providerPassthroughStatus } from "../_shared/provider-error-status.ts";
 import { transcribeChatAudio, TranscriptionError } from "../_shared/whatsapp-transcription.ts";
 import { authorizeGroupListing, listInstanceGroups } from "../_shared/whatsapp-group-list.ts";
 // deno-lint-ignore-file no-explicit-any
@@ -1755,6 +1756,21 @@ Deno.serve(
         return jsonResponse(e.status, { error: e.message, code: e.code }, corsHeaders);
       }
       const msg = (e as Error).message ?? "Internal error";
+      const passthrough = providerPassthroughStatus(e);
+      if (passthrough) {
+        console.warn(`[whatsapp-api-proxy] action=${action} provider rejected (${passthrough}): ${msg}`);
+        await logRuntime({
+          organizationId: callerOrgId,
+          module: "whatsapp",
+          action,
+          status: "skipped",
+          errorMessage: msg,
+          entityType: instanceId ? "whatsapp_instances" : undefined,
+          entityId: instanceId,
+        });
+        const code = (e as { provider_code?: unknown }).provider_code;
+        return jsonResponse(passthrough, { error: msg, ...(code != null ? { code: String(code) } : {}) }, corsHeaders);
+      }
       console.error(`[whatsapp-api-proxy] action=${action} UNHANDLED ERROR: ${msg}`, (e as Error).stack ?? e);
 
       await logRuntime({
