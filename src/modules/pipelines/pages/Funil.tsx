@@ -1,5 +1,5 @@
 import { useState, useMemo, useCallback, useEffect, useRef } from "react";
-import { useParams, useNavigate, useSearchParams, useLocation, Navigate } from "react-router-dom";
+import { useParams, useNavigate, useSearchParams, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
@@ -101,7 +101,6 @@ import {
   useResponsibleMembers,
 } from "@/modules/identity";
 import { useTags } from "@/modules/leads/hooks/useTags";
-import { useOrgFeatures } from "@/contexts/OrgFeaturesContext";
 import { trackModuleVisit } from "@/lib/analytics";
 import {
   startOfDay,
@@ -1117,15 +1116,8 @@ function FunilPageInner() {
 }
 
 export default function FunilPage() {
-  const { slug: param } = useParams<{ slug: string }>();
-  const { hasFeature } = useOrgFeatures();
-
-  // Agendamentos foi mergeado em Oportunidades — board standalone aposentado
-  // (ADR-0004). Mesma guarda que a página velha de Confirmação carregava.
-  if (param === "confirmacao" && hasFeature("merged_opportunity_funnel")) {
-    return <Navigate to="/funis" replace />;
-  }
-
+  // A navegação já é decidida por pipelines.config.navigation. Slug e UUID
+  // resolvem o mesmo funil; acesso de master/loading não representa rollout.
   return (
     <LeadPanelProvider>
       <DealPanelProvider>
