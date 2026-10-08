@@ -44,6 +44,11 @@ export interface WhatsAppMessage extends UazapiMenuFields, UazapiPixFields {
   sent_by_ai: boolean | null;
   sent_source: "manual" | "copilot" | "workflow" | null;
   /**
+   * Encaminhada pelo Torque: `whatsapp_messages.id` da mensagem de origem.
+   * Opcional porque só o chat da Uazapi seleciona a coluna.
+   */
+  forwarded_from_message_id?: string | null;
+  /**
    * Por que o envio falhou, quando o provider soube dizer. Opcional: só o canal
    * oficial preenche hoje, a partir do callback da Meta.
    */

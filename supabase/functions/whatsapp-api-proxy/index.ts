@@ -46,6 +46,12 @@ import {
   nullifyInBatches,
   type BatchNullifyIO,
 } from "../_shared/whatsapp-instance-teardown.ts";
+import { executeForward, type ForwardSource } from "../_shared/whatsapp-forward.ts";
+import {
+  normalizeBrazilianPhone,
+  sendMediaViaInstance,
+  sendTextViaInstance,
+} from "../_shared/whatsapp-dispatch.ts";
 
 // Force bundler to include provider modules (used via dynamic import in
 // whatsapp-client). meta-cloud is force-imported too so the human composer can
@@ -863,6 +869,7 @@ Deno.serve(
         "sendMenu",
         "sendLocation",
         "sendContact",
+        "forwardMessage",
         // Bloquear e desbloquear endereçam um contato — mesmo crivo. `listBlocked`
         // e `numberHealth` NÃO entram: eles não têm destinatário nenhum.
         "blockUser",
@@ -965,6 +972,7 @@ Deno.serve(
         "sendMenu",
         "sendLocation",
         "sendContact",
+        "forwardMessage",
       ]);
       if (NUMBER_ACTIONS.has(action)) {
         const rawNumber = (payload?.number ?? "") as string;
@@ -1048,6 +1056,145 @@ Deno.serve(
             .eq("id", instanceId);
           result = { loggedOut: true };
           break;
+        }
+
+        // -------------------------------------------------------------------
+        // forwardMessage — reenvia uma mensagem do chat para outra conversa
+        // 1:1 da org, pelo chip da conversa de DESTINO (`instance_id`), com o
+        // rótulo nativo "Encaminhada". Regras em _shared/whatsapp-forward.ts.
+        // O destino já passou pelo guard de responsável no choke acima; a
+        // origem passa dentro de `executeForward`.
+        // -------------------------------------------------------------------
+        case "forwardMessage": {
+          if (instance.provider !== "uazapi") {
+            return jsonResponse(
+              422,
+              { error: "Encaminhar só está disponível em números conectados pela Uazapi." },
+              corsHeaders,
+            );
+          }
+          const { number, source_instance_id, source_message_id } = payload as {
+            number?: unknown;
+            source_instance_id?: unknown;
+            source_message_id?: unknown;
+          };
+          if (
+            typeof number !== "string" ||
+            typeof source_instance_id !== "string" || !source_instance_id ||
+            typeof source_message_id !== "string" || !source_message_id.trim()
+          ) {
+            return jsonResponse(400, { error: "Encaminhamento inválido" }, corsHeaders);
+          }
+          const destPhone = normalizeBrazilianPhone(number);
+          if (!destPhone) {
+            return jsonResponse(
+              422,
+              { error: "Número de telefone inválido ou ausente para este contato." },
+              corsHeaders,
+            );
+          }
+          const destInstance = instance as WhatsAppInstance;
+          // `trackSource` segue o do composer: é dele que o webhook tira autoria
+          // (`track_id`) e a classificação de envio humano. A categoria do
+          // governor vem explícita porque `deriveCategory` leria este
+          // `trackSource` como automação.
+          const sendOpts = {
+            trackSource: "whatsapp-api-proxy",
+            trackId: callerTeamMemberId ?? undefined,
+            category: "manual" as const,
+            forward: true,
+          };
+
+          const outcome = await executeForward(
+            {
+              loadSource: async () => {
+                const { data, error } = await supabaseAdmin
+                  .from("whatsapp_messages")
+                  .select("id, instance_id, message_id, message_type, content, media_url, media_file_name")
+                  .eq("organization_id", callerOrgId)
+                  .eq("instance_id", source_instance_id)
+                  .eq("message_id", source_message_id)
+                  .is("deleted_at", null)
+                  .maybeSingle();
+                if (error) throw error;
+                return (data ?? null) as ForwardSource | null;
+              },
+              canSeeSource: (source) =>
+                isChatTargetAllowed(supabaseUser, callerOrgId, source.instance_id, {
+                  leadId: null,
+                  rawPhone: null,
+                  messageId: source.message_id,
+                }),
+              downloadFromSource: async (source) => {
+                const { data: sourceInstance } = await supabaseAdmin
+                  .from("whatsapp_instances")
+                  .select("*")
+                  .eq("id", source.instance_id)
+                  .eq("organization_id", callerOrgId)
+                  .maybeSingle();
+                if (!sourceInstance) throw new Error("source instance not found");
+                const sourceProvider = await getWhatsAppProvider(
+                  sourceInstance as WhatsAppInstance,
+                  supabaseAdmin,
+                );
+                if (!sourceProvider.downloadMedia) {
+                  throw new Error("Provider does not support downloadMedia");
+                }
+                return await sourceProvider.downloadMedia(source.message_id);
+              },
+              sendText: (text) =>
+                sendTextViaInstance(supabaseAdmin, destInstance, destPhone, text, sendOpts),
+              sendMedia: (media) =>
+                sendMediaViaInstance(supabaseAdmin, destInstance, destPhone, media, sendOpts),
+              // Mesmo padrão da citação (fim deste handler): cria a linha se o
+              // eco ainda não chegou, nunca sobrescreve a do eco, e só então
+              // grava a evidência.
+              persist: async ({ messageId, status, plan, source }) => {
+                const row = {
+                  organization_id: callerOrgId,
+                  instance_id: instanceId,
+                  message_id: messageId,
+                  remote_jid: `${destPhone}@s.whatsapp.net`,
+                  phone_number: destPhone,
+                  direction: "outgoing",
+                  message_type: plan.kind === "text" ? "text" : plan.type,
+                  content: plan.kind === "text" ? plan.text : plan.caption ?? null,
+                  media_url: plan.kind === "media" ? plan.url : null,
+                  status: status === "queued" ? "pending" : status === "failed" ? "failed" : "sent",
+                  timestamp: new Date().toISOString(),
+                  forwarded_from_message_id: source.id,
+                };
+                const inserted = await supabaseAdmin
+                  .from("whatsapp_messages")
+                  .upsert(row, { onConflict: "message_id,instance_id", ignoreDuplicates: true });
+                if (inserted.error) throw inserted.error;
+                const updated = await supabaseAdmin
+                  .from("whatsapp_messages")
+                  .update({ forwarded_from_message_id: source.id })
+                  .eq("organization_id", callerOrgId)
+                  .eq("instance_id", instanceId)
+                  .eq("message_id", messageId);
+                if (updated.error) throw updated.error;
+              },
+            },
+            Deno.env.get("SUPABASE_URL") ?? "",
+          );
+
+          // Trilha de quem encaminhou o quê para onde, sem conteúdo nem telefone.
+          await logRuntime({
+            organizationId: callerOrgId,
+            module: "whatsapp",
+            action: outcome.status === 200 ? "message_forwarded" : "message_forward_failed",
+            status: outcome.status === 200 ? "success" : "error",
+            entityType: "whatsapp_instances",
+            entityId: instanceId,
+            payloadSnapshot: {
+              user_id: user.id,
+              source_instance_id,
+              http_status: outcome.status,
+            },
+          });
+          return jsonResponse(outcome.status, outcome.body, corsHeaders);
         }
 
         // -------------------------------------------------------------------

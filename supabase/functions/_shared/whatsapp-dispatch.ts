@@ -37,6 +37,7 @@ import {
 import { governSend, isSkippedSend } from "./send-governor/gate.ts";
 import { espelharMidiaDosComponentes } from "./mirror-template-media.ts";
 import { deriveCategory } from "./send-governor/core.ts";
+import type { SendCategory } from "./send-governor/types.ts";
 import { isValidGroupJid } from "./whatsapp-jid.ts";
 import { GROUP_PROVIDERS } from "./instance-routing.ts";
 
@@ -329,7 +330,22 @@ type SendTextOpts = {
   delay?: number;
   replyId?: string;
   idempotencyKey?: string;
+  /**
+   * Categoria explícita do governor. Sem ela, vale `deriveCategory(trackSource)`.
+   * Existe para o caminho manual do proxy: o `trackSource` dele precisa seguir
+   * `"whatsapp-api-proxy"` (é o que o webhook lê para autoria e classificação),
+   * mas `deriveCategory` leria esse valor como automação.
+   */
+  category?: SendCategory;
+  /** Rótulo nativo "Encaminhada" no WhatsApp (Uazapi). */
+  forward?: boolean;
 };
+
+/** Opções de envio de mídia — mesmo contrato de `SendTextOpts` no que se aplica. */
+type SendMediaOpts = Pick<
+  SendTextOpts,
+  "trackSource" | "trackId" | "idempotencyKey" | "category" | "forward"
+>;
 
 /**
  * Núcleo governado do envio de texto: provider + Send Governor + classificação
@@ -360,7 +376,7 @@ async function sendTextGoverned(
       {
         orgId: instance.organization_id,
         instanceId: instance.id,
-        category: deriveCategory(opts.trackSource),
+        category: opts.category ?? deriveCategory(opts.trackSource),
         recipientPhone: governorRecipient,
         trackSource: opts.trackSource,
         content: text,
@@ -374,6 +390,7 @@ async function sendTextGoverned(
           trackId: opts.trackId,
           delay: opts.delay,
           replyid: opts.replyId,
+          ...(opts.forward ? { forward: true } : {}),
         }),
     );
     if (isSkippedSend(governed)) {
@@ -719,12 +736,12 @@ export async function sendMediaViaInstance(
   instance: WhatsAppInstance,
   phoneNumber: string,
   media: {
-    type: "image" | "video" | "document" | "audio" | "sticker";
+    type: "image" | "video" | "document" | "audio" | "ptt" | "sticker";
     file: string;
     filename?: string;
     caption?: string;
   },
-  opts: { trackSource?: string; trackId?: string; idempotencyKey?: string } = {}
+  opts: SendMediaOpts = {}
 ): Promise<SendResultSimple> {
   const phone = normalizeBrazilianPhone(phoneNumber);
   if (!phone) return { success: false, error: "Invalid phone" };
@@ -736,7 +753,7 @@ export async function sendMediaViaInstance(
       {
         orgId: instance.organization_id,
         instanceId: instance.id,
-        category: deriveCategory(opts.trackSource),
+        category: opts.category ?? deriveCategory(opts.trackSource),
         recipientPhone: phone,
         trackSource: opts.trackSource,
         content: media.caption && media.caption.trim().length > 0 ? media.caption : media.file,
@@ -749,6 +766,7 @@ export async function sendMediaViaInstance(
           file: media.file,
           filename: media.filename,
           caption: media.caption,
+          ...(opts.forward ? { forward: true } : {}),
           trackSource: opts.trackSource,
           trackId: opts.trackId,
         }),
