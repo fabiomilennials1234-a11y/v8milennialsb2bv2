@@ -30,6 +30,7 @@ export function useServiceWorkerUpdate(): UseServiceWorkerUpdateReturn {
   const updateSWRef = useRef<ReturnType<typeof registerSW>>();
   const notifiedRef = useRef(false);
   const updatingRef = useRef(false);
+  const requestedReloadRef = useRef<() => void>();
 
   const updateSW = useCallback(() => {
     if (updatingRef.current) return;
@@ -45,6 +46,7 @@ export function useServiceWorkerUpdate(): UseServiceWorkerUpdateReturn {
       reloaded = true;
       window.location.reload();
     };
+    requestedReloadRef.current = reload;
 
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.addEventListener('controllerchange', reload, {
@@ -63,6 +65,11 @@ export function useServiceWorkerUpdate(): UseServiceWorkerUpdateReturn {
 
     updateSWRef.current = registerSW({
       immediate: true,
+      onNeedReload() {
+        // Workbox also receives activation from other tabs. Only this tab's
+        // explicit action may reload it, sharing the native/fallback guard.
+        requestedReloadRef.current?.();
+      },
       onNeedRefresh() {
         // workbox-window classifica um update achado >60s após o register
         // como "externo" e emite installed + waiting para o MESMO SW — o build

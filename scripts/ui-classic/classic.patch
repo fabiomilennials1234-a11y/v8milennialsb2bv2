@@ -5559,7 +5559,7 @@ index 64976bc8c..4d1ab20b5 100644
  
        <QuickBlastProgressPanel />
 diff --git a/classic/src/modules/platform/hooks/use-sw-update.ts b/classic/src/modules/platform/hooks/use-sw-update.ts
-index 76afbc226..9ba4f5242 100644
+index 76afbc226..1848457df 100644
 --- a/classic/src/modules/platform/hooks/use-sw-update.ts
 +++ b/classic/src/modules/platform/hooks/use-sw-update.ts
 @@ -7,15 +7,6 @@ import { registerSW } from 'virtual:pwa-register';
@@ -5578,7 +5578,7 @@ index 76afbc226..9ba4f5242 100644
  /**
   * Rede de segurança: se `skipWaiting` não resultar em `controllerchange`
   * (sem waiting worker no momento, activation travada), força o reload mesmo
-@@ -31,16 +22,18 @@ interface UseServiceWorkerUpdateReturn {
+@@ -31,16 +22,19 @@ interface UseServiceWorkerUpdateReturn {
  }
  
  /**
@@ -5593,6 +5593,7 @@ index 76afbc226..9ba4f5242 100644
    const updateSWRef = useRef<ReturnType<typeof registerSW>>();
    const notifiedRef = useRef(false);
 +  const updatingRef = useRef(false);
++  const requestedReloadRef = useRef<() => void>();
  
    const updateSW = useCallback(() => {
 +    if (updatingRef.current) return;
@@ -5600,7 +5601,15 @@ index 76afbc226..9ba4f5242 100644
      // O reload do build prompt roda só `if (event.isUpdate)` no evento
      // 'controlling', e workbox-window congela isUpdate no register() — página
      // que começou SEM controller ativaria o SW novo sem recarregar, ficando
-@@ -65,54 +58,6 @@ export function useServiceWorkerUpdate(): UseServiceWorkerUpdateReturn {
+@@ -52,6 +46,7 @@ export function useServiceWorkerUpdate(): UseServiceWorkerUpdateReturn {
+       reloaded = true;
+       window.location.reload();
+     };
++    requestedReloadRef.current = reload;
+ 
+     if ('serviceWorker' in navigator) {
+       navigator.serviceWorker.addEventListener('controllerchange', reload, {
+@@ -65,59 +60,16 @@ export function useServiceWorkerUpdate(): UseServiceWorkerUpdateReturn {
      updateSWRef.current?.(true);
    }, []);
  
@@ -5655,6 +5664,16 @@ index 76afbc226..9ba4f5242 100644
    useEffect(() => {
      let intervalId: number | undefined;
  
+     updateSWRef.current = registerSW({
+       immediate: true,
++      onNeedReload() {
++        // Workbox also receives activation from other tabs. Only this tab's
++        // explicit action may reload it, sharing the native/fallback guard.
++        requestedReloadRef.current?.();
++      },
+       onNeedRefresh() {
+         // workbox-window classifica um update achado >60s após o register
+         // como "externo" e emite installed + waiting para o MESMO SW — o build
 diff --git a/classic/src/modules/platform/hooks/useSavedViews.ts b/classic/src/modules/platform/hooks/useSavedViews.ts
 index 82fb19bff..081a21cfb 100644
 --- a/classic/src/modules/platform/hooks/useSavedViews.ts
