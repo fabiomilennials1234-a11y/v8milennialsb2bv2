@@ -92,6 +92,25 @@ describe("o canal oficial na lista", () => {
 });
 
 /**
+ * O recuo entra em momentos diferentes conforme a política. Na Loofting
+ * (2026-10-08) o nó estava em "responsável" e o campo dizia "Se não houver
+ * conversa" — o operador leu como irrelevante para um lead que já tinha
+ * escrito, deixou vazio, e 14 de 14 execuções falharam.
+ */
+describe("rótulo do recuo por política", () => {
+  it("em responsável, diz que entra quando o responsável não tem número", () => {
+    montar({ instanceRoutingPolicy: "responsible" }, [CHIP, CHIP_2]);
+    expect(screen.queryByLabelText("Se o responsável não tiver número")).not.toBeNull();
+    expect(screen.queryByLabelText("Se não houver conversa")).toBeNull();
+  });
+
+  it("em conversa, mantém o rótulo da conversa", () => {
+    montar({ instanceRoutingPolicy: "conversation" }, [CHIP, CHIP_2]);
+    expect(screen.queryByLabelText("Se não houver conversa")).not.toBeNull();
+  });
+});
+
+/**
  * O aviso descreve `deadPinShortcut`, não a contagem geral. São 63 nós ativos
  * em 9 orgs com a fixa morta e sem recuo (medido 2026-08-20); o operador
  * precisa ler por onde o envio sai HOJE, e "hoje" é o chip.

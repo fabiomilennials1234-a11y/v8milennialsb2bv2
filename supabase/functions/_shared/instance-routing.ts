@@ -575,8 +575,66 @@ async function resolveByResponsible(
 ): Promise<RoutedInstance | null> {
   if (!leadId) return null;
   const result = await resolveLeadWriteInstance(supabase, leadId);
-  if (!result.ok || !result.instance) return null;
-  return await loadInstance(supabase, organizationId, result.instance.instanceId, providers);
+  if (result.ok && result.instance) {
+    return await loadInstance(supabase, organizationId, result.instance.instanceId, providers);
+  }
+  if (result.ok || result.errorCode !== "NO_INSTANCE") return null;
+  return await resolveByResponsibleAccess(supabase, organizationId, leadId, providers);
+}
+
+/**
+ * O responsável não é DONO de número nenhum — mas pode ter ACESSO a um.
+ *
+ * São dois vínculos diferentes, e a tela que o cliente usa é a do segundo:
+ * Configurações → WhatsApp → membros com acesso (`whatsapp_instance_allowed_members`).
+ * O dono (`owner_team_member_id`) só se marca num modal administrativo à parte.
+ * Medido na Loofting em 2026-10-08: 3 números, 3 vínculos de acesso, zero
+ * donos — e 14 de 14 execuções com "Enviar por: responsável" falhando, com a
+ * Ludimila tendo acesso ao número "Ludimila" desde 11/09.
+ *
+ * Só resolve quando o acesso aponta para **exatamente um** número da
+ * organização, no universo do nó. Com dois ou mais, quem escolhe seria o
+ * sistema — o defeito que o ADR-0025 corrigiu —, então devolve `null` e o nó
+ * segue para o recuo declarado ou falha. Vivacidade fica com `checkLive`: um
+ * número de acesso caído falha o envio, como um número de dono caído.
+ */
+async function resolveByResponsibleAccess(
+  supabase: SupabaseClient,
+  organizationId: string,
+  leadId: string,
+  providers: readonly string[],
+): Promise<RoutedInstance | null> {
+  const { data: lead } = await supabase
+    .from("leads")
+    .select("responsible_user_id")
+    .eq("id", leadId)
+    .eq("organization_id", organizationId)
+    .maybeSingle();
+
+  const responsible = str((lead as { responsible_user_id?: unknown } | null)?.responsible_user_id);
+  if (!responsible) return null;
+
+  const { data: access } = await supabase
+    .from("whatsapp_instance_allowed_members")
+    .select("whatsapp_instance_id")
+    .eq("team_member_id", responsible);
+
+  const ids = ((access as { whatsapp_instance_id?: unknown }[] | null) ?? [])
+    .map((r) => str(r.whatsapp_instance_id))
+    .filter((id): id is string => id !== null);
+  if (ids.length === 0) return null;
+
+  // O filtro por organização e provedor é o portão: um vínculo de acesso a
+  // número de outra org, ou a um `meta_cloud`, não é candidato.
+  const { data: candidates } = await supabase
+    .from("whatsapp_instances")
+    .select("*")
+    .eq("organization_id", organizationId)
+    .in("provider", providers)
+    .in("id", ids);
+
+  const list = (candidates as RoutedInstance[] | null) ?? [];
+  return list.length === 1 ? list[0] : null;
 }
 
 // ============================================================================

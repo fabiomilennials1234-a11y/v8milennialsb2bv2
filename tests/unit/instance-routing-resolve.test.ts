@@ -304,6 +304,102 @@ describe("política responsible", () => {
     const inst = await resolved({ instanceRoutingPolicy: "responsible" });
     expect(inst.id).toBe(INST_2.id);
   });
+
+  // ── Sem dono, com acesso ──────────────────────────────────────────────────
+  // Loofting, 2026-10-08: 3 números com membros de acesso e nenhum dono. A
+  // política `responsible` falhava em 14 de 14 execuções.
+
+  describe("responsável sem número próprio, com acesso", () => {
+    const LEAD_COM_RESP = { ...LEAD, responsible_user_id: "tm-7" };
+
+    beforeEach(() => {
+      mockTable("leads", [LEAD_COM_RESP]);
+      mockRpc("get_lead_write_instance", [{ responsible_user_id: "tm-7", error_code: "NO_INSTANCE" }]);
+    });
+
+    it("acesso a exatamente um número resolve nele", async () => {
+      mockTable("whatsapp_instance_allowed_members", [
+        { team_member_id: "tm-7", whatsapp_instance_id: INST_1.id },
+      ]);
+      const inst = await resolved({ instanceRoutingPolicy: "responsible" });
+      expect(inst.id).toBe(INST_1.id);
+    });
+
+    it("acesso a dois números não escolhe — cai no recuo declarado", async () => {
+      mockTable("whatsapp_instance_allowed_members", [
+        { team_member_id: "tm-7", whatsapp_instance_id: INST_1.id },
+        { team_member_id: "tm-7", whatsapp_instance_id: INST_2.id },
+      ]);
+      const inst = await resolved({
+        instanceRoutingPolicy: "responsible",
+        fallbackInstanceId: INST_2.id,
+      });
+      expect(inst.id).toBe(INST_2.id);
+    });
+
+    it("acesso a dois números e sem recuo falha", async () => {
+      mockTable("whatsapp_instance_allowed_members", [
+        { team_member_id: "tm-7", whatsapp_instance_id: INST_1.id },
+        { team_member_id: "tm-7", whatsapp_instance_id: INST_2.id },
+      ]);
+      await expect(resolve({ instanceRoutingPolicy: "responsible" })).resolves.toMatchObject({
+        ok: false,
+        code: "no_instance_resolved",
+      });
+    });
+
+    it("acesso de outro membro não conta", async () => {
+      mockTable("whatsapp_instance_allowed_members", [
+        { team_member_id: "tm-outro", whatsapp_instance_id: INST_1.id },
+      ]);
+      await expect(resolve({ instanceRoutingPolicy: "responsible" })).resolves.toMatchObject({
+        ok: false,
+        code: "no_instance_resolved",
+      });
+    });
+
+    it("acesso a número de outra organização não conta", async () => {
+      mockTable("whatsapp_instance_allowed_members", [
+        { team_member_id: "tm-7", whatsapp_instance_id: INST_ALHEIA.id },
+      ]);
+      await expect(resolve({ instanceRoutingPolicy: "responsible" })).resolves.toMatchObject({
+        ok: false,
+        code: "no_instance_resolved",
+      });
+    });
+
+    it("acesso a um número Meta não conta — isolamento de certificação", async () => {
+      mockTable("whatsapp_instances", [INST_1, INST_2, INST_META]);
+      mockTable("whatsapp_instance_allowed_members", [
+        { team_member_id: "tm-7", whatsapp_instance_id: INST_META.id },
+      ]);
+      await expect(resolve({ instanceRoutingPolicy: "responsible" })).resolves.toMatchObject({
+        ok: false,
+        code: "no_instance_resolved",
+      });
+    });
+
+    it("número de acesso caído falha — não troca de número", async () => {
+      mockTable("whatsapp_instance_allowed_members", [
+        { team_member_id: "tm-7", whatsapp_instance_id: INST_MORTA.id },
+      ]);
+      await expect(
+        resolve({ instanceRoutingPolicy: "responsible", fallbackInstanceId: INST_1.id }),
+      ).resolves.toMatchObject({ ok: false, code: "instance_disconnected" });
+    });
+
+    it("dono caído não vira acesso — o vínculo de dono continua mandando", async () => {
+      mockRpc("get_lead_write_instance", [{ instance_id: INST_MORTA.id, responsible_user_id: "tm-7" }]);
+      mockTable("whatsapp_instance_allowed_members", [
+        { team_member_id: "tm-7", whatsapp_instance_id: INST_1.id },
+      ]);
+      const inst = await resolved({
+        instanceRoutingPolicy: "responsible",
+        fallbackInstanceId: INST_2.id,
+      });
+      expect(inst.id).toBe(INST_2.id);
+    });
+  });
 });
 
 // ─── Sessão morta e isolamento Meta ────────────────────────────────────────

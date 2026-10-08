@@ -23,6 +23,7 @@ import {
   buildFixedInstanceChange,
   buildPolicyChange,
   deadPinShortcut,
+  describeFallback,
   describeRoutingPolicy,
   instanceRoutingLabel,
   isChipInstance,
@@ -207,6 +208,7 @@ export function InstanceRoutingSelector({
   // resolve o nó quando a política não resolve.
   const single = routable.length === 1;
   const showFallback = policyUsesFallback(policy) && !single;
+  const fallback = describeFallback(policy);
 
   return (
     <div className="space-y-4">
@@ -252,7 +254,7 @@ export function InstanceRoutingSelector({
 
       {showFallback && (
         <div className="space-y-2">
-          <Label>Se não houver conversa</Label>
+          <Label>{fallback.label}</Label>
           <Select
             value={data.fallbackInstanceId || SEM_RECUO}
             onValueChange={(v) =>
@@ -263,7 +265,7 @@ export function InstanceRoutingSelector({
               )
             }
           >
-            <SelectTrigger aria-label="Se não houver conversa">
+            <SelectTrigger aria-label={fallback.label}>
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -273,10 +275,7 @@ export function InstanceRoutingSelector({
               <InstanceOptions instances={routable} />
             </SelectContent>
           </Select>
-          <p className="text-xs text-muted-foreground">
-            Usado quando o lead ainda não trocou nenhuma mensagem. Sem recuo
-            declarado, o envio falha em vez de escolher um número sozinho.
-          </p>
+          <p className="text-xs text-muted-foreground">{fallback.hint}</p>
         </div>
       )}
     </div>
