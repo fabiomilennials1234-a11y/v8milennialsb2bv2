@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 
-import { useOrganization, useTeamMembers } from "@/modules/identity";
+import { useFeaturePermission, useOrganization, useTeamMembers } from "@/modules/identity";
 import { useLeadDetail } from "../lead-detail/hooks/useLeadDetail";
 import { useLeadComments } from "../lead-detail/hooks/useLeadComments";
 import { useLeadsDeals } from "../../hooks/useLeadsDeals";
@@ -14,6 +14,7 @@ import { deriveLeadStanding } from "../../lib/lead-relacao-situacao";
 import { useOrgUsaLeiDoErp } from "../../hooks/useOrgUsaLeiDoErp";
 import { useCafeJurereCadastro } from "../../hooks/useCafeJurereCadastro";
 import { aplicarCadastroCafeJurere } from "../../lib/cafe-jurere-cadastro";
+import { useLeadDocument } from "../../hooks/useLeadDocument";
 import { camposDeOrigemDaCampanha } from "./campos-de-origem-da-campanha";
 import type {
   LeadCardData,
@@ -183,6 +184,8 @@ export function useLeadCardData(leadId: string | null, isOpen: boolean): LeadCar
   const { lead, isLoading, visibility } = useLeadDetail(leadId, isOpen);
   const { organizationId, teamMemberId, role } = useOrganization();
   const cadastroErp = useCafeJurereCadastro(leadId, isOpen && !!lead && !!texto(lead as Linha, "erp_code") && (lead as Linha).cafe_jurere_erp_elegivel === true);
+  const { data: documentoLocal } = useLeadDocument(leadId, isOpen && !!lead);
+  const { allowed: podeEditarDocumento } = useFeaturePermission("leads.edit_document");
 
   // Os três hooks de lote aceitam lista; aqui a lista tem um id só. A queryKey
   // deles é ordenada, então o cache da aba de Leads não colide com o do card.
@@ -326,11 +329,24 @@ export function useLeadCardData(leadId: string | null, isOpen: boolean): LeadCar
           { chave: "company", rotulo: "Empresa", valor: texto(l, "company"), tipo: "texto", vazio: "Informe a empresa" },
           { chave: "email", rotulo: "E-mail", valor: texto(l, "email"), tipo: "email", vazio: "nome@empresa.com.br" },
           { chave: "phone", rotulo: "Telefone", valor: texto(l, "phone"), tipo: "telefone", vazio: "(00) 00000-0000" },
-          // ⚠️ As quatro abaixo NÃO existem como coluna em `leads` (medido em
+          // CPF/CNPJ NÃO é coluna de `leads`: o valor editado no Torque mora em
+          // `lead_documents` e só a RPC `set_lead_document` grava (o container
+          // tem ramo próprio para esta chave). Vale para todas as orgs; na
+          // Café Jurerê, `aplicarCadastroCafeJurere` põe o valor do ERP por
+          // baixo. A trava é só de permissão (Chamado 93027ffb).
+          {
+            somenteLeitura: !podeEditarDocumento,
+            chave: "documento",
+            rotulo: "CPF / CNPJ",
+            valor: documentoLocal?.document ?? null,
+            alteradoLocalmente: !!documentoLocal,
+            tipo: "documento",
+            vazio: "Informe o documento",
+          },
+          // ⚠️ As duas abaixo NÃO existem como coluna em `leads` (medido em
           // prod 2026-08-04). Aparecem vazias por decisão do CTO — some da tela
           // é o que faz ninguém nunca preencher — mas continuam apenas de
-          // leitura até a migration que cria as colunas. Ver o resumo da sessão.
-          { somenteLeitura: true, chave: "documento", rotulo: "CPF / CNPJ", valor: null, tipo: "documento", vazio: "Informe o documento" },
+          // leitura até a migration que cria as colunas.
           { somenteLeitura: true, chave: "site", rotulo: "Site", valor: null, tipo: "url", vazio: "www.exemplo.com.br" },
           { somenteLeitura: true, chave: "nascimento", rotulo: "Nascimento / fundação", valor: null, tipo: "data", vazio: "dd/mm/aaaa" },
           // O que a org perguntou no formulário e o lead respondeu. Vem por
@@ -430,7 +446,7 @@ export function useLeadCardData(leadId: string | null, isOpen: boolean): LeadCar
 
       negocios,
       nota: texto(l, "notes") ?? "",
-      campos: cadastroErp.data ? aplicarCadastroCafeJurere(campos, cadastroErp.data) : cadastroErp.isFetching || cadastroErp.isError ? [
+      campos: cadastroErp.data ? aplicarCadastroCafeJurere(campos, cadastroErp.data, documentoLocal?.document ?? null) : cadastroErp.isFetching || cadastroErp.isError ? [
         ...campos,
         { titulo: "Cadastro no ERP", campos: [{ chave: "erp_carregamento", rotulo: "Sincronização", valor: cadastroErp.isError ? "Não foi possível carregar os dados. Reabra o cartão para tentar novamente." : "Carregando dados do ERP…", somenteLeitura: true, origemErp: true }] },
       ] : campos,
@@ -441,6 +457,8 @@ export function useLeadCardData(leadId: string | null, isOpen: boolean): LeadCar
     cadastroErp.data,
     cadastroErp.isFetching,
     cadastroErp.isError,
+    documentoLocal,
+    podeEditarDocumento,
     lead,
     dealsMap,
     produtosPorNegocio,

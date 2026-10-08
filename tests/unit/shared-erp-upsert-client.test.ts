@@ -333,3 +333,81 @@ describe("upsertCanonicalClient — canonical", () => {
     expect(row.organization_id).toBe("org1");
   });
 });
+
+/**
+ * Chamado 93027ffb — CPF/CNPJ editado no Torque mora em `lead_documents`, e
+ * NÃO em `upsell_clients.cnpj`. O motivo está aqui: em `canonical` o sync
+ * escreve o documento do ERP por cima da coluna a cada volta, e a coluna é a
+ * chave que casa pedidos e cobranças. Estes casos travam as duas metades do
+ * contrato: o sync continua dono do espelho, e não conhece o override.
+ */
+describe("upsertCanonicalClient — o override de documento do lead fica fora do sync", () => {
+  const espelhoDivergente: ExistingClient = {
+    id: "c-1",
+    // Alguém mexeu na coluna à mão: em canonical o ERP volta a valer.
+    cnpj: "10203040506070",
+    phone: CLIENT.phone,
+    email: CLIENT.email,
+    company: CLIENT.company,
+    name: CLIENT.name,
+    external_source: "toth",
+    external_id: CLIENT.externalId,
+    external_ref: CLIENT.externalRef,
+  };
+
+  function storeQueRegistra() {
+    const escritas: Array<{ metodo: string; args: unknown[] }> = [];
+    const store: ClientStore = {
+      findByExternalId: () => Promise.resolve(espelhoDivergente),
+      findByCnpj: () => Promise.resolve(espelhoDivergente),
+      enrich: (...args) => {
+        escritas.push({ metodo: "enrich", args });
+        return Promise.resolve();
+      },
+      createLead: (...args) => {
+        escritas.push({ metodo: "createLead", args });
+        return Promise.resolve("l-1");
+      },
+      createClient: (...args) => {
+        escritas.push({ metodo: "createClient", args });
+        return Promise.resolve("c-1");
+      },
+    };
+    return { store, escritas };
+  }
+
+  it("em canonical o documento do ERP reescreve upsell_clients.cnpj — por isso o override não pode morar ali", async () => {
+    const { store, escritas } = storeQueRegistra();
+    const r = await upsertCanonicalClient(store, {
+      organizationId: "org-1",
+      source: "toth",
+      client: CLIENT,
+      syncMode: "canonical",
+    });
+
+    expect(r.action).toBe("enriched");
+    expect(escritas).toEqual([{ metodo: "enrich", args: ["c-1", { cnpj: CLIENT.cnpj }] }]);
+  });
+
+  it("a única escrita do sync é a linha de upsell_clients: nenhum lead e nenhum override são tocados", async () => {
+    const { store, escritas } = storeQueRegistra();
+    await upsertCanonicalClient(store, {
+      organizationId: "org-1",
+      source: "toth",
+      client: { ...CLIENT, email: "novo@acme.com" },
+      syncMode: "canonical",
+    });
+
+    expect(escritas.map((e) => e.metodo)).toEqual(["enrich"]);
+    const patch = escritas[0].args[1] as Record<string, unknown>;
+    expect(Object.keys(patch).some((k) => /document|override|lead_/.test(k))).toBe(false);
+  });
+
+  it("o porto do sync não tem caminho para lead_documents", async () => {
+    const { readFileSync } = await import("node:fs");
+    const fonte = readFileSync("supabase/functions/_shared/erp/sync/upsert-client.ts", "utf8");
+    expect(fonte).not.toMatch(/lead_documents|set_lead_document/);
+    const { store } = storeQueRegistra();
+    expect(Object.keys(store).sort()).toEqual(["createClient", "createLead", "enrich", "findByCnpj", "findByExternalId"]);
+  });
+});

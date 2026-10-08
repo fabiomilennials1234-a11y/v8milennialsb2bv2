@@ -67,6 +67,7 @@ vi.mock("@/modules/identity", () => ({
     role: identidadeRef.papel,
   }),
   useTeamMembers: () => ({ data: [] }),
+  useFeaturePermission: () => ({ allowed: false, isLoading: false, hasError: false }),
 }));
 
 vi.mock("@/modules/leads/hooks/useLeadsDeals", () => ({ useLeadsDeals: () => ({ data: {} }) }));
@@ -84,6 +85,15 @@ vi.mock("@/modules/leads/hooks/useLeadsSalesMetrics", () => ({
 }));
 vi.mock("@/modules/leads/hooks/useLeadsCarteiraMetrics", () => ({
   useLeadsCarteiraMetrics: () => ({ data: {} }),
+}));
+// CPF/CNPJ grava por RPC própria (Chamado 93027ffb); a mutação passa por
+// `useQueryClient`, e este arquivo monta sem provider.
+vi.mock("@/modules/leads/hooks/useLeadDocument", () => ({
+  useLeadDocument: () => ({ data: null }),
+  useSetLeadDocument: () => ({ mutateAsync: vi.fn().mockResolvedValue({}) }),
+}));
+vi.mock("@/modules/leads/hooks/useCafeJurereCadastro", () => ({
+  useCafeJurereCadastro: () => ({ data: undefined, isFetching: false, isError: false }),
 }));
 vi.mock("@/modules/leads/hooks/useLeadCustomFields", () => ({
   useLeadCustomFields: () => ({ data: [] }),

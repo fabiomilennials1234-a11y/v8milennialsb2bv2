@@ -4,9 +4,14 @@ import { notifyError } from "@/shared/errors";
 interface UseInlineEditOptions {
   value: string;
   onSave: (newValue: string) => Promise<void>;
+  /**
+   * Na recusa, mantém o texto digitado na linha em vez de voltar ao valor
+   * salvo — para quem errou um dígito do CPF/CNPJ corrigir sem redigitar.
+   */
+  keepOnError?: boolean;
 }
 
-export function useInlineEdit({ value, onSave }: UseInlineEditOptions) {
+export function useInlineEdit({ value, onSave, keepOnError = false }: UseInlineEditOptions) {
   const [localValue, setLocalValue] = useState(value);
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -60,7 +65,7 @@ export function useInlineEdit({ value, onSave }: UseInlineEditOptions) {
       originalRef.current = savedValue;
       setLocalValue(savedValue);
     } catch (err: unknown) {
-      setLocalValue(originalValue);
+      setLocalValue(keepOnError ? savedValue : originalValue);
       notifyError(err, { fallback: "Não foi possível salvar." });
     } finally {
       editingRef.current = false;
@@ -68,7 +73,7 @@ export function useInlineEdit({ value, onSave }: UseInlineEditOptions) {
       setIsEditing(false);
       setIsSaving(false);
     }
-  }, [localValue, onSave]);
+  }, [localValue, onSave, keepOnError]);
 
   return { localValue, setLocalValue, isEditing, isSaving, startEditing, commit, cancel };
 }

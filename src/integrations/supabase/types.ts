@@ -8997,6 +8997,66 @@ export type Database = {
           },
         ]
       }
+      lead_documents: {
+        Row: {
+          created_at: string
+          document: string
+          document_kind: string | null
+          erp_document_at_set: string | null
+          erp_writeback_attempted_at: string | null
+          erp_writeback_error: string | null
+          erp_writeback_status: string
+          lead_id: string
+          organization_id: string
+          source: string
+          updated_at: string
+          updated_by: string
+        }
+        Insert: {
+          created_at?: string
+          document: string
+          document_kind?: never
+          erp_document_at_set?: string | null
+          erp_writeback_attempted_at?: string | null
+          erp_writeback_error?: string | null
+          erp_writeback_status: string
+          lead_id: string
+          organization_id: string
+          source?: string
+          updated_at?: string
+          updated_by: string
+        }
+        Update: {
+          created_at?: string
+          document?: string
+          document_kind?: never
+          erp_document_at_set?: string | null
+          erp_writeback_attempted_at?: string | null
+          erp_writeback_error?: string | null
+          erp_writeback_status?: string
+          lead_id?: string
+          organization_id?: string
+          source?: string
+          updated_at?: string
+          updated_by?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lead_documents_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: true
+            referencedRelation: "leads"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lead_documents_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       lead_history: {
         Row: {
           action: string
@@ -23378,6 +23438,10 @@ export type Database = {
           p_state: string
         }
         Returns: undefined
+      }
+      set_lead_document: {
+        Args: { p_document: string; p_lead_id: string }
+        Returns: Json
       }
       set_meta_cloud_credentials: {
         Args: {

@@ -129,6 +129,13 @@ export interface LeadCardField {
   somenteLeitura?: boolean;
   /** Fonte externa autoritativa; alterações são feitas no ERP. */
   origemErp?: boolean;
+  /**
+   * O valor exibido é um override gravado no Torque (`lead_documents`), não o
+   * do ERP. A linha mostra o selo "alterado no Torque". Só CPF/CNPJ hoje.
+   */
+  alteradoLocalmente?: boolean;
+  /** O valor que o ERP tem para este campo, mostrado ao lado do override. */
+  valorErp?: string | null;
 }
 
 export interface LeadCardFieldGroup {

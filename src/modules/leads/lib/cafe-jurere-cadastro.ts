@@ -1,4 +1,5 @@
 import type { LeadCardField, LeadCardFieldGroup } from "../components/lead-card/types";
+import { sanitizeErpDocument } from "./document";
 
 type Row = Record<string, unknown>;
 const record = (value: unknown): Row => value && typeof value === "object" && !Array.isArray(value) ? value as Row : {};
@@ -6,8 +7,21 @@ const text = (value: unknown): string | null => typeof value === "string" ? valu
 const date = (value: string | null) => value?.replace(/^(\d{4})-(\d{2})-(\d{2})(?:T.*)?$/, "$3/$2/$1") ?? null;
 const label = (value: string | null, labels: Record<string, string>) => value === null ? null : labels[value] ?? value;
 
-/** Preenche somente os campos ERP; as respostas personalizadas permanecem intactas. */
-export function aplicarCadastroCafeJurere(groups: LeadCardFieldGroup[], client: Row): LeadCardFieldGroup[] {
+/**
+ * Preenche somente os campos ERP; as respostas personalizadas permanecem intactas.
+ *
+ * CPF/CNPJ é a exceção (Chamado 93027ffb): o valor do ERP passa pela mesma
+ * sanitização do sync (o placeholder "00000000000000" do Toth vira vazio) e
+ * pode ser sobreposto por um override local (`lead_documents`). Com override,
+ * o valor exibido é o do Torque, com o do ERP ao lado. A edição não é travada
+ * aqui: quem decide é a permissão `leads.edit_document`, que já chega no
+ * `somenteLeitura` do campo. Os demais campos do ERP continuam travados.
+ */
+export function aplicarCadastroCafeJurere(
+  groups: LeadCardFieldGroup[],
+  client: Row,
+  override: string | null = null,
+): LeadCardFieldGroup[] {
   const meta = record(client.erp_metadata);
   const snapshot = record(meta.cadastro);
   const completo = Object.keys(snapshot).length > 0;
@@ -16,14 +30,19 @@ export function aplicarCadastroCafeJurere(groups: LeadCardFieldGroup[], client: 
     chave: `erp_${key}`, rotulo, valor, somenteLeitura: true, origemErp: true, vazio: "Não informado no ERP",
   });
   const address = [value("logradouro"), value("numero")].filter(Boolean).join(", ") || null;
+  const documentoErp = sanitizeErpDocument(value("numeroInscricao", client.cnpj));
+  const documento = (field: LeadCardField): LeadCardField => override
+    ? { ...field, valor: override, origemErp: false, alteradoLocalmente: true, valorErp: documentoErp, vazio: "Informe o documento" }
+    : { ...field, valor: documentoErp, origemErp: true, alteradoLocalmente: false, valorErp: documentoErp, vazio: "Não informado no ERP" };
   const replacements: Record<string, string | null> = {
-    documento: value("numeroInscricao", client.cnpj), site: value("site"),
+    site: value("site"),
     nascimento: date(value("dataNascimento")), cidade: value("cidade", client.erp_city),
     uf: value("uf", client.erp_uf), logradouro: address, cep: value("cep"),
   };
   return [
     ...groups.map(group => ({ ...group, campos: group.campos.map(field =>
-      !field.personalizado && Object.prototype.hasOwnProperty.call(replacements, field.chave)
+      !field.personalizado && field.chave === "documento" ? documento(field)
+      : !field.personalizado && Object.prototype.hasOwnProperty.call(replacements, field.chave)
         ? { ...field, valor: replacements[field.chave], somenteLeitura: true, origemErp: true, vazio: "Não informado no ERP" }
         : field) })),
     { titulo: "Cadastro no ERP", campos: [
