@@ -23,6 +23,7 @@ import { AgentEngine } from "../agent-message/agent-engine.ts";
 import { OpenRouterClient } from "../agent-message/openrouter-client.ts";
 import { timingSafeCompare } from "../_shared/auth.ts";
 import { isCopilotCanceled } from "../_shared/copilot/cancellation.ts";
+import { decideFunnelGate } from "../agent-message/funnel-gate.ts";
 import { getNextCadenceStep, type CadenceStep, type StepLogEntry } from "../_shared/copilot/followup-cadence.ts";
 import { isLeadEligibleForTrigger, type TriggerLead } from "../_shared/copilot/followup-triggers.ts";
 import { sleepJitter } from "../_shared/anti-ban-jitter.ts";
@@ -101,7 +102,7 @@ Deno.serve(withErrorBoundary('process-copilot-followups', async (req) => {
       send_days,
       timezone,
       sequence_steps,
-      copilot_agents(organization_id, whatsapp_instance_id)
+      copilot_agents(organization_id, whatsapp_instance_id, active_pipes)
     `
     )
     .eq("is_active", true)
@@ -301,6 +302,16 @@ Deno.serve(withErrorBoundary('process-copilot-followups', async (req) => {
           totalSkipped++;
           continue;
         }
+      }
+      // Funil ligado do agente (`active_pipes`): a regra não procura lead que vive
+      // só em funil onde a IA não foi ligada, mesmo com filter_pipes vazio.
+      // Mesma decisão do gate de inbound (agent-message/funnel-gate.ts).
+      const openFunnels = ((lead.current_funnel_entries || []) as Array<any>)
+        .filter((entry) => !entry.closed_at)
+        .map((entry) => ({ id: entry.pipeline_id, slug: entry.pipeline_slug }));
+      if (decideFunnelGate([{ active_pipes: agent?.active_pipes }], openFunnels).blocked) {
+        totalSkipped++;
+        continue;
       }
       if (filterStages.length > 0) {
         const upsellClient = (lead as any).upsell_clients?.[0] || (lead as any).upsell_clients || null;
