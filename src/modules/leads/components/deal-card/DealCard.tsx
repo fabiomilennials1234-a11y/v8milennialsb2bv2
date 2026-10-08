@@ -20,9 +20,10 @@ import { AjustarPedidoGanho, type AjustePedidoGanho } from "./AjustarPedidoGanho
 import { CorrigirVendaHistorica } from "./CorrigirVendaHistorica";
 import { diaDaVenda } from "./dia-da-venda";
 import type { CorrecaoVendaHistorica } from "@/modules/leads/components/deal-card/types";
+import { DataDoDesfecho } from "./DataDoDesfecho";
 import { contaDoNegocio } from "./conta-do-negocio";
 import { situacaoDaReuniao, type SituacaoDaReuniao } from "./reuniao-do-negocio";
-import type { DealCardAba, DealCardComentario, DealCardData, ItemEditado } from "./types";
+import type { CorrecaoDataDoDesfecho, DealCardAba, DealCardComentario, DealCardData, ItemEditado } from "./types";
 
 /**
  * O Card do Negócio — a aba "Negócio" da gaveta do V5.
@@ -247,6 +248,7 @@ export function DealCard({
   onEditarItem,
   onAjustarPedido,
   onCorrigirVendaHistorica,
+  onCorrigirDataDoDesfecho,
   ajustesPedido = [],
   onRemoverItem,
   onEditarValor,
@@ -293,6 +295,11 @@ export function DealCard({
   onEditarItem?: (edicao: ItemEditado) => Promise<void>;
   onAjustarPedido?: (ajuste: AjustePedidoGanho) => Promise<void>;
   onCorrigirVendaHistorica?: (correcao: CorrecaoVendaHistorica) => Promise<void>;
+  /**
+   * Corrige "Vendido em" / "Perdido em" clicando no próprio bloco. Ausente =
+   * bloco só de leitura (sem permissão, ou a prévia sem banco).
+   */
+  onCorrigirDataDoDesfecho?: (correcao: CorrecaoDataDoDesfecho) => Promise<unknown>;
   ajustesPedido?: Array<{
     id: string;
     reason: string;
@@ -587,9 +594,16 @@ export function DealCard({
           {/* Desfecho — só quando o negócio já morreu. */}
           {!aberto && negocio.desfecho && (
             <div className="grid grid-cols-2 gap-2 min-[480px]:grid-cols-3">
-              <BlocoNoOuro rotulo={negocio.estado === "ganho" ? "Vendido em" : "Perdido em"}>
+              <DataDoDesfecho
+                key={`${negocio.id}:${negocio.estado}`}
+                estado={negocio.estado === "ganho" ? "ganho" : "perdido"}
+                quando={negocio.desfecho.quando}
+                timezone={negocio.timezone}
+                versao={negocio.pedidoAtualizadoEm}
+                onSalvar={negocio.desfecho.quando ? onCorrigirDataDoDesfecho : undefined}
+              >
                 {formatarData(negocio.desfecho.quando)}
-              </BlocoNoOuro>
+              </DataDoDesfecho>
               {negocio.desfecho.valorVenda ? (
                 <BlocoNoOuro rotulo="Valor da venda">{formatBRL(negocio.desfecho.valorVenda)}</BlocoNoOuro>
               ) : null}

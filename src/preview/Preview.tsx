@@ -168,6 +168,9 @@ export function Preview() {
                      confirmação e a exclusão moram no `DealCardPanel`, que fala
                      com banco e por isso não entra aqui (`inv:H5-17`). */
                   onExcluir={() => undefined}
+                  /* O bloco "Vendido em" vira botão só com esta prop — sem ela
+                     a bancada esconderia a affordance que se quer julgar. */
+                  onCorrigirDataDoDesfecho={async () => undefined}
                 />
               </div>
             </div>

@@ -38,6 +38,7 @@ import { TothOrderDraftSlot } from "./TothOrderDraftSlot";
 import { useDealCardData } from "./useDealCardData";
 import { useAjustarPedidoGanho } from "./useAjustarPedidoGanho";
 import { useCorrigirVendaHistorica } from "./useCorrigirVendaHistorica";
+import { useCorrigirDataDoDesfecho } from "./useCorrigirDataDoDesfecho";
 import { useExcluirNegocio } from "./useExcluirNegocio";
 import { useCelebracaoDoDesfecho } from "./useCelebracaoDoDesfecho";
 import {
@@ -116,6 +117,10 @@ export const DealCardPanel = memo(function DealCardPanel() {
     dealId, entryId, data?.pedidoAtualizadoEm ?? null, organizacaoId,
   );
   const corrigirVenda = useCorrigirVendaHistorica(
+    data?.vendaHistorica ? data.id : dealId, organizacaoId, data?.pedidoAtualizadoEm ?? null,
+  );
+  // Venda histórica mora em outro negócio (`data.id`), como na correção acima.
+  const corrigirDataDoDesfecho = useCorrigirDataDoDesfecho(
     data?.vendaHistorica ? data.id : dealId, organizacaoId, data?.pedidoAtualizadoEm ?? null,
   );
   const garantirNegocio = useGarantirNegocioDaEntrada(entryId);
@@ -582,6 +587,7 @@ export const DealCardPanel = memo(function DealCardPanel() {
         onAdicionarProduto={adicionarProduto}
         onAjustarPedido={dealId && data.pedidoAtualizadoEm ? ajustePedido.mutateAsync : undefined}
         onCorrigirVendaHistorica={data.estado === "ganho" && (data.vendaHistorica || dealId) && data.pedidoAtualizadoEm && organizacaoId ? corrigirVenda.mutateAsync : undefined}
+        onCorrigirDataDoDesfecho={data.estado !== "aberto" && (data.vendaHistorica || dealId) && data.pedidoAtualizadoEm && organizacaoId ? corrigirDataDoDesfecho.mutateAsync : undefined}
         ajustesPedido={ajustePedido.historico}
         /* Estes dois seguem presos ao negócio, e isso NÃO esconde nada: o lápis
            e a lixeira são de item já lançado, e não há item sem negócio. */
