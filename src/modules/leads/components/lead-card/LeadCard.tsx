@@ -211,6 +211,7 @@ export function LeadCard({
   modo = "ficha",
   abaInicial,
   painelNegocios,
+  contatos,
 }: {
   lead: LeadCardData;
   /** Persiste a anotação. Sem ela o campo edita mas não grava (visualização). */
@@ -266,6 +267,12 @@ export function LeadCard({
    * prop, a aba Dados mostra só o dono, de leitura.
    */
   controles?: React.ReactNode;
+  /**
+   * Contatos do lead (telefones nomeados, Chamado 82c50502), montados por quem
+   * tem banco — mesmo escape de `editorDeEtiquetas`. Com a prop, o campo
+   * "Telefone" sai do bloco de dados: a lista de contatos É o telefone.
+   */
+  contatos?: React.ReactNode;
   /**
    * `ficha` é a gaveta da pessoa (a lista de Leads abre esta). `negocio` é a
    * MESMA gaveta aberta pelo cartão do funil: o nome da pessoa deixa de ser o
@@ -413,6 +420,8 @@ export function LeadCard({
               </div>
             )}
 
+            {contatos && <div className={CARTAO}>{contatos}</div>}
+
             <section className={cn(CARTAO, "flex flex-col gap-2")}>
               <h3 className={ROTULO}>Etiquetas</h3>
               {/* Com o editor, as pílulas saem daqui e vêm de lá: duas listas
@@ -451,7 +460,15 @@ export function LeadCard({
               {/* `key`: a edição em linha guarda o valor salvo até o refetch;
                   sem reiniciar por pessoa, o nome gravado em um lead aparecia
                   no campo do próximo (a aba Dados agora fica aberta na troca). */}
-              <LeadCardFields key={lead.id} grupos={lead.campos} onSave={onSaveField} />
+              <LeadCardFields
+                key={lead.id}
+                grupos={
+                  contatos
+                    ? lead.campos.map((g) => ({ ...g, campos: g.campos.filter((c) => c.chave !== "phone") }))
+                    : lead.campos
+                }
+                onSave={onSaveField}
+              />
             </div>
           </div>
         )}

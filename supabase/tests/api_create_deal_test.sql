@@ -23,12 +23,12 @@ SELECT no_plan();
 -- ===========================================================================
 SELECT ok(
   NOT has_function_privilege('anon',
-    'public.api_create_deal(uuid,uuid,text,text,uuid,numeric,text,text,text,text)', 'EXECUTE'),
+    'public.api_create_deal(uuid,uuid,text,text,uuid,numeric,text,text,text,text,uuid)', 'EXECUTE'),
   '(ACL) anon NÃO executa api_create_deal');
 
 SELECT ok(
   NOT has_function_privilege('authenticated',
-    'public.api_create_deal(uuid,uuid,text,text,uuid,numeric,text,text,text,text)', 'EXECUTE'),
+    'public.api_create_deal(uuid,uuid,text,text,uuid,numeric,text,text,text,text,uuid)', 'EXECUTE'),
   '(ACL) authenticated NÃO executa — é DEFINER e recebe a org por parâmetro');
 
 SELECT is(

@@ -156,3 +156,53 @@ describe("contactLabel — flag chat_nome_do_lead", () => {
     expect(contactLabel(c, { nomeDoLeadPrimeiro: false })).toBe("Ana");
   });
 });
+
+describe("contactLabel — flag chat_nome_cod_contato_lead (Chamado 82c50502)", () => {
+  const cliente = whatsapp({
+    lead_id: "l-1",
+    lead_name: "Padaria Um",
+    lead_erp_code: "6627",
+    lead_contact_label: "José Luiz - Compras",
+    push_name: "Zé",
+  });
+
+  it("lista mostra Cód - Contato - Lead", () => {
+    expect(contactLabel(cliente, { nomeCodContatoLead: true })).toBe("6627 - José Luiz - Compras - Padaria Um");
+  });
+
+  it("vence chat_nome_do_lead", () => {
+    expect(contactLabel(cliente, { nomeCodContatoLead: true, nomeDoLeadPrimeiro: true })).toBe(
+      "6627 - José Luiz - Compras - Padaria Um",
+    );
+  });
+
+  it("telefone sem nome de contato: Cód - Lead", () => {
+    expect(contactLabel({ ...cliente, lead_contact_label: null }, { nomeCodContatoLead: true })).toBe(
+      "6627 - Padaria Um",
+    );
+  });
+
+  it("grupo fica com a regra de sempre", () => {
+    expect(contactLabel({ ...cliente, is_group: true }, { nomeCodContatoLead: true })).toBe("Zé");
+  });
+
+  it("sem a flag, nada muda", () => {
+    expect(contactLabel(cliente)).toBe("Zé");
+    expect(contactLabel(cliente, { nomeDoLeadPrimeiro: true })).toBe("Padaria Um");
+  });
+
+  it("lista e topo dão o MESMO nome (uma função só)", async () => {
+    const { nomeDaConversa } = await import("../../lib/nomeDaConversa");
+    const topo = nomeDaConversa(
+      {
+        pushName: cliente.push_name,
+        nomeDoLead: cliente.lead_name,
+        telefone: cliente.phone_number,
+        erpCode: cliente.lead_erp_code,
+        contato: cliente.lead_contact_label,
+      },
+      { nomeCodContatoLead: true },
+    );
+    expect(contactLabel(cliente, { nomeCodContatoLead: true })).toBe(topo);
+  });
+});

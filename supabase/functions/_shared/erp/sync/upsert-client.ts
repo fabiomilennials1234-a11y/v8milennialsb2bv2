@@ -25,6 +25,11 @@ export type ErpSyncMode = "off" | "enrich_only" | "canonical";
 
 export interface ExistingClient {
   id: string;
+  /**
+   * Lead da carteira. Opcional para não quebrar chamadores antigos; quando
+   * presente, o sync leva os telefones do ERP para `lead_phones` deste lead.
+   */
+  lead_id?: string | null;
   cnpj: string | null;
   phone: string | null;
   email: string | null;
@@ -173,7 +178,10 @@ export async function upsertCanonicalClient(
       patch.name = client.name;
       patch.company = client.company;
       patch.email = client.email;
-      patch.phone = client.phone;
+      // Telefone NÃO é sobrescrito, nem em canonical (Chamado 82c50502): o
+      // número que o vendedor ajustou no CRM vale mais que o do ERP. Só entra
+      // quando está vazio; os demais telefones do ERP vão para `lead_phones`.
+      if (!existing.phone && client.phone) patch.phone = client.phone;
       patch.cnpj = client.cnpj;
     } else {
       // enrich_only: fill only empty fields; the curated name is never touched.

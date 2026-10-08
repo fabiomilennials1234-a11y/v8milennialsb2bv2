@@ -28,7 +28,7 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { useQuery } from "@tanstack/react-query";
 import { useDebounce } from "@/shared/hooks/useDebounce";
-import { LeadModal } from "@/modules/leads";
+import { LeadModal, buscarLeadIdsPorTelefoneSecundario } from "@/modules/leads";
 import { notifyError } from "@/shared/errors";
 
 interface AddLeadToPipeModalProps {
@@ -77,11 +77,18 @@ export function AddLeadToPipeModal({
       if (!teamMember?.organization_id || !debouncedSearch.trim()) return [];
 
       const query = `%${debouncedSearch.trim()}%`;
+      // Telefone secundário do lead (lead_phones) também acha — Chamado 82c50502.
+      const secundarios = await buscarLeadIdsPorTelefoneSecundario(
+        teamMember.organization_id,
+        debouncedSearch,
+      );
+      const clauses = [`name.ilike.${query}`, `company.ilike.${query}`, `phone.ilike.${query}`];
+      if (secundarios.length > 0) clauses.push(`id.in.(${secundarios.join(",")})`);
       const { data, error } = await supabase
         .from("leads")
         .select("id, name, company, phone, email")
         .eq("organization_id", teamMember.organization_id)
-        .or(`name.ilike.${query},company.ilike.${query},phone.ilike.${query}`)
+        .or(clauses.join(","))
         .limit(20);
 
       if (error) throw error;

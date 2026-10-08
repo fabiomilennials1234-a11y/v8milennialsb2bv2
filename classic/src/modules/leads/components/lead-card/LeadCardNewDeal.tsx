@@ -51,7 +51,7 @@ export function LeadCardNewDeal({
   const { usePipePropostaByLeadId } = usePipeOps();
   const { data: proposta } = usePipePropostaByLeadId(alvo);
 
-  const { options, isCreating, criar } = useAbrirNegocio({
+  const { options, phones, isCreating, criar } = useAbrirNegocio({
     leadId,
     organizationId,
     pipelines: pipelines as PipelineStatus[],
@@ -62,6 +62,7 @@ export function LeadCardNewDeal({
   return (
     <NewDealDialog
       options={options}
+      phones={phones}
       isCreating={isCreating}
       onCreate={criar}
       open={open}

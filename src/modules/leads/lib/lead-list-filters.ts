@@ -15,6 +15,13 @@
 export interface LeadListFilterValues {
   /** Busca livre — casa contra nome, empresa, e-mail e telefone. */
   searchQuery?: string;
+  /**
+   * Leads cujo telefone SECUNDÁRIO (`lead_phones`) casa com os dígitos da busca
+   * (Chamado 82c50502). Resolvido antes, por `buscarLeadIdsPorTelefoneSecundario`
+   * — este módulo é puro e não consulta o banco. Entra no MESMO `or()` da busca:
+   * achar pelo celular do "José Luiz - Compras" é achar o cliente.
+   */
+  secondaryPhoneLeadIds?: string[];
   filterOrigin?: string;
   /** Tier de qualificação, ou os sentinels `"all"` (sem filtro) e `"none"`
    * (leads sem tier — `qualification_tier IS NULL`, ≠ do tier "desqualificado"). */
@@ -119,7 +126,7 @@ const MIN_PHONE_SEARCH_DIGITS = 4;
  * não parece um telefone. Só os dígitos entram na query — o que também os torna
  * seguros de interpolar no `or()` do PostgREST (nenhum caractere estrutural).
  */
-function extractSearchDigits(search: string): string | null {
+export function extractSearchDigits(search: string): string | null {
   const digits = search.replace(/\D/g, "");
   return digits.length >= MIN_PHONE_SEARCH_DIGITS ? digits : null;
 }
@@ -188,6 +195,13 @@ export function applyLeadListFilters<Q>(query: Q, filters: LeadListFilterValues)
     const digits = extractSearchDigits(search);
     if (digits) {
       clauses.push(`normalized_phone.ilike.%${digits}%`);
+    }
+
+    // Só uuid entra: os ids vêm do banco, mas o `or()` do PostgREST é texto e
+    // um valor fora do formato quebraria a busca inteira (400).
+    const secundarios = (filters.secondaryPhoneLeadIds ?? []).filter((id) => UUID_RE.test(id));
+    if (secundarios.length > 0) {
+      clauses.push(`id.in.(${secundarios.join(",")})`);
     }
 
     q = q.or(clauses.join(","));

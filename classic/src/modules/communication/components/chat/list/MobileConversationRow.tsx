@@ -11,6 +11,7 @@ import { contactKey, isWhatsAppContact, type InboxContact } from "@/modules/comm
 import { ChannelBadge } from "../ChannelBadge";
 import { contactDisplayName, formatContactTime } from "./ConversationListItem";
 import { useNomeDoLeadPrimeiro } from "@/modules/communication/hooks/chat/useNomeDoLeadPrimeiro";
+import { useNomeCodContatoLead } from "@/modules/communication/hooks/chat/useNomeCodContatoLead";
 
 // ─── Props ───────────────────────────────────────────────────────────────────
 
@@ -35,7 +36,8 @@ export function MobileConversationRow({
   stageColor,
 }: MobileConversationRowProps) {
   const nomeDoLeadPrimeiro = useNomeDoLeadPrimeiro();
-  const name = contactDisplayName(contact, nomeDoLeadPrimeiro);
+  const nomeCodContato = useNomeCodContatoLead();
+  const name = contactDisplayName(contact, nomeDoLeadPrimeiro, nomeCodContato);
   const initials = (name.replace("@", "").charAt(0) || "?").toUpperCase();
   const hasUnread = contact.unread_count > 0 && !isSelected;
   const key = contactKey(contact);

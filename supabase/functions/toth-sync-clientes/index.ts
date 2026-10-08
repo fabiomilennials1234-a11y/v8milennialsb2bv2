@@ -47,6 +47,10 @@ import { cachedClientStore } from "../_shared/erp/sync/cached-client-store.ts";
 import { deferredEnrichStore } from "../_shared/erp/sync/deferred-enrich-store.ts";
 import { bulkCreateClients } from "../_shared/erp/sync/bulk-create-clients.ts";
 import { upsertCanonicalClient, type ErpSyncMode } from "../_shared/erp/sync/upsert-client.ts";
+import {
+  syncLeadPhonesFromErp,
+  type LeadPhonesSyncItem,
+} from "../_shared/erp/sync/lead-phones-sync.ts";
 import { loadOwnerMap } from "../_shared/erp/sync/owner-map.ts";
 import type { CanonicalClient } from "../_shared/erp/types.ts";
 import { CAFE_JURERE_ORG_ID, cafeJurereScopeEnabled, cafeJurereClientExclusion } from "../_shared/erp/cafe-jurere-client-scope.ts";
@@ -393,6 +397,11 @@ Deno.serve(
     const mappedClients: CanonicalClient[] = [];
     /** Fila da criação em lote — ver bulk-create-clients.ts. */
     const toCreate: CanonicalClient[] = [];
+    /**
+     * Telefones do ERP a levar para `lead_phones` (Chamado 82c50502). Vale para
+     * casado e criado; a reconciliação é idempotente e só escreve o que muda.
+     */
+    const phoneQueue: LeadPhonesSyncItem[] = [];
     let page = conn.clientes_cursor ?? 1;
     let stopReason = "max_pages";
 
@@ -542,6 +551,10 @@ Deno.serve(
                 : null;
 
             if (byExternalId || byCnpj) {
+              const leadId = (byExternalId ?? byCnpj)?.lead_id;
+              if (leadId && canonical.phones?.length) {
+                phoneQueue.push({ leadId, phones: canonical.phones });
+              }
               const result = await upsertCanonicalClient(store, {
                 organizationId,
                 source: TOTH_PROVIDER_ID,
@@ -726,8 +739,23 @@ Deno.serve(
         ownerMap,
       });
       stats.created = bulk.created;
+      phoneQueue.push(...bulk.leadPhones);
       stats.failed += bulk.failed;
       for (const e of bulk.errors) {
+        if (mappingErrors.length < 3) mappingErrors.push(e);
+      }
+    }
+
+    // ── Contatos do ERP → lead_phones ───────────────────────────────────────
+    // Depois da criação em lote: o lead novo já existe e o gatilho já espelhou
+    // o principal. Falha aqui não derruba a sincronização — os clientes estão
+    // gravados e a próxima volta reconcilia de novo.
+    const telefones = { inserted: 0, updated: 0 };
+    if (phoneQueue.length > 0) {
+      const synced = await syncLeadPhonesFromErp(admin, organizationId, phoneQueue);
+      telefones.inserted = synced.inserted;
+      telefones.updated = synced.updated;
+      for (const e of synced.errors) {
         if (mappingErrors.length < 3) mappingErrors.push(e);
       }
     }
@@ -854,6 +882,7 @@ Deno.serve(
         representantes_mapeados: ownerMap.size,
         leads_com_dono_novo: leadsComDonoNovo,
         classificacao,
+        telefones,
       },
     });
 
@@ -863,6 +892,7 @@ Deno.serve(
         recorte,
         stop_reason: stopReason,
         stats,
+        telefones,
         // Zero nos três com a lei ligada é sinal de que `clientes_situacoes`
         // ainda está NULL — a lei não roda sem o conjunto confirmado.
         classificacao,

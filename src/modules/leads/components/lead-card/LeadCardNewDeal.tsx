@@ -55,7 +55,7 @@ export function LeadCardNewDeal({
   // abrir com opções parciais e trocar o formulário enquanto a pessoa digita.
   const customQuery = useCustomPipelines();
 
-  const { options, isCreating, criar } = useAbrirNegocio({
+  const { options, phones, isCreating, criar } = useAbrirNegocio({
     leadId,
     organizationId,
     pipelines: (pipelinesQuery.data ?? []) as PipelineStatus[],
@@ -72,6 +72,7 @@ export function LeadCardNewDeal({
   return (
     <NewDealDialog
       options={options}
+      phones={phones}
       isLoading={isLoading}
       loadError={isError}
       onRetry={() => void Promise.all(queries.map((query) => query.refetch()))}

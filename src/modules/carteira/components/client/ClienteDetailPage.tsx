@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageHeader } from "@/components/ui/page-header";
 import { cn } from "@/lib/utils";
-import { AbrirConversaButton } from "@/modules/communication/components/chat/AbrirConversaButton";
+import { AbrirConversaComContato } from "@/modules/communication/components/chat/AbrirConversaComContato";
 import { supabase } from "@/integrations/supabase/client";
 import type { Tables } from "@/integrations/supabase/types";
 import { useClientAlerts } from "@/modules/carteira/hooks/useClientAlerts";
@@ -207,14 +207,14 @@ export default function ClienteDetailPage() {
         actions={
           <>
             {clientPhone && client?.lead_id && (
-              <AbrirConversaButton
+              <AbrirConversaComContato
                 leadId={client.lead_id}
                 phone={clientPhone}
                 variant="outline"
               >
                 <MessageCircle />
                 WhatsApp
-              </AbrirConversaButton>
+              </AbrirConversaComContato>
             )}
             <Button onClick={() => setNewOrderOpen(true)}>
               <ShoppingCart />

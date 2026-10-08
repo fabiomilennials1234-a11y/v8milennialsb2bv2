@@ -28,6 +28,7 @@ import {
 } from "@/modules/communication/hooks/chat/types";
 import { ConversationListItem, contactDisplayName } from "./ConversationListItem";
 import { useNomeDoLeadPrimeiro } from "@/modules/communication/hooks/chat/useNomeDoLeadPrimeiro";
+import { useNomeCodContatoLead } from "@/modules/communication/hooks/chat/useNomeCodContatoLead";
 import { SeletorDeCaixas } from "./SeletorDeCaixas";
 import type { CaixaDaLinha } from "@/modules/communication/lib/caixaUnificada";
 import type { NaoLidasDaCaixa } from "@/modules/communication/hooks/chat/useNaoLidasPorCaixa";
@@ -218,6 +219,7 @@ export function ConversationList({
   const scrollAreaRef = useRef<HTMLDivElement | null>(null);
   const { isMobile } = useViewport();
   const nomeDoLeadPrimeiro = useNomeDoLeadPrimeiro();
+  const nomeCodContato = useNomeCodContatoLead();
   const [mobileFilter, setMobileFilter] = useState<MobileChatFilter>("all");
 
   // A caixa que o header MOBILE nomeia. Com várias marcadas é a primeira da
@@ -299,8 +301,8 @@ export function ConversationList({
     if (universo.length === 0) return universo;
     const q = searchQuery.trim().toLowerCase();
     if (!q) return universo;
-    return universo.filter((c) => contactDisplayName(c, nomeDoLeadPrimeiro).toLowerCase().includes(q));
-  }, [isSocialBox, modoUnificado, contacts, searchQuery, nomeDoLeadPrimeiro]);
+    return universo.filter((c) => contactDisplayName(c, nomeDoLeadPrimeiro, nomeCodContato).toLowerCase().includes(q));
+  }, [isSocialBox, modoUnificado, contacts, searchQuery, nomeDoLeadPrimeiro, nomeCodContato]);
 
   // ── Desktop: engine puro. Mobile: header próprio (all/unread/groups + vendedor).
   const whatsappFiltered = useMemo(() => {
@@ -343,7 +345,7 @@ export function ConversationList({
     const key = contactKey(contact);
     return (
       <div className="flex min-w-0 items-center gap-1">
-        <Checkbox className="ml-2 shrink-0" aria-label={`Selecionar ${contactDisplayName(contact, nomeDoLeadPrimeiro)}`}
+        <Checkbox className="ml-2 shrink-0" aria-label={`Selecionar ${contactDisplayName(contact, nomeDoLeadPrimeiro, nomeCodContato)}`}
           checked={bulk.selected.some(c => contactKey(c) === key)} disabled={bulk.busy}
           onCheckedChange={() => bulk.toggle(key)} />
         <div className="min-w-0 flex-1">{row}</div>

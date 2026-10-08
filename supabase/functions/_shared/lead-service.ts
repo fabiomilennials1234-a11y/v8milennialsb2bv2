@@ -99,6 +99,51 @@ export function normalizeEmail(email: string | null | undefined): string | null 
 }
 
 /**
+ * Lead dono de um telefone SECUNDÁRIO (Chamado 82c50502).
+ *
+ * O lead pode ter vários telefones em `lead_phones`; `leads.normalized_phone` é
+ * só o principal. Sem esta busca, mensagem ou formulário vindos do celular do
+ * "José Luiz - Compras" criavam um lead novo — duplicata do cliente.
+ *
+ * Mesmo número em dois leads (o ERP tem isso): fica o telefone atualizado por
+ * último, que é a mesma regra determinística do gatilho de mensagens.
+ */
+async function findLeadBySecondaryPhone(
+  supabase: SupabaseClient,
+  organizationId: string,
+  normalizedPhone: string,
+): Promise<GetOrCreateLeadResult["lead"] | null> {
+  const { data: phoneRows, error } = await supabase
+    .from("lead_phones")
+    .select("lead_id")
+    .eq("organization_id", organizationId)
+    .eq("normalized_phone", normalizedPhone)
+    .is("deleted_at", null)
+    .order("updated_at", { ascending: false })
+    .limit(5);
+
+  if (error) {
+    console.error("[lead-service] Error searching lead_phones:", error);
+    return null;
+  }
+  const ids = (phoneRows ?? []).map((r: { lead_id: string }) => r.lead_id);
+  if (ids.length === 0) return null;
+
+  const { data: leads } = await supabase
+    .from("leads")
+    .select("id, name, phone, email, organization_id, normalized_phone, ai_disabled")
+    .eq("organization_id", organizationId)
+    .in("id", ids)
+    .is("deleted_at", null);
+  // Respeita a ordem de `lead_phones` (mais recente primeiro).
+  for (const id of ids) {
+    const lead = (leads ?? []).find((l: { id: string }) => l.id === id);
+    if (lead) return lead;
+  }
+  return null;
+}
+
+/**
  * Centralized function to get or create a lead.
  * ALL sources of lead creation should use this function.
  *
@@ -163,6 +208,13 @@ export async function getOrCreateLead(
     if (leadByPhone) {
       console.log("[lead-service] Found lead by phone:", leadByPhone.id);
       return { lead: leadByPhone, created: false, source: "phone" };
+    }
+
+    // 1b. Telefone secundário do lead (lead_phones).
+    const leadBySecondary = await findLeadBySecondaryPhone(supabase, organizationId, normalizedPhone);
+    if (leadBySecondary) {
+      console.log("[lead-service] Found lead by secondary phone:", leadBySecondary.id);
+      return { lead: leadBySecondary, created: false, source: "phone" };
     }
   }
 
@@ -393,6 +445,9 @@ export async function findLeadByPhoneOrEmail(
     if (phoneResults?.[0]) {
       return phoneResults[0];
     }
+
+    const leadBySecondary = await findLeadBySecondaryPhone(supabase, organizationId, normalizedPhone);
+    if (leadBySecondary) return leadBySecondary;
   }
 
   // Fallback to email (limit(1) handles duplicates gracefully)

@@ -32,6 +32,7 @@ import { toast } from "sonner";
 import { normalizePhone } from "@/lib/normalizePhone";
 import { definirConversaAberta, useFeatureFlag } from "@/modules/platform";
 import { useNomeDoLeadPrimeiro } from "@/modules/communication/hooks/chat/useNomeDoLeadPrimeiro";
+import { useContatoDaConversa, useNomeCodContatoLead } from "@/modules/communication/hooks/chat/useNomeCodContatoLead";
 import { nomeComLeadPrimeiro, nomeDaConversa } from "@/modules/communication/lib/nomeDaConversa";
 import { useResolveChatDeepLink } from "@/modules/communication/hooks/chat/useResolveChatDeepLink";
 import { computeNeedsDeepLinkResolve } from "@/modules/communication/lib/computeNeedsDeepLinkResolve";
@@ -214,6 +215,14 @@ function ChatView({
   const { enabled: nomeDoWhatsappPrimeiro } = useFeatureFlag("chat_nome_do_whatsapp");
   // `chat_nome_do_lead`: o `leads.name` manda no topo, na lista e no painel.
   const nomeDoLeadPrimeiro = useNomeDoLeadPrimeiro();
+  // `chat_nome_cod_contato_lead` (Chamado 82c50502): "Cód - Contato - Lead",
+  // a mesma função da lista e do painel. Vence `chat_nome_do_lead`.
+  const nomeCodContato = useNomeCodContatoLead();
+  const { data: fontesDoContato } = useContatoDaConversa(
+    effectiveLeadId,
+    phoneNumber,
+    nomeCodContato && !selectedContact?.is_group,
+  );
 
   // O sino não anuncia a conversa que já está sendo lida (#1891). Publicar
   // daqui é o único ponto que sabe qual lead está aberto.
@@ -309,11 +318,14 @@ function ChatView({
       nomeDoLead: effectiveLeadName,
       savedContactName: selectedContact?.saved_contact_name,
       telefone: phoneNumber ?? null,
+      erpCode: fontesDoContato?.erpCode ?? selectedContact?.lead_erp_code ?? null,
+      contato: fontesDoContato?.contato ?? selectedContact?.lead_contact_label ?? null,
     },
     {
       nomeDoWhatsappPrimeiro,
       // Grupo fica com a regra de sempre.
       nomeDoLeadPrimeiro: nomeDoLeadPrimeiro && !selectedContact?.is_group,
+      nomeCodContatoLead: nomeCodContato && !selectedContact?.is_group,
     },
   );
 
@@ -1511,6 +1523,7 @@ export function ChatShellWithContext() {
                 leadId={selectedContact?.lead_id ?? undefined}
                 phoneNumber={telefoneSelecionado ?? undefined}
                 pushName={selectedContact?.push_name ?? null}
+                ehGrupo={!!selectedContact?.is_group}
                 nomeDaConversa={
                   nomeDoLeadPrimeiro && selectedContact && !selectedContact.is_group
                     ? nomeComLeadPrimeiro({

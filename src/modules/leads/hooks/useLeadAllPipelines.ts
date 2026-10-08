@@ -332,6 +332,11 @@ export interface AddLeadToStandardPipeVars {
   /** Só `confirmacao` — os lembretes D-5/D-3/D-1 dependem deste carimbo. */
   meetingDate?: string | null;
   notes?: string | null;
+  /**
+   * Com qual telefone do lead é o negócio (Chamado 82c50502). A RPC exige quando
+   * o lead tem 2+ telefones e o clique é humano (`lead_phone_required`).
+   */
+  leadPhoneId?: string | null;
 }
 
 export function useAddLeadToStandardPipe() {
@@ -347,6 +352,7 @@ export function useAddLeadToStandardPipe() {
       saleValue,
       meetingDate,
       notes,
+      leadPhoneId,
     }: AddLeadToStandardPipeVars) => {
       if (!teamMember?.organization_id) throw new Error("Organização não encontrada");
 
@@ -420,6 +426,7 @@ export function useAddLeadToStandardPipe() {
           // NULL de propósito — 'human' por omissão etiquetaria como humano tudo
           // que esquecesse de informar.
           p_source: "human",
+          p_lead_phone_id: leadPhoneId ?? null,
         } as never);
         if (error) throw error;
       } else if (pipeType === "upsell") {

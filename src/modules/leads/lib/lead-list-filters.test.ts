@@ -87,3 +87,36 @@ describe("applyLeadListFilters — dono da conta", () => {
     ]);
   });
 });
+
+describe("applyLeadListFilters — telefone secundário (Chamado 82c50502)", () => {
+  const LEAD = "0d7f5a3e-1b2c-4d5e-8f90-123456789abc";
+
+  it("a busca acha o lead pelo telefone secundário: id entra no MESMO or()", () => {
+    const { calls } = applyLeadListFilters(fakeQuery(), {
+      searchQuery: "(17) 98125-7650",
+      secondaryPhoneLeadIds: [LEAD],
+    });
+    expect(calls).toHaveLength(1);
+    expect(calls[0]).toMatch(/^or:/);
+    expect(calls[0]).toContain("normalized_phone.ilike.%17981257650%");
+    expect(calls[0]).toContain(`id.in.(${LEAD})`);
+  });
+
+  it("sem ids do secundário, a busca é a de sempre", () => {
+    const { calls } = applyLeadListFilters(fakeQuery(), { searchQuery: "Padaria", secondaryPhoneLeadIds: [] });
+    expect(calls[0]).not.toContain("id.in.");
+  });
+
+  it("id fora do formato uuid não entra no or() (quebraria a busca inteira)", () => {
+    const { calls } = applyLeadListFilters(fakeQuery(), {
+      searchQuery: "98125",
+      secondaryPhoneLeadIds: ["x),name.eq.y", LEAD],
+    });
+    expect(calls[0]).toContain(`id.in.(${LEAD})`);
+    expect(calls[0]).not.toContain("name.eq.y");
+  });
+
+  it("sem busca, ids soltos não filtram nada", () => {
+    expect(applyLeadListFilters(fakeQuery(), { secondaryPhoneLeadIds: [LEAD] }).calls).toEqual([]);
+  });
+});

@@ -1,6 +1,10 @@
 import { useCallback, useMemo } from "react";
 import { toast } from "sonner";
 
+import { supabase } from "@/integrations/supabase/client";
+import { useLeadPhones } from "../../../../hooks/useLeadPhones";
+import { mensagemDoErroDeTelefone, rotuloDoTelefone } from "../../../../lib/lead-phones";
+
 import {
   assertMemberInOrg,
   useAddLeadToStandardPipe,
@@ -11,7 +15,7 @@ import {
 import { usePipeOps } from "../../../../pipe-ops";
 import { useLogLeadAction } from "@/shared/hooks/useLogLeadAction";
 import { notifyError } from "@/shared/errors";
-import type { NewDealOption, NewDealValues } from "./NewDealDialog";
+import type { NewDealOption, NewDealPhoneOption, NewDealValues } from "./NewDealDialog";
 import {
   buildNewDealOptions,
   resolveNewDealTarget,
@@ -45,6 +49,8 @@ export interface UseAbrirNegocioInput {
 
 export interface AbrirNegocioApi {
   options: NewDealOption[];
+  /** Telefones do lead para "Com quem é este negócio" (Chamado 82c50502). */
+  phones: NewDealPhoneOption[];
   isCreating: boolean;
   criar: (option: NewDealOption, values: NewDealValues) => Promise<void>;
 }
@@ -61,6 +67,11 @@ export function useAbrirNegocio({
   const addStandard = useAddLeadToStandardPipe();
   const addCustom = useAddLeadToCustomPipe();
   const logAction = useLogLeadAction();
+  const { data: telefones } = useLeadPhones(leadId);
+  const phones = useMemo<NewDealPhoneOption[]>(
+    () => (telefones ?? []).map((t) => ({ id: t.id, label: rotuloDoTelefone(t) })),
+    [telefones],
+  );
 
   const options = useMemo(
     () => buildNewDealOptions(pipelines, { canAdd, vendaFechada }),
@@ -84,6 +95,7 @@ export function useAbrirNegocio({
           saleValue: values.saleValue ?? null,
           meetingDate: values.meetingDate ?? null,
           notes: values.notes ?? null,
+          leadPhoneId: values.leadPhoneId ?? null,
         });
         void logAction({
           leadId,
@@ -98,7 +110,12 @@ export function useAbrirNegocio({
         });
         toast.success(`Negócio aberto em ${pipe.label}`);
       } catch (err) {
-        notifyError(err, { fallback: "Não foi possível criar o negócio." });
+        const msg = (err as { message?: string } | null)?.message;
+        if (msg === "lead_phone_required" || msg === "lead_phone_invalid") {
+          toast.error(mensagemDoErroDeTelefone({ message: msg }));
+        } else {
+          notifyError(err, { fallback: "Não foi possível criar o negócio." });
+        }
         // Repropaga: o modal segura o rascunho digitado em vez de fechar como
         // se tivesse dado certo.
         throw err;
@@ -123,13 +140,30 @@ export function useAbrirNegocio({
           if (!organizationId) throw new Error("Organização não encontrada");
           await assertMemberInOrg(ownerInOrg, organizationId);
         }
-        await addCustom.mutateAsync({
+        const entry = await addCustom.mutateAsync({
           lead_id: leadId,
           pipeline_id: pipe.pipelineId,
           stage_id: stageId,
           ...(ownerInOrg ? { assigned_to: ownerInOrg } : {}),
           ...(values.notes ? { notes: values.notes } : {}),
         });
+        // Funil custom não passa por `abrir_negocio`: a posição nasce primeiro
+        // e o negócio é materializado aqui, já com o telefone escolhido
+        // (Chamado 82c50502). `garantir_negocio_da_entrada` é idempotente.
+        const entryId = (entry as { id?: string } | null | undefined)?.id;
+        if (values.leadPhoneId && entryId) {
+          const { data: dealId, error: dealErr } = await supabase.rpc("garantir_negocio_da_entrada", {
+            p_entry_id: entryId,
+          });
+          if (dealErr) throw dealErr;
+          if (dealId) {
+            const { error: phoneErr } = await supabase.rpc("definir_telefone_do_negocio", {
+              p_deal_id: dealId as string,
+              p_lead_phone_id: values.leadPhoneId,
+            });
+            if (phoneErr) throw phoneErr;
+          }
+        }
         void logAction({
           leadId,
           action: "pipe_added",
@@ -163,6 +197,7 @@ export function useAbrirNegocio({
 
   return {
     options,
+    phones,
     isCreating: addStandard.isPending || addCustom.isPending,
     criar,
   };

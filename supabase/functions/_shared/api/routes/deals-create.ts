@@ -64,6 +64,11 @@ function traduzErro(err: unknown): { status: number; code: string; message: stri
   if (msg === "idempotency_key_conflict" || msg === "idempotent_resource_unavailable") {
     return { status: 409, code: msg, message: "Esta chave já identifica outra solicitação ou um negócio indisponível. Não repita com uma chave nova sem conferir o negócio original." };
   }
+  // Telefone do negócio (Chamado 82c50502): opcional na API, mas, quando vem,
+  // tem de ser um telefone ativo DESTE lead.
+  if (msg === "lead_phone_invalid") {
+    return { status: 422, code: msg, message: "lead_phone_id não é um telefone ativo deste lead." };
+  }
   if (msg === "invalid_idempotency_key") {
     return { status: 422, code: msg, message: "Idempotency-Key deve conter de 1 a 200 caracteres." };
   }
@@ -109,6 +114,11 @@ export async function createDeal(ctx: ApiRouteContext): Promise<Response> {
     return apiError(422, "missing_lead_id", "lead_id é obrigatório", ctx.cors);
   }
 
+  const leadPhoneId = body.lead_phone_id ?? null;
+  if (leadPhoneId !== null && (typeof leadPhoneId !== "string" || leadPhoneId.length === 0)) {
+    return apiError(422, "lead_phone_invalid", "lead_phone_id deve ser o id de um telefone do lead", ctx.cors);
+  }
+
   const supabase = ctx.supabase as unknown as RpcClient;
   // `pipeline` aceita id (uuid) ou slug de QUALQUER funil da org (SCRUM-625);
   // etapa de funil custom aceita stage_key ou uuid — a tradução vive no banco.
@@ -124,6 +134,7 @@ export async function createDeal(ctx: ApiRouteContext): Promise<Response> {
     // Fixo. O chamador não escolhe a Procedência do próprio Negócio.
     p_source: "api",
     p_idempotency_key: ctx.req.headers.get("Idempotency-Key"),
+    p_lead_phone_id: leadPhoneId,
   });
 
   if (error) {

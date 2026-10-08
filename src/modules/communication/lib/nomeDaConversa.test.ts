@@ -8,7 +8,14 @@
  */
 import { describe, expect, it } from "vitest";
 
-import { nomeDaConversa, type FontesDoNomeDaConversa } from "./nomeDaConversa";
+import {
+  nomeCodContatoLead,
+  nomeDaConversa,
+  nomeDoPainelDeContexto,
+  type FontesDoNomeCodContatoLead,
+} from "./nomeDaConversa";
+
+type FontesDoNomeDaConversa = FontesDoNomeCodContatoLead;
 
 const fontes = (over: Partial<FontesDoNomeDaConversa> = {}): FontesDoNomeDaConversa => ({
   pushName: null,
@@ -145,5 +152,71 @@ describe("nomeDaConversa — flag chat_nome_do_lead: manda o leads.name", () => 
   it("sem a opção nova, nada muda (nome salvo vence, depois lead)", () => {
     expect(nomeDaConversa(fontes({ savedContactName: "Salvo", nomeDoLead: "Lead", pushName: "Ana" }))).toBe("Salvo");
     expect(nomeDaConversa(fontes({ nomeDoLead: "Lead", pushName: "Ana" }), { nomeDoLeadPrimeiro: false })).toBe("Lead");
+  });
+});
+
+describe("nomeCodContatoLead — flag chat_nome_cod_contato_lead (Chamado 82c50502)", () => {
+  const COD = { nomeCodContatoLead: true };
+
+  it("Cód - Contato - Lead", () => {
+    expect(
+      nomeCodContatoLead(fontes({ nomeDoLead: "Padaria Um", erpCode: "6627", contato: "José Luiz - Compras" })),
+    ).toBe("6627 - José Luiz - Compras - Padaria Um");
+  });
+
+  it("sem nome de contato: Cód - Lead", () => {
+    expect(nomeCodContatoLead(fontes({ nomeDoLead: "Padaria Um", erpCode: "6627", contato: null }))).toBe(
+      "6627 - Padaria Um",
+    );
+  });
+
+  it("sem código: Contato - Lead", () => {
+    expect(nomeCodContatoLead(fontes({ nomeDoLead: "Padaria Um", erpCode: null, contato: "Maria" }))).toBe(
+      "Maria - Padaria Um",
+    );
+  });
+
+  it("código já digitado no nome do lead não duplica — nem com o contato no meio", () => {
+    expect(nomeCodContatoLead(fontes({ nomeDoLead: "6627 - Fernando Porto", erpCode: "6627" }))).toBe(
+      "6627 - Fernando Porto",
+    );
+    expect(
+      nomeCodContatoLead(fontes({ nomeDoLead: "6627-Fernando Porto", erpCode: "6627", contato: "Compras" })),
+    ).toBe("6627 - Compras - Fernando Porto");
+  });
+
+  it("contato igual ao nome do lead (caixa e acento não contam) não se repete", () => {
+    expect(
+      nomeCodContatoLead(fontes({ nomeDoLead: "José Café", erpCode: "10", contato: "jose cafe" })),
+    ).toBe("10 - José Café");
+  });
+
+  it("conversa sem lead cai na regra de nomeComLeadPrimeiro", () => {
+    expect(nomeCodContatoLead(fontes({ nomeDoLead: null, pushName: "Ana", erpCode: "1", contato: "X" }))).toBe("Ana");
+  });
+
+  it("nomeDaConversa com a flag usa a regra nova e vence chat_nome_do_lead", () => {
+    expect(
+      nomeDaConversa(
+        fontes({ nomeDoLead: "Padaria Um", erpCode: "6627", contato: "Compras", pushName: "Zé" }),
+        { ...COD, nomeDoLeadPrimeiro: true, nomeDoWhatsappPrimeiro: true },
+      ),
+    ).toBe("6627 - Compras - Padaria Um");
+  });
+
+  it("sem a flag nova, nada muda: código e contato são ignorados", () => {
+    const f = fontes({ nomeDoLead: "Padaria Um", erpCode: "6627", contato: "Compras", pushName: "Zé" });
+    expect(nomeDaConversa(f)).toBe("Padaria Um");
+    expect(nomeDaConversa(f, { nomeDoLeadPrimeiro: true })).toBe("Padaria Um");
+    expect(nomeDaConversa(f, { nomeDoWhatsappPrimeiro: true })).toBe("Zé");
+  });
+
+  it("painel: com a flag mostra o MESMO nome do topo, não o leads.name cru", () => {
+    const topo = nomeDaConversa(fontes({ nomeDoLead: "Padaria Um", erpCode: "6627", contato: "Compras" }), COD);
+    expect(
+      nomeDoPainelDeContexto({ leadName: "Padaria Um", nomeDaConversa: topo, nomeCodContatoLead: true }),
+    ).toBe(topo);
+    // Sem a flag, o painel segue com o leads.name.
+    expect(nomeDoPainelDeContexto({ leadName: "Padaria Um", nomeDaConversa: topo })).toBe("Padaria Um");
   });
 });
