@@ -1,4 +1,4 @@
--- Rollback de 20271111000000_lead_phones_contatos_nomeados.sql (Chamado 82c50502)
+-- Rollback de 20271112000000_lead_phones_contatos_nomeados.sql (Chamado 82c50502)
 --
 -- ANTES de rodar: volte o frontend e as edge functions (`api`,
 -- `toth-sync-clientes` e as que importam `_shared/lead-service.ts`) para uma

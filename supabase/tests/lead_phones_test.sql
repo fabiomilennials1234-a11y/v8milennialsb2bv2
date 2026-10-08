@@ -1,7 +1,7 @@
 -- supabase/tests/lead_phones_test.sql
 --
 -- Chamado 82c50502: contatos nomeados do lead
--- (migration 20271111000000_lead_phones_contatos_nomeados.sql, ADR-0039).
+-- (migration 20271112000000_lead_phones_contatos_nomeados.sql, ADR-0039).
 --
 --   (GR) GRANTs por pg_class.relacl; anon/PUBLIC fora; sem policy de DELETE.
 --   (BF) backfill + espelho do principal (leads.phone → lead_phones).

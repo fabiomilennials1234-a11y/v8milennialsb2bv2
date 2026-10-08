@@ -16,7 +16,7 @@
 -- Vence `chat_nome_do_lead` (que está ligada nesta org e pode continuar: sem a
 -- flag nova, a regra dela volta a valer).
 --
--- Ordem: depois do APPLY da migration 20271111000000 (RPC
+-- Ordem: depois do APPLY da migration 20271112000000 (RPC
 -- `contatos_das_conversas`) e do DEPLOY do front. Ligar antes não faz nada (o
 -- bundle antigo não lê a chave). Rode o `toth-sync-clientes` uma vez depois,
 -- para os contatos do ERP chegarem com o nome; antes disso a lista mostra
