@@ -6,7 +6,7 @@
 #
 # Env overrides:
 #   CONTRACT_FIXTURE   schema fixture   (default tests/fixtures/chat-unread-schema.sql)
-#   CONTRACT_MIGRATION migration to test (default supabase/migrations/*_whatsapp_leitura_externa.sql;
+#   CONTRACT_MIGRATION migration to test (default supabase/migrations/*_whatsapp_leitura_externa*.sql, all of them;
 #                      set to empty to prove the contract is red without it)
 #   CONTRACT_SQL       assertions       (default tests/integration/chat-external-read.sql)
 #   CONTRACT_IMAGE     postgres image   (default postgres:17-alpine)
@@ -18,14 +18,15 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT"
 
 FIXTURE="${CONTRACT_FIXTURE:-tests/fixtures/chat-unread-schema.sql}"
+MIGRATIONS=()
 if [ -z "${CONTRACT_MIGRATION+set}" ]; then
+  # Every migration of this contract, in version order (the masters one rewrites the RPC body).
   shopt -s nullglob
-  matches=(supabase/migrations/*_whatsapp_leitura_externa.sql)
+  MIGRATIONS=(supabase/migrations/*_whatsapp_leitura_externa*.sql)
   shopt -u nullglob
-  [ "${#matches[@]}" -eq 1 ] || { echo "expected exactly one *_whatsapp_leitura_externa.sql, found ${#matches[@]}" >&2; echo FAIL; exit 1; }
-  MIGRATION="${matches[0]}"
-else
-  MIGRATION="$CONTRACT_MIGRATION"
+  [ "${#MIGRATIONS[@]}" -ge 1 ] || { echo "no *_whatsapp_leitura_externa*.sql found" >&2; echo FAIL; exit 1; }
+elif [ -n "$CONTRACT_MIGRATION" ]; then
+  MIGRATIONS=("$CONTRACT_MIGRATION")
 fi
 SQL="${CONTRACT_SQL:-tests/integration/chat-external-read.sql}"
 IMAGE="${CONTRACT_IMAGE:-postgres:17-alpine}"
@@ -61,7 +62,11 @@ GRANT USAGE ON SCHEMA public, auth TO anon, authenticated, service_role;
 SQL
 
 psql_file "$FIXTURE"
-if [ -n "$MIGRATION" ]; then psql_file "$MIGRATION"; else echo "== (no migration applied)" >&2; fi
+if [ "${#MIGRATIONS[@]}" -gt 0 ]; then
+  for m in "${MIGRATIONS[@]}"; do psql_file "$m"; done
+else
+  echo "== (no migration applied)" >&2
+fi
 out="$(psql_file "$SQL")"
 echo "$out"
 echo "$out" | grep -q CONTRACT_OK || { echo FAIL; exit 1; }
