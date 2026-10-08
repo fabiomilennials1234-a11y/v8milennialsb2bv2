@@ -27,6 +27,7 @@ import {
   BarChart3,
   FileText,
   LayoutList,
+  Forward,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -260,6 +261,12 @@ export function MessageBubble({
   const phone = (meta.remote_jid ?? "").split("@")[0] ?? "";
   const canEdit = isOutgoing && !!message.content && !hasMedia;
   const canDelete = isOutgoing;
+  const isForwarded = isWhatsAppMsg && !!(message as WhatsAppMessage).forwarded_from_message_id;
+  // Mesmo recorte que o servidor aceita (`_shared/whatsapp-forward.ts`):
+  // texto e mídia. Localização, contato, menu e afins ficam de fora.
+  const isPlainText = messageType === "text" || messageType === "conversation";
+  const canForward =
+    isWhatsAppMsg && !isFailed && ((isPlainText && !!message.content?.trim()) || hasMedia);
 
   const handleEditSave = async (newText: string) => {
     if (!instanceId || !message.message_id || !phone) return;
@@ -377,6 +384,7 @@ export function MessageBubble({
             canDelete={canDelete}
             isPinned={!!meta.pinned_at}
             hasMedia={hasMedia}
+            canForward={canForward}
             onRequestEdit={() => setIsEditing(true)}
           />
         </div>
@@ -411,6 +419,25 @@ export function MessageBubble({
         {senderName && !isOutgoing && (
           <p data-group-sender className="mb-1 truncate text-xs font-semibold text-muted-foreground">
             {senderName}
+          </p>
+        )}
+
+        {/* A evidência no Torque. No aparelho do cliente o WhatsApp desenha o
+            próprio rótulo (`forward: true` no envio). */}
+        {isForwarded && !isDeleted && (
+          <p
+            data-forwarded
+            className={cn(
+              "mb-1 flex items-center gap-1 text-[11px] font-medium",
+              isAiOutgoing
+                ? "text-primary-foreground/70"
+                : isManualOutgoing && !isFailed
+                  ? "text-tinta-muted"
+                  : "text-muted-foreground",
+            )}
+          >
+            <Forward className="h-3 w-3 shrink-0" aria-hidden />
+            Encaminhada
           </p>
         )}
 
@@ -698,6 +725,7 @@ export function MessageBubble({
             canDelete={false}
             isPinned={!!meta.pinned_at}
             hasMedia={hasMedia}
+            canForward={canForward}
             onRequestEdit={() => {}}
           />
         </div>

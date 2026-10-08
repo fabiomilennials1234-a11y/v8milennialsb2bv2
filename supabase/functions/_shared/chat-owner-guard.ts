@@ -43,6 +43,9 @@ const TARGETED_ACTIONS = new Set([
   "sendContact",
   "blockUser",
   "unblockUser",
+  // Aqui o alvo é o DESTINO (`number`). A conversa de origem tem o seu próprio
+  // crivo dentro da action — ver `_shared/whatsapp-forward.ts`.
+  "forwardMessage",
 ]);
 
 export interface ChatTarget {

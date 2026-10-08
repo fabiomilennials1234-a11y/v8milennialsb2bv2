@@ -272,6 +272,7 @@ export class UazapiProvider implements WhatsAppProvider {
       delay: opts.delay,
       replyid: opts.replyid,
       readchat: opts.readchat,
+      ...(opts.forward ? { forward: true } : {}),
       track_source: opts.trackSource,
       track_id: opts.trackId,
     });
@@ -305,6 +306,7 @@ export class UazapiProvider implements WhatsAppProvider {
       filename: opts.filename,
       caption: opts.caption,
       delay: opts.delay,
+      ...(opts.forward ? { forward: true } : {}),
       track_source: opts.trackSource,
       track_id: opts.trackId,
     });

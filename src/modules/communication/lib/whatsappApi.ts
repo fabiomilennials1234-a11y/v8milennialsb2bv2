@@ -309,6 +309,31 @@ export async function downloadMedia(
   });
 }
 
+/**
+ * Encaminha uma mensagem do chat para outra conversa 1:1 da org.
+ *
+ * `destInstanceId` é o chip da conversa de DESTINO — é por ele que a mensagem
+ * sai. A origem é identificada pelo par (chip, id do provider), o mesmo que as
+ * outras ações de mensagem usam.
+ */
+export async function forwardMessage(args: {
+  destInstanceId: string;
+  destNumber: string;
+  sourceInstanceId: string;
+  sourceMessageId: string;
+  destLeadId?: string | null;
+}): Promise<{ message_id: string | null; status?: string }> {
+  return callProxy("forwardMessage", {
+    instance_id: args.destInstanceId,
+    payload: {
+      number: args.destNumber,
+      source_instance_id: args.sourceInstanceId,
+      source_message_id: args.sourceMessageId,
+      ...(args.destLeadId ? { lead_id: args.destLeadId } : {}),
+    },
+  });
+}
+
 export async function syncHistory(
   instanceId: string,
   opts?: { chatJid?: string; limit?: number; cursor?: string }
