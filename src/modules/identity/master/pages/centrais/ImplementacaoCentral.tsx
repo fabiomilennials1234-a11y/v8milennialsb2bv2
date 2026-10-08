@@ -36,6 +36,8 @@ import { cn } from "@/lib/utils";
 import { notifyError } from "@/shared/errors";
 import { MasterPageHeader } from "../../components/MasterPageHeader";
 import { MasterKanban, type KanbanColumnDef } from "../../components/MasterKanban";
+import { usePlanCatalog } from "../../hooks/usePlanCatalog";
+import { planLabel } from "../../lib/plan-label";
 import {
   useAdvanceImplementation,
   useMasterImplementations,
@@ -170,6 +172,8 @@ export default function ImplementacaoCentral() {
 }
 
 function ImplementationCard({ item }: { item: MasterImplementation }) {
+  // Mesma query em todos os cartões: o react-query busca uma vez só.
+  const { data: planos } = usePlanCatalog();
   const stale = isStale(item);
   const dias = daysInStage(item);
   const feitos = checklistDone(item.gates);
@@ -193,7 +197,7 @@ function ImplementationCard({ item }: { item: MasterImplementation }) {
         )}
       </div>
       <p className="mt-0.5 truncate text-xs text-muted-foreground">
-        {item.subscription_plan ?? "sem plano"} · {item.owner_name ?? "sem responsável"}
+        {planLabel(item.subscription_plan, planos)} · {item.owner_name ?? "sem responsável"}
       </p>
 
       {/* IM-6: o checklist do cliente, passo a passo. */}

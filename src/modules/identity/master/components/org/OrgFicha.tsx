@@ -41,6 +41,8 @@ import { useMasterImplementations } from "../../hooks/useMasterImplementations";
 import { useMasterSupportTickets } from "../../hooks/useMasterSupportTickets";
 import { useOrgFeatures, useSetOrgFeature } from "../../hooks/useOrgFicha";
 import { useOrgSalesSummary } from "../../hooks/useOrgSalesSummary";
+import { usePlanCatalog } from "../../hooks/usePlanCatalog";
+import { planLabel } from "../../lib/plan-label";
 import { IMPLEMENTACAO_STAGE_LABELS } from "../../lib/implementacao-kanban";
 import { healthBand, QUOTA_RESOURCE_LABELS, type OrgHealth } from "../../lib/org-health";
 import type { ResolvedFeature } from "../../lib/org-features";
@@ -64,6 +66,8 @@ const brl = (v: number) => v.toLocaleString("pt-BR", { style: "currency", curren
 export function OrgFicha({ org, health }: { org: MasterOrganization; health: OrgHealth | null }) {
   const { isOutbounder } = useMasterAuth();
   const [billingOpen, setBillingOpen] = useState(false);
+  const { data: planos } = usePlanCatalog();
+  const plano = planLabel(org.subscription_plan, planos);
 
   return (
     <div className="space-y-5">
@@ -74,8 +78,8 @@ export function OrgFicha({ org, health }: { org: MasterOrganization; health: Org
               {health.atRisk ? "Em risco" : "Saudável"} · nota {health.score}
             </Badge>
           )}
-          <Badge variant="soft" className="text-[11px] capitalize">
-            {org.subscription_plan ?? "sem plano"}
+          <Badge variant="soft" className="text-[11px]">
+            {plano}
           </Badge>
           {org.billing_override && (
             <Badge variant="gold" className="text-[11px]">
@@ -106,7 +110,7 @@ export function OrgFicha({ org, health }: { org: MasterOrganization; health: Org
         <TabsContent value="plano" className="space-y-4 pt-4">
           <section className="flex flex-wrap items-center gap-3 rounded-card border border-card-border bg-card p-4 shadow-relevo">
             <div className="min-w-0 flex-1">
-              <p className="text-sm font-bold capitalize">{org.subscription_plan ?? "Sem plano"}</p>
+              <p className="text-sm font-bold">{plano}</p>
               <p className="text-xs text-muted-foreground">
                 Assinatura {org.subscription_status}
                 {org.subscription_expires_at &&
