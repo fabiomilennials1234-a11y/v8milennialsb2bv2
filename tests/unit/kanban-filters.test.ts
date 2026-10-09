@@ -186,3 +186,25 @@ describe("matchesResponsibleFilter — dual-only (Issue #214 / PRD #211)", () =>
     expect(matchesResponsibleFilter(null, "all")).toBe(true);
   });
 });
+
+describe("matchesResponsibleFilter — N donos por lead (Chamado 793f4b05)", () => {
+  it("co-dono em lead_owners casa o filtro", () => {
+    const item = baseItem();
+    item.lead!.sale_responsible_id = OTHER;
+    item.lead!.lead_owners = [{ team_member_id: OTHER }, { team_member_id: BRUNA }];
+    expect(matchesResponsibleFilter(item, BRUNA)).toBe(true);
+  });
+
+  it("quem não está entre os donos continua sem casar", () => {
+    const item = baseItem();
+    item.lead!.lead_owners = [{ team_member_id: OTHER }];
+    expect(matchesResponsibleFilter(item, BRUNA)).toBe(false);
+  });
+
+  it("lead sem dono não regride: sem lead_owners e sem colunas, nada casa", () => {
+    expect(matchesResponsibleFilter(baseItem(), BRUNA)).toBe(false);
+    const vazio = baseItem();
+    vazio.lead!.lead_owners = [];
+    expect(matchesResponsibleFilter(vazio, BRUNA)).toBe(false);
+  });
+});

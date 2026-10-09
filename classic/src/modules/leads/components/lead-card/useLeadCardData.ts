@@ -14,6 +14,8 @@ import { deriveLeadStanding } from "../../lib/lead-relacao-situacao";
 import { useOrgUsaLeiDoErp } from "../../hooks/useOrgUsaLeiDoErp";
 import { useCafeJurereCadastro } from "../../hooks/useCafeJurereCadastro";
 import { aplicarCadastroCafeJurere } from "../../lib/cafe-jurere-cadastro";
+import { resolveLeadOwners, rotuloDoPapel, type LeadOwnersSource } from "../../lib/lead-owners";
+import { useLeadOwners, useLeadOwnersEnabled } from "../../hooks/useLeadOwners";
 import type {
   LeadCardData,
   LeadCardDeal,
@@ -77,19 +79,12 @@ function texto(linha: Linha, chave: string): string | null {
   return typeof v === "string" && v !== "" ? v : null;
 }
 
-/** Nome de um join `team_members!fk(id, name)`. */
-function nomeDoJoin(linha: Linha, chave: string): string | null {
-  const v = linha[chave];
-  if (!v || typeof v !== "object" || Array.isArray(v)) return null;
-  const nome = (v as Linha).name;
-  return typeof nome === "string" && nome !== "" ? nome : null;
-}
-
 /**
- * O par `{id, name}` de um join de `team_members`.
+ * O par `{id, name}` de um join de `team_members!fk(id, name)`.
  *
- * Irmão de `nomeDoJoin`, e existe porque editar precisa do id: o nome sozinho
- * não diz ao `ResponsibleSlot` qual membro marcar na lista.
+ * Existe porque editar precisa do id: o nome sozinho não diz ao
+ * `ResponsibleSlot` qual membro marcar na lista. O nome de exibição vem de
+ * `resolveLeadOwners`.
  */
 function membroDoJoin(linha: Linha, chave: string): { id: string; name: string } | null {
   const v = linha[chave];
@@ -182,6 +177,10 @@ export function useLeadCardData(leadId: string | null, isOpen: boolean): LeadCar
   const { lead, isLoading, visibility } = useLeadDetail(leadId, isOpen);
   const { organizationId, teamMemberId, role } = useOrganization();
   const cadastroErp = useCafeJurereCadastro(leadId, isOpen && !!lead && !!texto(lead as Linha, "erp_code") && (lead as Linha).cafe_jurere_erp_elegivel === true);
+  // N donos por lead (Chamado 793f4b05): consulta própria e só na org com a
+  // flag — `useLeadDetail` (e o cache que tanta gente escreve) fica intocado.
+  const donosMultiplos = useLeadOwnersEnabled();
+  const { data: donosDoLead } = useLeadOwners(leadId, isOpen && !!lead && donosMultiplos);
 
   // Os três hooks de lote aceitam lista; aqui a lista tem um id só. A queryKey
   // deles é ordenada, então o cache da aba de Leads não colide com o do card.
@@ -364,24 +363,22 @@ export function useLeadCardData(leadId: string | null, isOpen: boolean): LeadCar
         : []),
     ];
 
-    // Mesma precedência de `LeadListRow`: venda → pré-venda → responsável.
-    // Um dono só, e o papel vai no title para o nome não brigar por espaço.
-    const nomeVenda = nomeDoJoin(l, "sale_responsible");
-    const nomePreVenda = nomeDoJoin(l, "pre_sale_responsible");
-    const nomeResp = nomeDoJoin(l, "responsible");
-    const dono = nomeVenda
-      ? { nome: nomeVenda, papel: "Responsável de venda" }
-      : nomePreVenda
-        ? { nome: nomePreVenda, papel: "Responsável de pré-venda" }
-        : nomeResp
-          ? { nome: nomeResp, papel: "Responsável" }
-          : null;
+    // Mesma regra de `LeadListRow`: sem o embed `lead_owners` (org sem N
+    // donos) é um dono só, por precedência venda → pré-venda → responsável;
+    // com o embed, todos os donos, principal primeiro (Chamado 793f4b05).
+    const owners = donosDoLead && donosDoLead.length > 0 ? donosDoLead : resolveLeadOwners(l as LeadOwnersSource);
+    const donos = owners.map((o) => ({ nome: o.name, papel: rotuloDoPapel(o) }));
+    const dono = donos[0] ?? null;
+    const coDonos = owners
+      .filter((o) => o.papeis.length === 1 && o.papeis[0] === "co")
+      .map((o) => ({ id: o.id, name: o.name }));
 
     return {
       id,
       edicao: {
         preVenda: membroDoJoin(l, "pre_sale_responsible"),
         venda: membroDoJoin(l, "sale_responsible"),
+        ...(coDonos.length > 0 ? { coDonos } : {}),
         preQualificacao: texto(l, "pre_qualification_tier"),
         qualificacao: texto(l, "qualification_tier"),
         atualizadoEm: texto(l, "updated_at"),
@@ -401,6 +398,7 @@ export function useLeadCardData(leadId: string | null, isOpen: boolean): LeadCar
         : null,
 
       dono,
+      ...(donos.length > 1 ? { donos } : {}),
       copilotAtivo: l.ai_disabled !== true,
 
       tags: (Array.isArray(l.lead_tags) ? l.lead_tags : [])
@@ -435,6 +433,7 @@ export function useLeadCardData(leadId: string | null, isOpen: boolean): LeadCar
     cadastroErp.isFetching,
     cadastroErp.isError,
     lead,
+    donosDoLead,
     dealsMap,
     produtosPorNegocio,
     vendasMap,

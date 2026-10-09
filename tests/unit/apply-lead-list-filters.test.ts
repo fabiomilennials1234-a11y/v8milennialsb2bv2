@@ -250,3 +250,27 @@ describe("applyLeadListFilters — busca por telefone secundário (Chamado 82c50
     expect(rec.ors[0]).toContain(`id.in.(${id})`);
   });
 });
+
+describe("applyLeadListFilters — dono entre N donos (Chamado 793f4b05)", () => {
+  const MEMBRO = "aaaaaaaa-1111-4222-8333-444444444444";
+  const LEAD_CO = "bbbbbbbb-1111-4222-8333-444444444444";
+
+  it("co-dono casa o filtro de responsável quando a org tem a flag", () => {
+    const { builder, rec } = makeBuilder();
+    applyLeadListFilters(builder, { filterResponsible: MEMBRO, donosMultiplos: true, coOwnedLeadIds: [LEAD_CO] });
+    expect(rec.ors).toHaveLength(1);
+    expect(rec.ors[0]).toContain(`id.in.(${LEAD_CO})`);
+    expect(rec.ors[0]).toContain(`sale_responsible_id.eq.${MEMBRO}`);
+  });
+
+  it("sem dono ('none') não regride com a flag ligada", () => {
+    const { builder, rec } = makeBuilder();
+    applyLeadListFilters(builder, { filterResponsible: "none", donosMultiplos: true, coOwnedLeadIds: [LEAD_CO] });
+    expect(rec.ors).toHaveLength(0);
+    expect(rec.iss).toEqual([
+      ["sale_responsible_id", null],
+      ["pre_sale_responsible_id", null],
+      ["responsible_id", null],
+    ]);
+  });
+});

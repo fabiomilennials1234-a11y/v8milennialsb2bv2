@@ -6,6 +6,7 @@ import { formatBRL } from "@/lib/format";
 import { LeadEtiquetasPopover } from "../etiquetas/LeadEtiquetasPopover";
 import type { CicloDeRecompra } from "../../lib/reorder-cycle";
 import { erpLabel } from "@/shared/format/erp-code";
+import { nomesDosDonos, resolveLeadOwners } from "../../lib/lead-owners";
 import { QUALIFICATION_TIER_CONFIG } from "../lead-detail/modal/qualification-config";
 import type { QualificationTier } from "../lead-detail/modal/types";
 import {
@@ -214,8 +215,9 @@ export function LeadListRowV2({
   actions,
 }: LeadListRowV2Props) {
   const tags = (lead.lead_tags ?? []).map((t) => t.tag).filter((t): t is LeadTagRef => Boolean(t));
-  const owner =
-    lead.sale_responsible?.name ?? lead.pre_sale_responsible?.name ?? lead.responsible?.name ?? null;
+  // Sem o embed (org sem N donos) é o dono único de sempre: venda → pré-venda → responsável.
+  const owners = resolveLeadOwners(lead);
+  const owner = owners[0]?.name ?? null;
   const avgTicket = metrics?.avgTicket ?? 0;
   const tier = (lead.qualification_tier ?? null) as QualificationTier | null;
   const tierCfg = tier ? QUALIFICATION_TIER_CONFIG[tier] : null;
@@ -412,7 +414,25 @@ export function LeadListRowV2({
 
       {/* dono — só o avatar; o nome no title */}
       <div>
-        {owner ? (
+        {owners.length > 1 ? (
+          <div
+            title={nomesDosDonos(owners)}
+            aria-label={`Donos: ${nomesDosDonos(owners)}`}
+            role="img"
+            className="flex w-fit items-center -space-x-2"
+          >
+            {owners.slice(0, 2).map((o) => (
+              <div key={o.id} className="rounded-full ring-2 ring-card">
+                <LeadAvatar name={o.name} size="xs" />
+              </div>
+            ))}
+            {owners.length > 2 && (
+              <span className="grid size-7 place-items-center rounded-full bg-muted text-[11px] font-semibold tabular-nums text-muted-foreground ring-2 ring-card">
+                +{owners.length - 2}
+              </span>
+            )}
+          </div>
+        ) : owner ? (
           <div title={owner} aria-label={`Dono: ${owner}`} role="img" className="w-fit">
             <LeadAvatar name={owner} size="xs" />
           </div>

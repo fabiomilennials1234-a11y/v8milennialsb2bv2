@@ -252,6 +252,7 @@ export function LeadCardContainer({
               leadId={leadId}
               preVenda={e.preVenda}
               venda={e.venda}
+              coDonos={e.coDonos}
               preQualificacao={tier(e.preQualificacao)}
               qualificacao={tier(e.qualificacao)}
               atualizadoEm={e.atualizadoEm}

@@ -13,6 +13,7 @@ import type { Lead } from "../../hooks/useLeads";
 import type { LeadCarteiraMetrics } from "../../hooks/useLeadsCarteiraMetrics";
 import type { LeadDeal } from "../../hooks/useLeadsDeals";
 import { erpLabel } from "@/shared/format/erp-code";
+import { nomesDosDonos, resolveLeadOwners, type LeadOwnerRow } from "../../lib/lead-owners";
 
 /**
  * Linha da lista de leads — cartão solto, não célula de tabela.
@@ -58,6 +59,8 @@ export type LeadListItem = Lead & {
   sale_responsible?: { id: string; name: string } | null;
   responsible?: { id: string; name: string } | null;
   lead_tags?: { tag: LeadTagRef | null }[] | null;
+  /** Embed `lead_owners(...)` — só em org com N donos (Chamado 793f4b05). */
+  lead_owners?: LeadOwnerRow[] | null;
 };
 
 interface LeadListRowProps {
@@ -288,8 +291,11 @@ export function LeadListRow({
 }: LeadListRowProps) {
   const tags = (lead.lead_tags ?? []).map((t) => t.tag).filter((t): t is LeadTagRef => Boolean(t));
 
-  const owner =
-    lead.sale_responsible?.name ?? lead.pre_sale_responsible?.name ?? lead.responsible?.name ?? null;
+  // Sem o embed (org sem N donos) é o dono único de sempre, pela mesma
+  // precedência: venda → pré-venda → responsável.
+  const owners = resolveLeadOwners(lead);
+  const owner = owners[0]?.name ?? null;
+  const outrosDonos = owners.length - 1;
 
   // `metrics` continua chegando por causa do ticket médio (na coluna Negócios) e
   // do selo de `segment`. Total, nº de compras, ciclo e última compra saíram com
@@ -495,7 +501,14 @@ export function LeadListRow({
 
       {/* dono da conta */}
       <div>
-        {owner ? (
+        {owner && outrosDonos > 0 ? (
+          <div className="flex min-w-0 items-center gap-1" title={nomesDosDonos(owners)}>
+            <Badge variant="secondary">{owner.split(" ")[0]}</Badge>
+            <Badge variant="outline" className="tabular-nums" aria-label={`Donos: ${nomesDosDonos(owners)}`}>
+              +{outrosDonos}
+            </Badge>
+          </div>
+        ) : owner ? (
           <Badge variant="secondary">{owner.split(" ")[0]}</Badge>
         ) : (
           <span className="inline-block rounded-full border border-dashed border-border px-2.5 py-0.5 text-[12.5px] text-muted-foreground">
