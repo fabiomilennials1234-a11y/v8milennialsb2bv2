@@ -23,6 +23,9 @@ vi.mock("@/integrations/supabase/client", () => ({ supabase: {
   }),
   rpc: api.rpc,
 } }));
+// Flags de nome da linha (`chat_nome_do_lead`, …) leem a org via AuthProvider,
+// que este teste não monta. Desligadas: a linha usa o nome de sempre.
+vi.mock("@/modules/platform/hooks/useFeatureFlag", () => ({ useFeatureFlag: () => ({ enabled: false }) }));
 vi.mock("@/shared/hooks/use-viewport", () => ({ useViewport: () => ({ isMobile: false }) }));
 
 const contacts = [batchContact("5511999999999"), batchContact("5521999999999", "box-b")];

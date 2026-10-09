@@ -15,6 +15,8 @@ import {
 import { usePipeOps } from "../../../../pipe-ops";
 import { useLogLeadAction } from "@/shared/hooks/useLogLeadAction";
 import { notifyError } from "@/shared/errors";
+import { ETAPA_DE_PERDA_INDISPONIVEL } from "@/contracts/pipe/perda";
+import { etapaDoLeadEhDePerda } from "../../../../lib/etapa-de-perda";
 import type { NewDealOption, NewDealPhoneOption, NewDealValues } from "./NewDealDialog";
 import {
   buildNewDealOptions,
@@ -55,6 +57,31 @@ export interface AbrirNegocioApi {
   criar: (option: NewDealOption, values: NewDealValues) => Promise<void>;
 }
 
+/**
+ * Etapa em que o negócio nasce: a escolhida, ou a primeira não-perda. Etapa de
+ * perda é recusada — nascer perdido gravaria a perda sem motivo (o diálogo já a
+ * desabilita; isto é a guarda do caminho programático).
+ */
+export function etapaDeAbertura(
+  stages: { id: string; role?: string | null; isFinalNegative?: boolean }[],
+  escolhida: string | null | undefined,
+): string {
+  if (escolhida) {
+    const etapa = stages.find((s) => s.id === escolhida);
+    if (etapaDoLeadEhDePerda(etapa)) {
+      toast.error(ETAPA_DE_PERDA_INDISPONIVEL);
+      throw new Error("etapa_de_perda_na_abertura");
+    }
+    return escolhida;
+  }
+  const primeira = stages.find((s) => !etapaDoLeadEhDePerda(s));
+  if (!primeira) {
+    toast.error("Funil sem etapa de entrada (todas são de perda)");
+    throw new Error("funil_sem_etapa_de_entrada");
+  }
+  return primeira.id;
+}
+
 export function useAbrirNegocio({
   leadId,
   organizationId,
@@ -85,7 +112,7 @@ export function useAbrirNegocio({
         toast.error("Funil sem etapas configuradas");
         throw new Error("Funil sem etapas configuradas");
       }
-      const stageId = values.stageId || pipe.stages[0].id;
+      const stageId = etapaDeAbertura(pipe.stages, values.stageId);
       try {
         await addStandard.mutateAsync({
           leadId,
@@ -131,7 +158,7 @@ export function useAbrirNegocio({
         toast.error("Funil sem etapas configuradas");
         throw new Error("Funil sem etapas configuradas");
       }
-      const stageId = values.stageId || pipe.stages[0].id;
+      const stageId = etapaDeAbertura(pipe.stages, values.stageId);
       try {
         // Mesma guarda do caminho system: `custom_pipe_entries` valida o
         // `organization_id` da LINHA, nunca o org de `assigned_to`.

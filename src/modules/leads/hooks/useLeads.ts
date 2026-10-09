@@ -291,6 +291,21 @@ export function useCreateLead() {
 }
 
 /**
+ * Chave-raiz de `useLeadResponsibleMap` (communication). String literal de
+ * propósito: importar de `modules/communication` criaria dependência
+ * leads→communication que o dependency-cruiser barra.
+ */
+export const LEAD_RESPONSIBLE_MAP_KEY = "lead-responsible-map";
+
+/** Campos de `leads` que o mapa de responsáveis do inbox lê. */
+const RESPONSAVEL_FIELDS = ["responsible_id", "sale_responsible_id", "pre_sale_responsible_id"] as const;
+
+/** O patch escreve algum campo de responsável? Decide se o inbox precisa reler. */
+export function patchTocaResponsavel(patch: object): boolean {
+  return RESPONSAVEL_FIELDS.some((field) => field in patch);
+}
+
+/**
  * Update an existing lead
  * SECURITY: Filters by organization_id to prevent cross-tenant updates
  */
@@ -363,6 +378,12 @@ export function useUpdateLead() {
       queryClient.invalidateQueries({ queryKey: ["lead-detail", variables.id], refetchType: 'active' });
       if ("pre_sale_responsible_id" in variables || "sale_responsible_id" in variables) {
         queryClient.invalidateQueries({ queryKey: ["lead-responsibles", variables.id], refetchType: 'active' });
+      }
+      if (patchTocaResponsavel(variables)) {
+        // A linha do inbox desenha o dono a partir de `useLeadResponsibleMap`
+        // (staleTime 60 s). Sem esta linha, trocar o responsável no painel do
+        // chat grava no banco e a lista ao lado segue mostrando o antigo.
+        queryClient.invalidateQueries({ queryKey: [LEAD_RESPONSIBLE_MAP_KEY], refetchType: 'active' });
       }
       queryClient.invalidateQueries({ queryKey: ["pipeline-page"], refetchType: 'active' });
       queryClient.invalidateQueries({ queryKey: ["pipeline-stage-counts"], refetchType: 'active' });

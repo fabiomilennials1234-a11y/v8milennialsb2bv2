@@ -28,6 +28,7 @@ import {
 } from "./shared/cacheDeContatos";
 import { upsertRealtimeMessage } from "./shared/optimistic-messages";
 import { mergeRealtimeUpdate } from "./shared/realtimeUpdate";
+import { shouldUnarchiveOnInbound } from "./shared/unarchiveOnInbound";
 import { sortContactsByRecency } from "@/modules/communication/lib/sortContactsByRecency";
 import { pedirAtualizacaoDeNaoLidas } from "./unreadRefresh";
 import { pedirReconciliacaoDaLista, reconciliarAposReconexao } from "./chatReconcile";
@@ -200,8 +201,15 @@ export function useWhatsAppMessagesRealtime(
                 (instanceIdRef.current == null ||
                   instanceIdRef.current === caixaDaMensagem);
 
+              // Lead respondeu numa conversa arquivada → volta pra caixa de
+              // entrada já, como o trigger do banco faz. Só no INSERT: é o
+              // evento que o trigger observa; UPDATE de status não reabre.
+              const reabrir =
+                eventType === "INSERT" && shouldUnarchiveOnInbound(contact, message);
+
               return {
                 ...contact,
+                ...(reabrir ? { archived_at: null } : {}),
                 last_message: message.content ?? contact.last_message,
                 last_message_time: message.timestamp,
                 last_message_direction: message.direction as "incoming" | "outgoing",

@@ -41,6 +41,8 @@ import { useExportLeads } from "@/modules/leads/hooks/useExportLeads";
 import { QuickBlastDialog } from "./QuickBlastDialog";
 import { notifyError } from "@/shared/errors";
 import { prepararDissolucao } from "../../lib/card-effects";
+import { ETAPA_DE_PERDA_INDISPONIVEL, isEtapaDePerda } from "@/contracts/pipe/perda";
+import { useLossReasonGate } from "../../loss-reason-gate";
 
 interface BulkActionBarProps {
   selectedIds: Set<string>;
@@ -242,9 +244,29 @@ function BulkMoveDialog({
   const { data: stages = [] } = useFunnelStages(effectivePipelineId || undefined);
 
   const move = useBulkMoveToPipeline();
+  const { capturarMotivoDaPerda } = useLossReasonGate();
+  /**
+   * Perda em massa só no modo MOVER (kanban): ali os negócios são conhecidos
+   * (`entryIds`) e cada um recebe o motivo ANTES do move. No modo ADICIONAR
+   * (lista de leads) o RPC decide sozinho quais negócios move e quais cria —
+   * não há como gravar o motivo antes; a etapa de perda fica indisponível
+   * e a perda se registra movendo o negócio no funil.
+   */
+  const podePerda = !!sourcePipelineId && (entryIds?.length ?? 0) > 0;
 
   const handleSubmit = async () => {
     if (!stageId || !effectivePipelineId) return;
+    const etapa = stages.find((s) => s.id === stageId);
+    if (isEtapaDePerda(etapa)) {
+      if (!podePerda || !entryIds) return; // defensivo — a opção nem aparece habilitada
+      // UM motivo para o lote, gravado em cada negócio antes do move.
+      const perda = await capturarMotivoDaPerda({
+        entryIds,
+        stageName: etapa?.name ?? null,
+        quantidade: entryIds.length,
+      });
+      if (!perda) return;
+    }
     try {
       await move.mutateAsync({
         lead_ids: leadIds,
@@ -306,7 +328,16 @@ function BulkMoveDialog({
               <SelectTrigger><SelectValue placeholder="Selecionar etapa" /></SelectTrigger>
               <SelectContent>
                 {stages.map((s) => (
-                  <SelectItem key={s.id} value={s.id}>
+                  <SelectItem
+                    key={s.id}
+                    value={s.id}
+                    disabled={!podePerda && isEtapaDePerda(s)}
+                    title={
+                      !podePerda && isEtapaDePerda(s)
+                        ? ETAPA_DE_PERDA_INDISPONIVEL
+                        : undefined
+                    }
+                  >
                     {s.name}
                   </SelectItem>
                 ))}

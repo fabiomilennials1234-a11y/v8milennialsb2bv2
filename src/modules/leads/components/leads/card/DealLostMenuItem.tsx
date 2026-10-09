@@ -8,11 +8,16 @@ import { useOrganization } from "@/modules/identity";
 import type { DealOutcome } from "../../../hooks/useLeadsDeals";
 import { notifyError } from "@/shared/errors";
 import { cancelarEfeitoDeDesfecho, dispararEfeitoDeDesfecho } from "../../../lib/card-effects";
+import { useLossReasonGate } from "../../../loss-reason-gate";
+import type { PerdaResolvida } from "@/contracts/pipe/perda";
+
+type Decisao = { next: "open" } | { next: "lost"; perda: PerdaResolvida };
 
 /** Monta só ao abrir o menu. O desfecho pertence à entrada, não ao lead/etapa. */
 export function DealLostMenuItem({ entryId }: { entryId: string }) {
   const { organizationId, isReady } = useOrganization();
   const queryClient = useQueryClient();
+  const { capturarMotivoDaPerda } = useLossReasonGate();
   const saving = useRef(false);
   const queryKey = ["deal-menu-outcome", organizationId, entryId];
   const outcome = useQuery({
@@ -32,13 +37,16 @@ export function DealLostMenuItem({ entryId }: { entryId: string }) {
     },
   });
   const mutation = useMutation({
-    mutationFn: async (next: "open" | "lost") => {
+    mutationFn: async (decisao: Decisao) => {
+      // O motivo já está no metadata (gravado pela porta antes de chegar
+      // aqui); a RPC o copia para `deals.loss_reason`.
       const { error } = await supabase.rpc("definir_desfecho_da_entrada", {
         p_entry_id: entryId,
-        p_outcome: next,
+        p_outcome: decisao.next,
+        ...(decisao.next === "lost" && decisao.perda.texto ? { p_loss_reason: decisao.perda.texto } : {}),
       } as never);
       if (error) throw new Error(error.message);
-      return next;
+      return decisao.next;
     },
     onSuccess: async (next) => {
       queryClient.setQueryData(queryKey, next);
@@ -70,7 +78,19 @@ export function DealLostMenuItem({ entryId }: { entryId: string }) {
         }
         if (!outcome.data) return;
         saving.current = true;
-        mutation.mutate(lost ? "open" : "lost");
+        if (lost) {
+          mutation.mutate({ next: "open" });
+          return;
+        }
+        // Perder pede o motivo (SCRUM-369) e o grava antes do desfecho.
+        // Cancelou / falhou a gravação: libera o item sem escrever nada.
+        void capturarMotivoDaPerda({ entryIds: [entryId] }).then((perda) => {
+          if (!perda) {
+            saving.current = false;
+            return;
+          }
+          mutation.mutate({ next: "lost", perda });
+        });
       }}
     >
       <Icon className="w-4 h-4 mr-2" />

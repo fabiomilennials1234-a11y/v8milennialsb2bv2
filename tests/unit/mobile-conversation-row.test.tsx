@@ -3,6 +3,11 @@ import { render, screen, fireEvent } from "@testing-library/react";
 import { MobileConversationRow } from "@/modules/communication/components/chat/list/MobileConversationRow";
 import type { ChatContact } from "@/modules/communication/hooks/useWhatsAppChat";
 
+// Flags de nome da linha leem a org via AuthProvider, que este teste não monta.
+vi.mock("@/modules/platform/hooks/useFeatureFlag", () => ({
+  useFeatureFlag: () => ({ enabled: false }),
+}));
+
 const baseContact: ChatContact = {
   instance_id: "cx-1",
   phone_number: "5511999999999",
@@ -136,5 +141,48 @@ describe("MobileConversationRow", () => {
       />,
     );
     expect(screen.getByText("Sem mensagens")).toBeInTheDocument();
+  });
+
+  describe("responsável do lead (no lugar da caixa)", () => {
+    const caixa = { id: "cx-1", nome: "Riofix", kind: "whatsapp" as const };
+
+    it("mostra o dono, não a caixa; caixa vai no tooltip", () => {
+      render(
+        <MobileConversationRow
+          contact={baseContact}
+          isSelected={false}
+          onPress={vi.fn()}
+          caixa={caixa}
+          responsavel={{ nome: "Ana S.", nomeCompleto: "Ana Souza" }}
+        />,
+      );
+      expect(screen.getByText("Ana S.")).toBeInTheDocument();
+      expect(screen.queryByText("Riofix")).not.toBeInTheDocument();
+      expect(screen.getByTestId("linha-responsavel")).toHaveAttribute(
+        "title",
+        "Responsável: Ana Souza · Caixa: Riofix",
+      );
+    });
+
+    it("sem dono: 'Sem responsável'", () => {
+      render(
+        <MobileConversationRow contact={baseContact} isSelected={false} onPress={vi.fn()} caixa={caixa} responsavel={null} />,
+      );
+      expect(screen.getByText("Sem responsável")).toHaveClass("italic");
+    });
+
+    it("indefinido (sem lead / carregando): nada no andar 3", () => {
+      render(<MobileConversationRow contact={baseContact} isSelected={false} onPress={vi.fn()} caixa={caixa} />);
+      expect(screen.queryByTestId("linha-responsavel")).not.toBeInTheDocument();
+      expect(screen.queryByText("Riofix")).not.toBeInTheDocument();
+    });
+
+    it("indefinido no modo unificado (várias caixas): andar 3 mostra a caixa", () => {
+      render(
+        <MobileConversationRow contact={baseContact} isSelected={false} onPress={vi.fn()} caixa={caixa} variasCaixas />,
+      );
+      expect(screen.queryByTestId("linha-responsavel")).not.toBeInTheDocument();
+      expect(screen.getByTestId("linha-caixa")).toHaveTextContent("Riofix");
+    });
   });
 });

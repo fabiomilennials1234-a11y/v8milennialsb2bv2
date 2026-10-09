@@ -84,7 +84,9 @@ vi.mock("@/modules/identity", () => ({
   useOrganization: () => ({ organizationId: "org-1" }),
   useCanDo: () => ({ allowed: true, isLoading: false }),
 }));
-vi.mock("@/modules/leads", () => ({
+// A porta do motivo é a REAL (diálogo + regra): só o resto do barril é dublê.
+vi.mock("@/modules/leads", async () => ({
+  useLossReasonGate: (await import("@/modules/leads/loss-reason-gate")).useLossReasonGate,
   CompareceuModal: (props: Record<string, unknown>) =>
     props.open ? (
       <button type="button" onClick={() => (props.onConfirm as (r: string | null) => void)("tm-9")}>
@@ -209,6 +211,13 @@ import {
   type FunilFlowEntry,
 } from "@/modules/pipelines/components/funis/useFunilMoveFlow";
 import type { CustomPipelineStage } from "@/contracts/pipe";
+import { LossReasonGateProvider } from "@/modules/leads/loss-reason-gate";
+import { MockPipeOpsProvider } from "@/modules/leads/pipe-ops/testing";
+
+const CATALOGO_DE_MOTIVOS = [
+  { id: "lr-1", name: "Sem budget", organization_id: "org-1" },
+  { id: "lr-2", name: "Outro", organization_id: "org-1" },
+];
 import type { Pipeline } from "@/modules/pipelines/hooks/model/usePipelines";
 
 const stageBase = {
@@ -289,11 +298,19 @@ function Harness({
   );
 }
 
-function montar(pipeline: Pipeline, stages: CustomPipelineStage[], entries: FunilFlowEntry[]) {
+function montar(
+  pipeline: Pipeline,
+  stages: CustomPipelineStage[],
+  entries: FunilFlowEntry[],
+  { comPorta = true }: { comPorta?: boolean } = {},
+) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const harness = <Harness pipeline={pipeline} stages={stages} entries={entries} />;
   render(
     <QueryClientProvider client={qc}>
-      <Harness pipeline={pipeline} stages={stages} entries={entries} />
+      <MockPipeOpsProvider port={{ useLossReasons: (() => ({ data: CATALOGO_DE_MOTIVOS })) as never }}>
+        {comPorta ? <LossReasonGateProvider>{harness}</LossReasonGateProvider> : harness}
+      </MockPipeOpsProvider>
     </QueryClientProvider>,
   );
   return qc;
@@ -521,6 +538,42 @@ describe("perdido exige motivo antes do move", () => {
       stageId: "id-descartado",
       stageKey: "descartado",
     }));
+  });
+});
+
+// ── 3b. Etapa de perda só pela flag (Mustang/Riofix) + cancelar ────────────
+describe("perda pelo predicado único (isEtapaDePerda)", () => {
+  const stagesFlag = [
+    stage({ stage_key: "aberto" }),
+    stage({ stage_key: "perdido_desqualificado", stage_role: "open", is_final_negative: true }),
+  ];
+
+  it("role open + is_final_negative pede o motivo (antes movia sem perguntar quando havia role)", async () => {
+    montar(pipelineDe("custom", "mustang"), stagesFlag, [entryBase]);
+    fireEvent.click(screen.getByRole("button", { name: "mover-perdido_desqualificado" }));
+    await screen.findByRole("button", { name: /confirmar perda/i });
+    fireEvent.click(screen.getByRole("button", { name: "Sem budget" }));
+    fireEvent.click(screen.getByRole("button", { name: /confirmar perda/i }));
+    await waitFor(() => expect(moverAsync).toHaveBeenCalledTimes(1));
+    expect(patchEntryMetadata).toHaveBeenCalledWith("e-1", { loss_reason_id: "lr-1", loss_reason: "Sem budget" });
+  });
+
+  it("cancelar o diálogo não escreve nada", async () => {
+    montar(pipelineDe("custom", "mustang"), stagesFlag, [entryBase]);
+    fireEvent.click(screen.getByRole("button", { name: "mover-perdido_desqualificado" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Cancelar" }));
+    await waitFor(() => expect(toast).toHaveBeenCalledWith("Operação cancelada"));
+    expect(patchEntryMetadata).not.toHaveBeenCalled();
+    expect(moverAsync).not.toHaveBeenCalled();
+  });
+
+  it("porta fechada (sem provider): UM aviso só, nada escrito", async () => {
+    montar(pipelineDe("custom", "mustang"), stagesFlag, [entryBase], { comPorta: false });
+    fireEvent.click(screen.getByRole("button", { name: "mover-perdido_desqualificado" }));
+    await waitFor(() => expect(toast.error).toHaveBeenCalledTimes(1));
+    expect(toast).not.toHaveBeenCalledWith("Operação cancelada");
+    expect(patchEntryMetadata).not.toHaveBeenCalled();
+    expect(moverAsync).not.toHaveBeenCalled();
   });
 });
 

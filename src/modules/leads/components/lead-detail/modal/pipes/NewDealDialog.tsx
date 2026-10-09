@@ -22,6 +22,8 @@ import {
 } from "@/components/ui/select";
 import { useResponsibleMembers, useCurrentTeamMember, isVirtualTeamMember } from "@/modules/identity";
 import { cn } from "@/lib/utils";
+import { ETAPA_DE_PERDA_INDISPONIVEL } from "@/contracts/pipe/perda";
+import { etapaInicial } from "../../../../lib/etapa-de-perda";
 
 /**
  * "Novo negócio" — a única porta de entrada de um negócio (decisão D1).
@@ -58,7 +60,11 @@ export interface NewDealOption {
   key: string;
   label: string;
   color?: string;
-  stages: { id: string; label: string }[];
+  /**
+   * `isLoss`: etapa de perda. Fica visível e DESABILITADA — negócio que nasce
+   * perdido gravaria a perda sem motivo; a perda só pelo movimento (pede o motivo).
+   */
+  stages: { id: string; label: string; isLoss?: boolean }[];
   /** Propostas — habilita o campo de valor. */
   supportsValue?: boolean;
   /** Confirmação — habilita a data da reunião. */
@@ -183,7 +189,7 @@ export const NewDealDialog = memo(function NewDealDialog({
   const limparFormulario = useCallback(() => {
     const first = enabled[0] ?? null;
     setOptionKey(first?.key ?? null);
-    setStageId(first?.stages[0]?.id ?? "");
+    setStageId(etapaInicial(first));
     setOwnerId(
       currentMember && !isVirtualTeamMember(currentMember.id) ? currentMember.id : "",
     );
@@ -228,11 +234,12 @@ export const NewDealDialog = memo(function NewDealDialog({
   const handleSelectOption = (option: NewDealOption) => {
     if (option.disabled) return;
     setOptionKey(option.key);
-    setStageId(option.stages[0]?.id ?? "");
+    setStageId(etapaInicial(option));
   };
 
   const telefoneOk = !precisaEscolherTelefone || phones.some((p) => p.id === leadPhoneId);
-  const canSubmit = Boolean(selected && !selected.disabled && stageId)
+  const etapaEhPerda = selected?.stages.find((s) => s.id === stageId)?.isLoss === true;
+  const canSubmit = Boolean(selected && !selected.disabled && stageId && !etapaEhPerda)
     && telefoneOk
     && !submitting && !isCreating && !isLoading && !loadError;
 
@@ -410,7 +417,12 @@ export const NewDealDialog = memo(function NewDealDialog({
                     </SelectTrigger>
                     <SelectContent className="z-[70]">
                       {selected.stages.map((stage) => (
-                        <SelectItem key={stage.id} value={stage.id}>
+                        <SelectItem
+                          key={stage.id}
+                          value={stage.id}
+                          disabled={stage.isLoss}
+                          title={stage.isLoss ? ETAPA_DE_PERDA_INDISPONIVEL : undefined}
+                        >
                           {stage.label}
                         </SelectItem>
                       ))}

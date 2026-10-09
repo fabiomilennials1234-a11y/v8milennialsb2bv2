@@ -17,6 +17,15 @@
  * Devolve `status` junto do mapa: um mapa vazio por FALHA é indistinguível de um
  * mapa vazio por "ninguém tem responsável" — e a diferença inverte o resultado
  * do filtro (`vendor: "unassigned"` casaria todo mundo).
+ *
+ * DOIS mapas, de propósito, na MESMA consulta:
+ *  - `map` — `responsible_id`, o critério do filtro "por vendedor". Fica casado
+ *    com o `p_vendor_id` da RPC do inbox; trocá-lo aqui faria cliente e servidor
+ *    discordarem sobre quem é "do vendedor".
+ *  - `ownerByLead` — o DONO canônico, `sale_responsible_id ?? pre_sale_responsible_id`,
+ *    o mesmo par que o painel de contexto mostra e o `ResponsibleSlot` grava. É
+ *    o que a linha do inbox desenha. `responsible_id` é legado e diverge do par
+ *    em parte dos leads (13/133 na Riofix em 2026-10-09).
  */
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
@@ -25,11 +34,33 @@ import { selectInChunks, IN_CHUNK_SIZE } from "@/shared/supabase/selectInChunks"
 import type { EnrichmentStatus } from "@/modules/communication/lib/inboxEnrichment";
 
 export interface LeadResponsibleMapResult {
+  /** lead_id → `responsible_id` (critério do filtro por vendedor). */
   map: ReadonlyMap<string, string | null>;
+  /** lead_id → dono canônico (`sale_responsible_id ?? pre_sale_responsible_id`). */
+  ownerByLead: ReadonlyMap<string, string | null>;
   status: EnrichmentStatus;
 }
 
+interface LeadResponsibleRow {
+  id: string;
+  responsible_id: string | null;
+  sale_responsible_id: string | null;
+  pre_sale_responsible_id: string | null;
+}
+
+interface Maps {
+  map: Map<string, string | null>;
+  ownerByLead: Map<string, string | null>;
+}
+
 const EMPTY: ReadonlyMap<string, string | null> = new Map();
+
+/** Dono canônico do lead: vendas manda; pré-venda é o fallback. */
+export function leadOwnerId(
+  row: Pick<LeadResponsibleRow, "sale_responsible_id" | "pre_sale_responsible_id">,
+): string | null {
+  return row.sale_responsible_id ?? row.pre_sale_responsible_id ?? null;
+}
 
 /**
  * @param leadIds  IDs dos leads visíveis (derivados dos contatos da lista).
@@ -46,21 +77,25 @@ export function useLeadResponsibleMap(
 
   const { data, isError } = useQuery({
     queryKey: ["lead-responsible-map", organizationId, sortedIds],
-    queryFn: async (): Promise<Map<string, string | null>> => {
-      const rows = await selectInChunks<{ id: string; responsible_id: string | null }>(
+    queryFn: async (): Promise<Maps> => {
+      const rows = await selectInChunks<LeadResponsibleRow>(
         sortedIds,
         (chunk) =>
           supabase
             .from("leads")
-            .select("id, responsible_id")
+            .select("id, responsible_id, sale_responsible_id, pre_sale_responsible_id")
             .eq("organization_id", organizationId as string)
             .in("id", chunk),
         IN_CHUNK_SIZE,
       );
 
       const map = new Map<string, string | null>();
-      for (const row of rows) map.set(row.id, row.responsible_id ?? null);
-      return map;
+      const ownerByLead = new Map<string, string | null>();
+      for (const row of rows) {
+        map.set(row.id, row.responsible_id ?? null);
+        ownerByLead.set(row.id, leadOwnerId(row));
+      }
+      return { map, ownerByLead };
     },
     enabled: !vacuous,
     staleTime: 60_000,
@@ -70,6 +105,10 @@ export function useLeadResponsibleMap(
     // Mesma ordem de ramos do useLeadInboxMeta — ver o comentário de lá.
     const status: EnrichmentStatus =
       vacuous || data !== undefined ? "ready" : isError ? "error" : "pending";
-    return { map: vacuous ? EMPTY : data ?? EMPTY, status };
+    return {
+      map: vacuous ? EMPTY : data?.map ?? EMPTY,
+      ownerByLead: vacuous ? EMPTY : data?.ownerByLead ?? EMPTY,
+      status,
+    };
   }, [vacuous, data, isError]);
 }

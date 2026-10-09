@@ -5,6 +5,7 @@ import type {
 } from "../../../../hooks/useLeadAllPipelines";
 import { funisSemNegocioAberto } from "../../../../lib/negocio-aberto";
 import type { NewDealOption } from "./NewDealDialog";
+import { etapaDoLeadEhDePerda } from "../../../../lib/etapa-de-perda";
 
 /**
  * O construtor das opções de "Novo negócio" — **fora do painel**.
@@ -95,7 +96,7 @@ export function buildNewDealOptions(
       key: `sys:${p.pipeType}`,
       label: p.label,
       color: p.color,
-      stages: p.stages.map((s) => ({ id: s.id, label: s.label })),
+      stages: p.stages.map((s) => ({ id: s.id, label: s.label, isLoss: etapaDoLeadEhDePerda(s) })),
       supportsValue: p.pipeType === "propostas",
       supportsMeeting: p.pipeType === "confirmacao",
       disabled: !canAdd.allowed,
@@ -110,7 +111,7 @@ export function buildNewDealOptions(
       key: "sys:upsell",
       label: SYSTEM_PIPE_SHORT_LABEL.upsell,
       color: upsellPipe.color,
-      stages: upsellPipe.stages.map((s) => ({ id: s.id, label: s.label })),
+      stages: upsellPipe.stages.map((s) => ({ id: s.id, label: s.label, isLoss: etapaDoLeadEhDePerda(s) })),
       disabled: !canAdd.allowed || !vendaFechada,
       disabledReason: !canAdd.allowed
         ? semPermissao
@@ -126,7 +127,7 @@ export function buildNewDealOptions(
       key: `custom:${p.pipelineId}`,
       label: p.pipelineName,
       color: p.pipelineColor,
-      stages: p.stages.map((s) => ({ id: s.id, label: s.name })),
+      stages: p.stages.map((s) => ({ id: s.id, label: s.name, isLoss: etapaDoLeadEhDePerda(s) })),
       disabled: !canAdd.allowed,
       disabledReason: semPermissao,
     });

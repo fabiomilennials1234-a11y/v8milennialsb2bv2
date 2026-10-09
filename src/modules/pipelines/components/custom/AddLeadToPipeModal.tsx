@@ -30,6 +30,11 @@ import { useQuery } from "@tanstack/react-query";
 import { useDebounce } from "@/shared/hooks/useDebounce";
 import { LeadModal, buscarLeadIdsPorTelefoneSecundario } from "@/modules/leads";
 import { notifyError } from "@/shared/errors";
+import {
+  ETAPA_DE_PERDA_INDISPONIVEL,
+  isEtapaDePerda,
+  primeiraEtapaSemPerda,
+} from "@/modules/pipelines/lib/loss-reason";
 
 interface AddLeadToPipeModalProps {
   open: boolean;
@@ -59,11 +64,21 @@ export function AddLeadToPipeModal({
 }: AddLeadToPipeModalProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null);
-  const [selectedStageId, setSelectedStageId] = useState<string>(defaultStageId || stages[0]?.id || "");
+  // Entrar no funil já perdido gravaria a perda sem motivo: a etapa de perda
+  // não é selecionável aqui, e o default nunca cai nela (inclusive pelo "+" da
+  // própria coluna de perda) — vai para a primeira etapa não-perda.
+  const etapaPadrao = (preferida?: string | null): string => {
+    const escolhida = preferida ? stages.find((s) => s.id === preferida) : undefined;
+    if (escolhida && !isEtapaDePerda(escolhida)) return escolhida.id;
+    return primeiraEtapaSemPerda(stages)?.id ?? "";
+  };
+  const [selectedStageId, setSelectedStageId] = useState<string>(() => etapaPadrao(defaultStageId));
   // Abrir pelo "+" de uma coluna traz a etapa daquela coluna.
   useEffect(() => {
-    if (open && defaultStageId) setSelectedStageId(defaultStageId);
+    if (open && defaultStageId) setSelectedStageId(etapaPadrao(defaultStageId));
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `etapaPadrao` lê `stages`, estável enquanto aberto
   }, [open, defaultStageId]);
+  const selecionadaEhPerda = isEtapaDePerda(stages.find((s) => s.id === selectedStageId));
   const [isLeadModalOpen, setIsLeadModalOpen] = useState(false);
   const debouncedSearch = useDebounce(searchQuery, 300);
 
@@ -100,7 +115,7 @@ export function AddLeadToPipeModal({
   const selectedLead = searchResults?.find((l) => l.id === selectedLeadId);
 
   const handleAdd = async () => {
-    if (!selectedLeadId || !selectedStageId) return;
+    if (!selectedLeadId || !selectedStageId || selecionadaEhPerda) return;
 
     try {
       await addLead.mutateAsync({
@@ -118,7 +133,7 @@ export function AddLeadToPipeModal({
 
   const handleNewLeadCreated = async (newLeadId?: string) => {
     if (!newLeadId) return;
-    const stageId = selectedStageId || stages[0]?.id;
+    const stageId = selectedStageId && !selecionadaEhPerda ? selectedStageId : etapaPadrao(null);
     if (!stageId) return;
 
     try {
@@ -138,7 +153,7 @@ export function AddLeadToPipeModal({
     onOpenChange(false);
     setSearchQuery("");
     setSelectedLeadId(null);
-    setSelectedStageId(stages[0]?.id || "");
+    setSelectedStageId(etapaPadrao(null));
     setIsLeadModalOpen(false);
   };
 
@@ -251,7 +266,12 @@ export function AddLeadToPipeModal({
               </SelectTrigger>
               <SelectContent>
                 {stages.map((stage) => (
-                  <SelectItem key={stage.id} value={stage.id}>
+                  <SelectItem
+                    key={stage.id}
+                    value={stage.id}
+                    disabled={isEtapaDePerda(stage)}
+                    title={isEtapaDePerda(stage) ? ETAPA_DE_PERDA_INDISPONIVEL : undefined}
+                  >
                     <div className="flex items-center gap-2">
                       <div
                         className="w-3 h-3 rounded-full shrink-0"
@@ -272,7 +292,7 @@ export function AddLeadToPipeModal({
           </Button>
           <Button
             onClick={handleAdd}
-            disabled={!selectedLeadId || !selectedStageId || addLead.isPending}
+            disabled={!selectedLeadId || !selectedStageId || selecionadaEhPerda || addLead.isPending}
           >
             {addLead.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
             Adicionar

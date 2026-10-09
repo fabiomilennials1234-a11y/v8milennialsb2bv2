@@ -59,6 +59,7 @@ vi.mock("@/modules/leads", () => ({
   },
   CardEffectsHost: () => null,
   useEntradasEmDesfecho: () => new Set(),
+  useLossReasonGate: () => ({ requestLossReason: vi.fn(), capturarMotivoDaPerda: vi.fn() }),
 }));
 
 vi.mock("@/modules/pipelines/components/kanban/ExportStageDialog", () => ({
@@ -82,9 +83,6 @@ vi.mock("@/modules/pipelines/components/kanban/MeetingConfirmationButton", () =>
 }));
 vi.mock("@/modules/pipelines/components/kanban/SetMeetingDateModal", () => ({
   SetMeetingDateModal: () => null,
-}));
-vi.mock("@/modules/pipelines/components/kanban/LossReasonDialog", () => ({
-  LossReasonDialog: () => null,
 }));
 vi.mock("@/modules/workflows/hooks/useStageWorkflows", () => ({
   useCustomPipeStageWorkflows: () => ({ data: [] }),

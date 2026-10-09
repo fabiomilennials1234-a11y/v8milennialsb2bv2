@@ -4,7 +4,8 @@
  * Renderiza o controle por stage:
  *   - agendado        → botão de confirmação (date-aware)
  *   - remarcar        → CTA "Nova data → Agendado" (reseta confirmação)
- *   - nao_compareceu  → "Remarcar" + "Marcar perdido" (loss reason)
+ *   - nao_compareceu  → "Remarcar" + "Marcar perdido" (motivo pela porta única
+ *                       `useLossReasonGate`; cancelar = nada escrito)
  *
  * NÃO renderiza mais o "foco da reunião" (dia + horário). No S6 a data virou
  * linha de primeira classe do próprio card (`LeadCardData.date`), regida só
@@ -18,13 +19,14 @@ import { useState } from "react";
 import { CalendarPlus, RotateCcw, XCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useOrgFeatures } from "@/contexts/OrgFeaturesContext";
+import { useLossReasonGate } from "@/modules/leads";
+import { notifyError } from "@/shared/errors";
 import type { StageRole } from "@/contracts/pipe";
 import { ehEtapaDeReuniao } from "../../lib/etapa-de-reuniao";
 import type { ConfirmationStatus } from "../../lib/confirmation-button";
 import { useMarkLost } from "../../hooks/model/useMergedFunnelActions";
 import { MeetingConfirmationButton } from "./MeetingConfirmationButton";
 import { SetMeetingDateModal } from "./SetMeetingDateModal";
-import { LossReasonDialog } from "./LossReasonDialog";
 
 const SMALL_BTN =
   "flex flex-1 items-center justify-center gap-1.5 rounded-full border px-2 py-1.5 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
@@ -60,8 +62,8 @@ export function MergedFunnelCardActions({
 }: MergedFunnelCardActionsProps) {
   const { hasFeature } = useOrgFeatures();
   const [rescheduleOpen, setRescheduleOpen] = useState(false);
-  const [lossOpen, setLossOpen] = useState(false);
   const markLost = useMarkLost();
+  const { requestLossReason } = useLossReasonGate();
 
   if (!hasFeature("merged_opportunity_funnel")) return null;
   if (!ehEtapaDeReuniao(stageKey, stageRole, meetingDate)) return null;
@@ -120,7 +122,19 @@ export function MergedFunnelCardActions({
           {lostStageKey && (
             <button
               type="button"
-              onClick={(e) => { e.stopPropagation(); setLossOpen(true); }}
+              disabled={markLost.isPending}
+              onClick={(e) => {
+                e.stopPropagation();
+                void (async () => {
+                  const perda = await requestLossReason();
+                  if (!perda) return;
+                  // Motivo e move na MESMA escrita (`useMarkLost`).
+                  markLost.mutate(
+                    { entryId, lostStageKey, perda },
+                    { onError: (error) => notifyError(error, { fallback: "Não foi possível marcar como perdido." }) },
+                  );
+                })();
+              }}
               className={cn(SMALL_BTN, "border-destructive/40 text-destructive hover:bg-destructive/10")}
             >
               <XCircle className="w-3.5 h-3.5" />
@@ -128,19 +142,6 @@ export function MergedFunnelCardActions({
             </button>
           )}
         </div>
-        {lostStageKey && (
-          <LossReasonDialog
-            open={lossOpen}
-            onOpenChange={setLossOpen}
-            pending={markLost.isPending}
-            onConfirm={(lossReasonId) =>
-              markLost.mutate(
-                { entryId, lostStageKey, lossReasonId },
-                { onSuccess: () => setLossOpen(false) },
-              )
-            }
-          />
-        )}
       </>
     );
   }

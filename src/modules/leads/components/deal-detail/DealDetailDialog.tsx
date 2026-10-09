@@ -30,6 +30,7 @@ import {
   type PipelineStatus,
   type StandardPipelineStatus,
 } from "../../hooks/useLeadAllPipelines";
+import { etapaDoLeadEhDePerda } from "../../lib/etapa-de-perda";
 import { useLeadsDeals } from "../../hooks/useLeadsDeals";
 
 /**
@@ -137,7 +138,7 @@ function DealContent({ onClose, isMobile }: { onClose: () => void; isMobile: boo
         pipeRef: pipe.pipeType,
         shortLabel: SYSTEM_SHORT_LABEL[pipe.pipeType] ?? pipe.label,
         color: pipe.color,
-        stages: pipe.stages.map((s) => ({ key: s.id, label: s.label })),
+        stages: pipe.stages.map((s) => ({ key: s.id, label: s.label, isLoss: etapaDoLeadEhDePerda(s) })),
         currentKey: pipe.currentStage,
       };
     }
@@ -147,7 +148,7 @@ function DealContent({ onClose, isMobile }: { onClose: () => void; isMobile: boo
       pipeRef: pipe.pipelineId,
       shortLabel: pipe.pipelineName,
       color: pipe.pipelineColor,
-      stages: pipe.stages.map((s) => ({ key: s.id, label: s.name })),
+      stages: pipe.stages.map((s) => ({ key: s.id, label: s.name, isLoss: etapaDoLeadEhDePerda(s) })),
       currentKey: pipe.currentStageId,
     };
   }, [pipe, entryId]);

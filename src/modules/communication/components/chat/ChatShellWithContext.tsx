@@ -94,9 +94,13 @@ import { AiStateStrip } from "@/modules/communication/components/chat/takeover/A
 import { useIdentity } from "@/modules/identity";
 import { useTags } from "@/modules/leads/hooks/useTags";
 import { useCurrentTeamMember } from "@/modules/identity";
-import { useResponsibleMembers } from "@/modules/identity";
+import { useResponsibleMembers, useTeamMembers } from "@/modules/identity";
 import { useAuth } from "@/modules/identity";
 import { useLeadResponsibleMap } from "@/modules/communication/hooks/chat/useLeadResponsibleMap";
+import {
+  resolverResponsavelDaLinha,
+  type ResponsavelDaLinha,
+} from "@/modules/communication/lib/responsavelDaLinha";
 import { useLeadInboxMeta } from "@/modules/communication/hooks/chat/useLeadInboxMeta";
 import { useInboxFunnelOptions } from "@/modules/communication/hooks/chat/useInboxFunnelOptions";
 import { useInboxFilterState } from "@/modules/communication/hooks/chat/useInboxFilterState";
@@ -125,6 +129,7 @@ import {
 import type {
   ChatContact,
   FailedMessage,
+  InboxContact,
   SocialContact,
 } from "@/modules/communication/hooks/chat/types";
 import type { DensityMode } from "@/modules/communication/hooks/chat/useChatDensity";
@@ -1208,14 +1213,36 @@ export function ChatShellWithContext() {
     () => [...new Set(contacts.map((c) => c.lead_id).filter((id): id is string => !!id))],
     [contacts],
   );
-  const { map: leadResponsibleMap, status: vendorStatus } = useLeadResponsibleMap(
-    leadIds,
-    organizationId,
-  );
+  const {
+    map: leadResponsibleMap,
+    ownerByLead,
+    status: vendorStatus,
+  } = useLeadResponsibleMap(leadIds, organizationId);
   const resolveContactVendorId = useCallback(
     (c: ChatContact): string | null =>
       c.lead_id ? leadResponsibleMap.get(c.lead_id) ?? null : null,
     [leadResponsibleMap],
+  );
+
+  // ── Responsável na linha ────────────────────────────────────────────────────
+  // O DONO do lead (`sale ?? pre_sale`), não o `responsible_id` do filtro acima.
+  // Nomes saem de TODOS os membros (inclusive inativos): um dono que saiu da
+  // equipe continua sendo o nome no lead, e "Sem responsável" seria mentira.
+  // Enquanto os membros não chegam, `null` — a linha não desenha o segmento.
+  const { data: todosOsMembros, isSuccess: membrosProntos } = useTeamMembers();
+  const membrosPorId = useMemo(
+    () => (membrosProntos ? new Map((todosOsMembros ?? []).map((m) => [m.id, m])) : null),
+    [membrosProntos, todosOsMembros],
+  );
+  const resolveResponsavel = useCallback(
+    (c: InboxContact): ResponsavelDaLinha | null | undefined =>
+      resolverResponsavelDaLinha({
+        leadId: c.lead_id,
+        ownerByLead,
+        ownerStatus: vendorStatus,
+        membros: membrosPorId,
+      }),
+    [ownerByLead, vendorStatus, membrosPorId],
   );
 
   // ── Enrichment do inbox: funis (+ etapa) e qualificação por lead ─────────────
@@ -1442,6 +1469,7 @@ export function ChatShellWithContext() {
             funnelOptions={funnelOptions}
             vendorOptions={vendorOptions}
             resolveContactVendorId={resolveContactVendorId}
+            resolveResponsavel={resolveResponsavel}
             currentTeamMemberId={teamMember?.id ?? null}
             canSeeUnassigned={isAdmin}
             filterGate={filterGate}
