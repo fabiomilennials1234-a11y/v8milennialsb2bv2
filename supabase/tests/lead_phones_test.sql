@@ -319,5 +319,51 @@ SELECT is(
       AND normalized_phone IN ('48912340000', '48999750303')),
   '48912340000:true,48999750303:false', 'BF2: trocar leads.phone move o principal e mantém o número antigo');
 
+-- ===========================================================================
+-- (MS) master escreve contato (20271114000000) — sem ser membro da org A
+-- ===========================================================================
+RESET role;
+SET LOCAL role postgres;
+INSERT INTO auth.users (
+  id, email, encrypted_password, email_confirmed_at, raw_user_meta_data,
+  created_at, updated_at, instance_id, aud, role,
+  confirmation_token, recovery_token, email_change_token_new,
+  email_change_token_current, reauthentication_token, phone_change_token,
+  email_change, phone_change
+) VALUES (
+  '82c50502-0000-4000-8000-0000000000c1', 'lp-master@test.local', '', now(), '{}'::jsonb, now(), now(),
+  '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated',
+  '', '', '', '', '', '', '', ''
+) ON CONFLICT (id) DO NOTHING;
+INSERT INTO public.master_users (user_id, is_active)
+VALUES ('82c50502-0000-4000-8000-0000000000c1', true);
+
+SET LOCAL role authenticated;
+SELECT set_config('request.jwt.claims',
+  '{"sub":"82c50502-0000-4000-8000-0000000000c1","role":"authenticated"}', true);
+
+SELECT lives_ok(
+  $$ SELECT public.salvar_telefones_do_lead('82c50502-0000-4000-8000-0000000002a2',
+       '[{"phone":"48988887777","is_primary":true,"label":"Dono"},
+         {"phone":"48977776666","label":"Financeiro"}]'::jsonb) $$,
+  'MS1: master salva contato novo em lead de org onde não é membro');
+SELECT is(
+  (SELECT string_agg(label || ':' || label_locked::text, ',' ORDER BY label) FROM public.lead_phones
+    WHERE lead_id = '82c50502-0000-4000-8000-0000000002a2' AND deleted_at IS NULL),
+  'Dono:true,Financeiro:true', 'MS2: o UPDATE do master pega a linha (nome do principal gravado e travado)');
+SELECT is(
+  (SELECT organization_id FROM public.lead_phones
+    WHERE lead_id = '82c50502-0000-4000-8000-0000000002a2' AND normalized_phone = '48977776666'),
+  '82c50502-0000-4000-8000-00000000000a'::uuid, 'MS3: a org da linha do master é a do lead');
+
+-- Controle: membro da org B continua sem escrever em lead da org A.
+SELECT set_config('request.jwt.claims',
+  '{"sub":"82c50502-0000-4000-8000-0000000000b1","role":"authenticated"}', true);
+SELECT throws_ok(
+  $$ INSERT INTO public.lead_phones (organization_id, lead_id, phone, source, label)
+     VALUES ('82c50502-0000-4000-8000-00000000000a', '82c50502-0000-4000-8000-0000000002a2', '48966665555', 'crm', 'X') $$,
+  '42501', NULL,
+  'MS4: membro de outra org segue barrado pela RLS de INSERT');
+
 SELECT * FROM finish();
 ROLLBACK;
