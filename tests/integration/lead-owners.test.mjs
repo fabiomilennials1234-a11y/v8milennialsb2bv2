@@ -59,7 +59,9 @@ before(async () => {
   await db.query(sql('tests/fixtures/lead-owners-schema.sql'));
   await db.query(sql('supabase/migrations/20271110000000_lead_documents_override.sql'));
 
-  await db.query(`INSERT INTO organizations (id, name) VALUES ($1, 'A'), ($2, 'B')`, [ORG_A, ORG_B]);
+  // A com a flag (gate do CTO 09/10), B sem.
+  await db.query(`INSERT INTO organizations (id, name, feature_flags) VALUES
+    ($1, 'A', '{"lead_owners_n_donos": true, "outra_flag": true}'), ($2, 'B', '{}')`, [ORG_A, ORG_B]);
   await db.query(`INSERT INTO team_members (id, organization_id, user_id, name, role, is_active) VALUES
     ($1, $7, $8,  'Admin A',  'admin',  true),
     ($2, $7, $9,  'Varejo A', 'member', true),
@@ -88,9 +90,14 @@ before(async () => {
   await db.query('UPDATE leads SET closer_id = NULL WHERE id = $1', [lead('a6')]);
   await db.query('SET session_replication_role = origin');
 
+  await db.query(`INSERT INTO leads (id, organization_id, name, sale_responsible_id) VALUES ($1, $2, 'LB', $3)`,
+    [lead('b1'), ORG_B, tm('b1')]);
+
   policiesBefore = await leadsPolicies();
   canUpdateBefore = await canUpdateLeadDef();
   await db.query(sql(MIGRATION));
+  // A migration só faz o backfill da Café Jurerê; aqui a org com flag é A.
+  await db.query('SELECT public.lead_owners_backfill($1)', [ORG_A]);
 });
 
 after(async () => {
@@ -108,6 +115,24 @@ test('backfill: principais por papel, ignora org NULL; segunda volta grava 0', a
   assert.equal(await donos(lead('a9')), '');
   const { rows } = await db.query('SELECT public.lead_owners_backfill() AS n');
   assert.equal(rows[0].n, 0);
+});
+
+test('gate por org: B sem flag não ganha linha, RPC recusa até master; flags de A preservadas', async () => {
+  await root();
+  assert.equal((await db.query('SELECT count(*)::int AS n FROM lead_owners WHERE organization_id = $1', [ORG_B])).rows[0].n, 0);
+  await db.query('UPDATE leads SET sale_responsible_id = NULL WHERE id = $1', [lead('b1')]);
+  await db.query('UPDATE leads SET sale_responsible_id = $2 WHERE id = $1', [lead('b1'), tm('b1')]);
+  assert.equal(await donos(lead('b1')), '');
+  await assert.rejects(db.query('SELECT public.lead_owners_backfill($1)', [ORG_B]), e => e.code === 'PT403');
+  for (const u of ['b1', 'c1']) {
+    await as(u);
+    await assert.rejects(db.query('SELECT public.lead_owner_add($1, $2)', [lead('b1'), tm('b1')]),
+      e => e.code === 'PT403' && /não está ativo nesta organização/.test(e.message));
+  }
+  assert.equal(await visible('b1', lead('b1')), true);
+  await root();
+  const { rows } = await db.query('SELECT feature_flags FROM organizations WHERE id = $1', [ORG_A]);
+  assert.deepEqual(rows[0].feature_flags, { lead_owners_n_donos: true, outra_flag: true });
 });
 
 test('comportamento neutro logo após a migration: mesmas visibilidades de antes', async () => {
@@ -185,7 +210,11 @@ test('rollback devolve policies e can_update_lead literais; reaplicar é idempot
   assert.deepEqual(await leadsPolicies(), policiesBefore);
   assert.equal(await canUpdateLeadDef(), canUpdateBefore);
   assert.equal((await db.query("SELECT to_regclass('public.lead_owners') AS t")).rows[0].t, null);
+  const flags = (await db.query('SELECT feature_flags FROM organizations WHERE id = $1', [ORG_A])).rows[0].feature_flags;
+  assert.deepEqual(flags, { outra_flag: true }, 'rollback tira só a flag lead_owners_n_donos');
   await db.query(sql(MIGRATION));
+  await db.query(`UPDATE organizations SET feature_flags = feature_flags || '{"lead_owners_n_donos": true}' WHERE id = $1`, [ORG_A]);
+  await db.query('SELECT public.lead_owners_backfill($1)', [ORG_A]);
   const after = (await db.query('SELECT count(*)::int AS n FROM lead_owners')).rows[0].n;
   assert.ok(after > 0 && after <= before, `reaplicada: ${after} linhas (antes ${before}, co-donos se perdem no rollback)`);
   const { rows } = await db.query('SELECT public.lead_owners_backfill() AS n');

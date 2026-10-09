@@ -22,6 +22,10 @@
 --   (GU) guarda: membro de outra org não entra nem pela porta dos fundos.
 --   (NL) lead com organization_id NULL não quebra o trigger.
 --   (INV) invariante: toda coluna canônica (mesma org) tem principal.
+--   (FL) gate por org (CTO 09/10): org A tem a flag lead_owners_n_donos e se
+--        comporta como acima; org B NÃO tem: trigger não escreve, backfill
+--        não toca, RPC recusa (inclusive master), guarda recusa, e a
+--        visibilidade/edição de `leads` fica idêntica.
 --   (DR) can_update_lead == USING da policy de UPDATE em persona × lead,
 --        já com co-donos (FOR KEY SHARE como authenticated).
 --
@@ -45,6 +49,14 @@ INSERT INTO public.organizations (id, name, slug, timezone) VALUES
   ('793f4b05-0000-4000-8000-00000000000b', 'Org OWN B', 'org-own-b', 'America/Sao_Paulo')
 ON CONFLICT (id) DO NOTHING;
 
+-- Org A com a flag (merge, como a migration faz na Café Jurerê); B sem.
+UPDATE public.organizations
+   SET feature_flags = feature_flags || '{"lead_owners_n_donos": true}'::jsonb
+ WHERE id = '793f4b05-0000-4000-8000-00000000000a';
+UPDATE public.organizations
+   SET feature_flags = feature_flags - 'lead_owners_n_donos'
+ WHERE id = '793f4b05-0000-4000-8000-00000000000b';
+
 INSERT INTO auth.users (
   id, email, encrypted_password, email_confirmed_at, raw_user_meta_data,
   created_at, updated_at, instance_id, aud, role,
@@ -63,6 +75,7 @@ SELECT u.id::uuid, u.email, '', now(), '{}'::jsonb, now(), now(),
     ('793f4b05-0000-4000-8000-0000000000a5', 'own-alheio@test.local'),
     ('793f4b05-0000-4000-8000-0000000000a6', 'own-inativo@test.local'),
     ('793f4b05-0000-4000-8000-0000000000b1', 'own-org-b@test.local'),
+    ('793f4b05-0000-4000-8000-0000000000b2', 'own-org-b-membro@test.local'),
     ('793f4b05-0000-4000-8000-0000000000c1', 'own-master@test.local')
   ) AS u(id, email)
 ON CONFLICT (id) DO NOTHING;
@@ -75,7 +88,8 @@ INSERT INTO public.team_members (id, organization_id, user_id, name, role, is_ac
   ('793f4b05-0000-4000-8000-0000000001a4', '793f4b05-0000-4000-8000-00000000000a', '793f4b05-0000-4000-8000-0000000000a4', 'SDR A',    'member', true),
   ('793f4b05-0000-4000-8000-0000000001a5', '793f4b05-0000-4000-8000-00000000000a', '793f4b05-0000-4000-8000-0000000000a5', 'Alheio A', 'member', true),
   ('793f4b05-0000-4000-8000-0000000001a6', '793f4b05-0000-4000-8000-00000000000a', '793f4b05-0000-4000-8000-0000000000a6', 'Inativo A','member', false),
-  ('793f4b05-0000-4000-8000-0000000001b1', '793f4b05-0000-4000-8000-00000000000b', '793f4b05-0000-4000-8000-0000000000b1', 'Admin B',  'admin',  true)
+  ('793f4b05-0000-4000-8000-0000000001b1', '793f4b05-0000-4000-8000-00000000000b', '793f4b05-0000-4000-8000-0000000000b1', 'Admin B',  'admin',  true),
+  ('793f4b05-0000-4000-8000-0000000001b2', '793f4b05-0000-4000-8000-00000000000b', '793f4b05-0000-4000-8000-0000000000b2', 'Membro B', 'member', true)
 ON CONFLICT (id) DO NOTHING;
 
 INSERT INTO public.master_users (user_id, is_active)
@@ -85,13 +99,16 @@ VALUES ('793f4b05-0000-4000-8000-0000000000c1', true);
 INSERT INTO public.organization_feature_defaults (organization_id, feature_key, enabled) VALUES
   ('793f4b05-0000-4000-8000-00000000000a', 'leads.view_all', false),
   ('793f4b05-0000-4000-8000-00000000000a', 'leads.view_unassigned', false),
-  ('793f4b05-0000-4000-8000-00000000000a', 'leads.view_subordinates', false);
+  ('793f4b05-0000-4000-8000-00000000000a', 'leads.view_subordinates', false),
+  ('793f4b05-0000-4000-8000-00000000000b', 'leads.view_all', false),
+  ('793f4b05-0000-4000-8000-00000000000b', 'leads.view_unassigned', false),
+  ('793f4b05-0000-4000-8000-00000000000b', 'leads.view_subordinates', false);
 
 -- Colunas legadas preenchidas à mão (sem o trigger canônico em replica).
 --   L1 venda s1 + pré p1 · L2 venda s1 · L3 sem dono · L4 venda s2
 --   L6 venda s1 com closer NULL (o caso dos 3.952 do ERP)
 --   L7 s1 nos dois papéis · LX venda b1 (outra org, legado) · LN org NULL
---   LB org B venda b1
+--   LB org B venda b1 · LB2 org B venda b2 (membro restrito, org sem flag)
 INSERT INTO public.leads (id, organization_id, name, origin, sale_responsible_id, closer_id, responsible_id, pre_sale_responsible_id, sdr_id, created_at) VALUES
   ('793f4b05-0000-4000-8000-0000000002a1', '793f4b05-0000-4000-8000-00000000000a', 'L1', 'meta_ads', '793f4b05-0000-4000-8000-0000000001a2', '793f4b05-0000-4000-8000-0000000001a2', NULL, '793f4b05-0000-4000-8000-0000000001a4', '793f4b05-0000-4000-8000-0000000001a4', now()),
   ('793f4b05-0000-4000-8000-0000000002a2', '793f4b05-0000-4000-8000-00000000000a', 'L2', 'meta_ads', '793f4b05-0000-4000-8000-0000000001a2', '793f4b05-0000-4000-8000-0000000001a2', NULL, NULL, NULL, now()),
@@ -101,7 +118,8 @@ INSERT INTO public.leads (id, organization_id, name, origin, sale_responsible_id
   ('793f4b05-0000-4000-8000-0000000002a7', '793f4b05-0000-4000-8000-00000000000a', 'L7', 'meta_ads', '793f4b05-0000-4000-8000-0000000001a2', '793f4b05-0000-4000-8000-0000000001a2', NULL, '793f4b05-0000-4000-8000-0000000001a2', '793f4b05-0000-4000-8000-0000000001a2', now()),
   ('793f4b05-0000-4000-8000-0000000002a8', '793f4b05-0000-4000-8000-00000000000a', 'LX', 'meta_ads', '793f4b05-0000-4000-8000-0000000001b1', '793f4b05-0000-4000-8000-0000000001b1', NULL, NULL, NULL, now()),
   ('793f4b05-0000-4000-8000-0000000002a9', NULL,                                   'LN', 'meta_ads', '793f4b05-0000-4000-8000-0000000001a2', '793f4b05-0000-4000-8000-0000000001a2', NULL, NULL, NULL, now()),
-  ('793f4b05-0000-4000-8000-0000000002b1', '793f4b05-0000-4000-8000-00000000000b', 'LB', 'meta_ads', '793f4b05-0000-4000-8000-0000000001b1', '793f4b05-0000-4000-8000-0000000001b1', NULL, NULL, NULL, now())
+  ('793f4b05-0000-4000-8000-0000000002b1', '793f4b05-0000-4000-8000-00000000000b', 'LB', 'meta_ads', '793f4b05-0000-4000-8000-0000000001b1', '793f4b05-0000-4000-8000-0000000001b1', NULL, NULL, NULL, now()),
+  ('793f4b05-0000-4000-8000-0000000002b2', '793f4b05-0000-4000-8000-00000000000b', 'LB2', 'meta_ads', '793f4b05-0000-4000-8000-0000000001b2', '793f4b05-0000-4000-8000-0000000001b2', NULL, NULL, NULL, now())
 ON CONFLICT (id) DO NOTHING;
 
 SET LOCAL session_replication_role = origin;
@@ -146,7 +164,9 @@ SELECT ok(NOT has_function_privilege('anon', 'public.lead_owner_add(uuid, uuid)'
 SELECT ok(has_function_privilege('authenticated', 'public.lead_owner_add(uuid, uuid)', 'EXECUTE')
       AND has_function_privilege('authenticated', 'public.lead_owner_transfer(uuid, uuid, text, boolean)', 'EXECUTE'),
   'GR6: authenticated executa as RPCs');
-SELECT ok(NOT has_function_privilege('authenticated', 'public.lead_owners_backfill()', 'EXECUTE')
+SELECT ok(NOT has_function_privilege('authenticated', 'public.lead_owners_backfill(uuid)', 'EXECUTE')
+      AND NOT has_function_privilege('authenticated', 'public.lead_owners_enabled(uuid)', 'EXECUTE')
+      AND NOT has_function_privilege('anon', 'public.lead_owners_enabled(uuid)', 'EXECUTE')
       AND NOT has_function_privilege('authenticated', 'public.lead_owner_authorize(uuid)', 'EXECUTE')
       AND NOT has_function_privilege('authenticated', 'public.can_update_lead(uuid)', 'EXECUTE')
       AND NOT has_function_privilege('anon', 'public.rls_lead_co_owned(uuid, uuid[])', 'EXECUTE'),
@@ -155,8 +175,16 @@ SELECT ok(NOT has_function_privilege('authenticated', 'public.lead_owners_backfi
 -- ===========================================================================
 -- (BF) backfill
 -- ===========================================================================
-SELECT is(public.lead_owners_backfill(), 8,
-  'BF1: backfill grava 8 principais (L1×2, L2, L4, L6, L7×2, LB); ignora LX (outra org), LN (org NULL), L3 (sem dono)');
+SELECT throws_ok(
+  $q$SELECT public.lead_owners_backfill('793f4b05-0000-4000-8000-00000000000b')$q$,
+  'PT403', 'N donos por lead não está ativo nesta organização.',
+  'FL1: backfill explícito de org SEM a flag é recusado');
+SELECT is(public.lead_owners_backfill('793f4b05-0000-4000-8000-00000000000a'), 7,
+  'BF1: backfill da org A grava 7 principais (L1×2, L2, L4, L6, L7×2); ignora LX (outra org), LN (org NULL), L3 (sem dono)');
+SELECT is(public.lead_owners_backfill(), 0,
+  'FL2: backfill de "todas as orgs com flag" não toca a org B (LB, LB2 seguem sem linha)');
+SELECT is((SELECT count(*)::int FROM public.lead_owners WHERE organization_id = '793f4b05-0000-4000-8000-00000000000b'), 0,
+  'FL3: nenhuma linha da org sem flag');
 SELECT is(public.lead_owners_backfill(), 0, 'BF2: segunda volta não grava nada (idempotente)');
 SELECT is(pg_temp.donos('793f4b05-0000-4000-8000-0000000002a7'), 'a2:pre_venda:backfill,a2:venda:backfill',
   'BF3: mesma pessoa nos dois papéis = uma linha principal por papel');
@@ -366,9 +394,10 @@ RESET role;
 -- ===========================================================================
 SELECT pg_temp.as_user('793f4b05-0000-4000-8000-0000000000c1');
 SET LOCAL role authenticated;
-SELECT lives_ok(
-  $q$SELECT public.lead_owner_add('793f4b05-0000-4000-8000-0000000002b1', '793f4b05-0000-4000-8000-0000000001b1')$q$,
-  'MA1: master chama a RPC em qualquer org');
+SELECT throws_ok(
+  $q$SELECT public.lead_owner_add('793f4b05-0000-4000-8000-0000000002b1', '793f4b05-0000-4000-8000-0000000001b2')$q$,
+  'PT403', 'N donos por lead não está ativo nesta organização.',
+  'MA1: nem master escreve donos em org SEM a flag');
 SELECT lives_ok(
   $q$SELECT public.lead_owner_add('793f4b05-0000-4000-8000-0000000002a3', '793f4b05-0000-4000-8000-0000000001a5')$q$,
   'MA2: master adiciona co-dono em lead sem dono');
@@ -407,6 +436,55 @@ SELECT lives_ok(
 SELECT is(pg_temp.donos('793f4b05-0000-4000-8000-0000000002a9'), '', 'NL2: e não grava dono');
 
 -- ===========================================================================
+-- (FL) org B, SEM a flag: tudo como antes da migration
+-- ===========================================================================
+SELECT throws_ok(
+  $q$INSERT INTO public.lead_owners (organization_id, lead_id, team_member_id, role, is_primary, source)
+     VALUES ('793f4b05-0000-4000-8000-00000000000b', '793f4b05-0000-4000-8000-0000000002b1',
+             '793f4b05-0000-4000-8000-0000000001b2', 'co', false, 'manual')$q$,
+  'PT403', NULL, 'FL4: guarda recusa linha de org sem a flag até para o dono do banco');
+
+INSERT INTO public.leads (id, organization_id, name, origin, sale_responsible_id)
+VALUES ('793f4b05-0000-4000-8000-0000000002b3', '793f4b05-0000-4000-8000-00000000000b', 'LB3', 'meta_ads', '793f4b05-0000-4000-8000-0000000001b2');
+UPDATE public.leads SET sale_responsible_id = '793f4b05-0000-4000-8000-0000000001b2'
+ WHERE id = '793f4b05-0000-4000-8000-0000000002b1';
+UPDATE public.leads SET responsible_id = '793f4b05-0000-4000-8000-0000000001b1'
+ WHERE id = '793f4b05-0000-4000-8000-0000000002b3';
+SELECT is((SELECT count(*)::int FROM public.lead_owners WHERE organization_id = '793f4b05-0000-4000-8000-00000000000b'), 0,
+  'FL5: INSERT/UPDATE de dono em lead da org sem flag não escreve em lead_owners');
+UPDATE public.leads SET sale_responsible_id = '793f4b05-0000-4000-8000-0000000001b1'
+ WHERE id = '793f4b05-0000-4000-8000-0000000002b1';
+
+SELECT pg_temp.as_user('793f4b05-0000-4000-8000-0000000000b1');
+SET LOCAL role authenticated;
+SELECT throws_ok(
+  $q$SELECT public.lead_owner_add('793f4b05-0000-4000-8000-0000000002b1', '793f4b05-0000-4000-8000-0000000001b2')$q$,
+  'PT403', 'N donos por lead não está ativo nesta organização.', 'FL6: admin da org sem flag: add recusado');
+SELECT throws_ok(
+  $q$SELECT public.lead_owner_transfer('793f4b05-0000-4000-8000-0000000002b1', '793f4b05-0000-4000-8000-0000000001b2', 'venda')$q$,
+  'PT403', NULL, 'FL7: transfer recusado');
+SELECT throws_ok(
+  $q$SELECT public.lead_owner_remove('793f4b05-0000-4000-8000-0000000002b1', '793f4b05-0000-4000-8000-0000000001b2')$q$,
+  'PT403', NULL, 'FL8: remove recusado');
+RESET role;
+SELECT is(
+  (SELECT sale_responsible_id FROM public.leads WHERE id = '793f4b05-0000-4000-8000-0000000002b1'),
+  '793f4b05-0000-4000-8000-0000000001b1'::uuid,
+  'FL9: o transfer recusado não mudou a coluna');
+
+-- Membro restrito da org B: vê e edita o que é dele, não vê o resto (como hoje).
+SELECT pg_temp.as_user('793f4b05-0000-4000-8000-0000000000b2');
+SET LOCAL role authenticated;
+SELECT is((SELECT array_agg(name ORDER BY name)::text FROM public.leads
+            WHERE organization_id = '793f4b05-0000-4000-8000-00000000000b'),
+  '{LB2,LB3}', 'FL10: membro da org sem flag vê exatamente os leads pelas colunas');
+WITH u AS (UPDATE public.leads SET name = 'LB2 editado' WHERE id = '793f4b05-0000-4000-8000-0000000002b2' RETURNING 1)
+SELECT is(count(*)::int, 1, 'FL11: e edita o próprio lead') FROM u;
+WITH u AS (UPDATE public.leads SET name = 'LB invadido' WHERE id = '793f4b05-0000-4000-8000-0000000002b1' RETURNING 1)
+SELECT is(count(*)::int, 0, 'FL12: e não edita o lead alheio') FROM u;
+RESET role;
+
+-- ===========================================================================
 -- (INV) invariante sobre os leads do teste
 -- ===========================================================================
 SELECT is(
@@ -415,10 +493,11 @@ SELECT is(
      CROSS JOIN LATERAL (VALUES ('pre_venda', l.pre_sale_responsible_id), ('venda', l.sale_responsible_id)) r(role, tm)
      JOIN public.team_members m ON m.id = r.tm AND m.organization_id = l.organization_id
     WHERE l.id::text LIKE '793f4b05-%'
+      AND public.lead_owners_enabled(l.organization_id)
       AND NOT EXISTS (SELECT 1 FROM public.lead_owners o
                        WHERE o.lead_id = l.id AND o.team_member_id = r.tm
                          AND o.role = r.role AND o.is_primary)),
-  0, 'INV1: toda coluna canônica (mesma org) tem principal em lead_owners');
+  0, 'INV1: em org com a flag, toda coluna canônica (mesma org) tem principal em lead_owners');
 SELECT is(
   (SELECT count(*)::int FROM public.lead_owners o
     WHERE o.lead_id::text LIKE '793f4b05-%' AND o.role = 'co'

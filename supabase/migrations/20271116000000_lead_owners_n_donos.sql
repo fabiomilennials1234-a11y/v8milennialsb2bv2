@@ -5,6 +5,23 @@
 -- donos principais, que já eram visíveis pelas colunas; nenhuma leitura do
 -- front muda nesta fatia.
 --
+-- ── GATE POR ORG (decisão do CTO 09/10) ─────────────────────────────────
+-- Schema global; DADO e COMPORTAMENTO só em org com a flag
+-- organizations.feature_flags ->> 'lead_owners_n_donos' = 'true' (booleano
+-- jsonb, como as outras flags; o front lê com useFeatureFlag). Esta migration
+-- liga a flag SÓ da Café Jurerê (4922638c-…), com merge `||`, ANTES do
+-- backfill. Sem a flag: o trigger em `leads` sai antes de escrever, o
+-- backfill não toca a org, as RPCs recusam (PT403, também para master) e a
+-- guarda de lead_owners recusa qualquer linha. RLS de `leads`,
+-- rls_lead_co_owned e can_update_lead ficam globais: sem linha em
+-- lead_owners fora das orgs com flag, o ramo novo é sempre falso.
+-- Ligar outra org depois, sem migration nova:
+--   UPDATE organizations SET feature_flags = feature_flags || '{"lead_owners_n_donos": true}' WHERE id = '<org>';
+--   SELECT public.lead_owners_backfill('<org>');
+-- Desligar: tire a flag E apague as linhas da org
+--   (DELETE FROM lead_owners WHERE organization_id = '<org>'); senão os
+--   co-donos continuam vendo o lead e os principais deixam de sincronizar.
+--
 -- ── MODELO ───────────────────────────────────────────────────────────────
 -- `lead_owners` é tabela de junção ADITIVA. As colunas canônicas de `leads`
 -- (pre_sale_responsible_id, sale_responsible_id) continuam sendo o "dono
@@ -52,15 +69,16 @@
 -- tenta passar o próprio lead para outra pessoa sem permissão (como hoje).
 --
 -- ── BACKFILL ─────────────────────────────────────────────────────────────
--- public.lead_owners_backfill(): INSERT ... SELECT ... ON CONFLICT DO NOTHING
--- a partir das colunas canônicas, source='backfill'. Nunca UPDATE em `leads`.
--- Idempotente. Ignora lead com organization_id NULL e membro de OUTRA org
--- (3.188 pares legados em prod; continuam visíveis pelas colunas).
--- Prod (09/10): 52.581 linhas.
+-- public.lead_owners_backfill(p_org): INSERT ... SELECT ... ON CONFLICT DO
+-- NOTHING a partir das colunas canônicas, source='backfill', SÓ em org com a
+-- flag (p_org NULL = todas as orgs com a flag). Nunca UPDATE em `leads`.
+-- Idempotente. Ignora lead com organization_id NULL e membro de OUTRA org.
+-- Prod (09/10), só Café Jurerê: 4.452 linhas (4.087 venda + 365 pré-venda,
+-- 4.092 leads).
 --
 -- ── LOCKS / APLICAÇÃO ────────────────────────────────────────────────────
 -- A FK para `leads` pega SHARE ROW EXCLUSIVE em `leads` (bloqueia ESCRITA
--- até o COMMIT, inclusive durante o backfill); ALTER POLICY pega ACCESS
+-- até o COMMIT, inclusive durante o backfill de ~4,5 mil linhas); ALTER POLICY pega ACCESS
 -- EXCLUSIVE (bloqueia leitura) e fica no FIM, para durar o mínimo.
 -- lock_timeout 3s: se não pegar o lock, aborta limpo (rode de novo). Aplicar
 -- fora do pico (08:00–11:00 BRT). Ordem: migration ANTES de qualquer merge
@@ -102,9 +120,33 @@ COMMENT ON COLUMN public.lead_owners.added_by IS
   'auth.uid() de quem gravou (NULL para backend/ERP/backfill).';
 
 -- ─────────────────────────────────────────────────────────────────────────
--- 2. Backfill (função reutilizável e idempotente; roda já aqui)
+-- 2. Gate por org
 -- ─────────────────────────────────────────────────────────────────────────
-CREATE FUNCTION public.lead_owners_backfill()
+CREATE FUNCTION public.lead_owners_enabled(p_org uuid)
+RETURNS boolean
+LANGUAGE sql
+STABLE SECURITY DEFINER
+SET search_path = ''
+AS $fn$
+  SELECT COALESCE(
+    (SELECT o.feature_flags ->> 'lead_owners_n_donos' = 'true'
+       FROM public.organizations o
+      WHERE o.id = p_org),
+    false)
+$fn$;
+
+COMMENT ON FUNCTION public.lead_owners_enabled(uuid) IS
+  'true quando a org tem feature_flags.lead_owners_n_donos = true. Gate de dado e comportamento de lead_owners (Chamado 793f4b05, CTO 09/10).';
+
+-- Café Jurerê: liga ANTES do backfill; `||` preserva as outras flags.
+UPDATE public.organizations
+   SET feature_flags = COALESCE(feature_flags, '{}'::jsonb) || '{"lead_owners_n_donos": true}'::jsonb
+ WHERE id = '4922638c-4909-494e-ba10-12282ec0b161';
+
+-- ─────────────────────────────────────────────────────────────────────────
+-- 3. Backfill (função reutilizável e idempotente; roda já aqui)
+-- ─────────────────────────────────────────────────────────────────────────
+CREATE FUNCTION public.lead_owners_backfill(p_org uuid DEFAULT NULL)
 RETURNS integer
 LANGUAGE plpgsql
 VOLATILE SECURITY DEFINER
@@ -113,6 +155,11 @@ AS $fn$
 DECLARE
   v_rows integer;
 BEGIN
+  IF p_org IS NOT NULL AND NOT public.lead_owners_enabled(p_org) THEN
+    RAISE EXCEPTION 'N donos por lead não está ativo nesta organização.'
+      USING ERRCODE = 'PT403', DETAIL = 'lead_owners_desligado';
+  END IF;
+
   INSERT INTO public.lead_owners
     (organization_id, lead_id, team_member_id, role, is_primary, source)
   SELECT l.organization_id, l.id, r.tm, r.role, true, 'backfill'
@@ -125,6 +172,10 @@ BEGIN
       ON tm.id = r.tm
      AND tm.organization_id = l.organization_id
    WHERE l.organization_id IS NOT NULL
+     AND (p_org IS NULL OR l.organization_id = p_org)
+     AND l.organization_id IN (
+           SELECT o.id FROM public.organizations o
+            WHERE o.feature_flags ->> 'lead_owners_n_donos' = 'true')
      AND r.tm IS NOT NULL
   ON CONFLICT DO NOTHING;
   GET DIAGNOSTICS v_rows = ROW_COUNT;
@@ -132,9 +183,12 @@ BEGIN
 END
 $fn$;
 
-COMMENT ON FUNCTION public.lead_owners_backfill() IS
-  'Grava o principal por papel a partir das colunas canônicas de leads. Idempotente (ON CONFLICT DO NOTHING). Ignora org NULL e membro de outra org. Devolve as linhas gravadas.';
+COMMENT ON FUNCTION public.lead_owners_backfill(uuid) IS
+  'Grava o principal por papel a partir das colunas canônicas de leads, só em org com a flag lead_owners_n_donos (p_org NULL = todas com a flag; p_org sem a flag = PT403). Idempotente. Ignora org NULL e membro de outra org. Devolve as linhas gravadas.';
 
+-- Sem argumento = só as orgs com a flag (hoje, só a Café Jurerê, ligada logo
+-- acima). Com o id explícito, a migration quebraria num banco sem essa org
+-- (CI aplica as migrations do zero).
 SELECT public.lead_owners_backfill();
 
 -- Índices de leitura depois do backfill (construção em lote).
@@ -142,7 +196,7 @@ CREATE INDEX lead_owners_member_lead_idx ON public.lead_owners (team_member_id, 
 CREATE INDEX lead_owners_org_idx         ON public.lead_owners (organization_id);
 
 -- ─────────────────────────────────────────────────────────────────────────
--- 3. Guarda da linha: org = org do lead; membro da MESMA org
+-- 4. Guarda da linha: org = org do lead, com a flag; membro da MESMA org
 --    (mesma regra de fn_assert_member_same_org, que é trigger de `leads` e
 --    não serve para esta tabela).
 -- ─────────────────────────────────────────────────────────────────────────
@@ -164,6 +218,11 @@ BEGIN
       USING ERRCODE = 'P0001';
   END IF;
 
+  IF NOT public.lead_owners_enabled(v_lead_org) THEN
+    RAISE EXCEPTION 'N donos por lead não está ativo nesta organização.'
+      USING ERRCODE = 'PT403', DETAIL = 'lead_owners_desligado';
+  END IF;
+
   IF NOT EXISTS (
     SELECT 1 FROM public.team_members m
      WHERE m.id = NEW.team_member_id
@@ -182,7 +241,7 @@ CREATE TRIGGER trg_lead_owners_guard
   FOR EACH ROW EXECUTE FUNCTION public.fn_lead_owners_guard();
 
 -- ─────────────────────────────────────────────────────────────────────────
--- 4. Sincronia do principal (AFTER em `leads`)
+-- 5. Sincronia do principal (AFTER em `leads`)
 -- ─────────────────────────────────────────────────────────────────────────
 CREATE FUNCTION public.fn_lead_owners_sync_primary()
 RETURNS trigger
@@ -199,15 +258,20 @@ DECLARE
   v_old_pre  uuid;
   v_old_sale uuid;
 BEGIN
-  -- 13 leads legados em prod têm organization_id NULL: nada a espelhar.
-  IF NEW.organization_id IS NULL THEN
+  -- Lead mudou de org: os donos da org antiga deixam de valer, com ou sem
+  -- flag na org nova.
+  IF TG_OP = 'UPDATE' AND NEW.organization_id IS DISTINCT FROM OLD.organization_id THEN
+    DELETE FROM public.lead_owners WHERE lead_id = NEW.id;
+  END IF;
+
+  -- 13 leads legados em prod têm organization_id NULL; org sem a flag não
+  -- ganha dado (gate do CTO 09/10). Sai ANTES de qualquer escrita.
+  IF NEW.organization_id IS NULL OR NOT public.lead_owners_enabled(NEW.organization_id) THEN
     RETURN NULL;
   END IF;
 
-  -- Lead mudou de org: os donos da org antiga deixam de valer. Recomeça
-  -- pelas colunas (que trg_assert_member_same_org_leads já validou).
+  -- Recomeça pelas colunas (que trg_assert_member_same_org_leads já validou).
   IF TG_OP = 'UPDATE' AND NEW.organization_id IS DISTINCT FROM OLD.organization_id THEN
-    DELETE FROM public.lead_owners WHERE lead_id = NEW.id;
     INSERT INTO public.lead_owners
       (organization_id, lead_id, team_member_id, role, is_primary, source, added_by)
     SELECT NEW.organization_id, NEW.id, r.tm, r.role, true, 'canonical', auth.uid()
@@ -292,7 +356,7 @@ CREATE TRIGGER trg_lead_owners_sync_primary_upd
   EXECUTE FUNCTION public.fn_lead_owners_sync_primary();
 
 -- ─────────────────────────────────────────────────────────────────────────
--- 5. RLS de lead_owners e grants
+-- 6. RLS de lead_owners e grants
 -- ─────────────────────────────────────────────────────────────────────────
 ALTER TABLE public.lead_owners ENABLE ROW LEVEL SECURITY;
 
@@ -311,7 +375,7 @@ CREATE POLICY lead_owners_select_master ON public.lead_owners
   USING ((SELECT public.is_master_user()));
 
 -- ─────────────────────────────────────────────────────────────────────────
--- 6. Ramo novo da RLS de `leads`
+-- 7. Ramo novo da RLS de `leads`
 --    Mesmo molde de rls_lead_in_my_pipes: p_tm_ids INTERSECTADO com os
 --    team_members do caller (sem isso a função DEFINER seria um oráculo de
 --    "X é co-dono do lead Y?").
@@ -341,7 +405,7 @@ REVOKE ALL ON FUNCTION public.rls_lead_co_owned(uuid, uuid[]) FROM PUBLIC, anon,
 GRANT EXECUTE ON FUNCTION public.rls_lead_co_owned(uuid, uuid[]) TO authenticated;
 
 -- ─────────────────────────────────────────────────────────────────────────
--- 7. can_update_lead — espelho do USING da policy de UPDATE, com o MESMO
+-- 8. can_update_lead — espelho do USING da policy de UPDATE, com o MESMO
 --    ramo novo. O pgTAP lead_documents_test.sql (DR) e lead_owners_test.sql
 --    (CO) comparam os dois.
 -- ─────────────────────────────────────────────────────────────────────────
@@ -394,12 +458,13 @@ COMMENT ON FUNCTION public.can_update_lead(uuid) IS
 REVOKE ALL ON FUNCTION public.can_update_lead(uuid) FROM PUBLIC, anon, authenticated;
 
 -- ─────────────────────────────────────────────────────────────────────────
--- 8. RPCs — os únicos escritores
+-- 9. RPCs — os únicos escritores
 --    Erros (o PostgREST devolve PTxyz como HTTP xyz):
 --      42501  sem sessão / sem permissão no lead
 --      PT404  lead não encontrado (também lead de outra org: não revela)
 --      PT422  papel ou membro inválido
 --      PT409  tentar remover o dono principal (use a transferência)
+--      PT403  org sem a flag lead_owners_n_donos (vale para master também)
 -- ─────────────────────────────────────────────────────────────────────────
 
 -- Autoriza e devolve a org DO LEAD. Só as RPCs abaixo chamam.
@@ -432,6 +497,13 @@ BEGIN
 
   -- Plural e multi-org; master e service_role passam.
   PERFORM public.assert_org_access(v_org);
+
+  -- Gate por org: ninguém escreve donos em org sem a flag, nem master.
+  -- Depois do 404, para não revelar a flag de org alheia.
+  IF NOT public.lead_owners_enabled(v_org) THEN
+    RAISE EXCEPTION 'N donos por lead não está ativo nesta organização.'
+      USING ERRCODE = 'PT403', DETAIL = 'lead_owners_desligado';
+  END IF;
 
   IF NOT v_master AND NOT v_service AND NOT public.can_update_lead(p_lead_id) THEN
     RAISE EXCEPTION 'Você não pode alterar os responsáveis deste lead.'
@@ -636,7 +708,8 @@ COMMENT ON FUNCTION public.lead_owner_transfer(uuid, uuid, text, boolean) IS
   'Troca o dono principal de um papel (pre_venda|venda). p_keep_previous=true (padrão) mantém o anterior como co-dono. Comissão/métricas seguem o principal. Chamado 793f4b05.';
 
 -- Grants: default privileges dão EXECUTE a anon por nome.
-REVOKE ALL ON FUNCTION public.lead_owners_backfill()                         FROM PUBLIC, anon, authenticated, service_role;
+REVOKE ALL ON FUNCTION public.lead_owners_enabled(uuid)                      FROM PUBLIC, anon, authenticated, service_role;
+REVOKE ALL ON FUNCTION public.lead_owners_backfill(uuid)                     FROM PUBLIC, anon, authenticated, service_role;
 REVOKE ALL ON FUNCTION public.fn_lead_owners_guard()                         FROM PUBLIC, anon, authenticated, service_role;
 REVOKE ALL ON FUNCTION public.fn_lead_owners_sync_primary()                  FROM PUBLIC, anon, authenticated, service_role;
 REVOKE ALL ON FUNCTION public.lead_owner_authorize(uuid)                     FROM PUBLIC, anon, authenticated, service_role;
@@ -650,7 +723,7 @@ GRANT EXECUTE ON FUNCTION public.lead_owner_remove(uuid, uuid)                  
 GRANT EXECUTE ON FUNCTION public.lead_owner_transfer(uuid, uuid, text, boolean) TO authenticated, service_role;
 
 -- ─────────────────────────────────────────────────────────────────────────
--- 9. Policies de `leads` — por ÚLTIMO (ACCESS EXCLUSIVE dura o mínimo).
+-- 10. Policies de `leads` — por ÚLTIMO (ACCESS EXCLUSIVE dura o mínimo).
 --    Cópia literal de pg_policies (prod, 09/10) = 20271107150000, mais o ramo
 --    rls_lead_co_owned antes da sonda de pipeline_entries (as duas são as
 --    únicas sondas por linha; a de co-dono é uma busca de índice).

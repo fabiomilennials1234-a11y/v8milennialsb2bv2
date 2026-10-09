@@ -90,7 +90,8 @@ CREATE TABLE public.organizations (
   slug text,
   timezone text,
   subscription_status text NOT NULL DEFAULT 'trial',
-  billing_override boolean DEFAULT false
+  billing_override boolean DEFAULT false,
+  feature_flags jsonb NOT NULL DEFAULT '{}'::jsonb
 );
 
 CREATE TABLE public.team_members (

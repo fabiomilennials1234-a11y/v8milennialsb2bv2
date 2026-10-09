@@ -9,6 +9,8 @@
 -- tocadas pela migration. Quem só via o lead por ser co-dono deixa de ver.
 -- Exporte antes:  COPY (SELECT * FROM public.lead_owners WHERE role = 'co') TO ...
 --
+-- Remove também a flag `lead_owners_n_donos` de todas as orgs.
+--
 -- Policies e can_update_lead voltam ao texto LITERAL de antes
 -- (20271107150000 e 20271110000000, = pg_policies/pg_get_functiondef de prod
 -- em 09/10). Policies primeiro: dependem de rls_lead_co_owned.
@@ -139,6 +141,13 @@ DROP FUNCTION IF EXISTS public.fn_lead_owners_sync_primary();
 DROP TABLE IF EXISTS public.lead_owners;
 
 DROP FUNCTION IF EXISTS public.fn_lead_owners_guard();
-DROP FUNCTION IF EXISTS public.lead_owners_backfill();
+DROP FUNCTION IF EXISTS public.lead_owners_backfill(uuid);
+DROP FUNCTION IF EXISTS public.lead_owners_enabled(uuid);
+
+-- A flag sai de TODAS as orgs: sem a tabela ela mentiria para o front
+-- (useFeatureFlag), que mostraria a UI de N donos sobre RPCs inexistentes.
+UPDATE public.organizations
+   SET feature_flags = feature_flags - 'lead_owners_n_donos'
+ WHERE feature_flags ? 'lead_owners_n_donos';
 
 COMMIT;
