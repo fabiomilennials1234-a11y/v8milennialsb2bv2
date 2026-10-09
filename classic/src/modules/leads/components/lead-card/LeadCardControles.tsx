@@ -43,6 +43,25 @@ function Faixa({ rotulo, children }: { rotulo: string; children: React.ReactNode
   );
 }
 
+/**
+ * Co-donos do lead (N donos, Chamado 793f4b05) — só leitura nesta fatia; a
+ * edição (adicionar, transferir) chega com o PR3. Sem co-dono, não desenha
+ * nada: a ficha das orgs sem a flag fica como sempre foi.
+ */
+function CoDonos({ coDonos }: { coDonos: MembroDoLead[] }) {
+  const nomes = coDonos.map((m) => m.name).join(", ");
+  return (
+    <div className="flex items-center justify-between gap-3">
+      <span className="text-[10.5px] font-bold uppercase tracking-[.06em] text-muted-foreground">
+        Co-responsáveis
+      </span>
+      <span className="min-w-0 truncate text-[12.5px] font-semibold text-foreground" title={nomes}>
+        {nomes}
+      </span>
+    </div>
+  );
+}
+
 export interface MembroDoLead {
   id: string;
   name: string;
@@ -57,10 +76,13 @@ export function LeadCardControles({
   qualificacao,
   atualizadoEm,
   className,
+  coDonos,
 }: {
   leadId: string;
   preVenda: MembroDoLead | null;
   venda: MembroDoLead | null;
+  /** Co-donos (`lead_owners.role = 'co'`), só em org com N donos. */
+  coDonos?: MembroDoLead[];
   preQualificacao: QualificationTier | null;
   qualificacao: QualificationTier | null;
   /**
@@ -91,6 +113,7 @@ export function LeadCardControles({
           expectedUpdatedAt={atualizadoEm}
         />
       </Faixa>
+      {coDonos && coDonos.length > 0 && <CoDonos coDonos={coDonos} />}
 
       <Faixa rotulo="Qualificação">
         <QualificationSlot

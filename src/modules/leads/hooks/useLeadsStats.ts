@@ -3,6 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useOrganization } from "@/modules/identity";
 import type { LeadsFilterParams } from "./useLeads";
 import { applyLeadListFilters } from "../lib/lead-list-filters";
+import { coDonosDoFiltro } from "./useLeadOwners";
 import { leadsKeys } from "../lib/leads-query-keys";
 import { EMPTY_COUNT, runCappedCount, type CappedCount } from "../lib/capped-count";
 
@@ -71,14 +72,16 @@ export function useLeadsStats(filters: Omit<LeadsFilterParams, "page"> = {}) {
   const { organizationId, isReady, timezone } = useOrganization();
   const timeZone = timezone || "America/Sao_Paulo";
 
-  const { searchQuery, filterOrigin, filterQualification, filterClassificacao, usaLeiDoErp, usaCadastroErpCafeJurere, filterUf, createdFrom, createdTo, filterResponsible } = filters;
+  const { searchQuery, filterOrigin, filterQualification, filterClassificacao, usaLeiDoErp, usaCadastroErpCafeJurere, filterUf, createdFrom, createdTo, filterResponsible, donosMultiplos } = filters;
 
   return useQuery<LeadsStats>({
     queryKey: leadsKeys.stats(organizationId, timeZone, {
       searchQuery, filterOrigin, filterQualification, filterClassificacao, usaLeiDoErp, usaCadastroErpCafeJurere, filterUf, createdFrom, createdTo, filterResponsible,
+      ...(donosMultiplos ? { donosMultiplos } : {}),
     }),
     queryFn: async () => {
       if (!organizationId) return { thisMonth: EMPTY_COUNT, withOwner: EMPTY_COUNT };
+      const coOwnedLeadIds = await coDonosDoFiltro(organizationId, { donosMultiplos, filterResponsible });
 
       const base = () => {
         const q = supabase
@@ -100,7 +103,7 @@ export function useLeadsStats(filters: Omit<LeadsFilterParams, "page"> = {}) {
         // tela.
         return applyLeadListFilters(q, {
           searchQuery, filterOrigin, filterQualification, filterClassificacao, usaLeiDoErp, usaCadastroErpCafeJurere,
-          filterUf, createdFrom, createdTo, filterResponsible,
+          filterUf, createdFrom, createdTo, filterResponsible, donosMultiplos, coOwnedLeadIds,
         });
       };
 

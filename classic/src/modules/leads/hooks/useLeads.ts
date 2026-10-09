@@ -13,6 +13,8 @@ import type { LeadRelacao } from "../lib/lead-relacao-situacao";
 import { leadsKeys } from "../lib/leads-query-keys";
 import { EMPTY_COUNT, runCappedCount, type CappedCount } from "../lib/capped-count";
 import { useLeadsRealtime } from "./useLeadsRealtime";
+import { coDonosDoFiltro } from "./useLeadOwners";
+import { comEmbedDosDonos } from "../lib/lead-owners";
 
 export type Lead = Tables<"leads">;
 export type LeadInsert = TablesInsert<"leads">;
@@ -53,6 +55,12 @@ export interface LeadsFilterParams {
    * em `../lib/lead-list-filters`.
    */
   filterResponsible?: string;
+  /**
+   * Org com N donos por lead (flag `lead_owners_n_donos`, Chamado 793f4b05):
+   * a lista traz os donos (embed `lead_owners`) e o filtro de dono casa
+   * qualquer um. Ausente/false = a lista de sempre, sem leitura extra.
+   */
+  donosMultiplos?: boolean;
 }
 
 /**
@@ -65,12 +73,13 @@ export interface LeadsFilterParams {
 function applyLeadsFilters(
   query: any,
   organizationId: string,
-  filters: Omit<LeadsFilterParams, "page">
+  filters: Omit<LeadsFilterParams, "page">,
+  coOwnedLeadIds?: string[],
 ) {
   query = query
     .eq("organization_id", organizationId)
     .or("is_shadow.is.null,is_shadow.eq.false");
-  return applyLeadListFilters(query, filters);
+  return applyLeadListFilters(query, { ...filters, coOwnedLeadIds });
 }
 
 /**
@@ -79,10 +88,10 @@ function applyLeadsFilters(
  * Retorna até LEADS_PAGE_SIZE leads por página.
  */
 export function useLeads(params: LeadsFilterParams = {}, options: { enabled?: boolean } = {}) {
-  const { page = 0, searchQuery, filterOrigin, filterQualification, filterClassificacao, usaLeiDoErp, usaCadastroErpCafeJurere, filterUf, createdFrom, createdTo, filterAssignment, filterResponsible, sort = DEFAULT_LEAD_SORT } = params;
+  const { page = 0, searchQuery, filterOrigin, filterQualification, filterClassificacao, usaLeiDoErp, usaCadastroErpCafeJurere, filterUf, createdFrom, createdTo, filterAssignment, filterResponsible, donosMultiplos, sort = DEFAULT_LEAD_SORT } = params;
   const { organizationId, isReady } = useOrganization();
   const enabled = isReady && options.enabled !== false;
-  const filters = { searchQuery, filterOrigin, filterQualification, filterClassificacao, usaLeiDoErp, usaCadastroErpCafeJurere, filterUf, createdFrom, createdTo, filterAssignment, filterResponsible };
+  const filters = { searchQuery, filterOrigin, filterQualification, filterClassificacao, usaLeiDoErp, usaCadastroErpCafeJurere, filterUf, createdFrom, createdTo, filterAssignment, filterResponsible, ...(donosMultiplos ? { donosMultiplos } : {}) };
   const queryKey = leadsKeys.list(organizationId, page, filters, sort);
 
   // UM canal (em `leads`), classificado por evento — ver `useLeadsRealtime`.
@@ -112,7 +121,7 @@ export function useLeads(params: LeadsFilterParams = {}, options: { enabled?: bo
 
       let query = supabase
         .from("leads")
-        .select(`
+        .select(comEmbedDosDonos(`
           *,
           responsible:team_members!leads_responsible_id_fkey(id, name),
           sdr:team_members!leads_sdr_id_fkey(id, name),
@@ -122,9 +131,10 @@ export function useLeads(params: LeadsFilterParams = {}, options: { enabled?: bo
           lead_tags(
             tag:tags(id, name, color)
           )
-        `);
+        `, !!donosMultiplos));
 
-      query = applyLeadsFilters(query, organizationId, filters);
+      const coDonos = await coDonosDoFiltro(organizationId, filters);
+      query = applyLeadsFilters(query, organizationId, filters, coDonos);
 
       // Sempre com desempate por `id` — ver `lib/lead-list-sort`. Sem ele a
       // paginação por OFFSET repete linha entre páginas dentro de um empate,
@@ -172,15 +182,16 @@ export function useLeads(params: LeadsFilterParams = {}, options: { enabled?: bo
  * `{ capped: true }` em vez do total. Ver `lib/capped-count`.
  */
 export function useLeadsCount(filters: Omit<LeadsFilterParams, "page"> = {}) {
-  const { searchQuery, filterOrigin, filterQualification, filterClassificacao, usaLeiDoErp, usaCadastroErpCafeJurere, filterUf, createdFrom, createdTo, filterAssignment, filterResponsible } = filters;
+  const { searchQuery, filterOrigin, filterQualification, filterClassificacao, usaLeiDoErp, usaCadastroErpCafeJurere, filterUf, createdFrom, createdTo, filterAssignment, filterResponsible, donosMultiplos } = filters;
   const { organizationId, isReady } = useOrganization();
-  const recorte = { searchQuery, filterOrigin, filterQualification, filterClassificacao, usaLeiDoErp, usaCadastroErpCafeJurere, filterUf, createdFrom, createdTo, filterAssignment, filterResponsible };
+  const recorte = { searchQuery, filterOrigin, filterQualification, filterClassificacao, usaLeiDoErp, usaCadastroErpCafeJurere, filterUf, createdFrom, createdTo, filterAssignment, filterResponsible, ...(donosMultiplos ? { donosMultiplos } : {}) };
 
   return useQuery<CappedCount>({
     queryKey: leadsKeys.count(organizationId, recorte),
     queryFn: async () => {
       if (!organizationId) return EMPTY_COUNT;
-      const query = applyLeadsFilters(supabase.from("leads").select("id"), organizationId, recorte);
+      const coDonos = await coDonosDoFiltro(organizationId, recorte);
+      const query = applyLeadsFilters(supabase.from("leads").select("id"), organizationId, recorte, coDonos);
       return runCappedCount(query);
     },
     enabled: isReady,

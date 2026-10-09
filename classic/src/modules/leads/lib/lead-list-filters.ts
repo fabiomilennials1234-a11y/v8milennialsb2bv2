@@ -67,6 +67,20 @@ export interface LeadListFilterValues {
    * vazia.
    */
   filterResponsible?: string;
+  /**
+   * A org tem N donos por lead (flag `lead_owners_n_donos`, Chamado 793f4b05)?
+   * Então a célula mostra TODOS os donos, e o filtro por dono casa qualquer um
+   * deles: principal de venda, principal de pré-venda, co-dono, e o
+   * `responsible_id` legado só quando não há principal (é quando ele aparece).
+   * Ausente/false: a semântica de sempre, por precedência.
+   */
+  donosMultiplos?: boolean;
+  /**
+   * Leads em que o dono filtrado é CO-dono (`lead_owners.role = 'co'`).
+   * Resolvido antes, por `buscarLeadIdsCoDono` — este módulo é puro. Os
+   * principais já estão nas colunas; só os co-donos precisam da lista.
+   */
+  coOwnedLeadIds?: string[];
 }
 
 /**
@@ -105,6 +119,23 @@ function buildOwnerMatch(memberId: string): string {
     const igual = `${col}.eq.${memberId}`;
     return anteriores.length ? `and(${[...anteriores, igual].join(",")})` : igual;
   }).join(",");
+}
+
+/**
+ * Predicado "o membro está entre os donos" (org com N donos). A célula dessa
+ * org mostra todos os donos, então qualquer um deles casa: os dois principais
+ * pelas colunas, o `responsible_id` legado só onde ele aparece (sem principal),
+ * e os co-donos pela lista de ids resolvida antes.
+ */
+function buildAnyOwnerMatch(memberId: string, coOwnedLeadIds: string[]): string {
+  const clauses = [
+    `sale_responsible_id.eq.${memberId}`,
+    `pre_sale_responsible_id.eq.${memberId}`,
+    `and(sale_responsible_id.is.null,pre_sale_responsible_id.is.null,responsible_id.eq.${memberId})`,
+  ];
+  const co = coOwnedLeadIds.filter((id) => UUID_RE.test(id));
+  if (co.length > 0) clauses.push(`id.in.(${co.join(",")})`);
+  return clauses.join(",");
 }
 
 /**
@@ -159,7 +190,11 @@ export function applyLeadListFilters<Q>(query: Q, filters: LeadListFilterValues)
     if (owner === OWNER_NONE) {
       for (const col of OWNER_COLUMNS) q = q.is(col, null);
     } else if (UUID_RE.test(owner)) {
-      q = q.or(buildOwnerMatch(owner));
+      q = q.or(
+        filters.donosMultiplos
+          ? buildAnyOwnerMatch(owner, filters.coOwnedLeadIds ?? [])
+          : buildOwnerMatch(owner),
+      );
     }
     // Valor fora do contrato (visão salva adulterada): ignorado — mesma escolha
     // de `parseInstantParam` na página. Não vira predicado cru.

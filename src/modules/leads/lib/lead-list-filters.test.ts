@@ -88,6 +88,61 @@ describe("applyLeadListFilters — dono da conta", () => {
   });
 });
 
+describe("applyLeadListFilters — N donos por lead (Chamado 793f4b05)", () => {
+  const CO_LEAD = "0d7f5a3e-1b2c-4d5e-8f90-123456789abc";
+
+  it("org com a flag: casa QUALQUER dono — principais, legado sem principal e co-dono", () => {
+    const { calls } = applyLeadListFilters(fakeQuery(), {
+      filterResponsible: MEMBER,
+      donosMultiplos: true,
+      coOwnedLeadIds: [CO_LEAD],
+    });
+    expect(calls).toEqual([
+      `or:sale_responsible_id.eq.${MEMBER},` +
+        `pre_sale_responsible_id.eq.${MEMBER},` +
+        `and(sale_responsible_id.is.null,pre_sale_responsible_id.is.null,responsible_id.eq.${MEMBER}),` +
+        `id.in.(${CO_LEAD})`,
+    ]);
+  });
+
+  it("org com a flag: pré-venda casa mesmo quando há outra pessoa na venda", () => {
+    const { calls } = applyLeadListFilters(fakeQuery(), { filterResponsible: MEMBER, donosMultiplos: true });
+    expect(calls[0]).toContain(`pre_sale_responsible_id.eq.${MEMBER}`);
+    expect(calls[0]).not.toContain(`and(sale_responsible_id.is.null,pre_sale_responsible_id.eq.`);
+  });
+
+  it("sem co-donos: nenhum id.in vazio (PostgREST recusa `in.()`)", () => {
+    const { calls } = applyLeadListFilters(fakeQuery(), { filterResponsible: MEMBER, donosMultiplos: true, coOwnedLeadIds: [] });
+    expect(calls[0]).not.toContain("id.in.");
+  });
+
+  it("id de co-dono fora do formato uuid não entra no or()", () => {
+    const { calls } = applyLeadListFilters(fakeQuery(), {
+      filterResponsible: MEMBER,
+      donosMultiplos: true,
+      coOwnedLeadIds: ["x),name.eq.y", CO_LEAD],
+    });
+    expect(calls[0]).toContain(`id.in.(${CO_LEAD})`);
+    expect(calls[0]).not.toContain("name.eq.y");
+  });
+
+  it("'none' não regride: as três colunas nulas, com ou sem a flag", () => {
+    for (const donosMultiplos of [true, false]) {
+      expect(applyLeadListFilters(fakeQuery(), { filterResponsible: "none", donosMultiplos }).calls).toEqual([
+        "is:sale_responsible_id:null",
+        "is:pre_sale_responsible_id:null",
+        "is:responsible_id:null",
+      ]);
+    }
+  });
+
+  it("org sem a flag: ids de co-dono são ignorados e o predicado é o de sempre", () => {
+    const { calls } = applyLeadListFilters(fakeQuery(), { filterResponsible: MEMBER, coOwnedLeadIds: [CO_LEAD] });
+    expect(calls[0]).not.toContain("id.in.");
+    expect(calls[0]).toContain(`and(sale_responsible_id.is.null,pre_sale_responsible_id.eq.${MEMBER})`);
+  });
+});
+
 describe("applyLeadListFilters — telefone secundário (Chamado 82c50502)", () => {
   const LEAD = "0d7f5a3e-1b2c-4d5e-8f90-123456789abc";
 
