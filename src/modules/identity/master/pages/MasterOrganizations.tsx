@@ -375,7 +375,7 @@ export default function MasterOrganizations() {
               ) : totais.llmSemCambio ? (
                 "sem câmbio: LLM fora da conta"
               ) : (
-                "chips + LLM + infra rateada"
+                "chips + LLM + infra e salários rateados"
               )
             }
           />
@@ -800,6 +800,7 @@ function FinanceCells({ fin }: { fin: OrgFinance | undefined }) {
     `chips ${brl(cost.chipsCents)}`,
     cost.llmCents === null ? "LLM sem câmbio" : `LLM ${brl(cost.llmCents)}`,
     `infra ${brl(cost.infraCents)}`,
+    `salários ${brl(cost.payrollCents)}`,
   ].join(" · ");
 
   return (
