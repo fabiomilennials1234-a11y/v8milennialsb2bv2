@@ -14,6 +14,7 @@
 
 // ── Hooks: lead CRUD + listing ─────────────────────────────────────────────
 export { useLeadResponsibles, type LeadResponsiblesSummary } from "./hooks/useLeadResponsibles";
+export { useLeadOwners, useLeadOwnersEnabled, leadOwnersKey } from "./hooks/useLeadOwners";
 export {
   buscarLeadIdsPorTelefoneSecundario,
   useLeadPhones,

@@ -9196,6 +9196,71 @@ export type Database = {
           },
         ]
       }
+      lead_owners: {
+        Row: {
+          added_at: string
+          added_by: string | null
+          id: string
+          is_primary: boolean
+          lead_id: string
+          organization_id: string
+          role: string
+          source: string
+          team_member_id: string
+        }
+        Insert: {
+          added_at?: string
+          added_by?: string | null
+          id?: string
+          is_primary: boolean
+          lead_id: string
+          organization_id: string
+          role: string
+          source: string
+          team_member_id: string
+        }
+        Update: {
+          added_at?: string
+          added_by?: string | null
+          id?: string
+          is_primary?: boolean
+          lead_id?: string
+          organization_id?: string
+          role?: string
+          source?: string
+          team_member_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lead_owners_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "leads"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lead_owners_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lead_owners_team_member_id_fkey"
+            columns: ["team_member_id"]
+            isOneToOne: false
+            referencedRelation: "org_visible_members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lead_owners_team_member_id_fkey"
+            columns: ["team_member_id"]
+            isOneToOne: false
+            referencedRelation: "team_members"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       lead_phones: {
         Row: {
           created_at: string
@@ -22993,6 +23058,23 @@ export type Database = {
         Returns: boolean
       }
       lead_in_my_org: { Args: { p_lead_id: string }; Returns: boolean }
+      lead_owner_add: {
+        Args: { p_lead_id: string; p_team_member_id: string }
+        Returns: Json
+      }
+      lead_owner_remove: {
+        Args: { p_lead_id: string; p_team_member_id: string }
+        Returns: Json
+      }
+      lead_owner_transfer: {
+        Args: {
+          p_keep_previous?: boolean
+          p_lead_id: string
+          p_role: string
+          p_to_member: string
+        }
+        Returns: Json
+      }
       link_agent_to_instance: {
         Args: { p_agent_id: string; p_instance_id: string }
         Returns: undefined

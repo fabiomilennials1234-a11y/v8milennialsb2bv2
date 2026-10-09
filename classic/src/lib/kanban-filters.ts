@@ -41,6 +41,12 @@ export interface KanbanFilterableLead {
   closer_id?: string | null;
   pre_sale_responsible_id?: string | null;
   sale_responsible_id?: string | null;
+  /**
+   * Donos do lead em `lead_owners` (principais + co-donos), só em org com a
+   * flag `lead_owners_n_donos` (Chamado 793f4b05). Ausente nas outras orgs:
+   * o filtro fica no par dual de sempre.
+   */
+  lead_owners?: ReadonlyArray<{ team_member_id: string }> | null;
 }
 
 export interface KanbanFilterableItem {
@@ -75,6 +81,9 @@ export function matchesResponsibleFilter(
   // Lead-level dual fields (from the leads row joined into the entry).
   if (lead?.pre_sale_responsible_id && lead.pre_sale_responsible_id === filterId) return true;
   if (lead?.sale_responsible_id && lead.sale_responsible_id === filterId) return true;
+
+  // N donos (org com a flag): qualquer dono do lead casa, inclusive co-dono.
+  if (lead?.lead_owners?.some((o) => o?.team_member_id === filterId)) return true;
 
   return false;
 }

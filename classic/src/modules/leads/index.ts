@@ -13,6 +13,7 @@
  */
 
 // ── Hooks: lead CRUD + listing ─────────────────────────────────────────────
+export { useLeadOwners, useLeadOwnersEnabled, leadOwnersKey } from "./hooks/useLeadOwners";
 export {
   useLeads,
   useLeadsCount,

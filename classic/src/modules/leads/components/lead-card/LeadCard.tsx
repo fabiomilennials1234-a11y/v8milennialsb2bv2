@@ -302,7 +302,19 @@ export function LeadCard({
             O convite de etiquetar só é convite quando `editorDeEtiquetas` vem:
             até então este lugar tinha um "+ etiqueta" que não abria nada. */}
         <div className="flex flex-wrap items-center gap-1.5">
-            {lead.dono ? (
+            {/* N donos (Chamado 793f4b05): um chip por dono, principal primeiro. */}
+            {lead.donos ? (
+              lead.donos.map((d) => (
+                <span
+                  key={`${d.nome}-${d.papel}`}
+                  className="inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-2.5 py-[3px] text-[12px]"
+                  title={d.papel}
+                >
+                  <span className="size-1.5 rounded-full bg-success" aria-hidden="true" />
+                  {d.nome}
+                </span>
+              ))
+            ) : lead.dono ? (
               <span
                 className="inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-2.5 py-[3px] text-[12px]"
                 title={lead.dono.papel}

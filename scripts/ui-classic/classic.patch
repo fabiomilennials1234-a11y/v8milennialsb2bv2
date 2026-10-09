@@ -90,7 +90,7 @@ index abe343f8e..7b233248c 100644
    try {
      const regs = (await env.serviceWorker?.getRegistrations()) ?? [];
 diff --git a/classic/src/integrations/supabase/types.ts b/classic/src/integrations/supabase/types.ts
-index 8b757e586..e483a386c 100644
+index 8b757e586..a7d9d99a2 100644
 --- a/classic/src/integrations/supabase/types.ts
 +++ b/classic/src/integrations/supabase/types.ts
 @@ -7023,6 +7023,7 @@ export type Database = {
@@ -131,10 +131,75 @@ index 8b757e586..e483a386c 100644
            {
              foreignKeyName: "deals_company_id_fkey"
              columns: ["company_id"]
-@@ -9186,6 +9196,81 @@ export type Database = {
+@@ -9186,6 +9196,146 @@ export type Database = {
            },
          ]
        }
++      lead_owners: {
++        Row: {
++          added_at: string
++          added_by: string | null
++          id: string
++          is_primary: boolean
++          lead_id: string
++          organization_id: string
++          role: string
++          source: string
++          team_member_id: string
++        }
++        Insert: {
++          added_at?: string
++          added_by?: string | null
++          id?: string
++          is_primary: boolean
++          lead_id: string
++          organization_id: string
++          role: string
++          source: string
++          team_member_id: string
++        }
++        Update: {
++          added_at?: string
++          added_by?: string | null
++          id?: string
++          is_primary?: boolean
++          lead_id?: string
++          organization_id?: string
++          role?: string
++          source?: string
++          team_member_id?: string
++        }
++        Relationships: [
++          {
++            foreignKeyName: "lead_owners_lead_id_fkey"
++            columns: ["lead_id"]
++            isOneToOne: false
++            referencedRelation: "leads"
++            referencedColumns: ["id"]
++          },
++          {
++            foreignKeyName: "lead_owners_organization_id_fkey"
++            columns: ["organization_id"]
++            isOneToOne: false
++            referencedRelation: "organizations"
++            referencedColumns: ["id"]
++          },
++          {
++            foreignKeyName: "lead_owners_team_member_id_fkey"
++            columns: ["team_member_id"]
++            isOneToOne: false
++            referencedRelation: "org_visible_members"
++            referencedColumns: ["id"]
++          },
++          {
++            foreignKeyName: "lead_owners_team_member_id_fkey"
++            columns: ["team_member_id"]
++            isOneToOne: false
++            referencedRelation: "team_members"
++            referencedColumns: ["id"]
++          },
++        ]
++      }
 +      lead_phones: {
 +        Row: {
 +          created_at: string
@@ -213,7 +278,7 @@ index 8b757e586..e483a386c 100644
        lead_products: {
          Row: {
            avg_cycle_days: number | null
-@@ -18841,6 +18926,7 @@ export type Database = {
+@@ -18841,6 +18991,7 @@ export type Database = {
            is_group: boolean
            lead_id: string | null
            media_expired: boolean
@@ -221,7 +286,7 @@ index 8b757e586..e483a386c 100644
            media_url: string | null
            message_id: string
            message_type: string
-@@ -18873,6 +18959,7 @@ export type Database = {
+@@ -18873,6 +19024,7 @@ export type Database = {
            is_group?: boolean
            lead_id?: string | null
            media_expired?: boolean
@@ -229,7 +294,7 @@ index 8b757e586..e483a386c 100644
            media_url?: string | null
            message_id: string
            message_type?: string
-@@ -18905,6 +18992,7 @@ export type Database = {
+@@ -18905,6 +19057,7 @@ export type Database = {
            is_group?: boolean
            lead_id?: string | null
            media_expired?: boolean
@@ -237,7 +302,7 @@ index 8b757e586..e483a386c 100644
            media_url?: string | null
            message_id?: string
            message_type?: string
-@@ -20221,6 +20309,7 @@ export type Database = {
+@@ -20221,6 +20374,7 @@ export type Database = {
            p_meeting_date?: string
            p_notes?: string
            p_owner_id?: string
@@ -245,7 +310,7 @@ index 8b757e586..e483a386c 100644
            p_pipe: string
            p_source?: string
            p_stage: string
-@@ -20274,6 +20363,7 @@ export type Database = {
+@@ -20274,6 +20428,7 @@ export type Database = {
          Args: {
            p_idempotency_key?: string
            p_lead_id: string
@@ -253,7 +318,7 @@ index 8b757e586..e483a386c 100644
            p_notes?: string
            p_org: string
            p_owner_id?: string
-@@ -20541,6 +20631,10 @@ export type Database = {
+@@ -20541,6 +20696,10 @@ export type Database = {
          Args: { p_lead_id: string; p_org: string; p_patch: Json }
          Returns: Json
        }
@@ -264,7 +329,7 @@ index 8b757e586..e483a386c 100644
        apply_erp_lead_classification: {
          Args: { p_limit?: number; p_organization_id: string }
          Returns: {
-@@ -20986,6 +21080,15 @@ export type Database = {
+@@ -20986,6 +21145,15 @@ export type Database = {
          Returns: undefined
        }
        close_resolved_support_tickets: { Args: never; Returns: number }
@@ -280,7 +345,7 @@ index 8b757e586..e483a386c 100644
        convert_campaign_rule_to_workflow: {
          Args: { p_rule_id: string }
          Returns: string
-@@ -21181,6 +21284,10 @@ export type Database = {
+@@ -21181,6 +21349,10 @@ export type Database = {
          }
          Returns: Json
        }
@@ -291,7 +356,7 @@ index 8b757e586..e483a386c 100644
        delete_pipeline: { Args: { p_pipeline_id: string }; Returns: Json }
        delete_pipeline_stage: {
          Args: { p_destination_stage_id?: string; p_stage_id: string }
-@@ -21529,6 +21636,10 @@ export type Database = {
+@@ -21529,6 +21701,10 @@ export type Database = {
          Returns: number
        }
        fn_seed_default_dashboard: { Args: { p_org_id: string }; Returns: Json }
@@ -302,7 +367,31 @@ index 8b757e586..e483a386c 100644
        fn_varredura_avisos_followups: { Args: never; Returns: number }
        fn_varredura_avisos_reuniao_proxima: { Args: never; Returns: number }
        fn_voip_apply_vps_event: {
-@@ -23127,6 +23238,10 @@ export type Database = {
+@@ -22882,6 +23058,23 @@ export type Database = {
+         Returns: boolean
+       }
+       lead_in_my_org: { Args: { p_lead_id: string }; Returns: boolean }
++      lead_owner_add: {
++        Args: { p_lead_id: string; p_team_member_id: string }
++        Returns: Json
++      }
++      lead_owner_remove: {
++        Args: { p_lead_id: string; p_team_member_id: string }
++        Returns: Json
++      }
++      lead_owner_transfer: {
++        Args: {
++          p_keep_previous?: boolean
++          p_lead_id: string
++          p_role: string
++          p_to_member: string
++        }
++        Returns: Json
++      }
+       link_agent_to_instance: {
+         Args: { p_agent_id: string; p_instance_id: string }
+         Returns: undefined
+@@ -23127,6 +23320,10 @@ export type Database = {
          Args: { p_organization_id: string }
          Returns: string
        }
@@ -313,7 +402,7 @@ index 8b757e586..e483a386c 100644
        normalize_br_mobile: { Args: { digits: string }; Returns: string }
        normalize_brazilian_phone: { Args: { phone: string }; Returns: string }
        oraculo_metricas: {
-@@ -23231,6 +23346,10 @@ export type Database = {
+@@ -23231,6 +23428,10 @@ export type Database = {
        restore_lead: { Args: { p_lead_id: string }; Returns: undefined }
        restore_leads_bulk: { Args: { p_lead_ids: string[] }; Returns: number }
        rollback_import_batch: { Args: { p_batch_id: string }; Returns: Json }
@@ -346,6 +435,32 @@ index 9650d31ea..ccdced535 100644
  
      await supabase.from("usage_events").insert({
        organization_id: params.organizationId,
+diff --git a/classic/src/lib/kanban-filters.ts b/classic/src/lib/kanban-filters.ts
+index be0022bf1..30e9accfc 100644
+--- a/classic/src/lib/kanban-filters.ts
++++ b/classic/src/lib/kanban-filters.ts
+@@ -41,6 +41,12 @@ export interface KanbanFilterableLead {
+   closer_id?: string | null;
+   pre_sale_responsible_id?: string | null;
+   sale_responsible_id?: string | null;
++  /**
++   * Donos do lead em `lead_owners` (principais + co-donos), só em org com a
++   * flag `lead_owners_n_donos` (Chamado 793f4b05). Ausente nas outras orgs:
++   * o filtro fica no par dual de sempre.
++   */
++  lead_owners?: ReadonlyArray<{ team_member_id: string }> | null;
+ }
+ 
+ export interface KanbanFilterableItem {
+@@ -76,5 +82,8 @@ export function matchesResponsibleFilter(
+   if (lead?.pre_sale_responsible_id && lead.pre_sale_responsible_id === filterId) return true;
+   if (lead?.sale_responsible_id && lead.sale_responsible_id === filterId) return true;
+ 
++  // N donos (org com a flag): qualquer dono do lead casa, inclusive co-dono.
++  if (lead?.lead_owners?.some((o) => o?.team_member_id === filterId)) return true;
++
+   return false;
+ }
 diff --git a/classic/src/lib/realtimeStatusStore.ts b/classic/src/lib/realtimeStatusStore.ts
 index 2898149d1..c500d8e38 100644
 --- a/classic/src/lib/realtimeStatusStore.ts
@@ -1021,6 +1136,44 @@ index bae373207..e16a4829f 100644
        {identitySlot}
  
        {/* Tabs */}
+diff --git a/classic/src/modules/communication/components/chat/context-panel/ContextPanelTabInfo.tsx b/classic/src/modules/communication/components/chat/context-panel/ContextPanelTabInfo.tsx
+index cfda39c37..00ef739c2 100644
+--- a/classic/src/modules/communication/components/chat/context-panel/ContextPanelTabInfo.tsx
++++ b/classic/src/modules/communication/components/chat/context-panel/ContextPanelTabInfo.tsx
+@@ -51,7 +51,7 @@ import {
+ import { Textarea } from "@/components/ui/textarea";
+ import { cn } from "@/lib/utils";
+ import { supabase } from "@/integrations/supabase/client";
+-import { useUpdateLead } from "@/modules/leads";
++import { useLeadOwners, useLeadOwnersEnabled, useUpdateLead } from "@/modules/leads";
+ import { useOrganization, useResponsibleMembers } from "@/modules/identity";
+ import { useTags } from "@/modules/leads/hooks/useTags";
+ import { LeadCustomFields } from "@/modules/leads";
+@@ -246,6 +246,10 @@ function StandardFields({ lead }: { lead: LeadShape }) {
+   const { mutate: updateLead, isPending: saving } = useUpdateLead();
+   const responsibleMembers = useResponsibleMembers();
+   const leadId = lead.id ?? null;
++  // N donos por lead (Chamado 793f4b05): só a org com a flag lê `lead_owners`.
++  const donosMultiplos = useLeadOwnersEnabled();
++  const { data: donos } = useLeadOwners(leadId, donosMultiplos);
++  const coDonos = (donos ?? []).filter((d) => d.papeis.length === 1 && d.papeis[0] === "co");
+ 
+   const save = (patch: Record<string, unknown>) => {
+     if (!lead.id) return;
+@@ -362,6 +366,13 @@ function StandardFields({ lead }: { lead: LeadShape }) {
+               />
+             </ResponsibleValue>
+           </FieldRow>
++          {coDonos.length > 0 && (
++            <FieldRow label="Co-responsáveis">
++              <span className="truncate text-[13px] text-foreground" title={coDonos.map((d) => d.name).join(", ")}>
++                {coDonos.map((d) => d.name).join(", ")}
++              </span>
++            </FieldRow>
++          )}
+         </>
+       )}
+ 
 diff --git a/classic/src/modules/communication/components/chat/context-panel/FalandoCom.tsx b/classic/src/modules/communication/components/chat/context-panel/FalandoCom.tsx
 new file mode 100644
 index 000000000..9700c1e81
@@ -4102,6 +4255,95 @@ index e11df9df7..dcc812ebf 100644
  }
  
  export interface ItemNovoDoNegocio {
+diff --git a/classic/src/modules/leads/components/lead-card/LeadCard.tsx b/classic/src/modules/leads/components/lead-card/LeadCard.tsx
+index 697b2c803..cb6930c81 100644
+--- a/classic/src/modules/leads/components/lead-card/LeadCard.tsx
++++ b/classic/src/modules/leads/components/lead-card/LeadCard.tsx
+@@ -302,7 +302,19 @@ export function LeadCard({
+             O convite de etiquetar só é convite quando `editorDeEtiquetas` vem:
+             até então este lugar tinha um "+ etiqueta" que não abria nada. */}
+         <div className="flex flex-wrap items-center gap-1.5">
+-            {lead.dono ? (
++            {/* N donos (Chamado 793f4b05): um chip por dono, principal primeiro. */}
++            {lead.donos ? (
++              lead.donos.map((d) => (
++                <span
++                  key={`${d.nome}-${d.papel}`}
++                  className="inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-2.5 py-[3px] text-[12px]"
++                  title={d.papel}
++                >
++                  <span className="size-1.5 rounded-full bg-success" aria-hidden="true" />
++                  {d.nome}
++                </span>
++              ))
++            ) : lead.dono ? (
+               <span
+                 className="inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-2.5 py-[3px] text-[12px]"
+                 title={lead.dono.papel}
+diff --git a/classic/src/modules/leads/components/lead-card/LeadCardContainer.tsx b/classic/src/modules/leads/components/lead-card/LeadCardContainer.tsx
+index 408c6ca3a..c3ee45c17 100644
+--- a/classic/src/modules/leads/components/lead-card/LeadCardContainer.tsx
++++ b/classic/src/modules/leads/components/lead-card/LeadCardContainer.tsx
+@@ -252,6 +252,7 @@ export function LeadCardContainer({
+               leadId={leadId}
+               preVenda={e.preVenda}
+               venda={e.venda}
++              coDonos={e.coDonos}
+               preQualificacao={tier(e.preQualificacao)}
+               qualificacao={tier(e.qualificacao)}
+               atualizadoEm={e.atualizadoEm}
+diff --git a/classic/src/modules/leads/components/lead-card/LeadCardControles.tsx b/classic/src/modules/leads/components/lead-card/LeadCardControles.tsx
+index e49443a56..d6d1af952 100644
+--- a/classic/src/modules/leads/components/lead-card/LeadCardControles.tsx
++++ b/classic/src/modules/leads/components/lead-card/LeadCardControles.tsx
+@@ -43,6 +43,25 @@ function Faixa({ rotulo, children }: { rotulo: string; children: React.ReactNode
+   );
+ }
+ 
++/**
++ * Co-donos do lead (N donos, Chamado 793f4b05) — só leitura nesta fatia; a
++ * edição (adicionar, transferir) chega com o PR3. Sem co-dono, não desenha
++ * nada: a ficha das orgs sem a flag fica como sempre foi.
++ */
++function CoDonos({ coDonos }: { coDonos: MembroDoLead[] }) {
++  const nomes = coDonos.map((m) => m.name).join(", ");
++  return (
++    <div className="flex items-center justify-between gap-3">
++      <span className="text-[10.5px] font-bold uppercase tracking-[.06em] text-muted-foreground">
++        Co-responsáveis
++      </span>
++      <span className="min-w-0 truncate text-[12.5px] font-semibold text-foreground" title={nomes}>
++        {nomes}
++      </span>
++    </div>
++  );
++}
++
+ export interface MembroDoLead {
+   id: string;
+   name: string;
+@@ -57,10 +76,13 @@ export function LeadCardControles({
+   qualificacao,
+   atualizadoEm,
+   className,
++  coDonos,
+ }: {
+   leadId: string;
+   preVenda: MembroDoLead | null;
+   venda: MembroDoLead | null;
++  /** Co-donos (`lead_owners.role = 'co'`), só em org com N donos. */
++  coDonos?: MembroDoLead[];
+   preQualificacao: QualificationTier | null;
+   qualificacao: QualificationTier | null;
+   /**
+@@ -91,6 +113,7 @@ export function LeadCardControles({
+           expectedUpdatedAt={atualizadoEm}
+         />
+       </Faixa>
++      {coDonos && coDonos.length > 0 && <CoDonos coDonos={coDonos} />}
+ 
+       <Faixa rotulo="Qualificação">
+         <QualificationSlot
 diff --git a/classic/src/modules/leads/components/lead-card/LeadCardNewDeal.tsx b/classic/src/modules/leads/components/lead-card/LeadCardNewDeal.tsx
 index 65bfe657e..cfbd2ac92 100644
 --- a/classic/src/modules/leads/components/lead-card/LeadCardNewDeal.tsx
@@ -4123,6 +4365,131 @@ index 65bfe657e..cfbd2ac92 100644
        isCreating={isCreating}
        onCreate={criar}
        open={open}
+diff --git a/classic/src/modules/leads/components/lead-card/types.ts b/classic/src/modules/leads/components/lead-card/types.ts
+index d90a29c98..2f49e88e2 100644
+--- a/classic/src/modules/leads/components/lead-card/types.ts
++++ b/classic/src/modules/leads/components/lead-card/types.ts
+@@ -196,6 +196,12 @@ export interface LeadCardData {
+ 
+   dono: { nome: string; papel: string } | null;
+ 
++  /**
++   * Todos os donos, principal primeiro — só quando há MAIS de um (org com N
++   * donos por lead, Chamado 793f4b05). Ausente: `dono` acima diz tudo.
++   */
++  donos?: { nome: string; papel: string }[];
++
+   /**
+    * O que os CONTROLES precisam e o desenho não usa: ids e tiers crus.
+    *
+@@ -212,6 +218,8 @@ export interface LeadCardData {
+   edicao?: {
+     preVenda: { id: string; name: string } | null;
+     venda: { id: string; name: string } | null;
++    /** Co-donos (`lead_owners.role = 'co'`), só leitura nesta fatia. Ausente = nenhum. */
++    coDonos?: { id: string; name: string }[];
+     preQualificacao: string | null;
+     qualificacao: string | null;
+     atualizadoEm: string | null;
+diff --git a/classic/src/modules/leads/components/lead-card/useLeadCardData.ts b/classic/src/modules/leads/components/lead-card/useLeadCardData.ts
+index d5e33040e..0c4d9eacc 100644
+--- a/classic/src/modules/leads/components/lead-card/useLeadCardData.ts
++++ b/classic/src/modules/leads/components/lead-card/useLeadCardData.ts
+@@ -14,6 +14,8 @@ import { deriveLeadStanding } from "../../lib/lead-relacao-situacao";
+ import { useOrgUsaLeiDoErp } from "../../hooks/useOrgUsaLeiDoErp";
+ import { useCafeJurereCadastro } from "../../hooks/useCafeJurereCadastro";
+ import { aplicarCadastroCafeJurere } from "../../lib/cafe-jurere-cadastro";
++import { resolveLeadOwners, rotuloDoPapel, type LeadOwnersSource } from "../../lib/lead-owners";
++import { useLeadOwners, useLeadOwnersEnabled } from "../../hooks/useLeadOwners";
+ import type {
+   LeadCardData,
+   LeadCardDeal,
+@@ -77,19 +79,12 @@ function texto(linha: Linha, chave: string): string | null {
+   return typeof v === "string" && v !== "" ? v : null;
+ }
+ 
+-/** Nome de um join `team_members!fk(id, name)`. */
+-function nomeDoJoin(linha: Linha, chave: string): string | null {
+-  const v = linha[chave];
+-  if (!v || typeof v !== "object" || Array.isArray(v)) return null;
+-  const nome = (v as Linha).name;
+-  return typeof nome === "string" && nome !== "" ? nome : null;
+-}
+-
+ /**
+- * O par `{id, name}` de um join de `team_members`.
++ * O par `{id, name}` de um join de `team_members!fk(id, name)`.
+  *
+- * Irmão de `nomeDoJoin`, e existe porque editar precisa do id: o nome sozinho
+- * não diz ao `ResponsibleSlot` qual membro marcar na lista.
++ * Existe porque editar precisa do id: o nome sozinho não diz ao
++ * `ResponsibleSlot` qual membro marcar na lista. O nome de exibição vem de
++ * `resolveLeadOwners`.
+  */
+ function membroDoJoin(linha: Linha, chave: string): { id: string; name: string } | null {
+   const v = linha[chave];
+@@ -182,6 +177,10 @@ export function useLeadCardData(leadId: string | null, isOpen: boolean): LeadCar
+   const { lead, isLoading, visibility } = useLeadDetail(leadId, isOpen);
+   const { organizationId, teamMemberId, role } = useOrganization();
+   const cadastroErp = useCafeJurereCadastro(leadId, isOpen && !!lead && !!texto(lead as Linha, "erp_code") && (lead as Linha).cafe_jurere_erp_elegivel === true);
++  // N donos por lead (Chamado 793f4b05): consulta própria e só na org com a
++  // flag — `useLeadDetail` (e o cache que tanta gente escreve) fica intocado.
++  const donosMultiplos = useLeadOwnersEnabled();
++  const { data: donosDoLead } = useLeadOwners(leadId, isOpen && !!lead && donosMultiplos);
+ 
+   // Os três hooks de lote aceitam lista; aqui a lista tem um id só. A queryKey
+   // deles é ordenada, então o cache da aba de Leads não colide com o do card.
+@@ -364,24 +363,22 @@ export function useLeadCardData(leadId: string | null, isOpen: boolean): LeadCar
+         : []),
+     ];
+ 
+-    // Mesma precedência de `LeadListRow`: venda → pré-venda → responsável.
+-    // Um dono só, e o papel vai no title para o nome não brigar por espaço.
+-    const nomeVenda = nomeDoJoin(l, "sale_responsible");
+-    const nomePreVenda = nomeDoJoin(l, "pre_sale_responsible");
+-    const nomeResp = nomeDoJoin(l, "responsible");
+-    const dono = nomeVenda
+-      ? { nome: nomeVenda, papel: "Responsável de venda" }
+-      : nomePreVenda
+-        ? { nome: nomePreVenda, papel: "Responsável de pré-venda" }
+-        : nomeResp
+-          ? { nome: nomeResp, papel: "Responsável" }
+-          : null;
++    // Mesma regra de `LeadListRow`: sem o embed `lead_owners` (org sem N
++    // donos) é um dono só, por precedência venda → pré-venda → responsável;
++    // com o embed, todos os donos, principal primeiro (Chamado 793f4b05).
++    const owners = donosDoLead && donosDoLead.length > 0 ? donosDoLead : resolveLeadOwners(l as LeadOwnersSource);
++    const donos = owners.map((o) => ({ nome: o.name, papel: rotuloDoPapel(o) }));
++    const dono = donos[0] ?? null;
++    const coDonos = owners
++      .filter((o) => o.papeis.length === 1 && o.papeis[0] === "co")
++      .map((o) => ({ id: o.id, name: o.name }));
+ 
+     return {
+       id,
+       edicao: {
+         preVenda: membroDoJoin(l, "pre_sale_responsible"),
+         venda: membroDoJoin(l, "sale_responsible"),
++        ...(coDonos.length > 0 ? { coDonos } : {}),
+         preQualificacao: texto(l, "pre_qualification_tier"),
+         qualificacao: texto(l, "qualification_tier"),
+         atualizadoEm: texto(l, "updated_at"),
+@@ -401,6 +398,7 @@ export function useLeadCardData(leadId: string | null, isOpen: boolean): LeadCar
+         : null,
+ 
+       dono,
++      ...(donos.length > 1 ? { donos } : {}),
+       copilotAtivo: l.ai_disabled !== true,
+ 
+       tags: (Array.isArray(l.lead_tags) ? l.lead_tags : [])
+@@ -435,6 +433,7 @@ export function useLeadCardData(leadId: string | null, isOpen: boolean): LeadCar
+     cadastroErp.isFetching,
+     cadastroErp.isError,
+     lead,
++    donosDoLead,
+     dealsMap,
+     produtosPorNegocio,
+     vendasMap,
 diff --git a/classic/src/modules/leads/components/lead-detail/hooks/useLeadDetailRealtime.ts b/classic/src/modules/leads/components/lead-detail/hooks/useLeadDetailRealtime.ts
 index 980e2d02f..0a165192b 100644
 --- a/classic/src/modules/leads/components/lead-detail/hooks/useLeadDetailRealtime.ts
@@ -4474,6 +4841,101 @@ index 8862ae720..f93a8c736 100644
      isCreating: addStandard.isPending || addCustom.isPending,
      criar,
    };
+diff --git a/classic/src/modules/leads/components/leads/LeadListRow.tsx b/classic/src/modules/leads/components/leads/LeadListRow.tsx
+index 6aad52d7b..16c491fe0 100644
+--- a/classic/src/modules/leads/components/leads/LeadListRow.tsx
++++ b/classic/src/modules/leads/components/leads/LeadListRow.tsx
+@@ -13,6 +13,7 @@ import type { Lead } from "../../hooks/useLeads";
+ import type { LeadCarteiraMetrics } from "../../hooks/useLeadsCarteiraMetrics";
+ import type { LeadDeal } from "../../hooks/useLeadsDeals";
+ import { erpLabel } from "@/shared/format/erp-code";
++import { nomesDosDonos, resolveLeadOwners, type LeadOwnerRow } from "../../lib/lead-owners";
+ 
+ /**
+  * Linha da lista de leads — cartão solto, não célula de tabela.
+@@ -58,6 +59,8 @@ export type LeadListItem = Lead & {
+   sale_responsible?: { id: string; name: string } | null;
+   responsible?: { id: string; name: string } | null;
+   lead_tags?: { tag: LeadTagRef | null }[] | null;
++  /** Embed `lead_owners(...)` — só em org com N donos (Chamado 793f4b05). */
++  lead_owners?: LeadOwnerRow[] | null;
+ };
+ 
+ interface LeadListRowProps {
+@@ -288,8 +291,11 @@ export function LeadListRow({
+ }: LeadListRowProps) {
+   const tags = (lead.lead_tags ?? []).map((t) => t.tag).filter((t): t is LeadTagRef => Boolean(t));
+ 
+-  const owner =
+-    lead.sale_responsible?.name ?? lead.pre_sale_responsible?.name ?? lead.responsible?.name ?? null;
++  // Sem o embed (org sem N donos) é o dono único de sempre, pela mesma
++  // precedência: venda → pré-venda → responsável.
++  const owners = resolveLeadOwners(lead);
++  const owner = owners[0]?.name ?? null;
++  const outrosDonos = owners.length - 1;
+ 
+   // `metrics` continua chegando por causa do ticket médio (na coluna Negócios) e
+   // do selo de `segment`. Total, nº de compras, ciclo e última compra saíram com
+@@ -495,7 +501,14 @@ export function LeadListRow({
+ 
+       {/* dono da conta */}
+       <div>
+-        {owner ? (
++        {owner && outrosDonos > 0 ? (
++          <div className="flex min-w-0 items-center gap-1" title={nomesDosDonos(owners)}>
++            <Badge variant="secondary">{owner.split(" ")[0]}</Badge>
++            <Badge variant="outline" className="tabular-nums" aria-label={`Donos: ${nomesDosDonos(owners)}`}>
++              +{outrosDonos}
++            </Badge>
++          </div>
++        ) : owner ? (
+           <Badge variant="secondary">{owner.split(" ")[0]}</Badge>
+         ) : (
+           <span className="inline-block rounded-full border border-dashed border-border px-2.5 py-0.5 text-[12.5px] text-muted-foreground">
+diff --git a/classic/src/modules/leads/components/leads/LeadListRowV2.tsx b/classic/src/modules/leads/components/leads/LeadListRowV2.tsx
+index 71922716d..191bc1db4 100644
+--- a/classic/src/modules/leads/components/leads/LeadListRowV2.tsx
++++ b/classic/src/modules/leads/components/leads/LeadListRowV2.tsx
+@@ -8,6 +8,7 @@ import { LeadEtiquetasPopover } from "../etiquetas/LeadEtiquetasPopover";
+ import { ReorderCycleRing } from "./ReorderCycleRing";
+ import type { CicloDeRecompra } from "../../lib/reorder-cycle";
+ import { erpLabel } from "@/shared/format/erp-code";
++import { nomesDosDonos, resolveLeadOwners } from "../../lib/lead-owners";
+ import {
+   LeadAvatar,
+   SituacaoCell,
+@@ -144,8 +145,10 @@ export function LeadListRowV2({
+   actions,
+ }: LeadListRowV2Props) {
+   const tags = (lead.lead_tags ?? []).map((t) => t.tag).filter((t): t is LeadTagRef => Boolean(t));
+-  const owner =
+-    lead.sale_responsible?.name ?? lead.pre_sale_responsible?.name ?? lead.responsible?.name ?? null;
++  // Sem o embed (org sem N donos) é o dono único de sempre: venda → pré-venda → responsável.
++  const owners = resolveLeadOwners(lead);
++  const owner = owners[0]?.name ?? null;
++  const outrosDonos = owners.length - 1;
+   const avgTicket = metrics?.avgTicket ?? 0;
+ 
+   const ganhos = deals.filter((d) => d.outcome === "won");
+@@ -374,7 +377,17 @@ export function LeadListRowV2({
+ 
+       {/* dono */}
+       <div>
+-        {owner ? (
++        {owner && outrosDonos > 0 ? (
++          <span
++            className="inline-flex items-center gap-1.5 text-[12.5px] text-foreground/90"
++            title={nomesDosDonos(owners)}
++            aria-label={`Donos: ${nomesDosDonos(owners)}`}
++          >
++            <span className="size-1.5 rounded-full bg-success" />
++            {owner.split(" ")[0]}
++            <span className="tabular-nums text-muted-foreground">+{outrosDonos}</span>
++          </span>
++        ) : owner ? (
+           <span className="inline-flex items-center gap-1.5 text-[12.5px] text-foreground/90">
+             <span className="size-1.5 rounded-full bg-success" />
+             {owner.split(" ")[0]}
 diff --git a/classic/src/modules/leads/components/leads/LeadsStatsV2.tsx b/classic/src/modules/leads/components/leads/LeadsStatsV2.tsx
 index 682a48186..4e49cb8f6 100644
 --- a/classic/src/modules/leads/components/leads/LeadsStatsV2.tsx
@@ -4610,6 +5072,29 @@ index 8011e8662..f0861b1c0 100644
    useRealtimeSubscription("pipeline_entries", ["client-portfolio", "leads-deals"]);
    useRealtimeSubscription("pipeline_stages", ["client-portfolio", "leads-deals"]);
    useRealtimeSubscription("pipelines", ["client-portfolio", "leads-deals"]);
+diff --git a/classic/src/modules/leads/hooks/useExportLeads.ts b/classic/src/modules/leads/hooks/useExportLeads.ts
+index e9ce52481..5d3f9cd06 100644
+--- a/classic/src/modules/leads/hooks/useExportLeads.ts
++++ b/classic/src/modules/leads/hooks/useExportLeads.ts
+@@ -5,6 +5,7 @@ import { supabase } from "@/integrations/supabase/client";
+ import { useOrganization } from "@/modules/identity";
+ import { useCanDo } from "@/modules/identity";
+ import { applyLeadListFilters } from "../lib/lead-list-filters";
++import { coDonosDoFiltro } from "./useLeadOwners";
+ import { loadVentimaisExport } from "../lib/load-ventimais-export";
+ import { buildVentimaisWorkbook } from "../lib/ventimais-export";
+ import {
+@@ -203,7 +204,9 @@ export function useExportLeads(): UseExportLeadsResult {
+       // Espelha os filtros ativos da lista (busca, origem, qualificação,
+       // UF) — mesma semântica da tela via helper compartilhado.
+       if (options.listFilters) {
+-        leadsQuery = applyLeadListFilters(leadsQuery, options.listFilters);
++        // N donos (Chamado 793f4b05): o recorte por dono inclui co-donos, como na tela.
++        const coOwnedLeadIds = await coDonosDoFiltro(organizationId, options.listFilters);
++        leadsQuery = applyLeadListFilters(leadsQuery, { ...options.listFilters, coOwnedLeadIds });
+       }
+ 
+       const { data: leads, error: leadsError } = await leadsQuery
 diff --git a/classic/src/modules/leads/hooks/useLeadAllPipelines.ts b/classic/src/modules/leads/hooks/useLeadAllPipelines.ts
 index 6aeb2f49c..423a8184b 100644
 --- a/classic/src/modules/leads/hooks/useLeadAllPipelines.ts
@@ -4642,6 +5127,98 @@ index 6aeb2f49c..423a8184b 100644
          } as never);
          if (error) throw error;
        } else if (pipeType === "upsell") {
+diff --git a/classic/src/modules/leads/hooks/useLeadOwners.ts b/classic/src/modules/leads/hooks/useLeadOwners.ts
+new file mode 100644
+index 000000000..364e555ac
+--- /dev/null
++++ b/classic/src/modules/leads/hooks/useLeadOwners.ts
+@@ -0,0 +1,86 @@
++import { useQuery } from "@tanstack/react-query";
++import { supabase } from "@/integrations/supabase/client";
++import { useFeatureFlag } from "@/modules/platform";
++import { LEAD_OWNERS_EMBED, LEAD_OWNERS_FLAG, resolveLeadOwners, type LeadOwner, type LeadOwnerRow } from "../lib/lead-owners";
++
++/**
++ * N donos por lead ligado na org corrente (flag `lead_owners_n_donos`,
++ * Chamado 793f4b05)? Falso enquanto a flag carrega: a tela de sempre é a queda
++ * segura, e nenhuma org sem a flag paga leitura de `lead_owners`.
++ */
++export function useLeadOwnersEnabled(): boolean {
++  const { enabled, isLoading } = useFeatureFlag(LEAD_OWNERS_FLAG);
++  return !isLoading && enabled;
++}
++
++const PAGINA = 1000;
++
++/**
++ * Leads em que `memberId` é CO-dono, para o filtro "responsável" casar
++ * qualquer dono. Só os co-donos: os principais já estão nas colunas de `leads`.
++ *
++ * Paginado porque o PostgREST corta em 1000 sem avisar. Erro SOBE: uma lista
++ * vazia aqui esconderia leads do filtro em silêncio.
++ *
++ * Só chame em org com a flag — é quem decide se a leitura existe.
++ */
++export async function buscarLeadIdsCoDono(organizationId: string, memberId: string): Promise<string[]> {
++  const ids = new Set<string>();
++  for (let offset = 0; ; offset += PAGINA) {
++    const { data, error } = await supabase
++      .from("lead_owners")
++      .select("lead_id")
++      .eq("organization_id", organizationId)
++      .eq("team_member_id", memberId)
++      .eq("role", "co")
++      .order("lead_id", { ascending: true })
++      .range(offset, offset + PAGINA - 1);
++    if (error) throw error;
++    const linhas = (data ?? []) as { lead_id: string }[];
++    for (const r of linhas) ids.add(r.lead_id);
++    if (linhas.length < PAGINA) break;
++  }
++  return [...ids];
++}
++
++const UUID_DONO = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
++
++/**
++ * Leads em que o dono filtrado é co-dono — só em org com N donos e com um
++ * membro no filtro. Nas outras orgs devolve `undefined` sem tocar no banco.
++ * Lista, contagem, cards e exportação passam por aqui: o mesmo recorte.
++ */
++export async function coDonosDoFiltro(
++  organizationId: string,
++  filters: { donosMultiplos?: boolean; filterResponsible?: string },
++): Promise<string[] | undefined> {
++  const membro = filters.filterResponsible;
++  if (!filters.donosMultiplos || !membro || !UUID_DONO.test(membro)) return undefined;
++  return buscarLeadIdsCoDono(organizationId, membro);
++}
++
++/** Chave do cache dos donos de um lead — PR3 invalida ao escrever. */
++export const leadOwnersKey = (leadId: string | null) => ["lead-owners", leadId] as const;
++
++/**
++ * Donos de UM lead, na ordem de exibição. Para quem recebe o lead sem o embed
++ * (o painel do chat lê de `useLeadByPhone`/`useLeadById`, que têm shape fixo).
++ * Desligado fora da flag: zero leitura.
++ */
++export function useLeadOwners(leadId: string | null | undefined, enabled: boolean) {
++  return useQuery<LeadOwner[]>({
++    queryKey: leadOwnersKey(leadId ?? null),
++    enabled: enabled && !!leadId,
++    staleTime: 60_000,
++    queryFn: async () => {
++      const { data, error } = await supabase
++        .from("leads")
++        .select(LEAD_OWNERS_EMBED)
++        .eq("id", leadId as string)
++        .maybeSingle();
++      if (error) throw error;
++      const linha = data as { lead_owners?: LeadOwnerRow[] | null } | null;
++      return resolveLeadOwners({ lead_owners: linha?.lead_owners ?? [] });
++    },
++  });
++}
 diff --git a/classic/src/modules/leads/hooks/useLeadPhones.ts b/classic/src/modules/leads/hooks/useLeadPhones.ts
 new file mode 100644
 index 000000000..d8afe80b4
@@ -4760,7 +5337,7 @@ index 000000000..d8afe80b4
 +  });
 +}
 diff --git a/classic/src/modules/leads/hooks/useLeads.ts b/classic/src/modules/leads/hooks/useLeads.ts
-index 6e79c168c..60705c9a9 100644
+index 6e79c168c..24c1c73e7 100644
 --- a/classic/src/modules/leads/hooks/useLeads.ts
 +++ b/classic/src/modules/leads/hooks/useLeads.ts
 @@ -1,7 +1,6 @@
@@ -4771,19 +5348,53 @@ index 6e79c168c..60705c9a9 100644
  import { useOrganization } from "@/modules/identity";
  import { track } from "@/lib/analytics";
  import { useCanDo } from "@/modules/identity";
-@@ -11,6 +10,9 @@ import { OptimisticLockConflictError, isPostgrestNoRows } from "@/modules/platfo
+@@ -11,6 +10,11 @@ import { OptimisticLockConflictError, isPostgrestNoRows } from "@/modules/platfo
  import { applyLeadListFilters } from "../lib/lead-list-filters";
  import { applyLeadListSort, DEFAULT_LEAD_SORT, type LeadListSort } from "../lib/lead-list-sort";
  import type { LeadRelacao } from "../lib/lead-relacao-situacao";
 +import { leadsKeys } from "../lib/leads-query-keys";
 +import { EMPTY_COUNT, runCappedCount, type CappedCount } from "../lib/capped-count";
 +import { useLeadsRealtime } from "./useLeadsRealtime";
++import { coDonosDoFiltro } from "./useLeadOwners";
++import { comEmbedDosDonos } from "../lib/lead-owners";
  
  export type Lead = Tables<"leads">;
  export type LeadInsert = TablesInsert<"leads">;
-@@ -79,18 +81,26 @@ function applyLeadsFilters(
+@@ -51,6 +55,12 @@ export interface LeadsFilterParams {
+    * em `../lib/lead-list-filters`.
+    */
+   filterResponsible?: string;
++  /**
++   * Org com N donos por lead (flag `lead_owners_n_donos`, Chamado 793f4b05):
++   * a lista traz os donos (embed `lead_owners`) e o filtro de dono casa
++   * qualquer um. Ausente/false = a lista de sempre, sem leitura extra.
++   */
++  donosMultiplos?: boolean;
+ }
+ 
+ /**
+@@ -63,12 +73,13 @@ export interface LeadsFilterParams {
+ function applyLeadsFilters(
+   query: any,
+   organizationId: string,
+-  filters: Omit<LeadsFilterParams, "page">
++  filters: Omit<LeadsFilterParams, "page">,
++  coOwnedLeadIds?: string[],
+ ) {
+   query = query
+     .eq("organization_id", organizationId)
+     .or("is_shadow.is.null,is_shadow.eq.false");
+-  return applyLeadListFilters(query, filters);
++  return applyLeadListFilters(query, { ...filters, coOwnedLeadIds });
+ }
+ 
+ /**
+@@ -77,20 +88,28 @@ function applyLeadsFilters(
+  * Retorna até LEADS_PAGE_SIZE leads por página.
+  */
  export function useLeads(params: LeadsFilterParams = {}, options: { enabled?: boolean } = {}) {
-   const { page = 0, searchQuery, filterOrigin, filterQualification, filterClassificacao, usaLeiDoErp, usaCadastroErpCafeJurere, filterUf, createdFrom, createdTo, filterAssignment, filterResponsible, sort = DEFAULT_LEAD_SORT } = params;
+-  const { page = 0, searchQuery, filterOrigin, filterQualification, filterClassificacao, usaLeiDoErp, usaCadastroErpCafeJurere, filterUf, createdFrom, createdTo, filterAssignment, filterResponsible, sort = DEFAULT_LEAD_SORT } = params;
++  const { page = 0, searchQuery, filterOrigin, filterQualification, filterClassificacao, usaLeiDoErp, usaCadastroErpCafeJurere, filterUf, createdFrom, createdTo, filterAssignment, filterResponsible, donosMultiplos, sort = DEFAULT_LEAD_SORT } = params;
    const { organizationId, isReady } = useOrganization();
 -
 -  useRealtimeSubscription("leads", ["leads"]);
@@ -4791,7 +5402,7 @@ index 6e79c168c..60705c9a9 100644
 -  useRealtimeSubscription("pipeline_entries", ["leads", "leads-count", "leads-stats"]);
 -  useRealtimeSubscription("sale_events", ["leads", "leads-count", "leads-stats"]);
 +  const enabled = isReady && options.enabled !== false;
-+  const filters = { searchQuery, filterOrigin, filterQualification, filterClassificacao, usaLeiDoErp, usaCadastroErpCafeJurere, filterUf, createdFrom, createdTo, filterAssignment, filterResponsible };
++  const filters = { searchQuery, filterOrigin, filterQualification, filterClassificacao, usaLeiDoErp, usaCadastroErpCafeJurere, filterUf, createdFrom, createdTo, filterAssignment, filterResponsible, ...(donosMultiplos ? { donosMultiplos } : {}) };
 +  const queryKey = leadsKeys.list(organizationId, page, filters, sort);
 +
 +  // UM canal (em `leads`), classificado por evento — ver `useLeadsRealtime`.
@@ -4818,16 +5429,29 @@ index 6e79c168c..60705c9a9 100644
      queryFn: async () => {
        if (!organizationId) {
          console.warn("[useLeads] No organization_id available - returning empty array");
-@@ -114,7 +124,7 @@ export function useLeads(params: LeadsFilterParams = {}, options: { enabled?: bo
+@@ -102,7 +121,7 @@ export function useLeads(params: LeadsFilterParams = {}, options: { enabled?: bo
+ 
+       let query = supabase
+         .from("leads")
+-        .select(`
++        .select(comEmbedDosDonos(`
+           *,
+           responsible:team_members!leads_responsible_id_fkey(id, name),
+           sdr:team_members!leads_sdr_id_fkey(id, name),
+@@ -112,9 +131,10 @@ export function useLeads(params: LeadsFilterParams = {}, options: { enabled?: bo
+           lead_tags(
+             tag:tags(id, name, color)
            )
-         `);
+-        `);
++        `, !!donosMultiplos));
  
 -      query = applyLeadsFilters(query, organizationId, { searchQuery, filterOrigin, filterQualification, filterClassificacao, usaLeiDoErp, usaCadastroErpCafeJurere, filterUf, createdFrom, createdTo, filterAssignment, filterResponsible });
-+      query = applyLeadsFilters(query, organizationId, filters);
++      const coDonos = await coDonosDoFiltro(organizationId, filters);
++      query = applyLeadsFilters(query, organizationId, filters, coDonos);
  
        // Sempre com desempate por `id` — ver `lib/lead-list-sort`. Sem ele a
        // paginação por OFFSET repete linha entre páginas dentro de um empate,
-@@ -122,50 +132,56 @@ export function useLeads(params: LeadsFilterParams = {}, options: { enabled?: bo
+@@ -122,50 +142,57 @@ export function useLeads(params: LeadsFilterParams = {}, options: { enabled?: bo
        const { data, error } = await applyLeadListSort(query, sort).range(from, to);
  
        if (error) throw error;
@@ -4880,9 +5504,10 @@ index 6e79c168c..60705c9a9 100644
 + * `{ capped: true }` em vez do total. Ver `lib/capped-count`.
   */
  export function useLeadsCount(filters: Omit<LeadsFilterParams, "page"> = {}) {
-   const { searchQuery, filterOrigin, filterQualification, filterClassificacao, usaLeiDoErp, usaCadastroErpCafeJurere, filterUf, createdFrom, createdTo, filterAssignment, filterResponsible } = filters;
+-  const { searchQuery, filterOrigin, filterQualification, filterClassificacao, usaLeiDoErp, usaCadastroErpCafeJurere, filterUf, createdFrom, createdTo, filterAssignment, filterResponsible } = filters;
++  const { searchQuery, filterOrigin, filterQualification, filterClassificacao, usaLeiDoErp, usaCadastroErpCafeJurere, filterUf, createdFrom, createdTo, filterAssignment, filterResponsible, donosMultiplos } = filters;
    const { organizationId, isReady } = useOrganization();
-+  const recorte = { searchQuery, filterOrigin, filterQualification, filterClassificacao, usaLeiDoErp, usaCadastroErpCafeJurere, filterUf, createdFrom, createdTo, filterAssignment, filterResponsible };
++  const recorte = { searchQuery, filterOrigin, filterQualification, filterClassificacao, usaLeiDoErp, usaCadastroErpCafeJurere, filterUf, createdFrom, createdTo, filterAssignment, filterResponsible, ...(donosMultiplos ? { donosMultiplos } : {}) };
  
 -  return useQuery({
 -    queryKey: ["leads-count", organizationId, searchQuery, filterOrigin, filterQualification, filterClassificacao, usaLeiDoErp, usaCadastroErpCafeJurere, filterUf, createdFrom, createdTo, filterAssignment, filterResponsible],
@@ -4901,12 +5526,13 @@ index 6e79c168c..60705c9a9 100644
 -      if (error) throw error;
 -      return count ?? 0;
 +      if (!organizationId) return EMPTY_COUNT;
-+      const query = applyLeadsFilters(supabase.from("leads").select("id"), organizationId, recorte);
++      const coDonos = await coDonosDoFiltro(organizationId, recorte);
++      const query = applyLeadsFilters(supabase.from("leads").select("id"), organizationId, recorte, coDonos);
 +      return runCappedCount(query);
      },
      enabled: isReady,
      staleTime: 60000, // 1 minuto
-@@ -649,9 +665,12 @@ export function useToggleLeadAI() {
+@@ -649,9 +676,12 @@ export function useToggleLeadAI() {
      },
      // Atualização otimista para feedback imediato
      onMutate: async ({ leadId, disabled }) => {
@@ -5171,19 +5797,20 @@ index 000000000..3c7a9daa5
 +  );
 +}
 diff --git a/classic/src/modules/leads/hooks/useLeadsStats.ts b/classic/src/modules/leads/hooks/useLeadsStats.ts
-index adffa6e42..a809d9d84 100644
+index adffa6e42..db1bda602 100644
 --- a/classic/src/modules/leads/hooks/useLeadsStats.ts
 +++ b/classic/src/modules/leads/hooks/useLeadsStats.ts
-@@ -3,6 +3,8 @@ import { supabase } from "@/integrations/supabase/client";
+@@ -3,6 +3,9 @@ import { supabase } from "@/integrations/supabase/client";
  import { useOrganization } from "@/modules/identity";
  import type { LeadsFilterParams } from "./useLeads";
  import { applyLeadListFilters } from "../lib/lead-list-filters";
++import { coDonosDoFiltro } from "./useLeadOwners";
 +import { leadsKeys } from "../lib/leads-query-keys";
 +import { EMPTY_COUNT, runCappedCount, type CappedCount } from "../lib/capped-count";
  
  /**
   * Os três números do topo da lista de Leads, contados na ORGANIZAÇÃO inteira.
-@@ -26,16 +28,20 @@ import { applyLeadListFilters } from "../lib/lead-list-filters";
+@@ -26,16 +29,20 @@ import { applyLeadListFilters } from "../lib/lead-list-filters";
   * via um mês diferente do que o resto do produto usa — o mesmo defeito de
   * fronteira que já apareceu no card do Comando.
   *
@@ -5212,8 +5839,12 @@ index adffa6e42..a809d9d84 100644
  }
  
  /** Início do mês corrente no fuso informado, como instante UTC. */
-@@ -68,17 +74,16 @@ export function useLeadsStats(filters: Omit<LeadsFilterParams, "page"> = {}) {
-   const { searchQuery, filterOrigin, filterQualification, filterClassificacao, usaLeiDoErp, usaCadastroErpCafeJurere, filterUf, createdFrom, createdTo, filterResponsible } = filters;
+@@ -65,20 +72,21 @@ export function useLeadsStats(filters: Omit<LeadsFilterParams, "page"> = {}) {
+   const { organizationId, isReady, timezone } = useOrganization();
+   const timeZone = timezone || "America/Sao_Paulo";
+ 
+-  const { searchQuery, filterOrigin, filterQualification, filterClassificacao, usaLeiDoErp, usaCadastroErpCafeJurere, filterUf, createdFrom, createdTo, filterResponsible } = filters;
++  const { searchQuery, filterOrigin, filterQualification, filterClassificacao, usaLeiDoErp, usaCadastroErpCafeJurere, filterUf, createdFrom, createdTo, filterResponsible, donosMultiplos } = filters;
  
    return useQuery<LeadsStats>({
 -    queryKey: [
@@ -5221,10 +5852,12 @@ index adffa6e42..a809d9d84 100644
 +    queryKey: leadsKeys.stats(organizationId, timeZone, {
        searchQuery, filterOrigin, filterQualification, filterClassificacao, usaLeiDoErp, usaCadastroErpCafeJurere, filterUf, createdFrom, createdTo, filterResponsible,
 -    ],
++      ...(donosMultiplos ? { donosMultiplos } : {}),
 +    }),
      queryFn: async () => {
 -      if (!organizationId) return { thisMonth: 0, withOwner: 0 };
 +      if (!organizationId) return { thisMonth: EMPTY_COUNT, withOwner: EMPTY_COUNT };
++      const coOwnedLeadIds = await coDonosDoFiltro(organizationId, { donosMultiplos, filterResponsible });
  
        const base = () => {
          const q = supabase
@@ -5234,7 +5867,14 @@ index adffa6e42..a809d9d84 100644
            .eq("organization_id", organizationId)
            .is("deleted_at", null)
            // Mesmo guard da lista (`applyLeadsFilters`): lead sombra não aparece
-@@ -101,18 +106,12 @@ export function useLeadsStats(filters: Omit<LeadsFilterParams, "page"> = {}) {
+@@ -95,24 +103,18 @@ export function useLeadsStats(filters: Omit<LeadsFilterParams, "page"> = {}) {
+         // tela.
+         return applyLeadListFilters(q, {
+           searchQuery, filterOrigin, filterQualification, filterClassificacao, usaLeiDoErp, usaCadastroErpCafeJurere,
+-          filterUf, createdFrom, createdTo, filterResponsible,
++          filterUf, createdFrom, createdTo, filterResponsible, donosMultiplos, coOwnedLeadIds,
+         });
+       };
  
        const inicioDoMes = monthStartInTz(timeZone).toISOString();
  
@@ -5271,10 +5911,18 @@ index 983a5d070..231244d08 100644
          "portfolio-trends", "lead-timeline", "leads-sales-metrics", "metrics-studio",
        ].map(key => queryClient.invalidateQueries({ queryKey: [key] })));
 diff --git a/classic/src/modules/leads/index.ts b/classic/src/modules/leads/index.ts
-index 389232bfd..22e260f33 100644
+index 389232bfd..a645d2498 100644
 --- a/classic/src/modules/leads/index.ts
 +++ b/classic/src/modules/leads/index.ts
-@@ -320,3 +320,17 @@ export { CompareceuModal } from "./components/leads/funnel-contexts/modals/Compa
+@@ -13,6 +13,7 @@
+  */
+ 
+ // ── Hooks: lead CRUD + listing ─────────────────────────────────────────────
++export { useLeadOwners, useLeadOwnersEnabled, leadOwnersKey } from "./hooks/useLeadOwners";
+ export {
+   useLeads,
+   useLeadsCount,
+@@ -320,3 +321,17 @@ export { CompareceuModal } from "./components/leads/funnel-contexts/modals/Compa
  export { useVentimaisExportDetails } from "./hooks/useVentimaisExportDetails";
  
  export { useCustomFieldCatalogue, useCustomFieldReferences } from './hooks/useCustomFieldCatalogue';
@@ -5415,6 +6063,223 @@ index 000000000..8bead654d
 +    return { lastPage, hasNext: page < lastPage };
 +  }
 +  return { lastPage: null, hasNext: shown === pageSize };
++}
+diff --git a/classic/src/modules/leads/lib/lead-list-filters.ts b/classic/src/modules/leads/lib/lead-list-filters.ts
+index 25041660b..43a01db56 100644
+--- a/classic/src/modules/leads/lib/lead-list-filters.ts
++++ b/classic/src/modules/leads/lib/lead-list-filters.ts
+@@ -67,6 +67,20 @@ export interface LeadListFilterValues {
+    * vazia.
+    */
+   filterResponsible?: string;
++  /**
++   * A org tem N donos por lead (flag `lead_owners_n_donos`, Chamado 793f4b05)?
++   * Então a célula mostra TODOS os donos, e o filtro por dono casa qualquer um
++   * deles: principal de venda, principal de pré-venda, co-dono, e o
++   * `responsible_id` legado só quando não há principal (é quando ele aparece).
++   * Ausente/false: a semântica de sempre, por precedência.
++   */
++  donosMultiplos?: boolean;
++  /**
++   * Leads em que o dono filtrado é CO-dono (`lead_owners.role = 'co'`).
++   * Resolvido antes, por `buscarLeadIdsCoDono` — este módulo é puro. Os
++   * principais já estão nas colunas; só os co-donos precisam da lista.
++   */
++  coOwnedLeadIds?: string[];
+ }
+ 
+ /**
+@@ -107,6 +121,23 @@ function buildOwnerMatch(memberId: string): string {
+   }).join(",");
+ }
+ 
++/**
++ * Predicado "o membro está entre os donos" (org com N donos). A célula dessa
++ * org mostra todos os donos, então qualquer um deles casa: os dois principais
++ * pelas colunas, o `responsible_id` legado só onde ele aparece (sem principal),
++ * e os co-donos pela lista de ids resolvida antes.
++ */
++function buildAnyOwnerMatch(memberId: string, coOwnedLeadIds: string[]): string {
++  const clauses = [
++    `sale_responsible_id.eq.${memberId}`,
++    `pre_sale_responsible_id.eq.${memberId}`,
++    `and(sale_responsible_id.is.null,pre_sale_responsible_id.is.null,responsible_id.eq.${memberId})`,
++  ];
++  const co = coOwnedLeadIds.filter((id) => UUID_RE.test(id));
++  if (co.length > 0) clauses.push(`id.in.(${co.join(",")})`);
++  return clauses.join(",");
++}
++
+ /**
+  * Mínimo de dígitos para o termo ser tratado como busca de telefone. Abaixo
+  * disso ("21", "9") o `ilike` casaria com praticamente toda a base e a busca
+@@ -159,7 +190,11 @@ export function applyLeadListFilters<Q>(query: Q, filters: LeadListFilterValues)
+     if (owner === OWNER_NONE) {
+       for (const col of OWNER_COLUMNS) q = q.is(col, null);
+     } else if (UUID_RE.test(owner)) {
+-      q = q.or(buildOwnerMatch(owner));
++      q = q.or(
++        filters.donosMultiplos
++          ? buildAnyOwnerMatch(owner, filters.coOwnedLeadIds ?? [])
++          : buildOwnerMatch(owner),
++      );
+     }
+     // Valor fora do contrato (visão salva adulterada): ignorado — mesma escolha
+     // de `parseInstantParam` na página. Não vira predicado cru.
+diff --git a/classic/src/modules/leads/lib/lead-owners.ts b/classic/src/modules/leads/lib/lead-owners.ts
+new file mode 100644
+index 000000000..69bfc5943
+--- /dev/null
++++ b/classic/src/modules/leads/lib/lead-owners.ts
+@@ -0,0 +1,149 @@
++/**
++ * Donos do lead — N por lead (Chamado 793f4b05).
++ *
++ * Módulo PURO. Recebe a linha do lead como a lista/ficha a leem (joins de
++ * `team_members` por coluna + o embed opcional de `lead_owners`) e devolve os
++ * donos na ordem de exibição, sem repetição.
++ *
++ * DUAS FONTES, UMA RESPOSTA:
++ *   - org COM a flag `lead_owners_n_donos`: o embed `lead_owners` chega e é a
++ *     verdade — principal de venda, principal de pré-venda, co-donos;
++ *   - org SEM a flag (todas as outras): o embed não é pedido e a resposta é
++ *     o dono único de sempre, pela precedência que a lista pinta desde antes
++ *     (`sale_responsible ?? pre_sale_responsible ?? responsible`). A tela
++ *     dessas orgs não muda.
++ *
++ * Embed presente mas vazio (lead sem dono na org com flag) cai na mesma
++ * precedência: `responsible_id` legado continua aparecendo como hoje.
++ */
++
++/** Selecione isto para trazer os donos junto com o lead (só em org com a flag). */
++export const LEAD_OWNERS_EMBED =
++  "lead_owners(team_member_id, role, is_primary, added_at, team_members(id, name, avatar_url))";
++
++/**
++ * Acrescenta o embed dos donos a um `select` do PostgREST quando `ligado`.
++ *
++ * O tipo devolvido é o do select de ENTRADA, de propósito: o parser de tipos
++ * do supabase-js não lê um select montado em runtime e degradaria a linha
++ * inteira para erro de parse. O campo extra (`lead_owners`) é tipado à parte,
++ * opcional, em `LeadOwnersSource`/`LeadListItem` — quem lê já trata ausência.
++ */
++export function comEmbedDosDonos<S extends string>(select: S, ligado: boolean): S {
++  return (ligado ? `${select}, ${LEAD_OWNERS_EMBED}` : select) as S;
++}
++
++/** Chave em `organizations.feature_flags` que liga N donos por lead. */
++export const LEAD_OWNERS_FLAG = "lead_owners_n_donos";
++
++export type LeadOwnerRole = "venda" | "pre_venda" | "co";
++
++/** Uma linha do embed `lead_owners(...)`. */
++export interface LeadOwnerRow {
++  team_member_id: string;
++  role: string;
++  is_primary: boolean;
++  added_at?: string | null;
++  team_members?: { id: string; name: string | null; avatar_url?: string | null } | null;
++}
++
++interface MembroJoin {
++  id?: string | null;
++  name?: string | null;
++  avatar_url?: string | null;
++}
++
++/** O que `resolveLeadOwners` lê do lead. Tudo opcional: shapes de origens diferentes. */
++export interface LeadOwnersSource {
++  lead_owners?: LeadOwnerRow[] | null;
++  sale_responsible?: MembroJoin | null;
++  pre_sale_responsible?: MembroJoin | null;
++  responsible?: MembroJoin | null;
++}
++
++export interface LeadOwner {
++  /** `team_members.id`. */
++  id: string;
++  name: string;
++  avatarUrl: string | null;
++  /** Papéis desta pessoa no lead, na ordem venda → pré-venda → co. Vazio = `responsible_id` legado. */
++  papeis: LeadOwnerRole[];
++}
++
++const ORDEM_DO_PAPEL: Record<LeadOwnerRole, number> = { venda: 0, pre_venda: 1, co: 2 };
++
++function papelValido(role: string): role is LeadOwnerRole {
++  return role === "venda" || role === "pre_venda" || role === "co";
++}
++
++function nomeValido(v: unknown): v is string {
++  return typeof v === "string" && v.trim() !== "";
++}
++
++function precedenciaLegada(src: LeadOwnersSource): LeadOwner[] {
++  const candidatos: Array<[MembroJoin | null | undefined, LeadOwnerRole[]]> = [
++    [src.sale_responsible, ["venda"]],
++    [src.pre_sale_responsible, ["pre_venda"]],
++    [src.responsible, []],
++  ];
++  for (const [m, papeis] of candidatos) {
++    if (m && nomeValido(m.name)) {
++      return [{ id: m.id ?? "", name: m.name, avatarUrl: m.avatar_url ?? null, papeis }];
++    }
++  }
++  return [];
++}
++
++/**
++ * Donos do lead na ordem de exibição: principal de venda, principal de
++ * pré-venda, co-donos (mais antigos primeiro). A mesma pessoa em dois papéis
++ * aparece UMA vez, com os dois papéis.
++ */
++export function resolveLeadOwners(src: LeadOwnersSource | null | undefined): LeadOwner[] {
++  if (!src) return [];
++  const linhas = (src.lead_owners ?? []).filter(
++    (r): r is LeadOwnerRow & { role: LeadOwnerRole } =>
++      !!r && typeof r.team_member_id === "string" && papelValido(r.role) && nomeValido(r.team_members?.name),
++  );
++  if (linhas.length === 0) return precedenciaLegada(src);
++
++  const ordenadas = [...linhas].sort((a, b) => {
++    const p = ORDEM_DO_PAPEL[a.role] - ORDEM_DO_PAPEL[b.role];
++    if (p !== 0) return p;
++    const t = (a.added_at ?? "").localeCompare(b.added_at ?? "");
++    if (t !== 0) return t;
++    return (a.team_members?.name ?? "").localeCompare(b.team_members?.name ?? "", "pt-BR");
++  });
++
++  const porMembro = new Map<string, LeadOwner>();
++  for (const r of ordenadas) {
++    const atual = porMembro.get(r.team_member_id);
++    if (atual) {
++      if (!atual.papeis.includes(r.role)) atual.papeis.push(r.role);
++      continue;
++    }
++    porMembro.set(r.team_member_id, {
++      id: r.team_member_id,
++      name: r.team_members!.name as string,
++      avatarUrl: r.team_members?.avatar_url ?? null,
++      papeis: [r.role],
++    });
++  }
++  return [...porMembro.values()];
++}
++
++/** Rótulo do papel principal do dono, para title/aria. */
++export function rotuloDoPapel(owner: LeadOwner): string {
++  const papel = owner.papeis[0];
++  if (papel === "venda") return "Responsável de venda";
++  if (papel === "pre_venda") return "Responsável de pré-venda";
++  if (papel === "co") return "Co-responsável";
++  return "Responsável";
++}
++
++/** "Ana, Bia e Carla" — para title e aria-label. */
++export function nomesDosDonos(owners: LeadOwner[]): string {
++  const nomes = owners.map((o) => o.name);
++  if (nomes.length <= 1) return nomes[0] ?? "";
++  return `${nomes.slice(0, -1).join(", ")} e ${nomes[nomes.length - 1]}`;
 +}
 diff --git a/classic/src/modules/leads/lib/lead-phones.ts b/classic/src/modules/leads/lib/lead-phones.ts
 new file mode 100644
@@ -5930,7 +6795,7 @@ index 000000000..3fb8a464f
 +    ] as const,
 +};
 diff --git a/classic/src/modules/leads/pages/Leads.tsx b/classic/src/modules/leads/pages/Leads.tsx
-index 224c7e9d4..5ecdb03a8 100644
+index 224c7e9d4..51edb9947 100644
 --- a/classic/src/modules/leads/pages/Leads.tsx
 +++ b/classic/src/modules/leads/pages/Leads.tsx
 @@ -27,6 +27,7 @@ import {
@@ -5941,7 +6806,39 @@ index 224c7e9d4..5ecdb03a8 100644
  import { useLeadsCarteiraMetrics } from "../hooks/useLeadsCarteiraMetrics";
  import { mergeDataMetrics } from "../lib/data-metrics";
  import {
-@@ -360,8 +361,14 @@ function LeadsInner() {
+@@ -110,6 +111,7 @@ import {
+ } from "../lib/lead-classificacao";
+ import { useLeadClassificacao } from "../hooks/useLeadClassificacao";
+ import { useClassificacaoCafeJurere } from "../hooks/useClassificacaoCafeJurere";
++import { useLeadOwnersEnabled } from "../hooks/useLeadOwners";
+ import { normalizarAbaCafeJurere } from "../lib/cafe-jurere-classificacao";
+ import { useOrgUsaLeiDoErp } from "../hooks/useOrgUsaLeiDoErp";
+ import { useSearchParams } from "react-router-dom";
+@@ -243,6 +245,9 @@ function LeadsInner() {
+   // Visão salva gravada antes desta gaveta existir não traz a chave — sem o
+   // `??` o Select vira não-controlado no meio do uso.
+   const usaCadastroErpCafeJurere = useClassificacaoCafeJurere();
++  // N donos por lead (Chamado 793f4b05): lista traz todos os donos e o filtro
++  // casa qualquer um. Org sem a flag: `false`, a tela de sempre.
++  const donosMultiplos = useLeadOwnersEnabled();
+   const abaSalva = filterState.filterClassificacao ?? CLASSIFICACAO_TODAS;
+   const filterClassificacao = usaCadastroErpCafeJurere ? normalizarAbaCafeJurere(abaSalva) : abaSalva;
+   const portfolioActive = filterClassificacao === "cliente";
+@@ -349,19 +354,25 @@ function LeadsInner() {
+     }, { replace: true });
+   }, [setSearchParams]);
+ 
+-  const filterParams = { page, searchQuery, filterOrigin, filterQualification, filterClassificacao, usaLeiDoErp, usaCadastroErpCafeJurere, filterUf: ufFilter, createdFrom, createdTo, filterAssignment, filterResponsible, sort };
++  const filterParams = { page, searchQuery, filterOrigin, filterQualification, filterClassificacao, usaLeiDoErp, usaCadastroErpCafeJurere, filterUf: ufFilter, createdFrom, createdTo, filterAssignment, filterResponsible, donosMultiplos, sort };
+   const leadsQuery = useLeads(filterParams, { enabled: !portfolioActive });
+   const { data: loadedLeads = [], isLoading } = leadsQuery;
+   const leads = useMemo(() => portfolioActive ? [] : loadedLeads, [portfolioActive, loadedLeads]);
+-  const { data: totalLeads } = useLeadsCount({ searchQuery, filterOrigin, filterQualification, filterClassificacao, usaLeiDoErp, usaCadastroErpCafeJurere, filterUf: ufFilter, createdFrom, createdTo, filterAssignment, filterResponsible });
+-  const tabFilters = { searchQuery, filterOrigin, filterQualification, usaLeiDoErp, usaCadastroErpCafeJurere, filterUf: ufFilter, createdFrom, createdTo, filterAssignment, filterResponsible };
++  const { data: totalLeads } = useLeadsCount({ searchQuery, filterOrigin, filterQualification, filterClassificacao, usaLeiDoErp, usaCadastroErpCafeJurere, filterUf: ufFilter, createdFrom, createdTo, filterAssignment, filterResponsible, donosMultiplos });
++  const tabFilters = { searchQuery, filterOrigin, filterQualification, usaLeiDoErp, usaCadastroErpCafeJurere, filterUf: ufFilter, createdFrom, createdTo, filterAssignment, filterResponsible, donosMultiplos };
+   const { data: allTabCount } = useLeadsCount({ ...tabFilters, filterClassificacao: "all" });
+   const { data: leadTabCount } = useLeadsCount({ ...tabFilters, filterClassificacao: "lead" });
    const { data: clientTabCount } = useLeadsCount({ ...tabFilters, filterClassificacao: "cliente" });
    const finalTab = usaLeiDoErp && !usaCadastroErpCafeJurere ? "indefinido" : "perdido";
    const { data: finalTabCount } = useLeadsCount({ ...tabFilters, filterClassificacao: finalTab });
@@ -5958,7 +6855,7 @@ index 224c7e9d4..5ecdb03a8 100644
    const { data: currentTeamMember, isLoading: isLoadingTeamMember, isFetching: isFetchingTeamMember } = useCurrentTeamMember();
    const createLead = useCreateLead();
    const updateLead = useUpdateLead();
-@@ -488,6 +495,17 @@ function LeadsInner() {
+@@ -488,6 +499,17 @@ function LeadsInner() {
      setPage(0);
    }, [searchQuery, filterOrigin, filterQualification, filterClassificacao, usaLeiDoErp, usaCadastroErpCafeJurere, filterResponsible, createdFrom, createdTo, sort.key, sort.direction]);
  
@@ -5976,7 +6873,16 @@ index 224c7e9d4..5ecdb03a8 100644
    /**
     * ADR-0024 decisão 2 — os quatro cards contam a ORGANIZAÇÃO.
     *
-@@ -513,9 +531,9 @@ function LeadsInner() {
+@@ -502,7 +524,7 @@ function LeadsInner() {
+    */
+   const { data: orgStats, isLoading: isLoadingStats } = useLeadsStats({
+     searchQuery, filterOrigin, filterQualification, filterClassificacao, usaLeiDoErp, usaCadastroErpCafeJurere, filterResponsible,
+-    filterUf: ufFilter, createdFrom, createdTo,
++    filterUf: ufFilter, createdFrom, createdTo, donosMultiplos,
+   });
+ 
+   // Redesign aprovado pelo CTO em 2026-09-11 — a tela é a versão nova.
+@@ -513,9 +535,9 @@ function LeadsInner() {
    const [searchFocused, setSearchFocused] = useState(false);
  
    const stats = useMemo(() => ({
@@ -5989,7 +6895,7 @@ index 224c7e9d4..5ecdb03a8 100644
    }), [totalLeads, leads.length, orgStats]);
  
    const handleOpenDialog = (lead?: any) => {
-@@ -754,7 +772,7 @@ function LeadsInner() {
+@@ -754,7 +776,7 @@ function LeadsInner() {
              onClick={() => setFilterClassificacao(option.value)}
              className={cn("shrink-0 border-b-2 px-1 pb-3 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring", filterClassificacao === option.value ? "border-primary font-semibold text-warning-strong dark:text-primary" : "border-transparent text-muted-foreground hover:text-foreground")}>
              {{ lead: "Leads", cliente: "Clientes", perdido: "Inativos" }[option.value] ?? option.label}
@@ -5998,7 +6904,7 @@ index 224c7e9d4..5ecdb03a8 100644
            </button>
          ))}
        </div>
-@@ -793,7 +811,7 @@ function LeadsInner() {
+@@ -793,7 +815,7 @@ function LeadsInner() {
            className="stat-card"
          >
            <p className="stat-card-label">Total de Leads</p>
@@ -6007,7 +6913,7 @@ index 224c7e9d4..5ecdb03a8 100644
          </motion.div>
          <motion.div
            initial={{ opacity: 0, y: 10 }}
-@@ -802,7 +820,7 @@ function LeadsInner() {
+@@ -802,7 +824,7 @@ function LeadsInner() {
            className="stat-card"
          >
            <p className="stat-card-label">Este Mês</p>
@@ -6016,7 +6922,7 @@ index 224c7e9d4..5ecdb03a8 100644
          </motion.div>
          <motion.div
            initial={{ opacity: 0, y: 10 }}
-@@ -811,7 +829,7 @@ function LeadsInner() {
+@@ -811,7 +833,7 @@ function LeadsInner() {
            className="stat-card"
          >
            <p className="stat-card-label">Com Responsável</p>
@@ -6025,7 +6931,7 @@ index 224c7e9d4..5ecdb03a8 100644
          </motion.div>
        </div>
        )}
-@@ -912,8 +930,8 @@ function LeadsInner() {
+@@ -912,8 +934,8 @@ function LeadsInner() {
              )}
              aria-hidden={searchFocused}
            >
@@ -6036,7 +6942,7 @@ index 224c7e9d4..5ecdb03a8 100644
            </span>
          )}
        </div>
-@@ -1127,10 +1145,10 @@ function LeadsInner() {
+@@ -1127,10 +1149,10 @@ function LeadsInner() {
          )}
  
          {/* Paginação */}
@@ -6049,7 +6955,7 @@ index 224c7e9d4..5ecdb03a8 100644
              </span>
              <div className="flex items-center gap-2">
                <Button
-@@ -1144,8 +1162,8 @@ function LeadsInner() {
+@@ -1144,8 +1166,8 @@ function LeadsInner() {
                <Button
                  variant="outline"
                  size="sm"
@@ -6060,6 +6966,15 @@ index 224c7e9d4..5ecdb03a8 100644
                >
                  Próxima
                </Button>
+@@ -1162,7 +1184,7 @@ function LeadsInner() {
+       <ExportLeadsModal
+         open={isExportModalOpen}
+         onOpenChange={setIsExportModalOpen}
+-        listFilters={{ searchQuery, filterOrigin, filterQualification, filterClassificacao, usaLeiDoErp, usaCadastroErpCafeJurere, filterResponsible, filterUf: ufFilter, createdFrom, createdTo }}
++        listFilters={{ searchQuery, filterOrigin, filterQualification, filterClassificacao, usaLeiDoErp, usaCadastroErpCafeJurere, filterResponsible, filterUf: ufFilter, createdFrom, createdTo, donosMultiplos }}
+       />
+ 
+       <Dialog open={isImportHistoryOpen} onOpenChange={setIsImportHistoryOpen}>
 diff --git a/classic/src/modules/pipelines/components/funis/useFunilMoveFlow.tsx b/classic/src/modules/pipelines/components/funis/useFunilMoveFlow.tsx
 index 29a8f6333..4e12316b6 100644
 --- a/classic/src/modules/pipelines/components/funis/useFunilMoveFlow.tsx
