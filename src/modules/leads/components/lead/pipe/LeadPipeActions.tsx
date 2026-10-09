@@ -28,6 +28,7 @@ import {
   getNormalizedStages,
 } from "@/lib/lead/pipeline-adapters";
 import type { PipelineStatus } from "../../../hooks/useLeadAllPipelines";
+import { ETAPA_DE_PERDA_INDISPONIVEL } from "@/contracts/pipe/perda";
 
 interface LeadPipeActionsProps {
   pipelines: PipelineStatus[];
@@ -197,7 +198,14 @@ export function LeadPipeActions({
                   </SelectTrigger>
                   <SelectContent>
                     {stages.map((s) => (
-                      <SelectItem key={s.id} value={s.id}>
+                      // Entrar no funil já perdido gravaria a perda sem motivo:
+                      // a perda só nasce pelo movimento, que pede o motivo.
+                      <SelectItem
+                        key={s.id}
+                        value={s.id}
+                        disabled={s.isLoss}
+                        title={s.isLoss ? ETAPA_DE_PERDA_INDISPONIVEL : undefined}
+                      >
                         <div className="flex items-center gap-2">
                           <div
                             className="w-2.5 h-2.5 rounded-full"
@@ -209,7 +217,7 @@ export function LeadPipeActions({
                     ))}
                   </SelectContent>
                 </Select>
-                {addStageId && (
+                {addStageId && !stages.find((s) => s.id === addStageId)?.isLoss && (
                   <Button
                     size="sm"
                     className="w-full h-8 text-xs"

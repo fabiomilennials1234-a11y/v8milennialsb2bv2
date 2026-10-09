@@ -47,6 +47,8 @@ vi.mock("@/shared/realtime/useRealtimeSubscription", () => ({ useRealtimeSubscri
 vi.mock("@/modules/leads", async () => ({
   // Regra pura de "funil abrível" — a real, não um dublê.
   ...(await import("@/modules/leads/lib/negocio-aberto")),
+  ...(await import("@/modules/leads/lib/etapa-de-perda")),
+  useLossReasonGate: (await import("@/modules/leads/loss-reason-gate")).useLossReasonGate,
   useLeadActionGates: () => ({ canMoveMeeting: { allowed: state.allowed }, canAddToPipe: { allowed: state.allowed } }),
   useLeadAllPipelines: () => ({ data: [state.system ? {
     type: "standard", pipeType: "whatsapp", pipelineDbId: "pipeline", label: "Envase", color: "#ffaa00",

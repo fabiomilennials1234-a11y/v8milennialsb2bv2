@@ -14,6 +14,9 @@ import { createQueryErrorHandlers } from "@/shared/errors/query-error-handlers";
 import { setReportIdentity } from "@/shared/errors";
 import { OrgFeaturesProvider } from "@/contexts/OrgFeaturesContext";
 import { PipeOpsProvider } from "@/modules/pipelines";
+// Deep import de propósito: o barril de `leads` é grande e não deve entrar no
+// chunk do shell só por causa do provider.
+import { LossReasonGateProvider } from "@/modules/leads/loss-reason-gate";
 import { ProtectedRoute } from "@/modules/identity/auth";
 import { PermissionProtectedRoute } from "@/modules/identity/permissions";
 import { MainLayout } from "@/modules/platform/components/layout/MainLayout";
@@ -947,33 +950,39 @@ const App = () => {
                   <PipeOpsProvider>
                     <GlobalErrorBoundary>
                       <PushPermissionPrompt />
-                      {/* SupportPanelProvider envolve o palette: a ação
-                          "Abrir chamado" do Cmd+K abre este painel. */}
-                      <FloatingDockProvider>
-                        <SupportPanelProvider>
-                          <CommandPaletteProvider>
-                            <GlobalShortcutsProvider>
-                              {/* VoiceCallProvider por fora das rotas: a chamada
-                                  sobrevive à navegação e ao fechamento do modal
-                                  do lead que a originou. */}
-                              <VoiceCallProvider>
-                                {/* O botão de ligar dos cards de `leads` é
-                                    injetado daqui: `leads` não pode importar
-                                    `communication` sem fechar ciclo entre os
-                                    dois módulos. Ver LeadCallActionSlot. */}
-                                <LeadCallActionProvider value={renderLeadCallAction}>
-                                  <AppRoutes />
-                                  <CommandPaletteComponent />
-                                  <SupportAccess>
-                                    <SupportPanel />
-                                    <SupportAnnouncement />
-                                  </SupportAccess>
-                                </LeadCallActionProvider>
-                              </VoiceCallProvider>
-                            </GlobalShortcutsProvider>
-                          </CommandPaletteProvider>
-                        </SupportPanelProvider>
-                      </FloatingDockProvider>
+                      {/* Motivo da perda: porta única de toda movimentação
+                          humana para etapa de perda (chat, gaveta, /funil,
+                          massa). Dentro do PipeOpsProvider — o catálogo de
+                          motivos chega pela porta. */}
+                      <LossReasonGateProvider>
+                        {/* SupportPanelProvider envolve o palette: a ação
+                            "Abrir chamado" do Cmd+K abre este painel. */}
+                        <FloatingDockProvider>
+                          <SupportPanelProvider>
+                            <CommandPaletteProvider>
+                              <GlobalShortcutsProvider>
+                                {/* VoiceCallProvider por fora das rotas: a chamada
+                                    sobrevive à navegação e ao fechamento do modal
+                                    do lead que a originou. */}
+                                <VoiceCallProvider>
+                                  {/* O botão de ligar dos cards de `leads` é
+                                      injetado daqui: `leads` não pode importar
+                                      `communication` sem fechar ciclo entre os
+                                      dois módulos. Ver LeadCallActionSlot. */}
+                                  <LeadCallActionProvider value={renderLeadCallAction}>
+                                    <AppRoutes />
+                                    <CommandPaletteComponent />
+                                    <SupportAccess>
+                                      <SupportPanel />
+                                      <SupportAnnouncement />
+                                    </SupportAccess>
+                                  </LeadCallActionProvider>
+                                </VoiceCallProvider>
+                              </GlobalShortcutsProvider>
+                            </CommandPaletteProvider>
+                          </SupportPanelProvider>
+                        </FloatingDockProvider>
+                      </LossReasonGateProvider>
                     </GlobalErrorBoundary>
                   </PipeOpsProvider>
                 </RealtimeOrgBridge>

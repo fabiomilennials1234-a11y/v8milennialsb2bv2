@@ -79,7 +79,8 @@ type PipePropostaUpdateVars = Partial<PipePropostaRow> & {
 };
 
 type StageOptionsByPipe = {
-  stagesByPipe: Record<string, { value: string; label: string }[]>;
+  /** `isLoss`: etapa de perda — seletores de criação a desabilitam (perda pede motivo). */
+  stagesByPipe: Record<string, { value: string; label: string; isLoss?: boolean }[]>;
   isLoading: boolean;
 };
 
@@ -110,6 +111,9 @@ export interface FunnelStageOption {
   stage_key: string;
   name: string;
   position: number;
+  /** Para `isEtapaDePerda` — mover em massa para perda pede UM motivo do lote. */
+  stage_role?: string | null;
+  is_final_negative?: boolean | null;
 }
 
 /** Props do RescheduleModal (slot — implementação fica em pipelines). */

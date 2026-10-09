@@ -24,8 +24,10 @@ vi.mock("@/modules/leads/components/leads/AddToFunilDialog", () => ({
 
 
 const mocks = vi.hoisted(() => ({
-  rpc: vi.fn(), read: vi.fn(), eq: vi.fn(), outcome: "open", fail: false,
+  rpc: vi.fn(), read: vi.fn(), eq: vi.fn(), outcome: "open", fail: false, patch: vi.fn(),
 }));
+// O motivo da perda vai para o metadata ANTES do desfecho (porta única).
+vi.mock("@/integrations/supabase/entry-metadata", () => ({ patchEntryMetadata: mocks.patch }));
 vi.mock("@/modules/identity", () => ({
   useOrganization: () => ({ organizationId: "org-1", isReady: true }),
 }));
@@ -44,8 +46,16 @@ vi.mock("@/integrations/supabase/client", () => ({
 import { beforeEach } from "vitest";
 import { waitFor } from "@testing-library/react";
 import { LeadCard } from "@/modules/leads/components/leads/LeadCard";
+import {
+  FakeLossReasonGateProvider,
+  makeFakeLossReasonGate,
+} from "@/modules/leads/loss-reason-gate/testing";
+
+let gate = makeFakeLossReasonGate();
 
 beforeEach(() => {
+  gate = makeFakeLossReasonGate({ id: "lr-1", texto: "Sem budget" });
+  mocks.patch.mockReset().mockResolvedValue(undefined);
   mocks.outcome = "open";
   mocks.fail = false;
   mocks.rpc.mockReset().mockImplementation(async (_name, args) => {
@@ -64,8 +74,10 @@ function montar() {
   const invalidar = vi.spyOn(qc, "invalidateQueries");
   render(
     <QueryClientProvider client={qc}>
-      <LeadCard variant="custom" density="compact" onClick={onClick}
-        lead={{ id: "entry-1", leadId: "lead-1", pipelineId: "pipe-1", name: "Dora" }} />
+      <FakeLossReasonGateProvider gate={gate}>
+        <LeadCard variant="custom" density="compact" onClick={onClick}
+          lead={{ id: "entry-1", leadId: "lead-1", pipelineId: "pipe-1", name: "Dora" }} />
+      </FakeLossReasonGateProvider>
     </QueryClientProvider>,
   );
   return { onClick, invalidar };
@@ -89,8 +101,12 @@ describe("Menu + do negócio — perdido reversível", () => {
     abrirMenu();
     await clicar("Marcar como perdido");
     await waitFor(() => expect(mocks.rpc).toHaveBeenCalledWith(
-      "definir_desfecho_da_entrada", { p_entry_id: "entry-1", p_outcome: "lost" },
+      "definir_desfecho_da_entrada",
+      { p_entry_id: "entry-1", p_outcome: "lost", p_loss_reason: "Sem budget" },
     ));
+    // Motivo gravado no metadata ANTES do desfecho — mesmo par do /funil.
+    expect(mocks.patch).toHaveBeenCalledWith("entry-1", { loss_reason_id: "lr-1", loss_reason: "Sem budget" });
+    expect(mocks.patch.mock.invocationCallOrder[0]).toBeLessThan(mocks.rpc.mock.invocationCallOrder[0]);
     await screen.findByRole("menuitem", { name: "Remover de perdido" });
     fireEvent.keyDown(screen.getByRole("menu"), { key: "Escape" });
     await waitFor(() => expect(screen.queryByRole("menu")).not.toBeInTheDocument());
@@ -105,6 +121,19 @@ describe("Menu + do negócio — perdido reversível", () => {
     expect(mocks.eq).toHaveBeenCalledWith("id", "entry-1");
     expect(invalidar).toHaveBeenCalledWith({ queryKey: ["leads-deals"] });
     expect(invalidar).toHaveBeenCalledWith({ queryKey: ["funil-desfecho-counts"] });
+  });
+
+  it("cancelar o motivo não grava nada e o item continua disponível", async () => {
+    gate.resposta = null;
+    montar();
+    abrirMenu();
+    await clicar("Marcar como perdido");
+    await waitFor(() => expect(gate.pedidos).toHaveLength(1));
+    expect(mocks.patch).not.toHaveBeenCalled();
+    expect(mocks.rpc).not.toHaveBeenCalled();
+    // Liberado para tentar de novo.
+    await clicar("Marcar como perdido");
+    await waitFor(() => expect(gate.pedidos).toHaveLength(2));
   });
 
   it("reabre um negócio que já chegou perdido", async () => {

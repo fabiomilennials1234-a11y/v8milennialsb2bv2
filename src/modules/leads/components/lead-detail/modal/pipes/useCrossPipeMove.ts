@@ -4,6 +4,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { updateCustomPipelineEntry } from "@/integrations/supabase/pipeline-entry-rpc";
 import { useLogLeadAction } from "@/shared/hooks/useLogLeadAction";
 import { notifyError } from "@/shared/errors";
+import type { PerdaResolvida } from "@/contracts/pipe/perda";
+import { useLossReasonGate } from "../../../../loss-reason-gate";
 
 /**
  * useCrossPipeMove — unified stage-move hook for both system and custom
@@ -22,25 +24,40 @@ import { notifyError } from "@/shared/errors";
  *    `fn_entrada_custom_atualizar`, keyed by `entryId`. A função deriva também
  *    `stage_key`, mantendo auto-transition, workflow, checklist e histórico.
  *
+ * Etapa de PERDA (`isLoss`, calculado por `isEtapaDePerda`): antes de qualquer
+ * escrita o hook passa pela porta única do motivo — pede, grava
+ * `loss_reason_id` + `loss_reason` no metadata da entrada e só então move.
+ * Cancelar ou falhar a gravação = nada escrito, nada movido. Vale para os três
+ * consumidores (trilho do modal do lead, `DealDetailDialog`, painel do Negócio).
+ *
  * Invalidates the queries the CrossPipePanel + activity column rely on, o board
  * de funil que hospeda o modal (`pipeline-page` / `pipeline-stage-counts`, ou o
  * par custom) e a camada de negócio (`leads-deals` / `leads-sales-metrics`) que
  * a lista de Leads e o `DealDetailDialog` leem — ver os blocos no `move`.
  */
 
+/**
+ * Perda no alvo:
+ *  · `isLoss` — a etapa de destino é de perda; o hook pede e grava o motivo.
+ *  · `perda`  — o motivo JÁ foi colhido e gravado por quem chama (ex.: o botão
+ *    "Perdido" do painel, que degrada para mover até a etapa de perda); o hook
+ *    não pergunta de novo.
+ */
+type PerdaNoAlvo = { isLoss?: boolean; perda?: PerdaResolvida };
+
 export type CrossPipeMoveTarget =
-  | {
+  | ({
       kind: "system";
       pipeId: string;
       stageKey: string;
       stageLabel: string;
-    }
-  | {
+    } & PerdaNoAlvo)
+  | ({
       kind: "custom";
       entryId: string;
       stageId: string;
       stageLabel: string;
-    };
+    } & PerdaNoAlvo);
 
 export interface UseCrossPipeMoveResult {
   /** Stage key/id currently being persisted (or null when idle). */
@@ -55,12 +72,18 @@ export interface UseCrossPipeMoveResult {
 export function useCrossPipeMove(leadId: string): UseCrossPipeMoveResult {
   const qc = useQueryClient();
   const logAction = useLogLeadAction();
+  const { capturarMotivoDaPerda } = useLossReasonGate();
   const [pendingStageKey, setPendingStageKey] = useState<string | null>(null);
   const [recentlyMovedStageKey, setRecentlyMovedStageKey] = useState<string | null>(null);
 
   const move = useCallback(
     async (target: CrossPipeMoveTarget) => {
       const targetKey = target.kind === "system" ? target.stageKey : target.stageId;
+      if (target.isLoss && !target.perda) {
+        const entryId = target.kind === "system" ? target.pipeId : target.entryId;
+        const perda = await capturarMotivoDaPerda({ entryIds: [entryId], stageName: target.stageLabel });
+        if (!perda) return; // cancelou, ou a gravação falhou (toast já saiu)
+      }
       setPendingStageKey(targetKey);
       try {
         if (target.kind === "system") {
@@ -168,7 +191,7 @@ export function useCrossPipeMove(leadId: string): UseCrossPipeMoveResult {
         setPendingStageKey(null);
       }
     },
-    [leadId, logAction, qc],
+    [leadId, logAction, qc, capturarMotivoDaPerda],
   );
 
   return useMemo(

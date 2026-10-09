@@ -5,9 +5,15 @@ import React from "react";
 import { BulkActionBar } from "./BulkActionBar";
 import { useBulkMoveToPipeline, useBulkMoveToCustomPipe } from "../../hooks/useBulkActions";
 import { MockPipeOpsProvider } from "../../pipe-ops/testing";
+import { FakeLossReasonGateProvider, makeFakeLossReasonGate } from "../../loss-reason-gate/testing";
 
 // ── Mocks ──────────────────────────────────────────────────────────────────
 const rpc = vi.fn();
+const patchEntryMetadata = vi.fn();
+vi.mock("@/integrations/supabase/entry-metadata", () => ({
+  patchEntryMetadata: (...a: unknown[]) => patchEntryMetadata(...a),
+}));
+let gate = makeFakeLossReasonGate();
 /** Captura o DELETE em `pipeline_entries` do caminho de negócio (SCRUM-611). */
 const deleteSpy = vi.fn();
 vi.mock("@/integrations/supabase/client", () => ({
@@ -69,12 +75,14 @@ function renderBar(
           useFunnelStages: useFunnelStages as never,
         }}
       >
-        <BulkActionBar
-          selectedIds={selected}
-          onClear={() => {}}
-          leadIds={["l-1", "l-2", "l-3"]}
-          escopoFunil={escopoFunil}
-        />
+        <FakeLossReasonGateProvider gate={gate}>
+          <BulkActionBar
+            selectedIds={selected}
+            onClear={() => {}}
+            leadIds={["l-1", "l-2", "l-3"]}
+            escopoFunil={escopoFunil}
+          />
+        </FakeLossReasonGateProvider>
       </MockPipeOpsProvider>
     </QueryClientProvider>,
   );
@@ -84,6 +92,8 @@ beforeEach(() => {
   rpc.mockReset();
   rpc.mockResolvedValue({ data: null, error: null });
   deleteSpy.mockReset();
+  patchEntryMetadata.mockReset().mockResolvedValue(undefined);
+  gate = makeFakeLossReasonGate();
   useFunnelStages.mockReset();
   useFunnelStages.mockReturnValue({
     data: [
@@ -124,6 +134,64 @@ describe("BulkActionBar — paridade por pipeline_id (SCRUM-633)", () => {
   it("barra expõe a ação Exportar (seleção manual, agnóstica de funil)", () => {
     renderBar();
     expect(screen.getByRole("button", { name: /exportar/i })).toBeInTheDocument();
+  });
+});
+
+describe("BulkActionBar — mover em massa para etapa de perda pede UM motivo", () => {
+  beforeEach(() => {
+    useFunnelStages.mockReturnValue({
+      data: [
+        { id: "st-1", stage_key: "novo", name: "Novo", position: 0, stage_role: "open", is_final_negative: false },
+        { id: "st-x", stage_key: "perdido_desqualificado", name: "Perdido/Desqualificado", position: 1, stage_role: "open", is_final_negative: true },
+      ],
+      isLoading: false,
+    });
+  });
+
+  async function moverPara(etapa: string) {
+    fireEvent.click(screen.getByRole("button", { name: /^mover$/i }));
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.keyDown(within(dialog).getAllByRole("combobox")[1], { key: "ArrowDown" });
+    fireEvent.click(await screen.findByRole("option", { name: etapa }));
+    fireEvent.click(within(dialog).getByRole("button", { name: /^mover$/i }));
+  }
+
+  it("grava o motivo em CADA negócio do lote e só então chama o bulk move", async () => {
+    renderBar(new Set(["l-1", "l-2"]), { pipelineId: "pipe-cus-1", entryIds: ["entry-1", "entry-2"] });
+    await moverPara("Perdido/Desqualificado");
+    await waitFor(() => expect(rpc).toHaveBeenCalledWith("bulk_move_pipeline_entries", expect.objectContaining({
+      p_entry_ids: ["entry-1", "entry-2"], p_target_stage_id: "st-x",
+    })));
+    expect(gate.pedidos).toEqual([{ stageName: "Perdido/Desqualificado", quantidade: 2 }]);
+    const patch = { loss_reason_id: "lr-1", loss_reason: "Sem budget" };
+    expect(patchEntryMetadata).toHaveBeenCalledWith("entry-1", patch);
+    expect(patchEntryMetadata).toHaveBeenCalledWith("entry-2", patch);
+    expect(Math.max(...patchEntryMetadata.mock.invocationCallOrder)).toBeLessThan(rpc.mock.invocationCallOrder[0]);
+  });
+
+  it("cancelar o motivo não grava nem move", async () => {
+    gate.resposta = null;
+    renderBar(new Set(["l-1"]), { pipelineId: "pipe-cus-1", entryIds: ["entry-1"] });
+    await moverPara("Perdido/Desqualificado");
+    await waitFor(() => expect(gate.pedidos).toHaveLength(1));
+    expect(patchEntryMetadata).not.toHaveBeenCalled();
+    expect(rpc).not.toHaveBeenCalled();
+  });
+
+  it("etapa aberta move sem perguntar", async () => {
+    renderBar(new Set(["l-1"]), { pipelineId: "pipe-cus-1", entryIds: ["entry-1"] });
+    await moverPara("Novo");
+    await waitFor(() => expect(rpc).toHaveBeenCalledTimes(1));
+    expect(gate.pedidos).toHaveLength(0);
+  });
+
+  it("no modo adicionar (lista de leads) a etapa de perda fica indisponível", async () => {
+    renderBar();
+    fireEvent.click(screen.getByRole("button", { name: /adicionar ao funil/i }));
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.keyDown(within(dialog).getAllByRole("combobox")[1], { key: "ArrowDown" });
+    expect(await screen.findByRole("option", { name: "Perdido/Desqualificado" })).toHaveAttribute("data-disabled");
+    expect(screen.getByRole("option", { name: "Novo" })).not.toHaveAttribute("data-disabled");
   });
 });
 

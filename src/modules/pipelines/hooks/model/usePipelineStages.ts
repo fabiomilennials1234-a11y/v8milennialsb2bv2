@@ -4,6 +4,7 @@ import { useCurrentTeamMember } from "@/modules/identity";
 import { useRealtimeSubscription } from "@/shared/realtime/useRealtimeSubscription";
 import type { PipelineType, StageFamily, PipelineStage, PipelineStageInsert, DefaultStage } from "@/contracts/pipe";
 import { FALLBACK_STAGES } from "@/contracts/pipe";
+import { isEtapaDePerda } from "@/contracts/pipe/perda";
 import { chaveDeNovaEtapa } from "../../lib/chave-de-nova-etapa";
 import {
   proximaPosicaoDeEtapa,
@@ -567,10 +568,17 @@ export function useAllPipelineStageOptions() {
 
   const isLoading = whatsapp.isLoading || confirmacao.isLoading || propostas.isLoading;
 
-  const stagesByPipe: Record<string, { value: string; label: string }[]> = {
-    whatsapp: whatsapp.options,
-    confirmacao: confirmacao.options,
-    propostas: propostas.options,
+  // `isLoss` deixa os seletores de "criar negócio nesta etapa" desabilitarem a
+  // etapa de perda — nascer perdido gravaria a perda sem motivo.
+  const comPerda = (o: ReturnType<typeof usePipelineStageOptions>) =>
+    o.options.map((opt) => ({
+      ...opt,
+      isLoss: isEtapaDePerda(o.stages?.find((s) => s.stage_key === opt.value)),
+    }));
+  const stagesByPipe: Record<string, { value: string; label: string; isLoss: boolean }[]> = {
+    whatsapp: comPerda(whatsapp),
+    confirmacao: comPerda(confirmacao),
+    propostas: comPerda(propostas),
   };
 
   return { stagesByPipe, isLoading };

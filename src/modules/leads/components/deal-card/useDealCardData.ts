@@ -2,6 +2,7 @@ import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 
 import { supabase } from "@/integrations/supabase/client";
+import { isEtapaDePerda } from "@/contracts/pipe/perda";
 import { useOrganization, useTeamMembers } from "@/modules/identity";
 import { useLeadChecklists } from "@/modules/engagement";
 import { useLeadDetail } from "../lead-detail/hooks/useLeadDetail";
@@ -116,7 +117,8 @@ export function useDealCardData(entryId: string | null, leadId: string | null, i
           .from("pipeline_stages")
           // `stage_key` entra para a régua conseguir casar a etapa: é o
           // slug que os gatilhos gravam em `pipeline_entries.stage_key`.
-          .select("id, stage_key, name, stage_role, position")
+          // `is_final_negative` decide se mover para a etapa pede o motivo.
+          .select("id, stage_key, name, stage_role, is_final_negative, position")
           .eq("pipeline_id", pipelineId)
           .eq("is_active", true)
           .order("position"),
@@ -283,6 +285,10 @@ export function useDealCardData(entryId: string | null, leadId: string | null, i
       chaveEntry: String(e.stage_key ?? e.id),
       nome: String(e.name ?? ""),
       papel: papelDaEtapa(e.stage_role),
+      ehPerda: isEtapaDePerda({
+        stage_role: typeof e.stage_role === "string" ? e.stage_role : null,
+        is_final_negative: e.is_final_negative === true,
+      }),
     }));
 
     // Pela chave de LEITURA: é `to_stage_key` que chega aqui, não o uuid.
