@@ -54,6 +54,7 @@ import { getAvatarGradient } from "@/modules/communication/components/chat/list/
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { ComposerEmojiPicker } from "../composer/ComposerEmojiPicker";
+import { useClipboardImagePaste } from "@/modules/communication/hooks/chat/useClipboardImagePaste";
 import { cn } from "@/lib/utils";
 import { useSocialMessages } from "@/modules/communication/hooks/chat/useSocialMessages";
 import {
@@ -350,6 +351,13 @@ function SocialComposer({
     }
   };
 
+  // Colar imagem no campo publica como o clipe faz. Gate: com upload, envio ou
+  // gravação em andamento, a colagem não troca o anexo.
+  const handlePaste = useClipboardImagePaste({
+    onImage: (file) => void publicar(file),
+    disabled: subindo || enviar.isPending || gravando || !organizationId,
+  });
+
   const gravar = async () => {
     if (gravando) {
       gravadorRef.current?.stop();
@@ -604,6 +612,7 @@ function SocialComposer({
               void submeter();
             }
           }}
+          onPaste={handlePaste}
           placeholder={
             gravando
               ? "Gravando… toque no quadrado para parar"

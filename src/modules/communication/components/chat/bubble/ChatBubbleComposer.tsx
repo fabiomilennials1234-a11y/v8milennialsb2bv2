@@ -11,7 +11,8 @@ import { readMediaAsDataUrl } from "@/modules/communication/lib/media-operation"
  * e o componente AudioRecorder. UI é toda própria.
  *
  * Anexos: mesma paridade do composer desktop (imagem, vídeo, PDF/documentos) —
- * accept/teto/derivação vêm de `lib/attachment-media-type`.
+ * accept/teto/derivação vêm de `lib/attachment-media-type`. Colar imagem
+ * (Ctrl/⌘+V) no campo cai no mesmo `attachFile` do input de arquivo.
  */
 import { useRef, useState, type ChangeEvent, type KeyboardEvent } from "react";
 import { Film, FileText, Mic, Paperclip, Send } from "lucide-react";
@@ -29,6 +30,7 @@ import {
 } from "@/modules/communication/lib/attachment-media-type";
 import { AudioRecorder } from "@/modules/communication/components/chat/media/AudioRecorder";
 import { notifyError } from "@/shared/errors";
+import { useClipboardImagePaste } from "@/modules/communication/hooks/chat/useClipboardImagePaste";
 import { ComposerEmojiPicker } from "../composer/ComposerEmojiPicker";
 
 interface ChatBubbleComposerProps {
@@ -59,11 +61,18 @@ export function ChatBubbleComposer({
   const sendMessage = useSendWhatsAppMessage();
   const sendMedia = useSendWhatsAppMedia();
 
+  const isSending = sendMessage.isPending || sendMedia.isPending;
+  // Hook antes do early return (ordem dos hooks). `attachFile` é declarado
+  // abaixo, mas só é chamado no evento — quando a render já terminou.
+  const handlePaste = useClipboardImagePaste({
+    onImage: (file) => void attachFile(file),
+    disabled: isSending,
+  });
+
   if (!canReply) return null;
 
   const trimmed = text.trim();
   const hasText = trimmed.length > 0;
-  const isSending = sendMessage.isPending || sendMedia.isPending;
 
   const handleSend = async () => {
     if (!hasText || isSending) return;
@@ -89,9 +98,8 @@ export function ChatBubbleComposer({
     }
   };
 
-  const handleFileChange = async (e: ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  /** Valida e lê o arquivo para o preview — origem: input de arquivo ou colar. */
+  async function attachFile(file: File) {
     const validationError = getAttachmentValidationError(file);
     if (validationError) {
       toast({
@@ -99,16 +107,21 @@ export function ChatBubbleComposer({
         description: validationError,
         variant: "destructive",
       });
-      e.target.value = "";
       return;
     }
-    const input = e.target;
     try {
       const data = await readMediaAsDataUrl(file);
       setAttachment({ data, name: file.name, mime: file.type });
     } catch (error) {
       notifyError(error, { fallback: "Não foi possível ler o arquivo." });
     }
+  }
+
+  const handleFileChange = async (e: ChangeEvent<HTMLInputElement>) => {
+    const input = e.target;
+    const file = input.files?.[0];
+    if (!file) return;
+    await attachFile(file);
     input.value = ""; // permite re-selecionar mesmo arquivo
   };
 
@@ -247,7 +260,7 @@ export function ChatBubbleComposer({
         onClick={() => fileInputRef.current?.click()}
         disabled={isSending}
         aria-label="Anexar arquivo"
-        title="Anexar imagem, vídeo ou documento"
+        title="Anexar imagem, vídeo ou documento (ou cole com Ctrl/⌘+V)"
       >
         <Paperclip className="w-4 h-4" aria-hidden />
       </Button>
@@ -258,6 +271,7 @@ export function ChatBubbleComposer({
         value={text}
         onChange={(e) => setText(e.target.value)}
         onKeyDown={handleKeyDown}
+        onPaste={handlePaste}
         placeholder="Mensagem"
         aria-label="Mensagem"
         rows={1}
