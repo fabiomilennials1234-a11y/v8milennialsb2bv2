@@ -4,7 +4,8 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
-import { userMessageOf } from "@/shared/errors";
+import { reportError, toAppError } from "@/shared/errors";
+import { ErrorReference } from "@/shared/errors/ErrorReference";
 import { formatPhoneBR } from "@/shared/format/phone";
 import { useLeadPhones, useSalvarTelefonesDoLead, type TelefoneEditado } from "../../hooks/useLeadPhones";
 import { agruparPorContato } from "../../lib/lead-phones";
@@ -38,7 +39,8 @@ export function LeadContatos({ leadId, podeEditar = true }: { leadId: string; po
   const salvar = useSalvarTelefonesDoLead(leadId);
   const [editando, setEditando] = useState(false);
   const [rascunho, setRascunho] = useState<Rascunho[]>([]);
-  const [erro, setErro] = useState<string | null>(null);
+  // `referencia` só quando o erro é inesperado: recusa conhecida já diz o que fazer.
+  const [erro, setErro] = useState<{ mensagem: string; referencia: string | null } | null>(null);
 
   const grupos = useMemo(() => agruparPorContato(telefones), [telefones]);
 
@@ -81,7 +83,12 @@ export function LeadContatos({ leadId, podeEditar = true }: { leadId: string; po
       setEditando(false);
       toast.success("Contatos salvos");
     } catch (e) {
-      setErro(userMessageOf(e, "Não foi possível salvar os telefones."));
+      const appError = toAppError(e, "Não foi possível salvar os telefones.");
+      reportError(appError, { source: "handled", where: "lead-contatos" });
+      setErro({
+        mensagem: appError.userMessage,
+        referencia: appError.reportable ? appError.reference : null,
+      });
     }
   };
 
@@ -191,9 +198,10 @@ export function LeadContatos({ leadId, podeEditar = true }: { leadId: string; po
             Adicionar telefone
           </button>
           {erro && (
-            <p role="alert" className="text-[12px] text-destructive">
-              {erro}
-            </p>
+            <div role="alert" className="flex flex-col">
+              <p className="text-[12px] text-destructive">{erro.mensagem}</p>
+              {erro.referencia && <ErrorReference reference={erro.referencia} />}
+            </div>
           )}
           <div className="flex justify-end gap-1.5">
             <Button variant="ghost" size="sm" onClick={() => setEditando(false)} disabled={salvar.isPending}>
