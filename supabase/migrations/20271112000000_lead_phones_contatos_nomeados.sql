@@ -196,6 +196,8 @@ INSERT INTO public.lead_phones (organization_id, lead_id, phone, is_primary, sou
 SELECT l.organization_id, l.id, btrim(l.phone), true, 'crm'
   FROM public.leads l
  WHERE l.deleted_at IS NULL
+   -- 13 leads legados (jan–mar/2026) não têm org; o guard de org recusaria.
+   AND l.organization_id IS NOT NULL
    AND l.phone IS NOT NULL
    AND public.normalize_brazilian_phone(l.phone) IS NOT NULL
 ON CONFLICT DO NOTHING;
@@ -218,6 +220,9 @@ DECLARE
   v_source text := COALESCE(NULLIF(current_setting('app.lead_phone_source', true), ''), 'crm');
 BEGIN
   IF NEW.deleted_at IS NOT NULL THEN RETURN NEW; END IF;
+  -- Lead sem org (legado) não tem onde morar o telefone; o guard de org
+  -- recusaria e derrubaria o INSERT/UPDATE do próprio lead.
+  IF NEW.organization_id IS NULL THEN RETURN NEW; END IF;
   IF TG_OP = 'UPDATE' AND NEW.phone IS NOT DISTINCT FROM OLD.phone THEN RETURN NEW; END IF;
   IF v_source NOT IN ('crm', 'erp') THEN v_source := 'crm'; END IF;
 
