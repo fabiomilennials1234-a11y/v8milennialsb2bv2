@@ -13,6 +13,7 @@ import { useChatReply } from "../../../hooks/chat/useChatReply";
  *   Ctrl/Cmd+U abre file picker, Escape fecha popover ou cancela gravação
  * - Kbd hints no rodapé (mobile hidden)
  * - Drop zone: arrastar imagem → abre preview
+ * - Colar (Ctrl/⌘+V) imagem no campo → mesmo preview do botão de anexo
  * - Botão enviar/gravar, botão anexar, botão agendar
  * - AudioRecorder inline quando isRecording=true
  * - Image preview antes de enviar (com legenda)
@@ -32,6 +33,7 @@ import { useCurrentTeamMember } from "@/modules/identity";
 import { useConversationDraft } from "@/modules/communication/hooks/useConversationDraft";
 import { useSendWhatsAppMessage, useSendWhatsAppMedia } from "@/modules/communication/hooks/chat/useWhatsAppSend";
 import { useTypingPresence } from "@/modules/communication/hooks/chat/useTypingPresence";
+import { useClipboardImagePaste } from "@/modules/communication/hooks/chat/useClipboardImagePaste";
 import { AudioRecorder } from "@/modules/communication/components/chat/media/AudioRecorder";
 import { ScheduleMessageModal } from "@/modules/communication/components/chat/ScheduleMessageModal";
 import { SlashCommandPopover } from "@/modules/communication/components/chat/SlashCommandPopover";
@@ -409,9 +411,17 @@ export function ChatComposer({
     if (!window.matchMedia("(pointer: fine)").matches) return;
     e.preventDefault();
     setIsDragOver(false);
+    // Mesmo gate do paste: trocar o anexo durante o envio faria o
+    // clearAttachment pós-envio apagar o arquivo recém-solto.
+    if (isBusy) {
+      toast.info("Aguarde o envio anterior finalizar.");
+      return;
+    }
     const file = e.dataTransfer.files?.[0];
     if (file) handleFileSelect(file);
-  }, [handleFileSelect]);
+  }, [handleFileSelect, isBusy]);
+
+  const handlePaste = useClipboardImagePaste({ onImage: handleFileSelect, disabled: isBusy });
 
   const presence = useTypingPresence(instanceId, phoneNumber, canReply);
 
@@ -589,6 +599,7 @@ export function ChatComposer({
               }}
               onBlur={presence.stop}
               onKeyDown={handleKeyDown}
+              onPaste={handlePaste}
               aria-label={`Digite uma mensagem para ${contactName}`}
               className="block w-full min-h-[52px] max-h-[140px] resize-none border-0 bg-transparent px-3.5 pb-1 pt-3 text-sm leading-5 shadow-none focus-visible:ring-0 focus-visible:ring-offset-0"
             />

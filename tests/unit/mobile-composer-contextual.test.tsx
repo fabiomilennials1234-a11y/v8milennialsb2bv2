@@ -9,7 +9,7 @@
  *  5. Send button calls mutation
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor, createEvent } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 // ─── Mocks ────────────────────────────────────────────────────────────────────
@@ -363,5 +363,52 @@ describe("MobileComposerContextual", () => {
       expect(toast.error).toHaveBeenCalledWith("Arquivo vazio — selecione outro arquivo.");
     });
     expect(mockMediaMutateAsync).not.toHaveBeenCalled();
+  });
+});
+
+// ─── Colar imagem (Ctrl/⌘+V) — mesmo preview do picker ─────────────────────────
+
+function clipboardData({ images = [] as File[], text = "" } = {}) {
+  return {
+    items: images.map((f) => ({ kind: "file", type: f.type, getAsFile: () => f })),
+    files: images,
+    getData: (fmt: string) => (fmt === "text/plain" ? text : ""),
+  };
+}
+
+describe("MobileComposerContextual — colar imagem", () => {
+  beforeEach(() => {
+    mockDraft = "";
+    mockMediaMutateAsync.mockClear();
+  });
+
+  it("imagem colada no campo abre o preview e só envia após confirmar", async () => {
+    renderComposer();
+    const field = screen.getByLabelText("Mensagem para João");
+    const ev = createEvent.paste(field, {
+      clipboardData: clipboardData({ images: [new File(["png"], "image.png", { type: "image/png" })] }),
+    });
+    fireEvent(field, ev);
+    expect(ev.defaultPrevented).toBe(true);
+
+    await waitFor(() => expect(screen.getByTestId("attachment-preview")).toBeInTheDocument());
+    expect(screen.getByRole("img").getAttribute("alt")).toMatch(/^print-\d{8}-\d{6}\.png$/);
+    expect(mockMediaMutateAsync).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: /Enviar Imagem/ }));
+    await waitFor(() =>
+      expect(mockMediaMutateAsync).toHaveBeenCalledWith(
+        expect.objectContaining({ mediaType: "image", mimetype: "image/png" }),
+      ),
+    );
+  });
+
+  it("texto colado segue nativo, sem preview", () => {
+    renderComposer();
+    const field = screen.getByLabelText("Mensagem para João");
+    const ev = createEvent.paste(field, { clipboardData: clipboardData({ text: "bom dia" }) });
+    fireEvent(field, ev);
+    expect(ev.defaultPrevented).toBe(false);
+    expect(screen.queryByTestId("attachment-preview")).not.toBeInTheDocument();
   });
 });

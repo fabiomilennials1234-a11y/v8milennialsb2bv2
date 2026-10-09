@@ -25,6 +25,7 @@ import { cn } from "@/lib/utils";
 import { useAuth, useCurrentTeamMember } from "@/modules/identity";
 import { useConversationDraft } from "@/modules/communication/hooks/useConversationDraft";
 import { useSendWhatsAppMessage, useSendWhatsAppMedia } from "@/modules/communication/hooks/chat/useWhatsAppSend";
+import { useClipboardImagePaste } from "@/modules/communication/hooks/chat/useClipboardImagePaste";
 import { useMessageTemplates } from "@/modules/communication/hooks/useMessageTemplates";
 import { useKeyboardOffset } from "@/shared/hooks/use-keyboard-offset";
 import { AudioRecorder } from "@/modules/communication/components/chat/media/AudioRecorder";
@@ -197,6 +198,10 @@ export function MobileComposerContextual({
       notifyError(caught, { fallback: "Não foi possível ler arquivo. Tente novamente." });
     }
   }, [isSending]);
+
+  // Colar imagem (teclado físico no tablet) cai no mesmo preview do picker;
+  // o gate de envio já mora em handleFileSelected.
+  const handlePaste = useClipboardImagePaste({ onImage: handleFileSelected });
 
   const clearPendingAttachment = useCallback(() => {
     setPendingAttachment(null);
@@ -505,6 +510,7 @@ export function MobileComposerContextual({
               setMessage(val);
               setShowSlashPopover(val.startsWith("/") && val.length > 0);
             }}
+            onPaste={handlePaste}
             disabled={isSending}
             aria-label={`Mensagem para ${contactName}`}
             className="w-full min-h-[40px] max-h-32 resize-none rounded-[20px] border border-border/60 bg-sunken py-2 leading-5 focus-visible:bg-card"
