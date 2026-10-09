@@ -5,7 +5,7 @@
  * Just avatar + text + badges + tap handler.
  *
  * V5: mesmo vocabulário da linha do desktop (mockup) — três andares
- * (nome · IA · hora / prévia · contador / caixa · pediu atendente), avatar no
+ * (nome · IA · hora / prévia · contador / responsável · pediu atendente), avatar no
  * gradiente do contato e a selecionada em ouro. O celular segue lista →
  * conversa; só a linha muda de forma.
  */
@@ -19,12 +19,12 @@ import {
   type InboxContact,
 } from "@/modules/communication/hooks/chat/types";
 import type { CaixaDaLinha } from "@/modules/communication/lib/caixaUnificada";
+import type { ResponsavelDaLinha } from "@/modules/communication/lib/responsavelDaLinha";
 import { ChannelBadge } from "../ChannelBadge";
-import { instanceColor } from "../bubble/utils/instanceColor";
 import { getAvatarGradient } from "./avatarGradient";
 import { useNomeDoLeadPrimeiro } from "@/modules/communication/hooks/chat/useNomeDoLeadPrimeiro";
 import { useNomeCodContatoLead } from "@/modules/communication/hooks/chat/useNomeCodContatoLead";
-import { contactDisplayName, formatContactTime } from "./ConversationListItem";
+import { contactDisplayName, formatContactTime, SegmentoResponsavel } from "./ConversationListItem";
 
 // ─── Props ───────────────────────────────────────────────────────────────────
 
@@ -38,8 +38,12 @@ export interface MobileConversationRowProps {
   stageColor?: string | null;
   /** Fila de handoff (`waiting-human-leads`) — a mesma do desktop. */
   waitingHumanLeadIds?: Set<string>;
-  /** A caixa de onde a conversa corre; ausente com uma caixa só. */
+  /** A caixa de onde a conversa corre — vai no tooltip do responsável. */
   caixa?: CaixaDaLinha;
+  /** Dono do lead — mesmo contrato de `ConversationListItemProps.responsavel`. */
+  responsavel?: ResponsavelDaLinha | null;
+  /** Mais de uma caixa marcada: a bolinha ganha a cor da caixa. */
+  variasCaixas?: boolean;
 }
 
 // ─── Component ───────────────────────────────────────────────────────────────
@@ -53,6 +57,8 @@ export function MobileConversationRow({
   stageColor,
   waitingHumanLeadIds,
   caixa,
+  responsavel,
+  variasCaixas,
 }: MobileConversationRowProps) {
   const nomeDoLeadPrimeiro = useNomeDoLeadPrimeiro();
   const nomeCodContato = useNomeCodContatoLead();
@@ -86,7 +92,9 @@ export function MobileConversationRow({
 
   const pediuAtendente =
     !!contact.lead_id && (waitingHumanLeadIds?.has(contact.lead_id) ?? false);
-  const temMeta = !!caixa || pediuAtendente;
+  // Mesmo critério do `SegmentoResponsavel`: sem dono a afirmar, o modo
+  // unificado ainda mostra a caixa.
+  const temMeta = responsavel !== undefined || (!!variasCaixas && !!caixa) || pediuAtendente;
 
   return (
     <div
@@ -205,19 +213,15 @@ export function MobileConversationRow({
           </div>
         </div>
 
-        {/* Andar 3 — caixa · pediu atendente. Some quando não há o que dizer. */}
+        {/* Andar 3 — responsável · pediu atendente. Some quando não há o que dizer. */}
         {temMeta && (
           <div className="mt-1 flex min-w-0 items-center gap-2 overflow-hidden text-[10.5px] leading-none text-muted-foreground group-data-[selected=true]/linha:text-primary-foreground/70">
-            {caixa && (
-              <span className="flex min-w-0 shrink items-center gap-1" title={`Caixa: ${caixa.nome}`}>
-                <span
-                  className="h-1.5 w-1.5 shrink-0 rounded-full"
-                  style={{ backgroundColor: instanceColor(caixa.id) }}
-                  aria-hidden
-                />
-                <span className="truncate">{caixa.nome}</span>
-              </span>
-            )}
+            <SegmentoResponsavel
+              responsavel={responsavel}
+              caixa={caixa}
+              variasCaixas={variasCaixas}
+              className="min-w-0 shrink"
+            />
             {pediuAtendente && (
               <span className="flex shrink-0 items-center gap-1 font-semibold text-destructive group-data-[selected=true]/linha:text-primary-foreground">
                 <span

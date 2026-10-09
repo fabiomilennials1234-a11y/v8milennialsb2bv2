@@ -4,6 +4,12 @@ import { render, screen } from "@testing-library/react";
 import { ConversationListItem, type ConversationListItemProps } from "./ConversationListItem";
 import type { ChatContact } from "@/modules/communication/hooks/chat/types";
 
+// As flags de nome (`chat_nome_do_lead`, `chat_nome_cod_contato_lead`) leem a
+// org via AuthProvider; desligadas aqui, a linha usa a regra de nome de sempre.
+vi.mock("@/modules/platform/hooks/useFeatureFlag", () => ({
+  useFeatureFlag: () => ({ enabled: false }),
+}));
+
 function contact(over: Partial<ChatContact> = {}): ChatContact {
   return {
     channel: "whatsapp",
@@ -94,5 +100,102 @@ describe("ConversationListItem — linha de três andares (V5)", () => {
     render(<ConversationListItem {...baseProps({ contact: contact({ last_message_direction: "outgoing" }) })} />);
     expect(screen.getByText("Você:")).toBeInTheDocument();
     expect(screen.queryByTitle("A última mensagem foi do Copilot")).not.toBeInTheDocument();
+  });
+});
+
+describe("ConversationListItem — responsável do lead no lugar da caixa", () => {
+  const caixa = { id: "inst-1", nome: "Riofix", kind: "whatsapp" as const };
+
+  it("com dono: mostra o nome curto, e não o nome da caixa", () => {
+    render(
+      <ConversationListItem
+        {...baseProps({ caixa, responsavel: { nome: "Ana S.", nomeCompleto: "Ana Paula Souza" } })}
+      />,
+    );
+    expect(screen.getByText("Ana S.")).toBeInTheDocument();
+    expect(screen.queryByText("Riofix")).not.toBeInTheDocument();
+    expect(screen.queryByText("Sem responsável")).not.toBeInTheDocument();
+  });
+
+  it("tooltip traz o responsável completo e a caixa", () => {
+    render(
+      <ConversationListItem
+        {...baseProps({ caixa, responsavel: { nome: "Ana S.", nomeCompleto: "Ana Paula Souza" } })}
+      />,
+    );
+    expect(screen.getByTestId("linha-responsavel")).toHaveAttribute(
+      "title",
+      "Responsável: Ana Paula Souza · Caixa: Riofix",
+    );
+  });
+
+  it("sem dono (null): 'Sem responsável' discreto", () => {
+    render(<ConversationListItem {...baseProps({ caixa, responsavel: null })} />);
+    const rotulo = screen.getByText("Sem responsável");
+    expect(rotulo).toHaveClass("italic", "opacity-60");
+    expect(screen.getByTestId("linha-responsavel")).toHaveAttribute(
+      "title",
+      "Responsável: Sem responsável · Caixa: Riofix",
+    );
+  });
+
+  it("sem lead / pendente (undefined): segmento não renderiza", () => {
+    render(
+      <ConversationListItem
+        {...baseProps({ caixa, contact: contact({ lead_id: null }), responsavel: undefined })}
+      />,
+    );
+    expect(screen.queryByTestId("linha-responsavel")).not.toBeInTheDocument();
+    expect(screen.queryByText("Sem responsável")).not.toBeInTheDocument();
+    expect(screen.queryByText("Riofix")).not.toBeInTheDocument();
+  });
+
+  it("modo unificado sem dono a afirmar (undefined): volta bolinha + nome da caixa", () => {
+    render(
+      <ConversationListItem
+        {...baseProps({ caixa, contact: contact({ lead_id: null }), responsavel: undefined, variasCaixas: true })}
+      />,
+    );
+    expect(screen.queryByTestId("linha-responsavel")).not.toBeInTheDocument();
+    const seg = screen.getByTestId("linha-caixa");
+    expect(seg).toHaveAttribute("title", "Caixa: Riofix");
+    expect(seg).toHaveTextContent("Riofix");
+    expect((seg.firstElementChild as HTMLElement).style.backgroundColor).not.toBe("");
+    expect(screen.queryByText("Sem responsável")).not.toBeInTheDocument();
+  });
+
+  it("etapa continua igual ao lado do responsável", () => {
+    render(
+      <ConversationListItem
+        {...baseProps({ caixa, stageLabel: "Vendido", responsavel: { nome: "Ana S.", nomeCompleto: "Ana Souza" } })}
+      />,
+    );
+    expect(screen.getByTitle("Etapa: Vendido")).toHaveTextContent("Vendido");
+  });
+
+  it("uma caixa: bolinha neutra; várias caixas: bolinha na cor da caixa", () => {
+    const { rerender } = render(
+      <ConversationListItem {...baseProps({ caixa, responsavel: null })} />,
+    );
+    const bolinha = () => screen.getByTestId("linha-responsavel").firstElementChild as HTMLElement;
+    expect(bolinha()).toHaveClass("bg-current");
+    expect(bolinha().style.backgroundColor).toBe("");
+
+    rerender(<ConversationListItem {...baseProps({ caixa, responsavel: null, variasCaixas: true })} />);
+    expect(bolinha()).not.toHaveClass("bg-current");
+    expect(bolinha().style.backgroundColor).not.toBe("");
+  });
+
+  it("preserva o fio 'também em X'", () => {
+    render(
+      <ConversationListItem
+        {...baseProps({
+          caixa,
+          responsavel: { nome: "Ana S.", nomeCompleto: "Ana Souza" },
+          tambemEm: [{ id: "inst-2", nome: "Oficial", kind: "whatsapp" as const }],
+        })}
+      />,
+    );
+    expect(screen.getByText("também em Oficial")).toBeInTheDocument();
   });
 });

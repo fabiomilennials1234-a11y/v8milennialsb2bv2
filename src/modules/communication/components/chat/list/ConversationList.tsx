@@ -31,6 +31,7 @@ import { useNomeDoLeadPrimeiro } from "@/modules/communication/hooks/chat/useNom
 import { useNomeCodContatoLead } from "@/modules/communication/hooks/chat/useNomeCodContatoLead";
 import { SeletorDeCaixas } from "./SeletorDeCaixas";
 import type { CaixaDaLinha } from "@/modules/communication/lib/caixaUnificada";
+import type { ResponsavelDaLinha } from "@/modules/communication/lib/responsavelDaLinha";
 import type { NaoLidasDaCaixa } from "@/modules/communication/hooks/chat/useNaoLidasPorCaixa";
 import { MobileConversationRow } from "./MobileConversationRow";
 import { MobileChatListHeader, type MobileChatFilter } from "./MobileChatListHeader";
@@ -156,6 +157,12 @@ interface ConversationListProps {
   funnelOptions: FunnelOption[];
   vendorOptions: { id: string; name: string }[];
   resolveContactVendorId: (contact: ChatContact) => string | null;
+  /**
+   * Dono do lead da linha, resolvido no shell (é lá que moram o mapa de donos
+   * e a lista de membros). `undefined` = a linha não desenha o segmento.
+   * Ausente = nenhuma linha desenha — o caminho de quem não é o /chat.
+   */
+  resolveResponsavel?: (contact: InboxContact) => ResponsavelDaLinha | null | undefined;
   currentTeamMemberId: string | null;
   canSeeUnassigned: boolean;
   waitingHumanLeadIds?: Set<string>;
@@ -209,6 +216,7 @@ export function ConversationList({
   funnelOptions,
   vendorOptions,
   resolveContactVendorId,
+  resolveResponsavel,
   currentTeamMemberId,
   canSeeUnassigned,
   waitingHumanLeadIds,
@@ -737,6 +745,8 @@ export function ConversationList({
                     stageLabel={stageLabelFor(contact)}
                     caixa={metaPorLinha?.get(contactKey(contact))?.caixa}
                     tambemEm={metaPorLinha?.get(contactKey(contact))?.tambemEm}
+                    responsavel={resolveResponsavel?.(contact)}
+                    variasCaixas={modoUnificado}
                   />)}
                 </div>
               );
@@ -755,6 +765,8 @@ export function ConversationList({
                   onPress={onSelectContact}
                   waitingHumanLeadIds={waitingHumanLeadIds}
                   caixa={metaPorLinha?.get(contactKey(contact))?.caixa}
+                  responsavel={resolveResponsavel?.(contact)}
+                  variasCaixas={modoUnificado}
                 />
               ) : (
                 <ConversationListItem
@@ -777,6 +789,8 @@ export function ConversationList({
                   stageLabel={stageLabelFor(contact)}
                   caixa={metaPorLinha?.get(contactKey(contact))?.caixa}
                   tambemEm={metaPorLinha?.get(contactKey(contact))?.tambemEm}
+                  responsavel={resolveResponsavel?.(contact)}
+                  variasCaixas={modoUnificado}
                 />
               ))}
               </div>
