@@ -1,3 +1,14 @@
+---
+type: changelog
+title: Motivo da perda — porta única em toda movimentação humana
+status: in-progress
+created: 2026-10-09
+updated: 2026-10-09
+tags: [changelog, funis, perda, chat, whatsapp, riofix]
+related: []
+owner: claude-agent
+---
+
 # 2026-10-09 — Motivo da perda: porta única em toda movimentação humana
 
 ## Mudanças
