@@ -4644,15 +4644,15 @@ index 6aeb2f49c..423a8184b 100644
        } else if (pipeType === "upsell") {
 diff --git a/classic/src/modules/leads/hooks/useLeadPhones.ts b/classic/src/modules/leads/hooks/useLeadPhones.ts
 new file mode 100644
-index 000000000..8805f287b
+index 000000000..d8afe80b4
 --- /dev/null
 +++ b/classic/src/modules/leads/hooks/useLeadPhones.ts
 @@ -0,0 +1,111 @@
 +import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 +import { supabase } from "@/integrations/supabase/client";
 +import {
++  erroDeTelefone,
 +  leadPhoneFromRow,
-+  mensagemDoErroDeTelefone,
 +  ordenarTelefones,
 +  type LeadPhone,
 +  type LeadPhoneRow,
@@ -4720,7 +4720,7 @@ index 000000000..8805f287b
 +          is_primary: t.isPrimary,
 +        })),
 +      });
-+      if (error) throw new Error(mensagemDoErroDeTelefone(error));
++      if (error) throw erroDeTelefone(error);
 +    },
 +    onSettled: () => invalidarTelefones(qc, leadId),
 +  });
@@ -4736,7 +4736,7 @@ index 000000000..8805f287b
 +        p_phone: phone,
 +        p_label: label?.trim() || null,
 +      } as never);
-+      if (error) throw new Error(mensagemDoErroDeTelefone(error, "Não foi possível nomear o contato"));
++      if (error) throw erroDeTelefone(error);
 +    },
 +    onSettled: () => invalidarTelefones(qc, leadId),
 +  });
@@ -4750,7 +4750,7 @@ index 000000000..8805f287b
 +        p_deal_id: dealId,
 +        p_lead_phone_id: leadPhoneId,
 +      });
-+      if (error) throw new Error(mensagemDoErroDeTelefone(error, "Não foi possível escolher o telefone do negócio"));
++      if (error) throw erroDeTelefone(error);
 +    },
 +    onSettled: () =>
 +      Promise.all([
@@ -5418,10 +5418,10 @@ index 000000000..8bead654d
 +}
 diff --git a/classic/src/modules/leads/lib/lead-phones.ts b/classic/src/modules/leads/lib/lead-phones.ts
 new file mode 100644
-index 000000000..aefea4cdd
+index 000000000..c2bc37d50
 --- /dev/null
 +++ b/classic/src/modules/leads/lib/lead-phones.ts
-@@ -0,0 +1,117 @@
+@@ -0,0 +1,135 @@
 +import { formatPhoneBR } from "@/shared/format/phone";
 +
 +/**
@@ -5528,16 +5528,34 @@ index 000000000..aefea4cdd
 +  lead_not_found: "Lead não encontrado. Atualize a ficha.",
 +};
 +
-+export function mensagemDoErroDeTelefone(
++/** A frase da tela para uma recusa CONHECIDA das RPCs de telefone; `null` se não for uma. */
++export function recusaDeTelefone(
 +  error: { code?: string; message?: string } | null | undefined,
-+  fallback = "Não foi possível salvar os telefones",
-+): string {
++): string | null {
 +  const msg = error?.message ?? "";
 +  if (RECUSAS[msg]) return RECUSAS[msg];
 +  // idx_leads_org_phone_unique: o número escolhido como principal já é o
 +  // principal de OUTRO lead da organização.
 +  if (error?.code === "23505") return "Este número já é o principal de outro lead da organização";
-+  return fallback;
++  return null;
++}
++
++export function mensagemDoErroDeTelefone(
++  error: { code?: string; message?: string } | null | undefined,
++  fallback = "Não foi possível salvar os telefones",
++): string {
++  return recusaDeTelefone(error) ?? fallback;
++}
++
++/**
++ * O que a mutation lança: recusa conhecida vira a frase da tela; o resto sobe
++ * ORIGINAL, para `toAppError` classificar, relatar e dar a referência
++ * (ADR-0038). Embrulhar tudo num `Error` genérico apagava a causa — foi assim
++ * que um "Não foi possível salvar os telefones" chegou sem pista nenhuma.
++ */
++export function erroDeTelefone(error: { code?: string; message?: string }): unknown {
++  const recusa = recusaDeTelefone(error);
++  return recusa ? new Error(recusa) : error;
 +}
 diff --git a/classic/src/modules/leads/lib/lead-realtime-relevance.ts b/classic/src/modules/leads/lib/lead-realtime-relevance.ts
 new file mode 100644

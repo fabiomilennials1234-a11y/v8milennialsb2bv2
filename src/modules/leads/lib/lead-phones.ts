@@ -104,14 +104,32 @@ const RECUSAS: Record<string, string> = {
   lead_not_found: "Lead não encontrado. Atualize a ficha.",
 };
 
-export function mensagemDoErroDeTelefone(
+/** A frase da tela para uma recusa CONHECIDA das RPCs de telefone; `null` se não for uma. */
+export function recusaDeTelefone(
   error: { code?: string; message?: string } | null | undefined,
-  fallback = "Não foi possível salvar os telefones",
-): string {
+): string | null {
   const msg = error?.message ?? "";
   if (RECUSAS[msg]) return RECUSAS[msg];
   // idx_leads_org_phone_unique: o número escolhido como principal já é o
   // principal de OUTRO lead da organização.
   if (error?.code === "23505") return "Este número já é o principal de outro lead da organização";
-  return fallback;
+  return null;
+}
+
+export function mensagemDoErroDeTelefone(
+  error: { code?: string; message?: string } | null | undefined,
+  fallback = "Não foi possível salvar os telefones",
+): string {
+  return recusaDeTelefone(error) ?? fallback;
+}
+
+/**
+ * O que a mutation lança: recusa conhecida vira a frase da tela; o resto sobe
+ * ORIGINAL, para `toAppError` classificar, relatar e dar a referência
+ * (ADR-0038). Embrulhar tudo num `Error` genérico apagava a causa — foi assim
+ * que um "Não foi possível salvar os telefones" chegou sem pista nenhuma.
+ */
+export function erroDeTelefone(error: { code?: string; message?: string }): unknown {
+  const recusa = recusaDeTelefone(error);
+  return recusa ? new Error(recusa) : error;
 }
