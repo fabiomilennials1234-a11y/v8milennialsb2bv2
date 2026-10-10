@@ -221,7 +221,7 @@ async function encerrarNegocio(input: ActionInput, papel: "won" | "lost"): Promi
   // segunda venda que ninguém consegue apagar.
   const { data: atual, error: leituraErr } = await supabase
     .from("deals")
-    .select("id, outcome, organization_id")
+    .select("id, outcome, organization_id, metadata")
     .eq("id", dealId)
     .eq("organization_id", organizationId)
     .maybeSingle();
@@ -246,6 +246,23 @@ async function encerrarNegocio(input: ActionInput, papel: "won" | "lost"): Promi
   };
   if (papel === "lost" && typeof params.lossReason === "string" && params.lossReason.trim()) {
     patch.loss_reason = params.lossReason.trim();
+  }
+
+  // ── A execução que causou o desfecho ─────────────────────────────────────
+  // `trg_workflow_deal_outcome` (SQL, 20271115000000) dispara `deal_won`/
+  // `deal_lost` nesta mesma escrita e lê este carimbo como execução-pai: é o
+  // que encadeia `chain_depth` (teto 5) e corta o laço win_deal → deal_won →
+  // lose_deal → deal_lost → win_deal… Merge, não substituição: `metadata`
+  // carrega `workflow_execution_id` do `create_deal` e outras chaves. A base
+  // do merge é a leitura acima; a janela até o UPDATE é a mesma que a trava de
+  // `outcome` já aceita (escrita de metadata concorrente nela seria perdida).
+  const executionId = typeof params._executionId === "string" ? params._executionId.trim() : "";
+  if (executionId) {
+    const metadataAtual =
+      atual.metadata && typeof atual.metadata === "object" && !Array.isArray(atual.metadata)
+        ? (atual.metadata as Record<string, unknown>)
+        : {};
+    patch.metadata = { ...metadataAtual, outcome_execution_id: executionId };
   }
 
   const { error: upErr } = await supabase

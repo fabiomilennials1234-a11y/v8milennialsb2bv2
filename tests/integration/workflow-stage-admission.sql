@@ -4,8 +4,14 @@ INSERT INTO workflow_admission_test.workflows VALUES
  ('00000000-0000-0000-0000-000000000001','stage_changed',false),
  ('00000000-0000-0000-0000-000000000001','lead_created',true);
 SELECT workflow_admission_test.assert_move(0);
+-- 20271115000000: deal_won/deal_lost fire on deals.outcome and no longer admit.
+TRUNCATE workflow_admission_test.workflows;
+INSERT INTO workflow_admission_test.workflows VALUES
+ ('00000000-0000-0000-0000-000000000001','deal_won',true),
+ ('00000000-0000-0000-0000-000000000001','deal_lost',true);
+SELECT workflow_admission_test.assert_move(0);
 DO $$ DECLARE kind text; payload jsonb; expected jsonb; p record; BEGIN
- FOREACH kind IN ARRAY ARRAY['stage_changed','deal_won','deal_lost'] LOOP
+ FOREACH kind IN ARRAY ARRAY['stage_changed'] LOOP
   TRUNCATE workflow_admission_test.workflows;
   INSERT INTO workflow_admission_test.workflows VALUES('00000000-0000-0000-0000-000000000001',kind,true);
   PERFORM workflow_admission_test.assert_move(1);

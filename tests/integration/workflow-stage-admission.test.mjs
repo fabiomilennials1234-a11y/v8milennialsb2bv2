@@ -5,6 +5,10 @@ import { PGlite } from '@electric-sql/pglite';
 
 const migration = readFileSync(new URL('../../supabase/migrations/20271021000030_workflow_stage_http_admission.sql', import.meta.url), 'utf8');
 const rollback = readFileSync(new URL('../../supabase/migrations/rollback/20271021000030_workflow_stage_http_admission.sql', import.meta.url), 'utf8');
+// 20271115000000 redefine a admissão: deal_won/deal_lost deixaram de derivar de
+// stage_changed (nascem na transição de deals.outcome) e não admitem mais.
+const outcomeFix = readFileSync(new URL('../../supabase/migrations/20271115000000_negocio_ganho_dispara_automacao.sql', import.meta.url), 'utf8')
+  .match(/CREATE OR REPLACE FUNCTION public\.trigger_workflow_pipeline_stage_changed\(\)[\s\S]*?\$function\$;/)[0];
 const org = '00000000-0000-0000-0000-000000000001';
 const otherOrg = '00000000-0000-0000-0000-000000000002';
 const pipeline = '00000000-0000-0000-0000-000000000003';
@@ -17,7 +21,7 @@ const stage = '00000000-0000-0000-0000-000000000009';
 
 // A disposable Postgres engine executes the real trigger. Only HTTP delivery
 // is replaced by a collector; tests never contact Supabase or provider services.
-test('stage event admission preserves derived triggers, tenant scope, payload, grants and rollback', async () => {
+test('stage event admission: only stage_changed admits; tenant scope, payload, grants and rollback', async () => {
   const db = new PGlite();
   try {
     await db.exec(`CREATE ROLE authenticated; CREATE ROLE anon; CREATE ROLE service_role;
@@ -46,6 +50,8 @@ test('stage event admission preserves derived triggers, tenant scope, payload, g
     const beforeSecurity = await security();
     await db.exec(migration);
     assert.deepEqual(await security(), beforeSecurity);
+    await db.exec(outcomeFix);
+    assert.deepEqual(await security(), beforeSecurity, 'outcome fix preserves DEFINER, search_path and ACL');
     const original = (await db.query(`SELECT pg_get_functiondef('public.trigger_workflow_pipeline_stage_changed()'::regprocedure) AS definition`)).rows[0].definition;
     assert.match(original, /net\.http_post/);
     await db.exec(original.replaceAll('net.http_post', 'capacity_test_net.http_post'));
@@ -57,7 +63,11 @@ test('stage event admission preserves derived triggers, tenant scope, payload, g
     assert.equal((await move()).length, 0, 'no workflows: no HTTP');
     await db.exec(`INSERT INTO workflows VALUES('${otherOrg}','stage_changed',true),('${org}','stage_changed',false),('${org}','lead_created',true);`);
     assert.equal((await move()).length, 0, 'other tenant, inactive and unrelated workflows cannot admit');
-    for (const type of ['stage_changed','deal_won','deal_lost']) {
+    for (const type of ['deal_won','deal_lost']) {
+      await db.exec(`TRUNCATE workflows; INSERT INTO workflows VALUES('${org}','${type}',true);`);
+      assert.equal((await move()).length, 0, `active ${type} no longer admits (fires on deals.outcome)`);
+    }
+    for (const type of ['stage_changed']) {
       await db.exec(`TRUNCATE workflows; INSERT INTO workflows VALUES('${org}','${type}',true);`);
       const calls = await move();
       assert.equal(calls.length, 1, `active ${type} must preserve dispatch`);
@@ -88,7 +98,10 @@ test('stage event admission preserves derived triggers, tenant scope, payload, g
     await db.exec('TRUNCATE workflows;');
     assert.equal((await move()).length, 1, 'rollback restores legacy unguarded dispatch');
     await db.exec(migration.replaceAll('net.http_post', 'capacity_test_net.http_post'));
+    await db.exec(outcomeFix.replaceAll('net.http_post', 'capacity_test_net.http_post'));
     assert.equal((await move()).length, 0, 'reapply restores admission');
+    await db.exec(`INSERT INTO workflows VALUES('${org}','deal_won',true);`);
+    assert.equal((await move()).length, 0, 'reapplied admission ignores deal_won');
   } finally { await db.close(); }
 });
 

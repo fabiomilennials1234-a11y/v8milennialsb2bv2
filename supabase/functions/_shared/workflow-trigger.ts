@@ -12,7 +12,12 @@
  *
  * PG triggers handle: lead_created, tag_added, score_reached, lead_assigned,
  * field_changed, meeting_confirmed, proposal_accepted, proposal_lost,
- * campaign_status_changed
+ * campaign_status_changed, deal_created, deal_won, deal_lost
+ *
+ * `deal_won`/`deal_lost` NÃO são derivados aqui: nascem na transição de
+ * `deals.outcome` (trigger `trg_workflow_deal_outcome`, migration
+ * 20271115000000), seja qual for o escritor. Derivar de `stage_changed`
+ * dobraria o disparo do card arrastado para a etapa `won`.
  */
 
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
@@ -49,71 +54,6 @@ interface FireTriggerParams {
   dealId?: string | null;
   context?: Record<string, unknown>;
   source?: string;
-}
-
-/**
- * O papel da etapa de destino: `won`, `lost` ou outra coisa.
- *
- * É daqui que saem os gatilhos "Negócio ganho" e "Negócio perdido". Eles NÃO
- * leem `deals.won`: medido em prod (2026-08-25), 34.662 dos 34.980 negócios têm
- * `won = false` porque o backfill carimbou assim tudo que não estava ganho — a
- * coluna responde "não foi ganho", não "foi perdido". Quem sabe a verdade é a
- * POSIÇÃO (ADR-0023 §5), e ganhar/perder é chegar na etapa terminal
- * (ADR-0023 §4, §5). É o mesmo critério que o card do Negócio usa para desenhar
- * os botões "Ganhou" e "Perdeu".
- */
-async function resolveStageRole(
-  supabase: SupabaseClient,
-  organizationId: string,
-  ctx: Record<string, unknown>,
-): Promise<string | null> {
-  // Caminho canônico (SCRUM-627): o contexto unificado carrega o UUID da etapa
-  // (`pipeline_stages.id` — tabela ÚNICA pós-20270906001000, cobre sistema e
-  // custom). Resolve direto, sem depender de slug nem de qual funil é.
-  const stageId = asUuidOrNull(ctx.stage_id);
-  if (stageId) {
-    const { data } = await supabase
-      .from("pipeline_stages")
-      .select("stage_role, organization_id")
-      .eq("id", stageId)
-      .eq("organization_id", organizationId)
-      .maybeSingle();
-    if (data && data.organization_id === organizationId) {
-      return (data.stage_role as string) ?? null;
-    }
-  }
-
-  const toStage = typeof ctx.to_stage === "string" ? ctx.to_stage : null;
-  if (!toStage) return null;
-
-  const pipelineId = typeof ctx.pipeline_id === "string" ? ctx.pipeline_id : null;
-  if (pipelineId) {
-    const { data } = await supabase
-      .from("pipeline_stages")
-      .select("stage_role")
-      .eq("organization_id", organizationId)
-      .eq("pipeline_id", pipelineId)
-      .eq("stage_key", toStage)
-      .eq("is_active", true)
-      .maybeSingle();
-    return (data?.stage_role as string) ?? null;
-  }
-
-  // Compatibilidade de contexto anterior ao pipeline_id obrigatório.
-  const pipeType = typeof ctx.pipe_type === "string" ? ctx.pipe_type : null;
-  if (pipeType) {
-    const { data } = await supabase
-      .from("pipeline_stages")
-      .select("stage_role")
-      .eq("organization_id", organizationId)
-      .eq("pipeline_type", pipeType)
-      .eq("stage_key", toStage)
-      .eq("is_active", true)
-      .maybeSingle();
-    return (data?.stage_role as string) ?? null;
-  }
-
-  return null;
 }
 
 /**
@@ -166,6 +106,33 @@ function parseStrictIdFilter(config: Record<string, unknown>, key: string): Stri
     }
   }
   return { valid: true, ids };
+}
+
+/**
+ * Filtro de posição do Negócio (`pipeline_ids` + `stage_ids`), compartilhado
+ * por `deal_created`, `deal_won` e `deal_lost`. Ausência/lista vazia = qualquer
+ * funil; forma inválida falha fechada; etapa sem funil marcado é config
+ * incoerente (a interface só oferece etapas dentro dos funis marcados).
+ */
+function matchesPositionFilter(
+  config: Record<string, unknown>,
+  context: Record<string, unknown>,
+): boolean {
+  const pipelines = parseStrictIdFilter(config, "pipeline_ids");
+  if (!pipelines.valid) return false;
+  if (pipelines.ids.length > 0) {
+    const pipelineId = asUuidOrNull(context.pipeline_id);
+    if (!pipelineId || !pipelines.ids.includes(pipelineId)) return false;
+  }
+
+  const stages = parseStrictIdFilter(config, "stage_ids");
+  if (!stages.valid) return false;
+  if (stages.ids.length > 0) {
+    if (pipelines.ids.length === 0) return false;
+    const stageId = asUuidOrNull(context.stage_id);
+    if (!stageId || !stages.ids.includes(stageId)) return false;
+  }
+  return true;
 }
 
 /**
@@ -348,41 +315,6 @@ export async function fireTrigger(params: FireTriggerParams): Promise<number> {
   const ctxObj = (context ?? {}) as Record<string, unknown>;
   const entryId = params.entryId ?? asUuidOrNull(ctxObj.pipeline_entry_id);
   const dealId = params.dealId ?? asUuidOrNull(ctxObj.deal_id);
-
-  /**
-   * ── Gatilhos derivados: "Negócio ganho" e "Negócio perdido" ─────────────
-   * Ganhar e perder são MOVIMENTOS para a etapa terminal (ADR-0023 §4/§5), e
-   * por isso o fato já chega aqui como `stage_changed`. Um gatilho próprio em
-   * `deals.won` leria uma coluna que o backfill deixou mentindo (34.662 linhas
-   * com `won = false` que ninguém perdeu) e ainda seria cego aos 26% de cards
-   * sem linha em `deals`.
-   *
-   * Roda ANTES do corpo, e não no fim: o corpo tem quatro saídas antecipadas
-   * (nenhum workflow, nenhum casou, todos deduplicados, insert falhou) e em
-   * três delas o negócio foi ganho do mesmo jeito. Derivar no fim faria
-   * "Negócio ganho" depender de existir um workflow de `stage_changed` — que é
-   * exatamente o vínculo que este gatilho existe para não ter.
-   *
-   * Sem recursão: só `stage_changed` deriva, e o derivado nunca é `stage_changed`.
-   */
-  if (triggerType === "stage_changed") {
-    try {
-      const role = await resolveStageRole(supabase, organizationId, ctxObj);
-      const derivado = role === "won" ? "deal_won" : role === "lost" ? "deal_lost" : null;
-      if (derivado) {
-        await fireTrigger({
-          ...params,
-          triggerType: derivado,
-          entryId,
-          dealId,
-          context: { ...ctxObj, trigger: derivado, stage_role: role },
-        });
-      }
-    } catch (err) {
-      // Derivado que falha não pode derrubar o `stage_changed` que o originou.
-      console.warn("[workflow-trigger] falha ao derivar deal_won/deal_lost:", err);
-    }
-  }
 
   try {
     // `selectFields` é uma UNIÃO de dois literais, e o parser de tipos do
@@ -894,22 +826,7 @@ export function matchesTriggerConfig(
       const source = (config.source as string) || "any";
       if (source !== "any" && source !== context.deal_source) return false;
 
-      const pipelines = parseStrictIdFilter(config, "pipeline_ids");
-      if (!pipelines.valid) return false;
-      if (pipelines.ids.length > 0) {
-        const pipelineId = asUuidOrNull(context.pipeline_id);
-        if (!pipelineId || !pipelines.ids.includes(pipelineId)) return false;
-      }
-
-      const stages = parseStrictIdFilter(config, "stage_ids");
-      if (!stages.valid) return false;
-      if (stages.ids.length > 0) {
-        // Etapa sem funil selecionado é uma config incoerente: a interface só
-        // oferece etapas dentro dos funis marcados e o matcher falha fechado.
-        if (pipelines.ids.length === 0) return false;
-        const stageId = asUuidOrNull(context.stage_id);
-        if (!stageId || !stages.ids.includes(stageId)) return false;
-      }
+      if (!matchesPositionFilter(config, context)) return false;
 
       if (config.filter_owner_id && config.filter_owner_id !== context.owner_id) return false;
 
@@ -919,6 +836,14 @@ export function matchesTriggerConfig(
       }
 
       return true;
+    }
+
+    case "deal_won":
+    case "deal_lost": {
+      // Espelho de `matches_workflow_trigger_config` (SQL, 20271115000000).
+      // `process-workflow-executions` revalida por aqui antes de executar: se
+      // os dois divergirem, a execução criada no banco morre como "Skipped".
+      return matchesPositionFilter(config, context);
     }
 
     case "lead_assigned": {
