@@ -13,7 +13,7 @@ function pendingFor(
   to: OperacaoColumn,
   reply: string | null = "Corrigimos o envio das mensagens.",
 ): PendingMove {
-  const v = canMove(t(status), { customer_reply: reply }, to, true);
+  const v = canMove(t(status), { customer_reply: reply, kind: "feature" }, to, true);
   if (!v.ok) throw new Error(v.reason);
   return { ticketId: "t1", ticketTitle: "Mensagens não saem", move: v.move, reply };
 }
@@ -64,6 +64,19 @@ describe("OperacaoMoveDialog", () => {
     expect(screen.getByText("Reabrir chamado fechado?")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Reabrir chamado" }));
     expect(onConfirm).toHaveBeenCalledWith({ sendReply: false });
+  });
+
+  it("Feature recusada: diz o que o cliente vê e confirma sem enviar", () => {
+    const { onConfirm } = renderDialog(pendingFor("em_andamento", "recusada"));
+    expect(screen.getByText("Recusar a feature?")).toBeInTheDocument();
+    expect(screen.getByText(/passa a ver o chamado como Recusado/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Recusar feature" }));
+    expect(onConfirm).toHaveBeenCalledWith({ sendReply: false });
+  });
+
+  it("saindo de Feature recusada: confirma a reabertura", () => {
+    renderDialog(pendingFor("recusado", "andamento"));
+    expect(screen.getByText("Reabrir feature recusada?")).toBeInTheDocument();
   });
 
   it("movimento sem confirmação não abre diálogo", () => {

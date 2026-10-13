@@ -67,6 +67,7 @@ export function TicketThread({ ticketId, onBack }: Props) {
   const publicComments = comments.filter((c) => !c.is_internal);
 
   const closed = ticket?.status === "fechado";
+  const declined = ticket?.status === "recusado";
   const resolved = ticket?.status === "resolvido";
 
   // O anexo acompanha um Comentário, nunca o substitui: um turno que é só uma
@@ -164,6 +165,10 @@ export function TicketThread({ ticketId, onBack }: Props) {
       {closed ? (
         <p className="border-t border-border/50 bg-muted/20 px-6 py-4 text-center text-xs text-muted-foreground">
           Este chamado foi fechado. Abra um novo se o problema voltar.
+        </p>
+      ) : declined ? (
+        <p className="border-t border-border/50 bg-muted/20 px-6 py-4 text-center text-xs text-muted-foreground">
+          O suporte decidiu não seguir com este pedido. Abra um novo chamado se quiser conversar sobre ele.
         </p>
       ) : resolved ? (
         /* Sete dias de silêncio confirmam o conserto. Enquanto isso, reabrir é

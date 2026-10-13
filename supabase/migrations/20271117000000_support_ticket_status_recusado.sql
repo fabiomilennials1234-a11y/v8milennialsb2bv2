@@ -1,0 +1,13 @@
+-- Operação (Área Dev): estado `recusado` do Chamado — a coluna "Feature recusada".
+--
+-- Pedido do CTO (2026-10-13): nova etapa no kanban de /master/operacao para a
+-- feature que o time decide não construir.
+--
+-- Arquivo próprio porque um valor novo de enum não pode ser USADO na mesma
+-- transação que o cria. As funções que o leem vêm na migration seguinte
+-- (20271117000100), e o plpgsql só resolve o literal em tempo de execução.
+--
+-- Rollback: um valor de enum não sai sem recriar o tipo. O rollback de
+-- 20271117000100 devolve os chamados recusados para `fechado` e o valor fica
+-- inerte — nenhuma porta o escreve mais.
+ALTER TYPE public.support_ticket_status ADD VALUE IF NOT EXISTS 'recusado' AFTER 'fechado';
