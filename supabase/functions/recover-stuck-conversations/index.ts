@@ -4,6 +4,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getCorsHeaders } from "../_shared/cors.ts";
 import { withSecurityHeaders } from "../_shared/security-headers.ts";
 import { isCopilotCanceled } from "../_shared/copilot/cancellation.ts";
+import { checkReplyGate, replyTurnFromAgentResponse } from "../_shared/copilot/reply-gate.ts";
 
 // Force bundler to include provider modules (used via dynamic import in whatsapp-dispatch)
 import "../_shared/whatsapp-providers/evolution-provider.ts";
@@ -171,14 +172,16 @@ Deno.serve(withErrorBoundary("recover-stuck-conversations", async (req) => {
       if (parts.length === 0) { r.status = "skipped"; r.reason = "empty_generation"; results.push(r); continue; }
 
       // ── Entrega (mesmo padrão do whatsapp-webhook) ──
+      const replyTurn = replyTurnFromAgentResponse(agentData);
       let chunksSent = 0;
       for (let i = 0; i < parts.length; i++) {
         const text = parts[i]?.trim();
         if (!text) continue;
         if (i > 0) await new Promise((res) => setTimeout(res, 1200 + Math.random() * 800));
 
-        const recheck = await isCopilotCanceled(supabase, organization_id, lead.phone);
-        if (recheck.canceled) { r.canceled_mid_delivery = true; break; }
+        // Libera só o handoff do próprio turno (reply-gate.ts).
+        const recheck = await checkReplyGate(supabase, { organizationId: organization_id, phone: lead.phone, turn: replyTurn, gate: "recover_chunks" });
+        if (recheck.decision === "cancel") { r.canceled_mid_delivery = true; break; }
 
         const sendResult = await sendTextViaInstance(
           supabase, instance, lead.phone, text, { trackSource: "copilot" },

@@ -23,10 +23,13 @@ export interface CancellationCheck {
   ai_disabled: boolean;
   /**
    * True quando o `ai_disabled` veio do desligamento em massa do SISTEMA (script
-   * SQL direto, sem usuário) e não de uma ação manual ou pausa humana:
-   *   - pref `ai_disabled=true` com `set_by IS NULL`, ou
+   * SQL direto, sem usuário) e não de uma ação manual, transferência para
+   * humano ou pausa humana:
+   *   - pref `ai_disabled=true` com `set_by IS NULL` E `disabled_reason IS NULL`
+   *     (`'handoff'` = transferência — pegajosa, migration 20271120000000), ou
    *   - fallback `leads.ai_disabled=true` com `ai_disabled_at IS NULL`
-   * (todo toggle manual da UI grava `set_by`/`ai_disabled_at`; ver useCopilotToggle).
+   * (todo toggle manual da UI grava `set_by`/`ai_disabled_at`; ver useCopilotToggle;
+   * a transferência grava `ai_disabled_at` e o motivo `'handoff'`).
    *
    * O caller pode tratar esse caso como reativável-no-inbound: quando o lead
    * escreve, religa SÓ aquele contato e responde. Pausa humana e desligamento
@@ -78,12 +81,7 @@ export async function isCopilotCanceled(
     // 1. Source of truth: phone_ai_preferences (PK organization_id, normalized_phone).
     // Cobre DOIS gates phone-keyed: ai_disabled (toggle permanente) e
     // human_paused_until (pausa temporária quando humano assume — RC human-pause).
-    const { data: pref, error: prefErr } = await supabase
-      .from("phone_ai_preferences")
-      .select("ai_disabled, human_paused_until, set_by, set_at")
-      .eq("organization_id", organizationId)
-      .eq("normalized_phone", normalized)
-      .maybeSingle();
+    const { pref, error: prefErr, reasonKnown } = await readPhonePreference(supabase, organizationId, normalized);
 
     if (prefErr) {
       console.warn("[isCopilotCanceled] phone_ai_preferences read failed:", prefErr.message);
@@ -93,13 +91,16 @@ export async function isCopilotCanceled(
       );
       // ai_disabled (toggle permanente) tem prioridade sobre a pausa temporária.
       if (pref.ai_disabled) {
-        // set_by IS NULL → desligamento em massa do sistema (reativável no inbound).
-        // set_by preenchido → ação manual de um usuário (segue bloqueando).
+        // set_by IS NULL e sem motivo → desligamento em massa do sistema
+        // (reativável no inbound). set_by preenchido → ação manual de um
+        // usuário; motivo 'handoff' → transferência para humano. Os dois
+        // seguem bloqueando. Motivo ilegível (coluna ausente) → fail-safe:
+        // nunca religa.
         return {
           canceled: true,
           ai_disabled: true,
           source: "phone_ai_preferences",
-          systemDisabled: pref.set_by == null,
+          systemDisabled: reasonKnown && pref.set_by == null && pref.disabled_reason == null,
           disabledAt: (pref.set_at as string | null) ?? null,
           humanPauseActive,
         };
@@ -157,11 +158,56 @@ export async function isCopilotCanceled(
   }
 }
 
+interface PhonePreferenceRow {
+  ai_disabled: boolean | null;
+  human_paused_until: string | null;
+  set_by: string | null;
+  set_at: string | null;
+  disabled_reason?: string | null;
+}
+
+const PREF_COLUMNS = "ai_disabled, human_paused_until, set_by, set_at, disabled_reason";
+const PREF_COLUMNS_LEGACY = "ai_disabled, human_paused_until, set_by, set_at";
+
+/**
+ * Lê a preferência do telefone. Se a leitura com `disabled_reason` falhar
+ * (edge function publicada antes da migration 20271120000000, ou rollback dela),
+ * relê sem a coluna para NÃO perder os gates de `ai_disabled`/pausa humana — e
+ * devolve `reasonKnown=false`, que desliga a religação (fail-safe: na dúvida
+ * entre bulk e transferência, a IA continua desligada).
+ */
+async function readPhonePreference(
+  supabase: SupabaseClient,
+  organizationId: string,
+  normalized: string,
+): Promise<{ pref: PhonePreferenceRow | null; error: { message: string } | null; reasonKnown: boolean }> {
+  const query = (columns: string) =>
+    supabase
+      .from("phone_ai_preferences")
+      .select(columns)
+      .eq("organization_id", organizationId)
+      .eq("normalized_phone", normalized)
+      .maybeSingle();
+
+  const full = await query(PREF_COLUMNS);
+  if (!full.error) {
+    return { pref: (full.data as PhonePreferenceRow | null) ?? null, error: null, reasonKnown: true };
+  }
+  console.warn("[isCopilotCanceled] phone_ai_preferences read with disabled_reason failed:", full.error.message);
+  const legacy = await query(PREF_COLUMNS_LEGACY);
+  return {
+    pref: (legacy.data as PhonePreferenceRow | null) ?? null,
+    error: legacy.error ?? null,
+    reasonKnown: false,
+  };
+}
+
 /**
  * Reativação REATIVA disparada por mensagem do lead.
  *
  * Religa o copilot SÓ para este contato e SÓ quando o desligamento foi o bulk
- * do sistema (pref `set_by IS NULL` / lead `ai_disabled_at IS NULL`). Os guards
+ * do sistema (pref `set_by IS NULL` e `disabled_reason IS NULL` / lead
+ * `ai_disabled_at IS NULL`). Os guards
  * `.is(...)` garantem idempotência e blindam contra religar um desligamento
  * manual (Adriane) que tenha aparecido entre o check e a escrita.
  *
@@ -182,7 +228,10 @@ export async function reactivateSystemDisabledContact(
         .update({ ai_disabled: false })
         .eq("organization_id", organizationId)
         .eq("normalized_phone", normalized)
-        .is("set_by", null);
+        .is("set_by", null)
+        // Transferência para humano é pegajosa: nunca religa 'handoff'. Sem a
+        // coluna (antes da migration) o update falha → nada é religado.
+        .is("disabled_reason", null);
       if (prefErr) {
         console.warn("[reactivateSystemDisabledContact] pref update failed:", prefErr.message);
       }

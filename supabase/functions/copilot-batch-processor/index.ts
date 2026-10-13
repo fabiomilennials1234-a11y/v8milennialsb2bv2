@@ -25,6 +25,7 @@ import { getCorsHeaders } from "../_shared/cors.ts";
 import { withSecurityHeaders } from "../_shared/security-headers.ts";
 import { timingSafeCompare } from "../_shared/auth.ts";
 import { isCopilotCanceled } from "../_shared/copilot/cancellation.ts";
+import { checkReplyGate, replyTurnFromAgentResponse, type ReplyTurn } from "../_shared/copilot/reply-gate.ts";
 import { montarPayloadDoAgente } from "../_shared/copilot-batch-payload.ts";
 import { recordQuotePresentation, type QuotePresentation } from "../_shared/quotes/presentation.ts";
 import {
@@ -172,6 +173,7 @@ Deno.serve(withErrorBoundary('copilot-batch-processor', async (req: Request): Pr
     const agentMessageUrl = `${supabaseUrl}/functions/v1/agent-message`;
     let parts: string[] = [];
     let presentation: QuotePresentation | undefined;
+    let replyTurn: ReplyTurn = { leadId: null, sameTurnHandoff: null };
     try {
       const resp = await fetch(agentMessageUrl, {
         method: "POST",
@@ -206,6 +208,7 @@ Deno.serve(withErrorBoundary('copilot-batch-processor', async (req: Request): Pr
       }
       parts = data.messages ?? (data.message ? [data.message] : []);
       presentation = data.quote_presentation;
+      replyTurn = replyTurnFromAgentResponse(data);
     } catch (e) {
       await applyOutcome({ kind: "transient_error", error: e instanceof Error ? e.message : String(e) });
       return json({ ok: false, reason: "agent_message_exception" }, 200);
@@ -241,8 +244,9 @@ Deno.serve(withErrorBoundary('copilot-batch-processor', async (req: Request): Pr
       if (!text) continue;
       if (i > 0) await new Promise((r) => setTimeout(r, 1200 + Math.random() * 800));
 
-      const recheck = await isCopilotCanceled(supabase, orgId, phone);
-      if (recheck.canceled) { canceledMid = true; break; }
+      // Libera só o handoff do próprio turno (reply-gate.ts).
+      const recheck = await checkReplyGate(supabase, { organizationId: orgId, phone, turn: replyTurn, gate: "batch_chunks" });
+      if (recheck.decision === "cancel") { canceledMid = true; break; }
 
       const sendResult = await sendTextViaInstance(supabase, instance, phone, text, { trackSource: "copilot", idempotencyKey: presentation ? `quote-summary:${presentation.message_id}:${i}` : undefined });
       const msgId = sendResult.messageId

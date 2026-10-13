@@ -472,8 +472,33 @@ describe("AgentEngine — mídia × handoff do MESMO turno", () => {
     expect(r.queued("send_document")[0].payload.same_turn_handoff).toEqual({ lead_id: LEAD, disabled_at: DISABLED_AT });
   });
 
-  it("turno sem mídia → transferência não paga as leituras extras do gate", async () => {
+  it("H1: turno só [transfer] sem mídia → resposta devolve o carimbo do handoff do turno", async () => {
     const r = await run([{ content: ASSIST, tools: [TRANSFER] }]);
+    expect(r.out.actions_executed).toEqual(["TRANSFER_HUMAN"]);
+    expect((r.out as any).same_turn_handoff).toEqual({ lead_id: LEAD, disabled_at: DISABLED_AT });
+    expect(r.out.message).toContain("Perfeito");
+  });
+
+  it("H1: [transfer_sz_chat] também devolve o carimbo", async () => {
+    const r = await run([{ content: ASSIST, tools: [tc("transfer_sz_chat", { sector_id: "s-1" }, 1)] }]);
+    expect(r.out.actions_executed).toEqual(["TRANSFER_SZ_CHAT"]);
+    expect((r.out as any).same_turn_handoff).toEqual({ lead_id: LEAD, disabled_at: DISABLED_AT });
+  });
+
+  it("H1: [send_document, transfer] → mesmo carimbo na resposta e no payload da mídia", async () => {
+    const r = await run([{ content: ASSIST, tools: [SEND, TRANSFER] }]);
+    expect((r.out as any).same_turn_handoff).toEqual(r.queued("send_document")[0].payload.same_turn_handoff);
+  });
+
+  it("H1 controle: IA já desligada antes do turno → resposta SEM carimbo", async () => {
+    const humanOff: Pref = { ai_disabled: true, human_paused_until: null, set_by: "user-1", set_at: "2026-10-13T11:00:00+00:00" };
+    const r = await run([{ content: ASSIST, tools: [TRANSFER] }], { prefs: { before: humanOff, after: humanOff } });
+    expect((r.out as any).same_turn_handoff).toBeNull();
+  });
+
+  it("H1 controle: turno sem transferência nem mídia → sem carimbo e sem leituras extras do gate", async () => {
+    const r = await run([{ content: "Oi!", tools: [UPD] }]);
+    expect((r.out as any).same_turn_handoff).toBeNull();
     expect(r.fake.ops.filter((o) => o.table === "phone_ai_preferences")).toHaveLength(0);
   });
 });

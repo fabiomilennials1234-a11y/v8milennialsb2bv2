@@ -6,6 +6,7 @@ import { withSecurityHeaders } from "../_shared/security-headers.ts";
 import { findLeadByPhoneOrEmail, associateMessagesToLead, getOrCreateLead } from "../_shared/lead-service.ts";
 import { smartSplitMessage, type NaturalMessagingConfig } from "../_shared/natural-messaging.ts";
 import { isCopilotCanceled, logCopilotCancellation } from "../_shared/copilot/cancellation.ts";
+import { checkReplyGate, replyTurnFromAgentResponse, type ReplyTurn } from "../_shared/copilot/reply-gate.ts";
 import { timingSafeCompare } from "../_shared/auth.ts";
 
 /**
@@ -176,7 +177,7 @@ async function triggerAgentMessage(
   phoneNumber: string,
   messageText: string,
   pushName?: string,
-): Promise<{ success: boolean; message?: string; error?: string }> {
+): Promise<{ success: boolean; message?: string; error?: string; replyTurn?: ReplyTurn }> {
   try {
     console.log("[SZ Chat Webhook] Triggering agent-message for:", {
       organizationId, phoneNumber, pushName,
@@ -210,7 +211,8 @@ async function triggerAgentMessage(
       hasMessage: !!result.message, state: result.state, action: result.action,
     });
 
-    return { success: true, message: result.message };
+    // lead_id + same_turn_handoff: o gate por chunk reconhece o handoff do turno.
+    return { success: true, message: result.message, replyTurn: replyTurnFromAgentResponse(result) };
   } catch (error) {
     console.error("[SZ Chat Webhook] Error calling agent-message:", error);
     return { success: false, error: String(error) };
@@ -262,14 +264,16 @@ async function sendSzChatResponse(
   message: string,
   naturalMessagingConfig?: NaturalMessagingConfig | null,
   supabase?: ReturnType<typeof createClient>,
+  replyTurn: ReplyTurn = { leadId: null, sameTurnHandoff: null },
 ): Promise<boolean> {
   // Cancellation gate (RC-cancel, 2026-04-26): per-chunk check antes de cada
   // setTimeout/sendViaSzChat. Para envio se user desativou copilot mid-flight.
   // supabase opcional pra backwards-compat — se ausente, não faz check.
+  // O handoff do PRÓPRIO turno não cancela o texto dele (reply-gate.ts).
   const checkCanceled = async (): Promise<boolean> => {
     if (!supabase) return false;
-    const r = await isCopilotCanceled(supabase, organizationId, phoneNumber);
-    return r.canceled;
+    const r = await checkReplyGate(supabase, { organizationId, phone: phoneNumber, turn: replyTurn, gate: "sz_chat_chunks" });
+    return r.decision === "cancel";
   };
 
   // Use smart split if natural messaging is enabled
@@ -604,6 +608,7 @@ async function handleClientMessage(
       agentResult.message,
       naturalConfig,
       supabase,
+      agentResult.replyTurn,
     );
 
     if (sent) {
