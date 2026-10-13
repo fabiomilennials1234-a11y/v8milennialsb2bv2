@@ -44,14 +44,28 @@ END;
 $$;
 REVOKE ALL ON FUNCTION public.guard_workflow_reenrollment() FROM PUBLIC, anon, authenticated;
 
+-- Dado de UM cliente: só existe no banco de prod. Em banco novo (CI,
+-- `supabase start`, branch efêmera) o workflow não existe e o arquivo pula —
+-- antes ele abortava com RAISE e derrubava pgTAP e integração inteiros.
+-- Onde existe, ligar é idempotente (reaplicar não falha); workflow presente
+-- porém inativo continua sendo erro, que é o caso que a trava protegia.
 DO $$
 BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM public.workflows
+     WHERE id = 'f7cc3e94-b174-452c-a1a7-e2d5085c2b76'::uuid
+       AND organization_id = '38f3bea4-44c6-4732-bb20-065f547a7ed8'::uuid
+  ) THEN
+    RAISE NOTICE 'R. mercos (Chique) ausente neste banco — nada a ligar.';
+    RETURN;
+  END IF;
+
   UPDATE public.workflows SET re_enrollment_enabled = true
   WHERE id = 'f7cc3e94-b174-452c-a1a7-e2d5085c2b76'::uuid
     AND organization_id = '38f3bea4-44c6-4732-bb20-065f547a7ed8'::uuid
-    AND is_active AND NOT re_enrollment_enabled;
+    AND is_active;
   IF NOT FOUND THEN
-    RAISE EXCEPTION 'R. mercos is not an active, disabled workflow in Chique';
+    RAISE EXCEPTION 'R. mercos is not an active workflow in Chique';
   END IF;
 END;
 $$;
