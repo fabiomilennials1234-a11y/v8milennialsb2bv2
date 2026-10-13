@@ -33,6 +33,8 @@ import { ComposerEmojiPicker } from "../composer/ComposerEmojiPicker";
 
 interface ChatBubbleComposerProps {
   phoneNumber: string;
+  /** Conversa de grupo: o envio vai para o JID `<id>@g.us`, não para um telefone. */
+  isGroup?: boolean;
   instanceId: string;
   instanceName: string;
   /** Se false, composer não renderiza — caller deve mostrar PermissionBanner. */
@@ -43,6 +45,7 @@ interface ChatBubbleComposerProps {
 
 export function ChatBubbleComposer({
   phoneNumber,
+  isGroup = false,
   instanceId,
   instanceName,
   canReply,
@@ -72,6 +75,7 @@ export function ChatBubbleComposer({
     try {
       await sendMessage.mutateAsync({
         phoneNumber,
+        isGroup,
         message,
         instanceName,
         instanceId,
@@ -118,6 +122,7 @@ export function ChatBubbleComposer({
     try {
       await sendMedia.mutateAsync({
         phoneNumber,
+        isGroup,
         instanceName,
         instanceId,
         mediaType: kind,
@@ -148,6 +153,7 @@ export function ChatBubbleComposer({
       const dataUrl = await readMediaAsDataUrl(blob);
       await sendMedia.mutateAsync({
         phoneNumber,
+        isGroup,
         instanceName,
         instanceId,
         mediaType: "audio",

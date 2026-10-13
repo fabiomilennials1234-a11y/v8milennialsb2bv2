@@ -468,6 +468,7 @@ function ChatView({
         <MobileComposerContextual
           conversationKey={conversationKey}
           phoneNumber={phoneNumber ?? ""}
+          isGroup={selectedContact?.is_group === true}
           contactName={contactName}
           instanceName={instanceName}
           instanceId={instanceId}
@@ -484,6 +485,7 @@ function ChatView({
         <ChatComposer
           conversationKey={conversationKey}
           phoneNumber={phoneNumber ?? ""}
+          isGroup={selectedContact?.is_group === true}
           contactName={contactName}
           instanceName={instanceName}
           instanceId={instanceId}

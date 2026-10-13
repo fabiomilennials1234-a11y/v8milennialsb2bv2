@@ -63,6 +63,8 @@ export interface FailedMessage {
   retry_attempt?: number;
   id: string;
   phoneNumber: string;
+  /** Falha numa conversa de grupo: o reenvio precisa voltar ao JID do grupo. */
+  isGroup?: boolean;
   instanceId: string | null;
   instanceName: string;
   message: string | null;
