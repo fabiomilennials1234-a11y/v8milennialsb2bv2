@@ -40,6 +40,7 @@ import type {
   UazapiNumberCheck,
 } from "./uazapi-types.ts";
 import { buildPixButtonBody } from "./uazapi-pix.ts";
+import { isRecipientNotOnWhatsApp, RECIPIENT_NOT_ON_WHATSAPP } from "./uazapi-recipient-error.ts";
 
 // ---------------------------------------------------------------------------
 // Sender status mapping — Uazapi vocabulary → app canonical enum
@@ -920,13 +921,26 @@ export class UazapiClient {
             (errBody as any)?.code ??
             (errBody as any)?.error_code ??
             (errBody as any)?.provider_code;
+          const message = providerMsg
+            ? `Uazapi server error ${res.status} on ${method} ${path}: ${providerMsg}`
+            : `Uazapi server error ${res.status} on ${method} ${path}`;
+          // A recipient without WhatsApp is permanent and the provider is
+          // healthy: surface it as a 4xx (rethrown by the catch below with no
+          // retry and no circuit-breaker increment), so it never blocks valid
+          // sends and callers stop treating it as an ambiguous delivery.
+          if (isRecipientNotOnWhatsApp(errBody)) {
+            throw {
+              provider_code: RECIPIENT_NOT_ON_WHATSAPP,
+              status: 422,
+              message,
+              raw: errBody,
+            } satisfies UazapiError;
+          }
           lastError = {
             provider_code:
               rawProviderCode != null ? String(rawProviderCode) : undefined,
             status: res.status,
-            message: providerMsg
-              ? `Uazapi server error ${res.status} on ${method} ${path}: ${providerMsg}`
-              : `Uazapi server error ${res.status} on ${method} ${path}`,
+            message,
             raw: errBody,
           } satisfies UazapiError;
           this.recordFailure(cbKey);

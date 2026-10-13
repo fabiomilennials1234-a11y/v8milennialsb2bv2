@@ -274,10 +274,9 @@ describe("5xx retry — replay-safe requests", () => {
   });
 
   it("surfaces the Uazapi 5xx response body (reason + code + raw)", async () => {
-    // Uazapi returns 500 for permanent recipient conditions (e.g. number not
-    // on WhatsApp) instead of a clean 4xx. The thrown error must carry the
-    // provider reason so the dispatch failure is diagnosable, not opaque.
-    const body = { code: "number_not_found", message: "number is not on WhatsApp" };
+    // The thrown error must carry the provider reason so the dispatch failure
+    // is diagnosable, not an opaque "server error 500".
+    const body = { code: "session_unavailable", message: "whatsapp session not ready" };
     vi.mocked(fetch)
       .mockResolvedValueOnce(makeResponse(500, body))
       .mockResolvedValueOnce(makeResponse(500, body))
@@ -292,8 +291,8 @@ describe("5xx retry — replay-safe requests", () => {
     }
 
     expect(caught?.status).toBe(500);
-    expect(caught?.provider_code).toBe("number_not_found");
-    expect(caught?.message).toContain("number is not on WhatsApp");
+    expect(caught?.provider_code).toBe("session_unavailable");
+    expect(caught?.message).toContain("whatsapp session not ready");
     expect(caught?.raw).toMatchObject(body);
   });
 
@@ -322,6 +321,103 @@ describe("5xx retry — replay-safe requests", () => {
     // error_key is the stable provider marker; prefer it over numeric provider_code.
     expect(caught?.provider_code).toBe("WHATSAPP_REACHOUT_TIMELOCK");
     expect(caught?.message).toContain("temporary account restriction");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Recipient not on WhatsApp — Uazapi answers 500 for a permanent condition
+// ---------------------------------------------------------------------------
+
+describe("5xx 'not on WhatsApp' — reclassified as 422, outside the breaker", () => {
+  const NOT_ON_WA_BODY = {
+    error: "the number 5500000000000@s.whatsapp.net is not on WhatsApp",
+  };
+  const DEFAULT_CB_KEY = "[\"https://uazapi.example.com\",\"token\",\"tok-instance-xyz\"]:default";
+  const MEDIA_CB_KEY = "[\"https://uazapi.example.com\",\"token\",\"tok-instance-xyz\"]:media";
+
+  async function catchError(promise: Promise<unknown>): Promise<UazapiError | undefined> {
+    try {
+      await withTimers(promise);
+    } catch (e) {
+      return e as UazapiError;
+    }
+    return undefined;
+  }
+
+  it("sendText: rejects with 422 recipient_not_on_whatsapp after a single fetch", async () => {
+    vi.mocked(fetch).mockResolvedValue(makeResponse(500, NOT_ON_WA_BODY));
+
+    const client = new UazapiClient(BASE_CONFIG);
+    const caught = await catchError(client.sendText({ number: "5500000000000", text: "Hi" }));
+
+    expect(caught?.status).toBe(422);
+    expect(caught?.provider_code).toBe("recipient_not_on_whatsapp");
+    // Provider text survives: the front translates it into the actionable copy.
+    expect(caught?.message).toContain("is not on WhatsApp");
+    expect(caught?.raw).toMatchObject(NOT_ON_WA_BODY);
+    expect(vi.mocked(fetch)).toHaveBeenCalledTimes(1);
+    expect(UazapiClient._circuitState().get(DEFAULT_CB_KEY)?.failures ?? 0).toBe(0);
+  });
+
+  it("sendMedia: same reclassification, media breaker untouched", async () => {
+    vi.mocked(fetch).mockResolvedValue(makeResponse(500, NOT_ON_WA_BODY));
+
+    const client = new UazapiClient(BASE_CONFIG);
+    const caught = await catchError(
+      client.sendMedia({ number: "5500000000000", type: "image", file: "https://example.com/a.png" }),
+    );
+
+    expect(caught?.status).toBe(422);
+    expect(caught?.provider_code).toBe("recipient_not_on_whatsapp");
+    expect(vi.mocked(fetch)).toHaveBeenCalledTimes(1);
+    expect(UazapiClient._circuitState().get(MEDIA_CB_KEY)?.failures ?? 0).toBe(0);
+  });
+
+  it("matches the text case-insensitively and via a key naming the condition", async () => {
+    vi.mocked(fetch)
+      .mockResolvedValueOnce(makeResponse(500, { message: "NUMBER IS NOT ON WHATSAPP" }))
+      .mockResolvedValueOnce(makeResponse(500, { error: "rejected", error_key: "NUMBER_NOT_ON_WHATSAPP" }));
+
+    const client = new UazapiClient(BASE_CONFIG);
+    const byText = await catchError(client.sendText({ number: "5500000000000", text: "Hi" }));
+    const byKey = await catchError(client.sendText({ number: "5500000000000", text: "Hi" }));
+
+    expect(byText?.status).toBe(422);
+    expect(byKey?.status).toBe(422);
+    expect(byKey?.provider_code).toBe("recipient_not_on_whatsapp");
+  });
+
+  it("does not open the breaker: three in a row, the 4th (valid) send still reaches fetch", async () => {
+    vi.mocked(fetch)
+      .mockResolvedValueOnce(makeResponse(500, NOT_ON_WA_BODY))
+      .mockResolvedValueOnce(makeResponse(500, NOT_ON_WA_BODY))
+      .mockResolvedValueOnce(makeResponse(500, NOT_ON_WA_BODY))
+      .mockResolvedValueOnce(makeResponse(200, OK_MESSAGE));
+
+    const client = new UazapiClient(BASE_CONFIG);
+    for (let i = 0; i < CIRCUIT_BREAKER_THRESHOLD; i++) {
+      const caught = await catchError(client.sendText({ number: "5500000000000", text: "Hi" }));
+      expect(caught?.status).toBe(422);
+    }
+
+    const result = await withTimers(client.sendText({ number: "5500000000001", text: "Hi" }));
+    expect(result).toMatchObject({ id: OK_MESSAGE.id });
+    expect(vi.mocked(fetch)).toHaveBeenCalledTimes(CIRCUIT_BREAKER_THRESHOLD + 1);
+  });
+
+  it.each([500, 503])("a generic %i keeps its status and still opens the breaker on the 3rd failure", async (status) => {
+    vi.mocked(fetch).mockResolvedValue(makeResponse(status, { error: "internal server error" }));
+
+    const client = new UazapiClient(BASE_CONFIG);
+    for (let i = 0; i < CIRCUIT_BREAKER_THRESHOLD; i++) {
+      const caught = await catchError(client.sendText({ number: "5500000000000", text: "Hi" }));
+      expect(caught?.status).toBe(status);
+      expect(caught?.provider_code).not.toBe("recipient_not_on_whatsapp");
+    }
+
+    const blocked = await catchError(client.sendText({ number: "5500000000000", text: "Hi" }));
+    expect(blocked).toMatchObject({ status: 503, provider_code: "circuit_breaker_open" });
+    expect(vi.mocked(fetch)).toHaveBeenCalledTimes(CIRCUIT_BREAKER_THRESHOLD);
   });
 });
 
