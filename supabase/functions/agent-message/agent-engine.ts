@@ -66,6 +66,59 @@ import {
   getConversationHistory as getConversationHistoryExternal,
 } from "./engine/history.ts";
 import { extractConversationContext } from "../_shared/copilot/context-extractor.ts";
+import {
+  applyStageHandoff,
+  constrainNotifyPhones,
+  foldNextState,
+  parseStageHandoffPolicy,
+  planTurnActions,
+  stageAnchor,
+  toolNameForAction,
+  type TurnAction,
+  type TurnActionOrigin,
+} from "./engine/action-plan.ts";
+import {
+  SAME_TURN_HANDOFF_KEY,
+  type SameTurnHandoffMarker,
+} from "../_shared/copilot/same-turn-handoff.ts";
+
+/** Ações de mídia (enfileiradas; o worker aplica o gate de cancelamento). */
+const MEDIA_ACTIONS = new Set(['SEND_DOCUMENT', 'SEND_PRODUCT_MATERIAL']);
+
+/** Ações que recebem `lead_id` do lead corrente antes de executar/enfileirar. */
+const NEEDS_LEAD_ID = new Set([
+  'SCHEDULE_MEETING', 'TRANSFER_HUMAN', 'UPDATE_LEAD', 'QUALIFY_LEAD', 'DISQUALIFY_LEAD',
+  'ADVANCE_STAGE', 'UPDATE_QUALIFICATION_SCORE', 'CONFIRM_MEETING', 'ADVANCE_CONFIRMATION_STAGE',
+  'CREATE_CUSTOM_FIELD', 'TRANSFER_SZ_CHAT', 'SEND_DOCUMENT', 'SEND_PRODUCT_MATERIAL',
+]);
+
+function toTurnAction(
+  a: { action: string; params: Record<string, unknown>; tenant_id: string },
+  origin: TurnActionOrigin,
+): TurnAction {
+  return { ...a, toolName: toolNameForAction(a.action), origin };
+}
+
+/** `leadData.funnel_positions` → posições atuais do lead (anti-loop do handoff). */
+function currentStageKeysOf(leadData: unknown): Array<{ pipeline_slug?: string; pipeline_id?: string; stage_key: string }> {
+  const positions = (leadData as { funnel_positions?: unknown } | null)?.funnel_positions;
+  if (!Array.isArray(positions)) return [];
+  return positions
+    .filter((p): p is Record<string, unknown> =>
+      !!p && typeof p === 'object' && typeof (p as Record<string, unknown>).stage_key === 'string')
+    .map((p) => ({
+      stage_key: p.stage_key as string,
+      ...(typeof p.pipeline_slug === 'string' ? { pipeline_slug: p.pipeline_slug } : {}),
+      ...(typeof p.pipeline_id === 'string' ? { pipeline_id: p.pipeline_id } : {}),
+    }));
+}
+
+function handoffAllowlist(capabilities: Record<string, unknown> | null | undefined): string[] | null {
+  const raw = capabilities?.handoff_notify_phones;
+  if (!Array.isArray(raw)) return null;
+  const phones = raw.filter((p: unknown): p is string => typeof p === 'string' && p.trim().length > 0);
+  return phones.length > 0 ? phones : null;
+}
 
 // Interface para contexto resumido da conversa
 interface ConversationContextSummary {
@@ -368,14 +421,11 @@ export class AgentEngine {
     // 7. Call LLM com suporte a multi-turn para tools inline (search_knowledge)
     const openRouterTools = tools.length > 0 ? this.openRouter.convertTools(tools) : undefined;
     const multiTurnMessages: Array<{ role: string; content: string | null; tool_calls?: any; tool_call_id?: string }> = [...allMessages];
-    let finalNextState = conversation.state;
-    let finalAction: { action: string; params: Record<string, unknown>; tenant_id: string } | null = null;
     let finalAssistantMessage = '';
-    // Tool-calls extras do MESMO turno (além da ação principal). Só ações de
-    // mídia são seguras de executar em paralelo (idempotentes); as demais
-    // continuam descartadas de propósito (evita qualify/advance/transfer duplos).
-    let finalExtraToolCalls: Array<{ action: string; params: Record<string, unknown>; tenant_id: string }> = [];
-    const PARALLEL_SAFE_ACTIONS = ['SEND_DOCUMENT', 'SEND_PRODUCT_MATERIAL'];
+    // TODAS as tool_calls da resposta final (ordem do LLM). Viram um plano
+    // determinístico em planTurnActions (engine/action-plan.ts): dedupe,
+    // conflito qualify/disqualify, ordem por rank, transferência por último.
+    let finalToolCalls: TurnAction[] = [];
     const MAX_TOOL_TURNS = 3;
 
     // Telemetria por invocação — salva em runtime_logs
@@ -431,30 +481,14 @@ export class AgentEngine {
       if (!choice?.message?.content) telemetry.content_null_turns += 1;
       if (finishReason === 'length') telemetry.truncated = true;
 
-      const { nextState: ns, actionToExecute: action, assistantMessage: msg, extraToolCalls } =
+      const { actionToExecute: action, assistantMessage: msg, toolCalls } =
         processLLMResponseExternal(response, conversation, this.organizationId);
-      if (action?.action) telemetry.tools_called.push(action.action);
-      // Multi-tool responses: a ação principal (primeira) vira finalAction; as
-      // EXTRAS de mídia (send_document/send_product_material) são enfileiradas
-      // em paralelo mais abaixo — permite mandar fotos de VÁRIOS produtos pedidos
-      // no mesmo turno. Extras não-mídia continuam descartadas de propósito.
-      if (extraToolCalls && extraToolCalls.length > 0) {
-        console.warn(
-          '[AgentEngine] LLM returned',
-          extraToolCalls.length + 1,
-          'tool_calls. Extras:',
-          extraToolCalls.map((c) => c.action).join(','),
-        );
-        for (const extra of extraToolCalls) {
-          const label = PARALLEL_SAFE_ACTIONS.includes(extra.action) ? 'PARALLEL' : 'DROPPED';
-          telemetry.tools_called.push(`${label}:${extra.action}`);
-        }
-      }
 
       // Quote operations return their actual result to the model before it speaks.
       // Answer every tool_call in this branch, including calls not executed.
       const quoteCalls = response.choices?.[0]?.message?.tool_calls;
       if (quoteCalls?.some((call: any) => call.function?.name === 'generate_order_request')) {
+        if (action?.action) telemetry.tools_called.push(action.action);
         multiTurnMessages.push({ role: 'assistant', content: null, tool_calls: quoteCalls });
         for (const call of quoteCalls) {
           let result: Record<string, unknown> = { success: false, error: 'Execute esta ferramenta separadamente do orçamento.' };
@@ -480,6 +514,7 @@ export class AgentEngine {
 
       // Se o LLM chamou search_knowledge: executar INLINE e fazer outra chamada
       if (action?.action === 'SEARCH_KNOWLEDGE' && action.params?.query) {
+        telemetry.tools_called.push(action.action);
         const query = action.params.query as string;
         console.log(`[AgentEngine] search_knowledge("${query}") — executing inline...`);
 
@@ -503,10 +538,8 @@ export class AgentEngine {
       }
 
       // Nao e tool inline — esta e a resposta final
-      finalNextState = ns;
-      finalAction = action;
       finalAssistantMessage = msg;
-      finalExtraToolCalls = extraToolCalls ?? [];
+      finalToolCalls = toolCalls ?? [];
       break;
     }
 
@@ -542,8 +575,14 @@ export class AgentEngine {
       }
     }
 
-    const nextState = finalNextState;
-    let actionToExecute = finalAction;
+    // Chamadas do turno (LLM + recuperadas + fallback). Os ramos de fallback /
+    // recovery / anti-repeat só injetam ação quando o PLANO está vazio — mesma
+    // semântica do antigo `!actionToExecute`.
+    const turnCalls: TurnAction[] = [...finalToolCalls];
+    const planIsEmpty = (): boolean => {
+      const p = planTurnActions(turnCalls);
+      return p.sequential.length === 0 && p.media.length === 0;
+    };
 
     // Último recurso: sem texto após retry + forced-text turn. Em vez da frase
     // robótica de erro, entregamos mensagem natural de espera E acionamos
@@ -554,34 +593,25 @@ export class AgentEngine {
     } else {
       const fallback = buildFallbackOutcome(this.organizationId);
       rawAssistantMessage = fallback.message;
-      // Só sobrescreve a ação se o LLM não tiver decidido nenhuma — preserva
-      // qualquer tool legítima que tenha sido extraída antes do texto sumir.
-      if (!actionToExecute) {
-        actionToExecute = fallback.action;
+      // Só injeta a transferência se o LLM não tiver decidido nenhuma ação —
+      // preserva qualquer tool legítima extraída antes do texto sumir.
+      if (planIsEmpty()) {
+        turnCalls.push(toTurnAction(fallback.action, 'fallback'));
       }
       telemetry.fallback_used = true;
       console.error('[AgentEngine] FALLBACK USED — handing off to human', telemetry);
     }
 
-    // Bug 2 observability — persiste telemetry do turn em runtime_logs (queryável).
-    // Fire-and-forget; status=error quando fallback foi acionado.
-    logRuntime(buildTelemetryLog({
-      organizationId: this.organizationId,
-      leadId,
-      agentId: capabilities.id as string,
-      telemetry,
-    })).catch((e) => console.warn('[AgentEngine] telemetry log failed (non-fatal):', e));
-
     // 8a.0 Sanitizar JSON de ReAct leak + recuperar ação textual se tool nativo não foi usado.
     // Evita vazamento de blocos {"action":"...","action_input":"..."} para o lead (incidente 2026-04-24).
-    const sanitized = sanitizeAssistantMessage(rawAssistantMessage, !!actionToExecute);
-    if (sanitized.recoveredAction && !actionToExecute) {
+    const sanitized = sanitizeAssistantMessage(rawAssistantMessage, !planIsEmpty());
+    if (sanitized.recoveredAction && planIsEmpty()) {
       console.warn('[AgentEngine] Recovered inline action from LLM text (tool_call missed):', sanitized.recoveredAction.action);
-      actionToExecute = {
+      turnCalls.push(toTurnAction({
         action: sanitized.recoveredAction.action,
         params: sanitized.recoveredAction.params,
         tenant_id: this.organizationId,
-      };
+      }, 'recovered'));
     }
     // Recovery KomBag 2026-06-23 — o modelo vazou uma tag-de-chamada de mídia
     // (fora da allowlist) em vez de chamar o tool nativo send_document. O
@@ -589,7 +619,7 @@ export class AgentEngine {
     // document_id real e montamos SEND_DOCUMENT, injetando no MESMO caminho que
     // uma recoveredAction nativa seguiria. Se não achar doc 'ready' → apenas
     // suprime (a tag já saiu do texto), comportamento de antes do fix.
-    if (sanitized.recoveredMediaByName && !actionToExecute) {
+    if (sanitized.recoveredMediaByName && planIsEmpty()) {
       try {
         const recoveredMedia = await resolveRecoveredMediaExternal(
           this.supabase,
@@ -602,7 +632,7 @@ export class AgentEngine {
             '[AgentEngine] Recovered send_document from leaked media call-tag:',
             { file_name: sanitized.recoveredMediaByName.file_name, document_id: recoveredMedia.params.document_id },
           );
-          actionToExecute = recoveredMedia;
+          turnCalls.push(toTurnAction(recoveredMedia, 'recovered'));
         } else {
           console.warn(
             '[AgentEngine] Leaked media call-tag had no matching ready document — suppressed only:',
@@ -632,8 +662,7 @@ export class AgentEngine {
       }).catch((e) => console.warn('[AgentEngine] reasoning log failed (non-fatal):', e));
     }
     console.log('[AgentEngine] Response processed:', {
-      nextState,
-      hasAction: !!actionToExecute,
+      toolCalls: turnCalls.length,
       messageLength: assistantMessage?.length,
       telemetry,
     });
@@ -664,7 +693,7 @@ export class AgentEngine {
           temperature,
         });
         const plainRaw = plainResp.choices?.[0]?.message?.content?.trim() ?? '';
-        const plainSan = sanitizeAssistantMessage(plainRaw, !!actionToExecute);
+        const plainSan = sanitizeAssistantMessage(plainRaw, !planIsEmpty());
         if (plainSan.text && plainSan.text.trim().length > 0) {
           assistantMessage = plainSan.text;
           telemetry.forced_text_succeeded = true;
@@ -676,7 +705,7 @@ export class AgentEngine {
       if (!assistantMessage || assistantMessage.trim().length === 0) {
         const fb = buildFallbackOutcome(this.organizationId);
         assistantMessage = fb.message;
-        if (!actionToExecute) actionToExecute = fb.action;
+        if (planIsEmpty()) turnCalls.push(toTurnAction(fb.action, 'fallback'));
         telemetry.fallback_used = true;
         console.warn('[AgentEngine] Plain-text regenerate still empty — handing off to human');
       }
@@ -726,7 +755,7 @@ export class AgentEngine {
         messageParts = [fb.message];
         cleanMessage = fb.message;
         // Só assume o handoff se o LLM não decidiu nenhuma ação legítima.
-        if (!actionToExecute) actionToExecute = fb.action;
+        if (planIsEmpty()) turnCalls.push(toTurnAction(fb.action, 'fallback'));
         telemetry.fallback_used = true;
       };
       try {
@@ -746,7 +775,7 @@ export class AgentEngine {
           temperature,
         });
         const regenRaw = regenResp.choices?.[0]?.message?.content?.trim() ?? '';
-        const regenSan = sanitizeAssistantMessage(regenRaw, !!actionToExecute);
+        const regenSan = sanitizeAssistantMessage(regenRaw, !planIsEmpty());
         const regenParts = splitByDelimiter(regenSan.text);
         const regenClean = regenParts.join(' ');
 
@@ -765,140 +794,70 @@ export class AgentEngine {
       }
     }
 
-    // 8. Enqueue Action (via pending_ai_actions → worker assíncrono)
+    // 8. Plano do turno — roda DEPOIS de tudo que pode popular as chamadas
+    // (loop LLM, fallback, recovery do sanitizer, anti-repeat) e imediatamente
+    // antes da execução. Síntese de handoff por etapa entra aqui.
+    const notifyAllowlist = handoffAllowlist(capabilities);
+    const { plan, synthesized } = applyStageHandoff(
+      planTurnActions(turnCalls),
+      parseStageHandoffPolicy((capabilities.intent_detection as { stage_handoff?: unknown } | null)?.stage_handoff),
+      {
+        organizationId: this.organizationId,
+        userMessage,
+        notifyPhones: notifyAllowlist,
+        currentStageKeys: currentStageKeysOf(leadData),
+      },
+    );
+    for (const a of plan.sequential) {
+      telemetry.tools_called.push(a === synthesized ? `SYNTH:${a.action}` : `EXEC:${a.action}`);
+    }
+    for (const a of plan.media) telemetry.tools_called.push(`PARALLEL:${a.action}`);
+    for (const d of plan.dropped) telemetry.tools_called.push(`DROPPED:${d.reason}:${d.action}`);
+    if (plan.dropped.length > 0) {
+      console.warn('[AgentEngine] Dropped tool_calls:', plan.dropped.map((d) => `${d.reason}:${d.action}`).join(','));
+    }
+    const { nextState, visitedStates } = foldNextState(conversation.state, plan);
+
+    // 8.1 Execução: sequenciais na ordem do plano (transferência por último),
+    // depois mídia. A ordem do ENQUEUE não garante ordem no worker; a única
+    // dependência real (transferência inline × ADVANCE_STAGE da fila) é
+    // resolvida por skipHumanStageMove: a etapa explícita do turno vence.
+    //
+    // Mídia × transferência do mesmo turno: a transferência (sequencial, antes)
+    // desliga a IA e o worker de mídia cancelaria o envio decidido NESTE turno.
+    // Com mídia no plano, a transferência devolve o carimbo do desligamento que
+    // causou e ele vai no payload da mídia (same-turn-handoff.ts).
+    const skipHumanStageMove = plan.sequential.some((a) => a.action === 'ADVANCE_STAGE');
+    const captureHandoffMarker = plan.media.length > 0;
+    let sameTurnHandoff: SameTurnHandoffMarker | null = null;
+    const actionsExecuted: string[] = [];
     let executionResult: Record<string, unknown> | null = null;
-    if (actionToExecute) {
-      // Injetar lead_id para ações que precisam
-      const needsLeadId = ['SCHEDULE_MEETING', 'TRANSFER_HUMAN', 'UPDATE_LEAD', 'QUALIFY_LEAD', 'DISQUALIFY_LEAD', 'ADVANCE_STAGE', 'UPDATE_QUALIFICATION_SCORE', 'CONFIRM_MEETING', 'ADVANCE_CONFIRMATION_STAGE', 'CREATE_CUSTOM_FIELD', 'TRANSFER_SZ_CHAT', 'SEND_DOCUMENT'];
-      let currentAction = actionToExecute;
-      if (this.currentLeadId && needsLeadId.includes(currentAction.action)) {
-        currentAction = {
-          ...currentAction,
-          params: { ...currentAction.params, lead_id: this.currentLeadId },
-        };
-      }
-      console.log('[AgentEngine] Step 9: Enqueuing action:', currentAction.action);
-      try {
-        // TRANSFER_HUMAN: execute immediately, enqueue only side-effects
-        if (currentAction.action === 'TRANSFER_HUMAN') {
-          const transferResult = await immediateTransferHuman(
-            this.supabase,
-            this.currentLeadId!,
-            // SCRUM-628: a etapa "atendimento humano" é procurada no funil
-            // primário do agente (primeira kanban rule de eixo-funil), não mais
-            // no WhatsApp fixo. Sem regra → fallback legado dentro do handler.
-            funnelRefsFromRules(capabilities?.copilot_agent_kanban_rules)[0],
-          );
-          if (!transferResult.success) {
-            console.warn('[AgentEngine] Immediate transfer failed, will rely on queue:', transferResult.error);
-          }
-          // Enqueue notification + lead_history only (no db state change)
-          const minuteTs = Math.floor(Date.now() / 60_000);
-          await enqueueAiAction(this.supabase, {
-            organizationId: this.organizationId,
-            leadId: this.currentLeadId || undefined,
-            conversationId: conversation.id.startsWith('temp_') ? undefined : conversation.id,
-            actionType: 'transfer_to_human_notify',
-            payload: { ...currentAction.params, lead_id: this.currentLeadId },
-            idempotencyKey: `transfer_human_notify_${this.currentLeadId}_${minuteTs}`,
-          });
-
-          // Enqueue WhatsApp notification if agent has handoff_notify_phones
-          const notifyPhones = capabilities.handoff_notify_phones as string[] | null;
-          if (Array.isArray(notifyPhones) && notifyPhones.length > 0) {
-            const actionParams = currentAction.params || {};
-            await enqueueAiAction(this.supabase, {
-              organizationId: this.organizationId,
-              leadId: this.currentLeadId || undefined,
-              conversationId: conversation.id.startsWith('temp_') ? undefined : conversation.id,
-              actionType: 'transfer_to_human_whatsapp_notify',
-              payload: {
-                lead_id: this.currentLeadId,
-                summary: actionParams.summary || '',
-                priority: actionParams.priority || 'NORMAL',
-                priority_reason: actionParams.priority_reason || '',
-                reason: actionParams.reason || '',
-                extra_notes: actionParams.extra_notes || null,
-                notify_phones: actionParams.notify_phones || notifyPhones,
-              },
-              idempotencyKey: `transfer_human_wa_notify_${this.currentLeadId}_${minuteTs}`,
-            });
-            console.log('[AgentEngine] WhatsApp handoff notification enqueued for', (actionParams.notify_phones || notifyPhones).length, 'phone(s)');
-          }
-
-          executionResult = { success: true, queued: true, immediate: true };
-        } else if (currentAction.action === 'TRANSFER_SZ_CHAT') {
-          // TRANSFER_SZ_CHAT: disable AI immediately, enqueue SZ.chat transfer
-          const transferResult = await immediateTransferHuman(
-            this.supabase,
-            this.currentLeadId!,
-            funnelRefsFromRules(capabilities?.copilot_agent_kanban_rules)[0],
-          );
-          if (!transferResult.success) {
-            console.warn('[AgentEngine] Immediate SZ.chat transfer (ai_disabled) failed:', transferResult.error);
-          }
-          // Enqueue the actual SZ.chat transfer (calls sz-chat-send edge function)
-          const minuteTs = Math.floor(Date.now() / 60_000);
-          await enqueueAiAction(this.supabase, {
-            organizationId: this.organizationId,
-            leadId: this.currentLeadId || undefined,
-            conversationId: conversation.id.startsWith('temp_') ? undefined : conversation.id,
-            actionType: 'transfer_sz_chat',
-            payload: { ...currentAction.params, lead_id: this.currentLeadId },
-            idempotencyKey: `transfer_sz_chat_${this.currentLeadId}_${minuteTs}`,
-          });
-          executionResult = { success: true, queued: true, immediate: true };
-        } else {
-          executionResult = await enqueueToolActionExternal({
-            supabase: this.supabase,
-            organizationId: this.organizationId,
-            currentLeadId: this.currentLeadId,
-            action: currentAction,
-            conversationId: conversation.id,
-            turnCount: conversation.turn_count,
-          });
-        }
-      } catch (enqueueError) {
-        console.warn('[AgentEngine] Action enqueue failed (non-fatal):', enqueueError);
-        executionResult = { error: String(enqueueError), status: 'failed' };
-      }
+    for (const action of [...plan.sequential, ...plan.media]) {
+      const result = await this.executeAction(action, {
+        capabilities,
+        conversationId: conversation.id,
+        turnCount: conversation.turn_count,
+        notifyAllowlist,
+        skipHumanStageMove,
+        captureHandoffMarker,
+        sameTurnHandoff,
+      });
+      const marker = (result as { handoff_marker?: SameTurnHandoffMarker | null }).handoff_marker;
+      if (marker) sameTurnHandoff = marker;
+      if (actionsExecuted.length === 0) executionResult = result;
+      actionsExecuted.push(action.action);
     }
+    const primaryAction = plan.sequential[0] ?? plan.media[0] ?? null;
 
-    // 8c. Enfileira as tool-calls de MÍDIA extras do mesmo turno (fotos de
-    // vários produtos pedidos de uma vez). A ação principal já foi enfileirada
-    // acima; aqui vão as EXTRAS (send_document/send_product_material), que são
-    // idempotentes (chave por document_id/material_id) e seguras de repetir.
-    // Ações não-mídia continuam descartadas (evita qualify/advance/transfer
-    // duplicados no mesmo turno). Falha aqui é não-fatal — a foto principal e o
-    // texto já saem normalmente.
-    if (finalExtraToolCalls.length > 0) {
-      const mediaExtras = finalExtraToolCalls.filter((c) => PARALLEL_SAFE_ACTIONS.includes(c.action));
-      const droppedExtras = finalExtraToolCalls.filter((c) => !PARALLEL_SAFE_ACTIONS.includes(c.action));
-      if (droppedExtras.length > 0) {
-        console.warn(
-          '[AgentEngine] Dropping non-media extra tool_calls:',
-          droppedExtras.map((c) => c.action).join(','),
-        );
-      }
-      for (const extra of mediaExtras) {
-        try {
-          const extraAction = this.currentLeadId
-            ? { ...extra, params: { ...extra.params, lead_id: this.currentLeadId } }
-            : extra;
-          const extraResult = await enqueueToolActionExternal({
-            supabase: this.supabase,
-            organizationId: this.organizationId,
-            currentLeadId: this.currentLeadId,
-            action: extraAction,
-            conversationId: conversation.id,
-            turnCount: conversation.turn_count,
-          });
-          console.log('[AgentEngine] Extra media action enqueued:', extra.action, extraResult);
-        } catch (extraErr) {
-          console.warn('[AgentEngine] Extra media enqueue failed (non-fatal):', extraErr);
-        }
-      }
-    }
+    // Bug 2 observability — persiste telemetry do turn em runtime_logs (queryável).
+    // Fire-and-forget; status=error quando fallback foi acionado. Logado após o
+    // plano para carregar EXEC/PARALLEL/DROPPED/SYNTH do turno.
+    logRuntime(buildTelemetryLog({
+      organizationId: this.organizationId,
+      leadId,
+      agentId: capabilities.id as string,
+      telemetry,
+    })).catch((e) => console.warn('[AgentEngine] telemetry log failed (non-fatal):', e));
 
     // 9. Update Conversation State (salva mensagem limpa, sem delimitadores)
     console.log('[AgentEngine] Step 10: Updating conversation state...');
@@ -906,7 +865,7 @@ export class AgentEngine {
 
     // 10. Log Decision
     console.log('[AgentEngine] Step 11: Logging decision...');
-    await this.logDecision(conversation.id, conversation.state, nextState, actionToExecute, capabilities, {
+    await this.logDecision(conversation.id, conversation.state, nextState, primaryAction, capabilities, {
       reasoningChain: capturedReasoning ?? undefined,
     });
 
@@ -917,19 +876,26 @@ export class AgentEngine {
       this.organizationId,
       leadId,
       conversation.turn_count,
-      actionToExecute,
+      stageAnchor(plan),
       capabilities,
     );
 
-    // 12. Enqueue Automation Actions (if configured)
+    // 12. Enqueue Automation Actions (if configured) — para CADA estado distinto
+    // visitado no turno: [qualify, transfer] precisa disparar onQualify E
+    // onNeedHuman. Chaves `auto_<tipo>_<lead>_<state>` são idempotentes.
+    // ADVANCE_STAGE explícito no turno → a automação não move card
+    // (skip_stage_move), pelo mesmo motivo de skipHumanStageMove.
     console.log('[AgentEngine] Step 13: Enqueuing automation actions...');
-    await enqueueAutomationActionsExternal(
-      this.supabase,
-      this.organizationId,
-      leadId,
-      nextState,
-      capabilities,
-    );
+    for (const state of visitedStates) {
+      await enqueueAutomationActionsExternal(
+        this.supabase,
+        this.organizationId,
+        leadId,
+        state,
+        capabilities,
+        { skipStageMove: skipHumanStageMove },
+      );
+    }
 
     console.log('[AgentEngine] Message processing complete', { parts: messageParts.length });
 
@@ -965,16 +931,18 @@ export class AgentEngine {
       .catch(e => console.warn('[AgentEngine] Long-term memory extraction failed (non-fatal):', e));
 
     // 14. Return Response
-    // Se a acao foi SEND_DOCUMENT, incluir media_attachments na resposta
+    // media_attachments continua derivado da 1ª chamada do turno (ordem do LLM),
+    // como antes do plano.
+    const firstCall = turnCalls[0] ?? null;
     let mediaAttachments: Array<{ type: string; document_id?: string; material_id?: string; caption?: string }> | undefined;
-    if (actionToExecute?.action === 'SEND_DOCUMENT' && actionToExecute.params) {
+    if (firstCall?.action === 'SEND_DOCUMENT' && firstCall.params) {
       mediaAttachments = [{
         type: 'document',
-        document_id: actionToExecute.params.document_id as string,
-        caption: (actionToExecute.params.caption as string) || undefined,
+        document_id: firstCall.params.document_id as string,
+        caption: (firstCall.params.caption as string) || undefined,
       }];
-    } else if (actionToExecute?.action === 'SEND_PRODUCT_MATERIAL' && actionToExecute.params) {
-      const materialId = actionToExecute.params.material_id as string;
+    } else if (firstCall?.action === 'SEND_PRODUCT_MATERIAL' && firstCall.params) {
+      const materialId = firstCall.params.material_id as string;
       // Validate material exists and belongs to org before sending
       const { data: validMaterial } = await this.supabase
         .from('product_materials')
@@ -988,7 +956,7 @@ export class AgentEngine {
         mediaAttachments = [{
           type: 'product_material',
           material_id: materialId,
-          caption: (actionToExecute.params.caption as string) || undefined,
+          caption: (firstCall.params.caption as string) || undefined,
         }];
       } else {
         console.warn('[AgentEngine] Invalid material_id from LLM:', materialId);
@@ -1000,7 +968,8 @@ export class AgentEngine {
       messages: messageParts.length > 1 ? messageParts : undefined,
       media_attachments: mediaAttachments,
       state: nextState,
-      action_executed: actionToExecute?.action,
+      action_executed: actionsExecuted[0],
+      actions_executed: actionsExecuted,
       execution_result: executionResult,
       // Metadados para LLM-as-a-judge (#8) — usados em fire-and-forget pelo caller
       _eval_meta: {
@@ -1010,6 +979,139 @@ export class AgentEngine {
         systemPromptExcerpt: (capabilities.system_prompt || '').substring(0, 500),
       },
     };
+  }
+
+  /**
+   * Executa UMA ação do plano do turno. TRANSFER_HUMAN / TRANSFER_SZ_CHAT rodam
+   * inline (RPC atômico) + side-effects na fila; as demais vão para
+   * pending_ai_actions. Falha é não-fatal: devolve o erro como resultado.
+   */
+  private async executeAction(
+    action: TurnAction,
+    ctx: {
+      capabilities: { copilot_agent_kanban_rules?: unknown };
+      conversationId: string;
+      turnCount: number;
+      notifyAllowlist: string[] | null;
+      skipHumanStageMove: boolean;
+      captureHandoffMarker: boolean;
+      sameTurnHandoff: SameTurnHandoffMarker | null;
+    },
+  ): Promise<Record<string, unknown>> {
+    const { capabilities, conversationId, turnCount, notifyAllowlist, skipHumanStageMove } = ctx;
+    const queueConversationId = conversationId.startsWith('temp_') ? undefined : conversationId;
+    // SEGURANÇA: o marcador de handoff do mesmo turno libera a mídia no gate de
+    // cancelamento — só o engine o escreve. Qualquer chave homônima vinda do
+    // LLM (params da tool) é descartada.
+    const { [SAME_TURN_HANDOFF_KEY]: _llmMarker, ...llmParams } = action.params ?? {};
+    let currentAction: { action: string; params: Record<string, unknown>; tenant_id: string } = {
+      action: action.action,
+      params: llmParams,
+      tenant_id: action.tenant_id,
+    };
+    if (ctx.sameTurnHandoff && MEDIA_ACTIONS.has(currentAction.action)) {
+      currentAction = {
+        ...currentAction,
+        params: { ...currentAction.params, [SAME_TURN_HANDOFF_KEY]: ctx.sameTurnHandoff },
+      };
+    }
+    if (this.currentLeadId && NEEDS_LEAD_ID.has(currentAction.action)) {
+      currentAction = {
+        ...currentAction,
+        params: { ...currentAction.params, lead_id: this.currentLeadId },
+      };
+    }
+    console.log('[AgentEngine] Step 9: Enqueuing action:', currentAction.action, `(${action.origin})`);
+    try {
+      // TRANSFER_HUMAN: execute immediately, enqueue only side-effects
+      if (currentAction.action === 'TRANSFER_HUMAN') {
+        const transferResult = await immediateTransferHuman(
+          this.supabase,
+          this.currentLeadId!,
+          // SCRUM-628: a etapa "atendimento humano" é procurada no funil
+          // primário do agente (primeira kanban rule de eixo-funil), não mais
+          // no WhatsApp fixo. Sem regra → fallback legado dentro do handler.
+          funnelRefsFromRules(capabilities?.copilot_agent_kanban_rules)[0],
+          { skipHumanStageMove, captureHandoffMarker: ctx.captureHandoffMarker },
+        );
+        if (!transferResult.success) {
+          console.warn('[AgentEngine] Immediate transfer failed, will rely on queue:', transferResult.error);
+        }
+        // SEGURANÇA: notify_phones vem do LLM — o resumo (PII) só pode ir para
+        // a allowlist do agente (handoff_notify_phones).
+        const notifyPhones = constrainNotifyPhones(currentAction.params.notify_phones, notifyAllowlist);
+        const { notify_phones: _llmPhones, ...paramsWithoutPhones } = currentAction.params;
+        const safeParams = notifyPhones ? { ...paramsWithoutPhones, notify_phones: notifyPhones } : paramsWithoutPhones;
+
+        // Enqueue notification + lead_history only (no db state change)
+        const minuteTs = Math.floor(Date.now() / 60_000);
+        await enqueueAiAction(this.supabase, {
+          organizationId: this.organizationId,
+          leadId: this.currentLeadId || undefined,
+          conversationId: queueConversationId,
+          actionType: 'transfer_to_human_notify',
+          payload: { ...safeParams, lead_id: this.currentLeadId },
+          idempotencyKey: `transfer_human_notify_${this.currentLeadId}_${minuteTs}`,
+        });
+
+        // Enqueue WhatsApp notification if agent has handoff_notify_phones
+        if (notifyPhones) {
+          await enqueueAiAction(this.supabase, {
+            organizationId: this.organizationId,
+            leadId: this.currentLeadId || undefined,
+            conversationId: queueConversationId,
+            actionType: 'transfer_to_human_whatsapp_notify',
+            payload: {
+              lead_id: this.currentLeadId,
+              summary: safeParams.summary || '',
+              priority: safeParams.priority || 'NORMAL',
+              priority_reason: safeParams.priority_reason || '',
+              reason: safeParams.reason || '',
+              extra_notes: safeParams.extra_notes || null,
+              notify_phones: notifyPhones,
+            },
+            idempotencyKey: `transfer_human_wa_notify_${this.currentLeadId}_${minuteTs}`,
+          });
+          console.log('[AgentEngine] WhatsApp handoff notification enqueued for', notifyPhones.length, 'phone(s)');
+        }
+
+        return { success: true, queued: true, immediate: true, handoff_marker: transferResult.handoffMarker ?? null };
+      }
+      if (currentAction.action === 'TRANSFER_SZ_CHAT') {
+        // TRANSFER_SZ_CHAT: disable AI immediately, enqueue SZ.chat transfer
+        const transferResult = await immediateTransferHuman(
+          this.supabase,
+          this.currentLeadId!,
+          funnelRefsFromRules(capabilities?.copilot_agent_kanban_rules)[0],
+          { skipHumanStageMove, captureHandoffMarker: ctx.captureHandoffMarker },
+        );
+        if (!transferResult.success) {
+          console.warn('[AgentEngine] Immediate SZ.chat transfer (ai_disabled) failed:', transferResult.error);
+        }
+        // Enqueue the actual SZ.chat transfer (calls sz-chat-send edge function)
+        const minuteTs = Math.floor(Date.now() / 60_000);
+        await enqueueAiAction(this.supabase, {
+          organizationId: this.organizationId,
+          leadId: this.currentLeadId || undefined,
+          conversationId: queueConversationId,
+          actionType: 'transfer_sz_chat',
+          payload: { ...currentAction.params, lead_id: this.currentLeadId },
+          idempotencyKey: `transfer_sz_chat_${this.currentLeadId}_${minuteTs}`,
+        });
+        return { success: true, queued: true, immediate: true, handoff_marker: transferResult.handoffMarker ?? null };
+      }
+      return await enqueueToolActionExternal({
+        supabase: this.supabase,
+        organizationId: this.organizationId,
+        currentLeadId: this.currentLeadId,
+        action: currentAction,
+        conversationId,
+        turnCount,
+      });
+    } catch (enqueueError) {
+      console.warn('[AgentEngine] Action enqueue failed (non-fatal):', currentAction.action, enqueueError);
+      return { error: String(enqueueError), status: 'failed' };
+    }
   }
 
   // enqueueAutomationActions + enqueuePipelineStageUpdate extraidos para engine/decide-action.ts.
