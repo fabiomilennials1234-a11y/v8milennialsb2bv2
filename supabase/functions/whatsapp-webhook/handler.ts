@@ -32,7 +32,8 @@ import { withSecurityHeaders } from "../_shared/security-headers.ts";
 import { logRuntime } from "../_shared/logger.ts";
 import { upsertPipeEntry } from "../_shared/pipeline-adapter.ts";
 import { authorFromWebhookEcho } from "../_shared/message-authorship.ts";
-import { isCopilotCanceled, logCopilotCancellation } from "../_shared/copilot/cancellation.ts";
+import { logCopilotCancellation } from "../_shared/copilot/cancellation.ts";
+import { checkReplyGate, replyTurnFromAgentResponse } from "../_shared/copilot/reply-gate.ts";
 import {
   downloadAndPersistMedia,
   enqueueMediaJob,
@@ -818,19 +819,22 @@ export async function triggerReactions(
         // barAt=2 do idk virava código morto. Com o id persistido, o retry do chunk i
         // reusa o mesmo idk → conflito → hit=2 → barAt=2 dispara → retry idempotente.
         const dedupNonce = persisted.message_id;
+        // Turno que produziu a resposta: o handoff dele não cancela o próprio texto.
+        const replyTurn = replyTurnFromAgentResponse(agentData);
         for (let i = 0; i < parts.length; i++) {
           const text = parts[i]?.trim();
           if (!text) continue;
 
           if (i > 0) await new Promise((r) => setTimeout(r, 1200 + Math.random() * 800));
 
-          // RC-cancel: per-part cancellation gate
-          const cancelCheck = await isCopilotCanceled(
-            supabase,
-            persisted.organization_id,
-            persisted.phone_number,
-          );
-          if (cancelCheck.canceled) {
+          // RC-cancel: per-part cancellation gate (libera só o handoff do próprio turno)
+          const { decision, check: cancelCheck } = await checkReplyGate(supabase, {
+            organizationId: persisted.organization_id,
+            phone: persisted.phone_number,
+            turn: replyTurn,
+            gate: "outbound_chunks",
+          });
+          if (decision === "cancel") {
             canceledMidDelivery = true;
             logCopilotCancellation({
               organizationId: persisted.organization_id,

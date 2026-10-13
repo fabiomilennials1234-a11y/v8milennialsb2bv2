@@ -21,6 +21,8 @@ import { checkFunnelGate } from "./funnel-gate.ts";
 import { resolveMediaContent } from "../_shared/audio-transcription.ts";
 import { assertPlanFeature, PlanFeatureDeniedError } from "../_shared/plan-gate.ts";
 import { isOrgBlocked } from "../_shared/org-status.ts";
+import { logReplyReleased } from "../_shared/copilot/reply-gate.ts";
+import { buildPublicResponse, decidePostLlmGate, sameTurnHandoffOf, shouldRunAbsorbLoop } from "./post-llm-gate.ts";
 
 /**
  * Webhook receptor de mensagens de leads
@@ -536,8 +538,22 @@ Deno.serve(withErrorBoundary('agent-message', async (req) => {
     // user pode ter desligado o switch DURANTE a chamada LLM (~5-30s).
     // Se cancelado, retornamos skipped e NÃO entregamos a resposta — caller
     // (sz-chat-webhook etc) não dispara sendSzChatResponse.
+    // Exceção (H1, 2026-10-13): o cancelamento é EXATAMENTE o handoff que este
+    // turno causou (carimbo do engine) → o texto do turno sai e fica no
+    // histórico. Humano/pausa/opt-out/carimbo diferente continuam cancelando.
     const cancelCheck = await isCopilotCanceled(supabase, organizationId, from);
-    if (cancelCheck.canceled) {
+    const postLlmDecision = decidePostLlmGate(cancelCheck, response, lead.id);
+    if (postLlmDecision === "release") {
+      console.log('[agent-message] IA desligada pelo handoff do próprio turno — entregando resposta do lead:', lead.id);
+      logReplyReleased({
+        organizationId,
+        turn: { leadId: lead.id, sameTurnHandoff: sameTurnHandoffOf(response) },
+        gate: "post_llm",
+        check: cancelCheck,
+        conversationId: (response as { _eval_meta?: { conversationId?: string } })._eval_meta?.conversationId,
+      });
+    }
+    if (postLlmDecision === "cancel") {
       console.log('[agent-message] Canceled mid-LLM — skipping delivery for lead:', lead.id);
       const evalMeta = (response as any)._eval_meta;
 
@@ -620,21 +636,25 @@ Deno.serve(withErrorBoundary('agent-message', async (req) => {
       payloadSnapshot: { channel, action: response.action, hasMessage: !!response.message },
     });
 
-    // 5.5. POST-LLM ABSORB LOOP — pick up messages that arrived during LLM processing
-    try {
-      const { iterations, messagesProcessed } = await absorbPendingMessages({
-        supabase,
-        engine,
-        leadId: lead.id,
-        from,
-        organizationId,
-      });
-      if (iterations > 0) {
-        console.log('[agent-message] Absorb loop:', { iterations, messagesProcessed });
+    // 5.5. POST-LLM ABSORB LOOP — pick up messages that arrived during LLM processing.
+    // Não roda depois de handoff/cancelamento: o humano assumiu a conversa e o
+    // absorb geraria um turno novo sem gate (post-llm-gate.ts).
+    if (shouldRunAbsorbLoop(postLlmDecision, response)) {
+      try {
+        const { iterations, messagesProcessed } = await absorbPendingMessages({
+          supabase,
+          engine,
+          leadId: lead.id,
+          from,
+          organizationId,
+        });
+        if (iterations > 0) {
+          console.log('[agent-message] Absorb loop:', { iterations, messagesProcessed });
+        }
+      } catch (absorbErr) {
+        // Absorb loop failure is non-fatal — primary response already generated
+        console.warn('[agent-message] Absorb loop failed (non-fatal):', absorbErr);
       }
-    } catch (absorbErr) {
-      // Absorb loop failure is non-fatal — primary response already generated
-      console.warn('[agent-message] Absorb loop failed (non-fatal):', absorbErr);
     }
 
     // 6. RELEASE LOCK — reduce blocking window from 60s to actual processing time
@@ -646,8 +666,9 @@ Deno.serve(withErrorBoundary('agent-message', async (req) => {
         if (relErr) console.warn("[agent-message] Lock release failed (non-fatal):", relErr.message);
       });
 
-    // 7. RETURN RESPONSE (strip internal _eval_meta before sending)
-    const { _eval_meta: _unused, ...publicResponse } = response as any;
+    // 7. RETURN RESPONSE (sem _eval_meta; com lead_id + same_turn_handoff para
+    // os gates por chunk dos chamadores — reply-gate.ts)
+    const publicResponse = buildPublicResponse(response as Record<string, unknown>, lead.id);
     return new Response(JSON.stringify(publicResponse), {
       headers: { ...corsHeaders, "Content-Type": "application/json" }
     });

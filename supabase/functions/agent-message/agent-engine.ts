@@ -84,6 +84,8 @@ import {
 
 /** Ações de mídia (enfileiradas; o worker aplica o gate de cancelamento). */
 const MEDIA_ACTIONS = new Set(['SEND_DOCUMENT', 'SEND_PRODUCT_MATERIAL']);
+/** Ações que desligam a IA inline (RPC transfer_lead_to_human) e devolvem o carimbo do handoff. */
+const TRANSFER_ACTIONS = new Set(['TRANSFER_HUMAN', 'TRANSFER_SZ_CHAT']);
 
 /** Ações que recebem `lead_id` do lead corrente antes de executar/enfileirar. */
 const NEEDS_LEAD_ID = new Set([
@@ -823,12 +825,15 @@ export class AgentEngine {
     // dependência real (transferência inline × ADVANCE_STAGE da fila) é
     // resolvida por skipHumanStageMove: a etapa explícita do turno vence.
     //
-    // Mídia × transferência do mesmo turno: a transferência (sequencial, antes)
-    // desliga a IA e o worker de mídia cancelaria o envio decidido NESTE turno.
-    // Com mídia no plano, a transferência devolve o carimbo do desligamento que
-    // causou e ele vai no payload da mídia (same-turn-handoff.ts).
+    // Transferência do mesmo turno: ela (sequencial, antes) desliga a IA e os
+    // gates de cancelamento descartariam o que ESTE turno decidiu entregar — a
+    // mídia (worker) e o próprio texto (gate pós-LLM + gates por chunk). A
+    // transferência devolve o carimbo do desligamento que causou: vai no
+    // payload da mídia e em `same_turn_handoff` da resposta (same-turn-handoff.ts,
+    // reply-gate.ts). Só o engine escreve o carimbo (strip do LLM em executeAction).
     const skipHumanStageMove = plan.sequential.some((a) => a.action === 'ADVANCE_STAGE');
-    const captureHandoffMarker = plan.media.length > 0;
+    const hasTransfer = plan.sequential.some((a) => TRANSFER_ACTIONS.has(a.action));
+    const captureHandoffMarker = plan.media.length > 0 || hasTransfer;
     let sameTurnHandoff: SameTurnHandoffMarker | null = null;
     const actionsExecuted: string[] = [];
     let executionResult: Record<string, unknown> | null = null;
@@ -971,6 +976,9 @@ export class AgentEngine {
       action_executed: actionsExecuted[0],
       actions_executed: actionsExecuted,
       execution_result: executionResult,
+      // Carimbo do handoff deste turno (null sem transferência, ou quando a IA
+      // já estava desligada antes dela). Libera o texto do turno nos gates.
+      same_turn_handoff: sameTurnHandoff,
       // Metadados para LLM-as-a-judge (#8) — usados em fire-and-forget pelo caller
       _eval_meta: {
         conversationId: conversation.id,
