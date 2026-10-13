@@ -3,7 +3,7 @@ type: feature
 title: Copilot
 status: active
 created: 2026-04-12
-updated: 2026-04-12
+updated: 2026-10-13
 tags: [uncategorized]
 related: []
 owner: gabriel
@@ -231,6 +231,13 @@ Decisões CTO:
 
 NÃO coberto: `whatsapp-webhook` Uazapi reply (rota não mapeada), `send_document/send_product_material` (sem delay relevante).
 
+## Handoff pegajoso + texto do turno de transferência (2026-10-13)
+
+Dois defeitos do handoff para humano (todas as orgs V1 + V2 via fila):
+
+- **H1 — texto do turno descartado**: num turno com `transfer_to_human`/`transfer_sz_chat` a transferência roda inline e desliga a IA; o gate pós-LLM e os gates por chunk viam o próprio desligamento e descartavam "Já vou te passar para o time". Agora o engine devolve `same_turn_handoff` (carimbo do desligamento que ELE causou, só quando a IA estava ligada antes) e o texto sai se o cancelamento vigente é exatamente aquele. Módulo único `_shared/copilot/reply-gate.ts` usado no pós-LLM (`agent-message/post-llm-gate.ts`) e nos 4 laços de chunk (`whatsapp-webhook/handler.ts`, `copilot-batch-processor`, `recover-stuck-conversations`, `sz-chat-webhook`). Humano/pausa/opt-out/carimbo diferente/outro lead/fonte error|default continuam cancelando. Liberação loga `copilot_handoff_reply_released`. Absorb loop não roda depois de handoff.
+- **H2 — handoff não pegajoso**: a transferência desliga sem usuário (`set_by` NULL) e a religação no inbound (#839, feita para o bulk REALSC de 28/05) religava a IA; lead já desligado não virava a preferência (144 leads travados em 12 orgs). Coluna `phone_ai_preferences.disabled_reason` (`'handoff'` | NULL): o trigger `sync_lead_ai_to_preferences` grava `'handoff'` ao desligar sem `ai_disabled_by`; o RPC `transfer_lead_to_human` garante a preferência desligada (preserva desligamento anterior). `isCopilotCanceled.systemDisabled` exige `set_by` NULL **e** motivo NULL; a religação tem guarda `.is("disabled_reason", null)`. Coluna ausente → fail-safe (não religa). Migration `20271120000000` (schema/funções); backfill B1/B2a/B2b em `scripts/copilot-handoff-backfill-20271120.sql` (não é migration — F4), aplicado só depois da migration e do deploy das edges.
+
 ## Toggle Copilot — sistema unificado (Onda 1+2+3 — 2026-04-26)
 
 Bugs reportados pelo time ("switch não desliga", "responde mesmo desligado", "switch volta sozinho", etc) tratados em 3 ondas:
@@ -260,6 +267,8 @@ Bugs reportados pelo time ("switch não desliga", "responde mesmo desligado", "s
 - `leads.ai_disabled` é denormalização (RPCs sincronizam ambas)
 
 ## Historico de mudancas
+
+- **2026-10-13**: Handoff pegajoso (`disabled_reason='handoff'`) + texto do turno de transferência entregue (carimbo `same_turn_handoff` liberando pós-LLM e chunks). Ver `07 — Changelog/2026-10-13-copilot-handoff-pegajoso.md`.
 
 - **2026-06-05**: Gatilho "Quando enviar" para documentos (PDF) na Knowledge Base. Campos `description`/`send_when` (antes só mídia) liberados pra documento; edição inline de metadata de doc/mídia já salvos; tool `send_document` passa a expor `[Enviar quando: …]` pro agente. Hardening RLS UPDATE (`WITH CHECK`). Corrige double-render de doc existente no Playground. Ver `07 — Changelog/2026-06-05-copilot-pdf-send-trigger.md`.
 - **2026-04-26**: Toggle Copilot Onda 1+2+3 — fonte única canônica + hook unificado + realtime + audit page. Ver `07 — Changelog/2026-04-26.md`.
