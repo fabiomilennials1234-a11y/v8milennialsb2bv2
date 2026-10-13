@@ -44,6 +44,10 @@
 -- Corpos base de mover_negocio e bulk_move_pipeline_entries = prod (13/10).
 -- ============================================================================
 
+-- Transação explícita: o CLI NÃO embrulha o arquivo, e LOCK TABLE/SET LOCAL
+-- exigem bloco (25P01 em banco novo). Em prod foi aplicada assim, à mão.
+BEGIN;
+
 SET LOCAL lock_timeout = '10s';
 
 
@@ -397,3 +401,5 @@ BEGIN
   RETURN v_count;
 END;
 $function$;
+
+COMMIT;
