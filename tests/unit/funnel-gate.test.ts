@@ -72,18 +72,25 @@ describe("decideFunnelGate", () => {
 });
 
 function makeSupabase(tables: Record<string, { data: unknown; error?: unknown }>) {
+  interface Chain {
+    select: () => Chain;
+    eq: () => Chain;
+    is: () => Chain;
+    in: () => Chain;
+    then: (resolve: (v: unknown) => unknown) => unknown;
+  }
   const builder = (table: string) => {
-    const chain: any = {
+    const chain: Chain = {
       select: () => chain,
       eq: () => chain,
       is: () => chain,
       in: () => chain,
-      then: (resolve: (v: unknown) => unknown) =>
+      then: (resolve) =>
         resolve(tables[table] ?? { data: null, error: { message: "sem tabela" } }),
     };
     return chain;
   };
-  return { from: builder } as any;
+  return { from: builder } as unknown as Parameters<typeof checkFunnelGate>[0];
 }
 
 describe("checkFunnelGate", () => {
