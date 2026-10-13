@@ -129,3 +129,26 @@ it.each(["text", "image"])("keeps accepted %s pending in the database and the vi
   expect(client.getQueryData<WhatsAppMessage[]>(["whatsapp_messages", "org", base.phoneNumber, base.instanceId])?.[0]).toMatchObject({ message_id: "queued-id", status: "pending" });
   unmount(); client.clear();
 });
+
+it.each(["text", "image"])("sends a quoted %s in a group conversation to the group JID", async kind => {
+  invoke.mockResolvedValue({ data: { result: { message_id: "group-sent" } }, error: null });
+  const client = new QueryClient();
+  const { result, unmount } = renderHook(() => ({ text: useSendWhatsAppMessage(), media: useSendWhatsAppMedia() }), {
+    wrapper: ({ children }: { children: ReactNode }) => <QueryClientProvider client={client}>{children}</QueryClientProvider>,
+  });
+  const base = {
+    phoneNumber: "120363428385862417", isGroup: true, instanceId: "instance", instanceName: "sales",
+    replyContext: { messageId: "participant-msg", text: "pedido 24877", direction: "incoming" as const },
+  };
+  await act(async () => {
+    if (kind === "text") await result.current.text.mutateAsync({ ...base, message: "*BODEN* - pedido 24877" });
+    else await result.current.media.mutateAsync({ ...base, mediaType: "image", media: "https://test.invalid/image.png" });
+  });
+  expect(invoke).toHaveBeenCalledTimes(1);
+  expect(invoke.mock.calls[0][1].body.payload).toMatchObject({ number: "120363428385862417@g.us", replyid: "participant-msg" });
+  expect(upsert).toHaveBeenCalledWith(
+    expect.objectContaining({ remote_jid: "120363428385862417@g.us", phone_number: "120363428385862417", is_group: true }),
+    expect.anything(),
+  );
+  unmount(); client.clear();
+});

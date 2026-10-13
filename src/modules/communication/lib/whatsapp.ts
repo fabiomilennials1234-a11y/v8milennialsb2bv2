@@ -8,7 +8,7 @@ import {
 import { useCurrentTeamMember } from "@/modules/identity";
 import { useWhatsAppInstancesForUser } from "@/modules/communication/hooks/chat/useWhatsAppInstances";
 import { formatPhoneForWhatsApp } from "./whatsappPhone";
-export { formatPhoneForWhatsApp } from "./whatsappPhone";
+export { formatPhoneForWhatsApp, resolveWhatsAppDestination, type WhatsAppDestination } from "./whatsappPhone";
 
 export function openWhatsApp(phone: string | undefined, e?: React.MouseEvent) {
   if (e) {

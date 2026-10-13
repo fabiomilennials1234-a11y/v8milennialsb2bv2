@@ -64,3 +64,32 @@ export function formatPhoneForWhatsApp(phone: string | undefined): string | null
   return '55' + cleaned;
 }
 
+
+/** Para onde um envio do chat vai: `number` vai ao provider, os outros à linha. */
+export interface WhatsAppDestination {
+  /** O que o proxy repassa à Uazapi: número BR ou JID completo do grupo. */
+  number: string;
+  remoteJid: string;
+  /** Valor de `whatsapp_messages.phone_number` (parte local do JID). */
+  phoneNumber: string;
+}
+
+/** Id de grupo: atual (`120363…`) ou legado (`<criador>-<timestamp>`). */
+const GROUP_ID = /^\d+(-\d+)?$/;
+
+/**
+ * Resolve o destino de um envio do chat. Grupo é decidido pelo flag `is_group`
+ * do contato, nunca pelo formato do id: um id de grupo não é telefone e não
+ * pode passar pela normalização BR, e um "telefone" de 18 dígitos sem o flag
+ * continua sendo lixo. O proxy repassa `number` cru, e a Uazapi entrega no
+ * grupo quando recebe o JID `<id>@g.us` — o mesmo que o nó `send_to_group` usa.
+ */
+export function resolveWhatsAppDestination(phone: string | undefined, isGroup = false): WhatsAppDestination | null {
+  if (!isGroup) {
+    const number = formatPhoneForWhatsApp(phone);
+    return number ? { number, remoteJid: `${number}@s.whatsapp.net`, phoneNumber: number } : null;
+  }
+  const id = phone?.trim().replace(/@g\.us$/, '');
+  if (!id || !GROUP_ID.test(id)) return null;
+  return { number: `${id}@g.us`, remoteJid: `${id}@g.us`, phoneNumber: id };
+}
