@@ -10,7 +10,9 @@
 --   (PREENCHE)  notas pedidas preenchem só o que está vazio;
 --   (RECOMPRA)  card que JÁ tem negócio não é adotado — segundo negócio cria card;
 --   (ESCOPO)    card fechado, ou de outro funil, não é adotado;
---   (ORDEM)     com dois órfãos, o mais antigo é adotado;
+--   (ORDEM)     saiu: dois órfãos no mesmo funil viraram estado impossível
+--               (uq_pipeline_entries_um_card_sem_negocio, 20271119000000 —
+--               ver um_card_sem_negocio_por_lead_no_funil_test.sql);
 --   (CUSTOM)    funciona em funil personalizado, e uuid de etapa de outro funil
 --               continua sendo recusado mesmo quando há card para adotar.
 --
@@ -35,8 +37,7 @@ INSERT INTO public.leads (id, organization_id, name) VALUES
   ('deadbeef-0000-4000-8000-00000000a101', 'deadbeef-0000-4000-8000-00000000ad01', 'Gisele (órfão no funil)'),
   ('deadbeef-0000-4000-8000-00000000a102', 'deadbeef-0000-4000-8000-00000000ad01', 'Órfão fechado'),
   ('deadbeef-0000-4000-8000-00000000a103', 'deadbeef-0000-4000-8000-00000000ad01', 'Órfão em outro funil'),
-  ('deadbeef-0000-4000-8000-00000000a104', 'deadbeef-0000-4000-8000-00000000ad01', 'Órfão custom'),
-  ('deadbeef-0000-4000-8000-00000000a105', 'deadbeef-0000-4000-8000-00000000ad01', 'Dois órfãos')
+  ('deadbeef-0000-4000-8000-00000000a104', 'deadbeef-0000-4000-8000-00000000ad01', 'Órfão custom')
 ON CONFLICT (id) DO NOTHING;
 
 INSERT INTO public.pipelines (id, organization_id, name, slug, type) VALUES
@@ -79,14 +80,7 @@ VALUES
   -- Custom: em Contato, sem nota.
   ('deadbeef-0000-4000-8000-00000000ae04', 'deadbeef-0000-4000-8000-00000000ad01',
    'deadbeef-0000-4000-8000-00000000ab02', 'deadbeef-0000-4000-8000-00000000a104',
-   'deadbeef-0000-4000-8000-00000000ac04', 'contato', NULL, NULL, now() - interval '2 min'),
-  -- Dois órfãos: o mais antigo é o adotado.
-  ('deadbeef-0000-4000-8000-00000000ae05', 'deadbeef-0000-4000-8000-00000000ad01',
-   'deadbeef-0000-4000-8000-00000000ab01', 'deadbeef-0000-4000-8000-00000000a105',
-   'deadbeef-0000-4000-8000-00000000ac01', 'novo_lead', NULL, NULL, now() - interval '1 hour'),
-  ('deadbeef-0000-4000-8000-00000000ae06', 'deadbeef-0000-4000-8000-00000000ad01',
-   'deadbeef-0000-4000-8000-00000000ab01', 'deadbeef-0000-4000-8000-00000000a105',
-   'deadbeef-0000-4000-8000-00000000ac01', 'novo_lead', NULL, NULL, now() - interval '5 min');
+   'deadbeef-0000-4000-8000-00000000ac04', 'contato', NULL, NULL, now() - interval '2 min');
 
 SET LOCAL session_replication_role = origin;
 
@@ -170,23 +164,6 @@ SELECT public.abrir_negocio(
 SELECT ok(
   (SELECT deal_id FROM public.pipeline_entries WHERE id = 'deadbeef-0000-4000-8000-00000000ae03') IS NULL,
   '(ESCOPO) card sem negócio de OUTRO funil não é adotado');
-
--- ===========================================================================
--- (ORDEM) dois órfãos no funil: o mais antigo
--- ===========================================================================
-CREATE TEMP TABLE r5 AS
-SELECT public.abrir_negocio(
-  'deadbeef-0000-4000-8000-00000000a105', 'whatsapp', 'novo_lead',
-  p_source => 'api') AS deal_id;
-
-SELECT is(
-  (SELECT deal_id FROM public.pipeline_entries WHERE id = 'deadbeef-0000-4000-8000-00000000ae05'),
-  (SELECT deal_id FROM r5),
-  '(ORDEM) o órfão MAIS ANTIGO recebe o negócio');
-
-SELECT ok(
-  (SELECT deal_id FROM public.pipeline_entries WHERE id = 'deadbeef-0000-4000-8000-00000000ae06') IS NULL,
-  '(ORDEM) o outro órfão segue sem negócio — um negócio, um card');
 
 -- ===========================================================================
 -- (CUSTOM) funil personalizado

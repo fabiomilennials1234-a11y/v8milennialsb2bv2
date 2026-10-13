@@ -6,10 +6,23 @@ import { FALLBACK_STAGES } from "@/contracts/pipe";
 import { normalizePhone } from "@/lib/normalizePhone";
 import type { Tables, TablesInsert } from "@/integrations/supabase/types";
 import {
-  createCustomPipelineEntry,
-  createSystemPipelineEntry,
+  createCustomPipelineEntry as criarCardCustom,
+  createSystemPipelineEntry as criarCardSistema,
+  ignorarSeLeadJaNoFunil,
   updateSystemPipelineEntry,
+  type CreateCustomPipelineEntryInput,
+  type CreateSystemPipelineEntryInput,
 } from "@/integrations/supabase/pipeline-entry-rpc";
+
+/**
+ * Lead que já tem card sem negócio no funil — o workflow de "lead criado" pode
+ * ter chegado antes — fica com o card que tem. O índice recusa o segundo; aqui
+ * isso não é erro para o vendedor.
+ */
+const createSystemPipelineEntry = (input: CreateSystemPipelineEntryInput) =>
+  criarCardSistema(input).catch(ignorarSeLeadJaNoFunil);
+const createCustomPipelineEntry = (input: CreateCustomPipelineEntryInput) =>
+  criarCardCustom(input).catch(ignorarSeLeadJaNoFunil);
 
 /**
  * Fetches the first active stage_key for a pipeline type from pipeline_stages.

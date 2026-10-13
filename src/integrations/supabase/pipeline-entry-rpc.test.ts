@@ -9,6 +9,8 @@ vi.mock("./client", () => ({
 import {
   createCustomPipelineEntry,
   createSystemPipelineEntry,
+  ignorarSeLeadJaNoFunil,
+  isLeadJaNoFunil,
   updateCustomPipelineEntry,
   updateSystemPipelineEntry,
 } from "./pipeline-entry-rpc";
@@ -88,5 +90,26 @@ describe("pipeline entry RPC adapter", () => {
       p_entry_id: "entry",
       p_patch: { stage_id: "next-stage" },
     });
+  });
+});
+
+describe("lead já no funil (uq_pipeline_entries_um_card_sem_negocio)", () => {
+  const doIndice = {
+    code: "23505",
+    message: 'duplicate key value violates unique constraint "uq_pipeline_entries_um_card_sem_negocio"',
+  };
+
+  it("reconhece só o 23505 do índice de um card sem negócio", () => {
+    expect(isLeadJaNoFunil(doIndice)).toBe(true);
+    expect(isLeadJaNoFunil({ code: "23505", message: 'violates unique constraint "uq_pipeline_entries_deal_id"' })).toBe(false);
+    expect(isLeadJaNoFunil({ code: "23503", message: doIndice.message })).toBe(false);
+    expect(isLeadJaNoFunil(null)).toBe(false);
+    expect(isLeadJaNoFunil("duplicate")).toBe(false);
+  });
+
+  it("porta automática: card que já existe não é erro, qualquer outra falha segue", () => {
+    expect(ignorarSeLeadJaNoFunil(doIndice)).toBeNull();
+    const outro = { code: "42501", message: "rls" };
+    expect(() => ignorarSeLeadJaNoFunil(outro)).toThrow();
   });
 });

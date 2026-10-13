@@ -615,6 +615,8 @@ export async function upsertPipeEntry(
 export async function upsertPipeEntryDetailed(
   supabase: SupabaseClient,
   params: UpsertPipeEntryParams,
+  /** Interno: já é a segunda volta depois de perder a corrida do insert. */
+  retriedAfterConflict = false,
 ): Promise<UpsertPipeEntryResult> {
   // Resolução graceful de propósito: o status `no_pipeline` JÁ É o erro tipado
   // deste caminho, e os chamadores existentes o distinguem. Erro transitório de
@@ -696,6 +698,12 @@ export async function upsertPipeEntryDetailed(
     .single();
 
   if (error) {
+    // 23505 = `uq_pipeline_entries_um_card_sem_negocio`: outro escritor (webhook,
+    // workflow, poll da Meta) criou o card deste lead neste funil entre a nossa
+    // leitura e o insert. O card dele é O card — relê e atualiza, uma vez.
+    if (error.code === "23505" && !retriedAfterConflict) {
+      return upsertPipeEntryDetailed(supabase, params, true);
+    }
     console.warn("[pipeline-adapter] upsertPipeEntry insert error:", error);
     return { status: "write_failed" };
   }

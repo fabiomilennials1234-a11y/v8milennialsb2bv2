@@ -8,6 +8,7 @@ import { moverNegocio, invalidateAfterMove } from "../../lib/moverNegocio";
 import { chaveDeNovaEtapa } from "../../lib/chave-de-nova-etapa";
 import {
   createCustomPipelineEntry,
+  isLeadJaNoFunil,
   updateCustomPipelineEntry,
 } from "@/integrations/supabase/pipeline-entry-rpc";
 import {
@@ -991,12 +992,7 @@ export function useAddLeadToCustomPipe() {
           notes: notes || null,
         });
       } catch (error) {
-        if (
-          typeof error === "object"
-          && error !== null
-          && "message" in error
-          && String(error.message).includes("duplicate")
-        ) {
+        if (isLeadJaNoFunil(error)) {
           throw new Error("Este lead já está neste funil");
         }
         throw error;
