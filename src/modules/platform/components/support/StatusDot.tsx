@@ -12,6 +12,7 @@ const STATUS_STYLES: Record<TicketStatus, string> = {
   aguardando_cliente: "bg-warning animate-pulse",
   resolvido: "bg-success",
   fechado: "bg-muted-foreground/40",
+  recusado: "bg-muted-foreground/40",
 };
 
 export function StatusDot({ status, className }: { status: TicketStatus; className?: string }) {

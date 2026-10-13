@@ -132,6 +132,7 @@ describe("isEligibleForAutoClose", () => {
 describe("isTerminal", () => {
   it("só fechado é terminal", () => {
     expect(isTerminal("fechado")).toBe(true);
+    expect(isTerminal("recusado")).toBe(true);
     expect(isTerminal("resolvido")).toBe(false);
     expect(isTerminal("aberto")).toBe(false);
   });

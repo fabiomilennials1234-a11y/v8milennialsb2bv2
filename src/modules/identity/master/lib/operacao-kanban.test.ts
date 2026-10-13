@@ -19,8 +19,8 @@ const ticket = (over: Partial<OperacaoTicketFacts> = {}): OperacaoTicketFacts =>
   assigned_master_user_id: null,
   ...over,
 });
-const withReply: OperacaoDiagnosisFacts = { customer_reply: "Corrigimos o envio." };
-const noReply: OperacaoDiagnosisFacts = { customer_reply: "   " };
+const withReply: OperacaoDiagnosisFacts = { customer_reply: "Corrigimos o envio.", kind: "feature" };
+const noReply: OperacaoDiagnosisFacts = { customer_reply: "   ", kind: "fix" };
 
 describe("columnOf — OP-8: a coluna vem do dado", () => {
   it("aberto sem diagnóstico fica em Chamado aberto", () => {
@@ -39,11 +39,14 @@ describe("columnOf — OP-8: a coluna vem do dado", () => {
   it("fechado é Concluído", () => {
     expect(columnOf(ticket({ status: "fechado" }), withReply)).toBe("concluido");
   });
+  it("recusado é Feature recusada", () => {
+    expect(columnOf(ticket({ status: "recusado" }), withReply)).toBe("recusada");
+  });
 });
 
 /**
  * Um Chamado representante de cada coluna. O de Chamado aberto não tem
- * diagnóstico; os demais têm (com resposta pronta), como no fluxo real.
+ * diagnóstico; os demais têm (feature, com resposta pronta), como no fluxo real.
  */
 const em: Record<OperacaoColumn, [OperacaoTicketFacts, OperacaoDiagnosisFacts | null]> = {
   aberto: [ticket(), null],
@@ -51,15 +54,19 @@ const em: Record<OperacaoColumn, [OperacaoTicketFacts, OperacaoDiagnosisFacts | 
   andamento: [ticket({ status: "em_andamento" }), withReply],
   aguardando: [ticket({ status: "resolvido" }), withReply],
   concluido: [ticket({ status: "fechado" }), withReply],
+  recusada: [ticket({ status: "recusado" }), withReply],
 };
 
 describe("canMove — emenda ao ADR-0018: o master move livre", () => {
+  // Chamado aberto não tem diagnóstico, logo não é feature: Feature recusada fica de fora (testado abaixo).
   const pares = OPERACAO_COLUMNS.flatMap((from) =>
-    OPERACAO_COLUMNS.filter((to) => to !== from).map((to) => [from, to] as const),
+    OPERACAO_COLUMNS.filter((to) => to !== from && !(from === "aberto" && to === "recusada")).map(
+      (to) => [from, to] as const,
+    ),
   );
 
-  it("são 20 movimentos possíveis entre 5 colunas", () => {
-    expect(pares).toHaveLength(20);
+  it("são 29 movimentos possíveis entre 6 colunas", () => {
+    expect(pares).toHaveLength(29);
   });
 
   it.each(pares)("master: %s → %s é permitido e grava o estado da coluna", (from, to) => {
@@ -90,6 +97,28 @@ describe("canMove — emenda ao ADR-0018: o master move livre", () => {
       andamento: "em_andamento",
       aguardando: "resolvido",
       concluido: "fechado",
+      recusada: "recusado",
+    });
+  });
+
+  it("Feature recusada só aceita chamado diagnosticado como feature", () => {
+    const reason = "Só um chamado diagnosticado como feature vai para Feature recusada.";
+    expect(canMove(ticket(), null, "recusada", true)).toEqual({ ok: false, reason });
+    expect(canMove(ticket({ status: "em_andamento" }), noReply, "recusada", true)).toEqual({ ok: false, reason });
+    expect(canMove(ticket({ status: "em_andamento" }), withReply, "recusada", true)).toMatchObject({
+      ok: true,
+      move: { confirm: "recusar", status: "recusado", landsIn: "recusada", noop: false },
+    });
+  });
+
+  it("sair de Feature recusada pede confirmação de reabertura", () => {
+    expect(canMove(ticket({ status: "recusado" }), withReply, "andamento", true)).toMatchObject({
+      ok: true,
+      move: { confirm: "reabrir", status: "em_andamento" },
+    });
+    expect(canMove(ticket({ status: "recusado" }), withReply, "concluido", true)).toMatchObject({
+      ok: true,
+      move: { confirm: "fechar", status: "fechado" },
     });
   });
 
@@ -170,6 +199,16 @@ describe("mensagens do movimento", () => {
       /voltou para Diagnóstico feito/,
     );
   });
+  it("Feature recusada diz o que o cliente vê", () => {
+    expect(moveSuccessMessage(mv(ticket(), withReply, "recusada"), false)).toBe(
+      "Feature recusada. O cliente vê o chamado como Recusado.",
+    );
+  });
+  it("saindo de Feature recusada diz que reabriu", () => {
+    expect(moveSuccessMessage(mv(ticket({ status: "recusado" }), withReply, "andamento"), false)).toBe(
+      "Chamado reaberto. Movido para Em andamento.",
+    );
+  });
   it("saindo de Concluído diz que reabriu", () => {
     expect(moveSuccessMessage(mv(ticket({ status: "fechado" }), null, "andamento"), false)).toBe(
       "Chamado reaberto. Movido para Em andamento.",
@@ -194,11 +233,13 @@ describe("groupByColumn", () => {
       { ...ticket(), id: "a" },
       { ...ticket(), id: "b" },
       { ...ticket({ status: "fechado" }), id: "c" },
+      { ...ticket({ status: "recusado" }), id: "d" },
     ];
     const g = groupByColumn(list, new Map([["b", noReply]]));
     expect(g.aberto.map((t) => t.id)).toEqual(["a"]);
     expect(g.diagnostico.map((t) => t.id)).toEqual(["b"]);
     expect(g.concluido.map((t) => t.id)).toEqual(["c"]);
+    expect(g.recusada.map((t) => t.id)).toEqual(["d"]);
     expect(g.andamento).toEqual([]);
   });
 });

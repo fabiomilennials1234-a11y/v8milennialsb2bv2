@@ -9,6 +9,10 @@
  * `resolvido` é a alegação de conserto do staff. `fechado` é terminal e chega
  * sozinho 7 dias depois, se a Organização não reabrir.
  *
+ * `recusado` é o outro terminal: a feature que o time decidiu não construir. Só
+ * o master leva a ele, pelo kanban da Operação (`master_ticket_move`); nenhum
+ * evento deste mapa chega lá.
+ *
  * **Reabrir não é um estado**: devolve o Chamado a `aberto` e incrementa um
  * contador. Um Chamado reaberto três vezes é evidência de que a correção nunca
  * pegou, e esse sinal precisa somar, não ser sobrescrito. O incremento é do
@@ -81,9 +85,9 @@ export function canClientTransition(event: TicketEvent): boolean {
   return CLIENT_EVENTS.has(event);
 }
 
-/** `fechado` é terminal: depois da janela, o cliente abre um chamado novo. */
+/** `fechado` e `recusado` são terminais: o cliente abre um chamado novo. */
 export function isTerminal(status: TicketStatus): boolean {
-  return status === "fechado";
+  return status === "fechado" || status === "recusado";
 }
 
 export function isEligibleForAutoClose(

@@ -14,7 +14,7 @@ import { cn } from "@/lib/utils";
 import { useSupportTickets, type SupportTicket } from "@/modules/platform/hooks/useSupportTickets";
 import { STATUS_LABELS, TIPO_LABELS } from "@/modules/platform/lib/support-ticket-draft";
 
-const FECHADO = new Set(["resolvido", "fechado"]);
+const FECHADO = new Set(["resolvido", "fechado", "recusado"]);
 
 /** "2 h 15 min" a partir de milissegundos. */
 function duracao(ms: number) {
@@ -149,7 +149,7 @@ export function AjudaChamados({ onAbrir, onNovo }: { onAbrir: (id: string) => vo
                     <TableCell className="py-3 pl-6 text-[13px] font-semibold">{t.title}</TableCell>
                     <TableCell className="py-3 text-[13px] text-muted-foreground">{TIPO_LABELS[t.tipo]}</TableCell>
                     <TableCell className="py-3">
-                      <Badge variant={FECHADO.has(t.status) ? "success" : t.status === "aguardando_cliente" ? "warning" : "soft"}>
+                      <Badge variant={t.status === "recusado" ? "soft" : FECHADO.has(t.status) ? "success" : t.status === "aguardando_cliente" ? "warning" : "soft"}>
                         {STATUS_LABELS[t.status]}
                       </Badge>
                     </TableCell>

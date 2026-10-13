@@ -23772,6 +23772,7 @@ export type Database = {
         | "aguardando_cliente"
         | "resolvido"
         | "fechado"
+        | "recusado"
       support_ticket_tipo: "bug" | "duvida" | "solicitacao"
       upsell_campanha_status:
         | "cliente"
@@ -24016,6 +24017,7 @@ export const Constants = {
         "aguardando_cliente",
         "resolvido",
         "fechado",
+        "recusado",
       ],
       support_ticket_tipo: ["bug", "duvida", "solicitacao"],
       upsell_campanha_status: [
