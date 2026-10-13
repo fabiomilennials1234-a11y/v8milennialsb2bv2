@@ -12,6 +12,7 @@ import { describe, it, expect } from "vitest";
 
 import {
   readMessageStatus,
+  mesclarStatusNaLinha,
   OUTBOUND_STATUS_RANK,
 } from "../../supabase/functions/_shared/notificame-inbound.ts";
 
@@ -114,5 +115,96 @@ describe("OUTBOUND_STATUS_RANK", () => {
     // Se estivesse na escala, um ERROR depois de DELIVERED seria tratado como
     // rebaixamento e descartado. Foi exatamente a ordem que a Meta produziu.
     expect(OUTBOUND_STATUS_RANK.failed).toBeUndefined();
+  });
+});
+
+/**
+ * A MESCLA de um callback na linha — os dois defeitos de 13/10.
+ *
+ * Sampaio e Moraes: seis recusas gravadas com `detail` e `provider_code` nulos,
+ * e a vendedora vendo só "falhou". Chique (30/09): `ERROR 131047` 1,7s ANTES do
+ * `SENT`, e o `SENT` atrasado devolvia a mensagem para "enviada".
+ */
+describe("mesclarStatusNaLinha", () => {
+  const AGORA = new Date("2026-10-13T13:08:29.000Z");
+  const recusa131047 = {
+    code: "ERROR",
+    error: {
+      code: 131047,
+      details: "Message failed to send because more than 24 hours have passed since the customer last replied to this number.",
+      message: "Re-engagement message",
+    },
+  };
+  const evento = (messageStatus: Record<string, unknown>) =>
+    readMessageStatus({ type: "MESSAGE_STATUS", messageId: "m-1", messageStatus })!;
+
+  it("uma recusa grava status, código, motivo e o corpo cru", () => {
+    const { patch, progride } = mesclarStatusNaLinha(
+      { status: "sent", raw_payload: { request: { to: "5591" } }, provider_message_id: null },
+      evento(recusa131047),
+      recusa131047,
+      AGORA,
+    );
+    expect(progride).toBe(true);
+    expect(patch.status).toBe("failed");
+    expect(patch.raw_payload.request).toEqual({ to: "5591" });
+    expect(patch.raw_payload.status_event).toMatchObject({
+      code: "failed",
+      provider_code: "131047",
+      failure_raw: recusa131047,
+    });
+    expect(String((patch.raw_payload.status_event as Record<string, unknown>).detail))
+      .toContain("24 hours");
+  });
+
+  it("uma segunda falha SEM motivo NÃO apaga o motivo da primeira", () => {
+    const primeira = mesclarStatusNaLinha(
+      { status: "sent", raw_payload: {}, provider_message_id: null },
+      evento(recusa131047),
+      recusa131047,
+      AGORA,
+    );
+    const semMotivo = { code: "REJECTED", description: "The message was rejected by the provider" };
+    const { patch } = mesclarStatusNaLinha(
+      { status: "failed", raw_payload: primeira.patch.raw_payload, provider_message_id: null },
+      evento(semMotivo),
+      semMotivo,
+      AGORA,
+    );
+    expect(patch.raw_payload.status_event).toMatchObject({
+      code: "failed",
+      provider_code: "131047",
+    });
+    expect(String((patch.raw_payload.status_event as Record<string, unknown>).detail))
+      .toContain("24 hours");
+  });
+
+  it("`failed` é TERMINAL: um SENT atrasado não devolve a mensagem para enviada", () => {
+    const { patch, progride } = mesclarStatusNaLinha(
+      {
+        status: "failed",
+        raw_payload: { status_event: { code: "failed", provider_code: "131047", detail: "x" } },
+        provider_message_id: null,
+      },
+      evento({ code: "SENT", providerMessageId: "P-1" }),
+      { code: "SENT", providerMessageId: "P-1" },
+      AGORA,
+    );
+    expect(progride).toBe(false);
+    expect(patch.status).toBeUndefined();
+    // A chave de correlação ainda é gravada — é ela que acha os callbacks seguintes.
+    expect(patch.provider_message_id).toBe("P-1");
+    // E o motivo sobrevive ao evento de sucesso.
+    expect(patch.raw_payload.status_event).toMatchObject({ provider_code: "131047", detail: "x" });
+  });
+
+  it("evento de sucesso não grava `failure_raw`", () => {
+    const { patch } = mesclarStatusNaLinha(
+      { status: null, raw_payload: {}, provider_message_id: null },
+      evento({ code: "DELIVERED" }),
+      { code: "DELIVERED" },
+      AGORA,
+    );
+    expect(patch.raw_payload.status_event).not.toHaveProperty("failure_raw");
   });
 });

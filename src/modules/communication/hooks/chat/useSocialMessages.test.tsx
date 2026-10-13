@@ -16,6 +16,8 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 /** Registra cada `.eq(coluna, valor)` da cadeia do PostgREST. */
 const eqCalls: Array<[string, unknown]> = [];
 const fromMock = vi.fn();
+/** As linhas que a consulta devolve. Vazio por padrão. */
+const linhas = vi.hoisted(() => ({ data: [] as unknown[] }));
 
 vi.mock("@/integrations/supabase/client", () => {
   const builder: Record<string, unknown> = {};
@@ -27,7 +29,7 @@ vi.mock("@/integrations/supabase/client", () => {
       return builder;
     }),
     order: vi.fn(chain),
-    limit: vi.fn(() => Promise.resolve({ data: [], error: null })),
+    limit: vi.fn(() => Promise.resolve({ data: linhas.data, error: null })),
   });
   return {
     supabase: {
@@ -78,6 +80,7 @@ const wrap = (qc: QueryClient) =>
   );
 
 beforeEach(() => {
+  linhas.data = [];
   eqCalls.length = 0;
   fromMock.mockReset();
   teamMemberMock.mockReset();
@@ -133,5 +136,73 @@ describe("useSocialMessages — a coluna do eixo", () => {
 
     await new Promise((r) => setTimeout(r, 10));
     expect(fromMock).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * A RECUSA SEM MOTIVO — 13/10, Sampaio e Moraes.
+ *
+ * Seis textos livres para contatos que nunca escreveram, seis `failed` com
+ * `detail` e `provider_code` nulos, e a bolha só dizia "falhou". A própria
+ * thread mostra que o envio foi fora da janela — a tela tem que dizer isso.
+ */
+describe("useSocialMessages — motivo da recusa", () => {
+  const oficial = () => contato({
+    channel: "whatsapp_oficial",
+    messaging_channel_id: INSTANCIA,
+    external_user_id: "5591988229647",
+  });
+  const saida = (over: Record<string, unknown>) => ({
+    id: "s-1",
+    external_id: "e-1",
+    direction: "outgoing",
+    message_type: "text",
+    content: "olá bom dia tudo bom !",
+    media_url: null,
+    status: "failed",
+    sender_name: null,
+    sender_profile_pic: null,
+    timestamp: "2026-10-13T13:08:23.919Z",
+    created_at: "2026-10-13T13:08:23.919Z",
+    raw_payload: { status_event: { code: "failed", detail: null, provider_code: null } },
+    ...over,
+  });
+
+  const render = async (contact: SocialContact) => {
+    const { result } = renderHook(() => useSocialMessages(contact), { wrapper: wrap(newQc()) });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    return result.current.data!;
+  };
+
+  it("contato que nunca escreveu: a falha sem motivo vira 'fora da janela'", async () => {
+    linhas.data = [saida({})];
+    const [m] = await render(oficial());
+    expect(m.failure_reason).toMatch(/24 horas/);
+    expect(m.failure_reason).toMatch(/template/);
+  });
+
+  it("contato que escreveu há 2h: NÃO culpa a janela — seria mandar consertar a coisa errada", async () => {
+    linhas.data = [
+      { ...saida({ id: "r-1", external_id: "e-0", direction: "incoming", status: "received", raw_payload: {} }),
+        timestamp: "2026-10-13T11:08:00.000Z" },
+      saida({}),
+    ];
+    const msgs = await render(oficial());
+    expect(msgs[1].failure_reason).toBeNull();
+  });
+
+  it("motivo da Meta presente vence a inferência", async () => {
+    linhas.data = [saida({
+      raw_payload: { status_event: { code: "failed", provider_code: "131042", detail: "Business eligibility payment issue" } },
+    })];
+    const [m] = await render(oficial());
+    expect(m.failure_reason).toMatch(/forma de pagamento/);
+    expect(m.failure_code).toBe("131042");
+  });
+
+  it("Instagram não recebe a inferência do WhatsApp oficial", async () => {
+    linhas.data = [saida({})];
+    const [m] = await render(contato({}));
+    expect(m.failure_reason).toBeNull();
   });
 });

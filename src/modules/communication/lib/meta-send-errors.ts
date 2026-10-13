@@ -59,6 +59,12 @@ const CONHECIDOS: Record<string, Omit<RecusaDaMeta, "codigo">> = {
     mensagem: "A janela de 24 horas fechou",
     acao: "Só template aprovado é aceito agora.",
   },
+  // Documentado pela Meta: conta sem forma de pagamento válida. Template é
+  // cobrado; sem cartão, a única saída fora da janela também é recusada.
+  "131042": {
+    mensagem: "A conta da Meta está sem forma de pagamento válida",
+    acao: "Peça ao administrador para cadastrar um cartão no Gerenciador de Negócios da Meta.",
+  },
   "131051": {
     mensagem: "Tipo de mensagem não suportado neste canal",
   },
