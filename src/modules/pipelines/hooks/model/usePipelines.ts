@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { isLeadJaNoFunil } from "@/integrations/supabase/pipeline-entry-rpc";
 import { useOrganization } from "@/modules/identity";
 import { useRealtimeSubscription } from "@/shared/realtime/useRealtimeSubscription";
 import { invalidateAfterMove } from "../../lib/moverNegocio";
@@ -154,6 +155,7 @@ export function useCreatePipelineEntry() {
         .select()
         .single();
 
+      if (isLeadJaNoFunil(error)) throw new Error("Este lead já está neste funil");
       if (error) throw error;
       return data as PipelineEntry;
     },

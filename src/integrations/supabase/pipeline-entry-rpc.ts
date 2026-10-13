@@ -3,6 +3,28 @@ import type { Json } from "./types";
 
 export type SystemPipelineSlug = "whatsapp" | "confirmacao" | "propostas";
 
+/**
+ * Índice que garante UM card aberto sem negócio por lead em cada funil
+ * (migration 20271119000000). Card com negócio fica fora — recompra.
+ */
+export const UM_CARD_SEM_NEGOCIO_INDEX = "uq_pipeline_entries_um_card_sem_negocio";
+
+/** O lead já tem card aberto sem negócio neste funil: o insert perdeu para ele. */
+export function isLeadJaNoFunil(error: unknown): boolean {
+  if (typeof error !== "object" || error === null) return false;
+  const { code, message } = error as { code?: unknown; message?: unknown };
+  return code === "23505" && String(message ?? "").includes(UM_CARD_SEM_NEGOCIO_INDEX);
+}
+
+/**
+ * Para portas automáticas (ingestão, integração): se o lead já está no funil,
+ * o card que existe É o card — não é erro. Qualquer outra falha segue.
+ */
+export function ignorarSeLeadJaNoFunil(error: unknown): null {
+  if (isLeadJaNoFunil(error)) return null;
+  throw error;
+}
+
 export interface CreateSystemPipelineEntryInput {
   organizationId: string;
   slug: SystemPipelineSlug;
