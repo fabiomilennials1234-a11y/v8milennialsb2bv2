@@ -70,7 +70,7 @@ REVOKE ALL ON FUNCTION private.chat_unrestricted_org_ids() FROM anon;
 REVOKE ALL ON FUNCTION private.chat_unrestricted_org_ids() FROM service_role;
 GRANT EXECUTE ON FUNCTION private.chat_unrestricted_org_ids() TO authenticated;
 
-DROP POLICY channel_messages_org_access ON public.channel_messages;
+DROP POLICY IF EXISTS channel_messages_org_access ON public.channel_messages;
 
 ALTER POLICY channel_messages_select_by_owner ON public.channel_messages
   TO authenticated

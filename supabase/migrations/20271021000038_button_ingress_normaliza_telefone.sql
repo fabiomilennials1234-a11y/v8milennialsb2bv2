@@ -87,7 +87,7 @@ BEGIN
   SELECT * INTO previous FROM public.workflow_button_ingress
     WHERE organization_id=p_organization_id AND instance_id=p_instance_id AND message_id=msg_id;
   RETURN jsonb_build_object('recognized',previous.kind='reply','question_id',previous.question_id,'received_at',previous.received_at);
-END $function$
+END $function$;
 
 
 COMMIT;

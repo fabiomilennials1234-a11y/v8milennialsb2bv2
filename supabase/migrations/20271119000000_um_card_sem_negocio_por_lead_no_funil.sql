@@ -44,6 +44,10 @@
 -- Corpos base de mover_negocio e bulk_move_pipeline_entries = prod (13/10).
 -- ============================================================================
 
+-- Transação explícita: o CLI NÃO embrulha o arquivo, e LOCK TABLE/SET LOCAL
+-- exigem bloco (25P01 em banco novo). Em prod foi aplicada assim, à mão.
+BEGIN;
+
 SET LOCAL lock_timeout = '10s';
 
 
@@ -89,15 +93,33 @@ BEGIN
     RAISE EXCEPTION 'Sem acesso a este card.' USING ERRCODE = 'insufficient_privilege';
   END IF;
 
-  UPDATE public.lead_comments       SET pipeline_entry_id = p_para WHERE pipeline_entry_id = p_de;
-  UPDATE public.meetings            SET pipeline_entry_id = p_para WHERE pipeline_entry_id = p_de;
   UPDATE public.follow_ups          SET pipeline_entry_id = p_para WHERE pipeline_entry_id = p_de;
   UPDATE public.workflow_executions SET pipeline_entry_id = p_para WHERE pipeline_entry_id = p_de;
   UPDATE public.acoes_do_dia        SET pipeline_entry_id = p_para WHERE pipeline_entry_id = p_de;
   UPDATE public.acoes_do_dia        SET proposta_id       = p_para WHERE proposta_id       = p_de;
   UPDATE public.acoes_do_dia        SET confirmacao_id    = p_para WHERE confirmacao_id    = p_de;
   UPDATE public.pipe_proposta_items SET pipe_proposta_id  = p_para WHERE pipe_proposta_id  = p_de;
-  UPDATE public.commissions         SET pipe_proposta_id  = p_para WHERE pipe_proposta_id  = p_de;
+
+  -- Três vínculos que o domínio NÃO deixa trocar de card. Ficam onde estão e,
+  -- quando o card sai, o FK ON DELETE SET NULL solta só o link — o registro
+  -- segue com lead, org e histórico (os gatilhos aceitam ir a NULL):
+  --   comentário com anexo   — o caminho no storage carrega o id do card
+  --                            (validate_deal_comment_documents);
+  --   reunião de outro funil — guarda o funil em que foi marcada
+  --                            (fn_meeting_bind_booking);
+  --   comissão projetada     — imutável, ADR-0017 §6
+  --                            (fn_commissions_protect_projection).
+  UPDATE public.lead_comments SET pipeline_entry_id = p_para
+   WHERE pipeline_entry_id = p_de
+     AND attachments = '[]'::jsonb;
+  UPDATE public.meetings SET pipeline_entry_id = p_para
+   WHERE pipeline_entry_id = p_de
+     AND (lead_id IS NULL
+          OR (event_type IS NOT NULL AND event_type <> 'meeting')
+          OR pipeline_id = v_para.pipeline_id);
+  UPDATE public.commissions SET pipe_proposta_id = p_para
+   WHERE pipe_proposta_id = p_de
+     AND source IS DISTINCT FROM 'sale_event_projection';
 
   -- Únicos por card: só leva quando o destino ainda não tem. O que sobrar
   -- segue a FK do card que sai (CASCADE em checklists/tinyerp, SET NULL em
@@ -379,3 +401,5 @@ BEGIN
   RETURN v_count;
 END;
 $function$;
+
+COMMIT;
