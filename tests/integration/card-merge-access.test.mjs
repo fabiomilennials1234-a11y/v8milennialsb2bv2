@@ -52,7 +52,7 @@ test("card merging enforces caller visibility and preserves dependent data", asy
         TRUNCATE acoes_do_dia;
         SET test.uid='${id(900)}'; SET test.org='${id(100)}';
         SET test.master='false'; SET test.admin='false'; SET test.owner='true';
-        INSERT INTO pipeline_entries VALUES
+        INSERT INTO pipeline_entries(id,organization_id,lead_id,deal_id,closed_at,pipeline_id) VALUES
           ('${id(1)}','${id(100)}','${id(200)}',NULL,NULL,'${id(300)}'),
           ('${id(2)}','${id(100)}','${id(200)}',NULL,NULL,'${id(301)}');
         INSERT INTO lead_comments(id,pipeline_entry_id) VALUES('${id(10)}','${id(1)}');
@@ -141,6 +141,82 @@ test("card merging enforces caller visibility and preserves dependent data", asy
       await db.exec("RESET ROLE");
       assert.equal(await commentSource(),id(2));
     });
+
+    // Exercise the real caller and closing trigger together: the origin-stage
+    // UPDATE can change closed_at before the caller decides whether to merge.
+    await db.exec(`RESET ROLE;
+      ALTER TABLE pipeline_entries ADD COLUMN stage_key text DEFAULT 'entrada', ADD COLUMN assigned_to uuid;
+      CREATE TABLE pipelines(id uuid PRIMARY KEY,organization_id uuid,type text);
+      CREATE TABLE pipeline_stages(id uuid PRIMARY KEY,pipeline_id uuid,organization_id uuid,stage_key text);
+      INSERT INTO pipelines VALUES
+        ('${id(300)}','${id(100)}','custom'),('${id(301)}','${id(100)}','custom');
+      INSERT INTO pipeline_stages VALUES
+        ('${id(401)}','${id(300)}','${id(100)}','vendido'),
+        ('${id(402)}','${id(300)}','${id(100)}','qualificado'),
+        ('${id(403)}','${id(301)}','${id(100)}','novo');
+      GRANT SELECT ON pipelines,pipeline_stages TO authenticated;
+      GRANT UPDATE,DELETE ON pipeline_entries TO authenticated;
+      ALTER TABLE pipeline_entries ENABLE ROW LEVEL SECURITY;
+      CREATE POLICY member_entries ON pipeline_entries TO authenticated USING (
+        organization_id IN (SELECT get_my_organization_ids())
+        AND (NOT(organization_id=ANY(private.strict_lead_member_orgs()))
+             OR private.strict_lead_is_owned(organization_id,lead_id))
+      );
+    `);
+    const baselineSchema = read("../../supabase/migrations/20260101000000_baseline_prod_schema.sql");
+    const closingTrigger = baselineSchema.match(/CREATE OR REPLACE FUNCTION "public"\."enforce_closed_at_on_final_stage"\(\)[\s\S]*?\$\$;/);
+    assert.ok(closingTrigger, "canonical closing trigger must be present");
+    await db.exec(closingTrigger[0]);
+    await db.exec(`CREATE TRIGGER close_final_stage BEFORE INSERT OR UPDATE OF stage_key ON pipeline_entries
+      FOR EACH ROW EXECUTE FUNCTION enforce_closed_at_on_final_stage()`);
+    const prerequisite = read("../../supabase/migrations/20271119000000_um_card_sem_negocio_por_lead_no_funil.sql");
+    await db.exec(prerequisite.slice(prerequisite.indexOf("CREATE OR REPLACE FUNCTION public.mover_negocio("),
+      prerequisite.indexOf("-- ── 5. bulk_move")));
+    if (!process.env.CARD_FORWARDING_BASELINE) {
+      await db.exec(read("../../supabase/migrations/20271119000002_preserve_closed_card_on_forwarding.sql"));
+    }
+    const forward = (stage = "vendido") => db.query(`SELECT mover_negocio(
+      '${id(1)}','${id(301)}','novo','${stage}','${id(901)}') AS survivor`);
+    await t.test("a final-stage forward adopts the destination and preserves the newly closed source history", async () => {
+      await reset();
+      assert.equal((await forward()).rows[0].survivor,id(2));
+      const source=(await db.query(`SELECT * FROM pipeline_entries WHERE id='${id(1)}'`)).rows[0];
+      assert.ok(source.closed_at);
+      assert.equal(source.pipeline_id,id(300));
+      assert.equal(source.stage_key,"vendido");
+      assert.equal(await commentSource(),id(1));
+      assert.equal((await db.query("SELECT pipeline_entry_id FROM checklists")).rows[0].pipeline_entry_id,id(1));
+      assert.equal((await db.query("SELECT completed FROM checklist_items")).rows[0].completed,true);
+      assert.equal((await db.query("SELECT pipeline_entry_id FROM follow_ups")).rows[0].pipeline_entry_id,id(1));
+      const target=(await db.query(`SELECT * FROM pipeline_entries WHERE id='${id(2)}'`)).rows[0];
+      assert.equal(target.assigned_to,id(901));
+      assert.equal(target.closed_at,null);
+      assert.equal(target.stage_key,"entrada");
+      await assert.rejects(merge(),/Só se funde/);
+    });
+    await t.test("ordinary open-card forwarding still merges dependents and removes only the redundant card", async () => {
+      await reset();
+      assert.equal((await forward("qualificado")).rows[0].survivor,id(2));
+      assert.equal((await db.query("SELECT count(*)::int n FROM pipeline_entries")).rows[0].n,1);
+      assert.equal(await commentSource(),id(2));
+      assert.equal((await db.query("SELECT pipeline_entry_id FROM checklists")).rows[0].pipeline_entry_id,id(2));
+    });
+    await t.test("a closed-source forward preserves conflicting checklists on both cards", async () => {
+      await reset();
+      await db.exec(`RESET ROLE;
+        INSERT INTO checklists VALUES('${id(22)}','${id(2)}','${id(500)}');
+        INSERT INTO checklist_items VALUES('${id(23)}','${id(22)}',false);
+        SET ROLE authenticated`);
+      assert.equal((await forward()).rows[0].survivor,id(2));
+      assert.deepEqual((await db.query("SELECT completed FROM checklist_items ORDER BY id")).rows,[{completed:true},{completed:false}]);
+      assert.equal((await db.query("SELECT count(*)::int n FROM pipeline_entries")).rows[0].n,2);
+    });
+    await t.test("caller forwarding still obeys RLS for a member without lead access", async () => {
+      await reset(); await db.exec("SET test.owner='false'");
+      await assert.rejects(forward(),/não encontrado/);
+      await db.exec("RESET ROLE");
+      assert.equal((await db.query(`SELECT stage_key FROM pipeline_entries WHERE id='${id(1)}'`)).rows[0].stage_key,"entrada");
+      assert.equal(await commentSource(),id(1));
+    });
   } finally { await db.close(); }
 });
-
