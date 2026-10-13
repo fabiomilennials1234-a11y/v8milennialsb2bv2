@@ -49,8 +49,22 @@ $$;
 REVOKE ALL ON FUNCTION public.guard_workflow_reenrollment() FROM PUBLIC, anon, authenticated;
 
 -- Apply the setting the customer already chose in the guided draft.
+-- Dado de UM cliente: só existe no banco de prod. Em banco novo (CI,
+-- `supabase start`, branch efêmera) o workflow não existe e o arquivo pula;
+-- já ligado (reaplicação) também pula. Presente e desligado sem a escolha no
+-- rascunho continua sendo erro — é o caso que a trava protege.
 DO $$
 BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM public.workflows
+     WHERE id = 'adb843a0-b677-4aa5-979e-6bd3cee4db0d'::uuid
+       AND organization_id = '38f3bea4-44c6-4732-bb20-065f547a7ed8'::uuid
+       AND NOT (is_active AND re_enrollment_enabled)
+  ) THEN
+    RAISE NOTICE 'P. mercos (Chique) ausente ou já ligado neste banco — nada a fazer.';
+    RETURN;
+  END IF;
+
   UPDATE public.workflows SET re_enrollment_enabled = true
   WHERE id = 'adb843a0-b677-4aa5-979e-6bd3cee4db0d'::uuid
     AND organization_id = '38f3bea4-44c6-4732-bb20-065f547a7ed8'::uuid
