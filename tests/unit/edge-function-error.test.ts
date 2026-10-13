@@ -107,6 +107,16 @@ describe("whatsAppSendErrorMessage", () => {
     );
   });
 
+  it("translates the proxy's 422 recipient_not_on_whatsapp body (Chamado 2dd2fa5b)", async () => {
+    const err = functionsHttpError({
+      error: "Uazapi server error 500 on POST /send/text: the number 5500000000000@s.whatsapp.net is not on WhatsApp",
+      code: "recipient_not_on_whatsapp",
+    });
+    await expect(whatsAppSendErrorMessage(err)).resolves.toBe(
+      "Esse número não tem WhatsApp. Confira o telefone no cadastro do lead.",
+    );
+  });
+
   it("never surfaces the generic supabase-js string when a body exists", async () => {
     const err = functionsHttpError({ error: "instance is not connected" });
     await expect(whatsAppSendErrorMessage(err)).resolves.not.toContain("non-2xx");

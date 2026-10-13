@@ -63,3 +63,20 @@ it('does not mark a provider failed status as sent just because HTTP succeeded',
   expect((await outcome).retryAttempts).toBe(10);
   expect(send).toHaveBeenCalledTimes(1);
 });
+
+// Uazapi answers 500 for a number without WhatsApp; the proxy reclassifies it
+// as 422 { error, code: "recipient_not_on_whatsapp" } (Chamado 2dd2fa5b).
+it('stops at the first 422 recipient_not_on_whatsapp, with no recovery cycle', async () => {
+  vi.useFakeTimers();
+  const response = {
+    data: null,
+    error: { context: { status: 422 }, body: { error: 'Uazapi server error 500 on POST /send/text: the number 5500000000000@s.whatsapp.net is not on WhatsApp', code: 'recipient_not_on_whatsapp' } },
+  };
+  const send = vi.fn().mockResolvedValue(response);
+  const confirm = vi.fn();
+  const onRetry = vi.fn();
+  expect(await sendWithBoundedRecovery({ send, confirm, onRetry, timeoutMs: 100, retryDelayMs: 1 })).toBe(response);
+  expect(send).toHaveBeenCalledOnce();
+  expect(onRetry).not.toHaveBeenCalled();
+  expect(confirm).not.toHaveBeenCalled();
+});
