@@ -23,6 +23,8 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useDealSheet } from "../deal-detail/deal-sheet-context";
 import { useLeadSheet } from "../lead-detail/hooks/useLeadSheet";
 import { useCrossPipeMove } from "../lead-detail/modal/pipes/useCrossPipeMove";
+import { useLossReasonGate } from "../../loss-reason-gate";
+import type { PerdaResolvida } from "@/contracts/pipe/perda";
 import {
   useCreateLeadComment,
   useDeleteLeadComment,
@@ -209,19 +211,25 @@ export const DealCardPanel = memo(function DealCardPanel() {
    * verdades voltam.
    */
   const { move, pendingStageKey } = useCrossPipeMove(leadId ?? "");
+  const { capturarMotivoDaPerda } = useLossReasonGate();
 
+  /**
+   * `perda` = motivo já colhido e gravado (o fallback do botão "Perdido"
+   * abaixo). Sem ele, etapa de perda pede o motivo dentro do `move`.
+   */
   const moverEtapa = useCallback(
-    async (chave: string) => {
+    async (chave: string, perda?: PerdaResolvida) => {
       if (!data || !entryId) return;
       const etapa = data.etapas.find((e) => e.chave === chave);
       if (!etapa) return;
+      const perdaNoAlvo = { isLoss: etapa.ehPerda === true, perda };
 
       // SCRUM-637: discriminação por FAMÍLIA (`funilEhSystem`), não mais pelo
       // nome da view — funil de sistema com slug fora do trio agora move.
       if (data.funilEhSystem) {
-        await move({ kind: "system", pipeId: entryId, stageKey: chave, stageLabel: etapa.nome });
+        await move({ kind: "system", pipeId: entryId, stageKey: chave, stageLabel: etapa.nome, ...perdaNoAlvo });
       } else {
-        await move({ kind: "custom", entryId, stageId: chave, stageLabel: etapa.nome });
+        await move({ kind: "custom", entryId, stageId: chave, stageLabel: etapa.nome, ...perdaNoAlvo });
       }
     },
     [data, entryId, move],
@@ -273,13 +281,24 @@ export const DealCardPanel = memo(function DealCardPanel() {
   const definirDesfecho = useCallback(
     async (desfecho: "open" | "won" | "lost", valor?: number) => {
       if (!entryId || decidindo) return;
+
+      // Perder exige o motivo (SCRUM-369), gravado no metadata da entrada
+      // ANTES do desfecho — o mesmo par id+rótulo que o `/funil` grava — e
+      // passado à RPC, que o copia para `deals.loss_reason`. Cancelou ou a
+      // gravação falhou: nenhuma escrita de desfecho.
+      let perda: PerdaResolvida | null = null;
+      if (desfecho === "lost") {
+        perda = await capturarMotivoDaPerda({ entryIds: [entryId] });
+        if (!perda) return;
+      }
+
       setDecidindo(true);
       const origem = desfecho === "open" ? null : origemDo(desfecho);
       try {
         const { error } = await supabase.rpc("definir_desfecho_da_entrada", {
           p_entry_id: entryId,
           p_outcome: desfecho,
-          p_loss_reason: undefined,
+          p_loss_reason: perda?.texto ?? undefined,
           // O valor vai na MESMA chamada do desfecho, nunca antes: a trava é
           // BEFORE UPDATE OF outcome, e escrever em dois passos abriria a
           // janela em que o preço está salvo e o fechamento falhou.
@@ -304,7 +323,8 @@ export const DealCardPanel = memo(function DealCardPanel() {
             const papel = desfecho === "won" ? "ganho" : "perdido";
             const terminal = data?.etapas.find((e) => e.papel === papel);
             if (terminal) {
-              await moverEtapa(terminal.chave);
+              // Motivo já gravado acima — o move não pergunta de novo.
+              await moverEtapa(terminal.chave, perda ?? undefined);
               dispararEfeitoDeDesfecho(entryId, desfecho);
               celebrar(desfecho, origem);
               return;
@@ -344,7 +364,7 @@ export const DealCardPanel = memo(function DealCardPanel() {
         setDecidindo(false);
       }
     },
-    [entryId, decidindo, queryClient, data, moverEtapa, origemDo, celebrar],
+    [entryId, decidindo, queryClient, data, moverEtapa, origemDo, celebrar, capturarMotivoDaPerda],
   );
 
   /**

@@ -13,7 +13,7 @@
  *
  * Custo = chips Uazapi × preço por chip
  *       + tokens de LLM em 30 dias × preço (US$ → R$ pelo câmbio)
- *       + infra fixa ÷ orgs em uso (só org em uso absorve infra).
+ *       + (infra fixa + salários) ÷ orgs em uso (só org em uso absorve fixo).
  * O LLM é um PISO: o Copilot V2 não grava tokens.
  */
 
@@ -32,6 +32,8 @@ export interface OrgFinanceFacts {
 export interface CostSettings {
   chip_monthly_cents: number;
   infra_fixed_monthly_cents: number;
+  /** Folha total do mês, com encargos (20271113000000). */
+  payroll_monthly_cents: number;
   llm_input_usd_per_mtok: number;
   llm_output_usd_per_mtok: number;
   usd_brl: number;
@@ -55,6 +57,7 @@ export interface OrgCost {
   /** null quando há tokens mas o câmbio não foi informado. */
   llmCents: number | null;
   infraCents: number;
+  payrollCents: number;
   totalCents: number;
 }
 
@@ -102,9 +105,17 @@ export function orgCost(
     (facts.llm_output_tokens_30d / 1e6) * settings.llm_output_usd_per_mtok;
   const llmCents = usd === 0 ? 0 : settings.usd_brl > 0 ? Math.round(usd * settings.usd_brl * 100) : null;
 
-  const infraCents = inUse && orgsInUse > 0 ? Math.round(settings.infra_fixed_monthly_cents / orgsInUse) : 0;
+  const rateio = (cents: number) => (inUse && orgsInUse > 0 ? Math.round(cents / orgsInUse) : 0);
+  const infraCents = rateio(settings.infra_fixed_monthly_cents);
+  const payrollCents = rateio(settings.payroll_monthly_cents);
 
-  return { chipsCents, llmCents, infraCents, totalCents: chipsCents + (llmCents ?? 0) + infraCents };
+  return {
+    chipsCents,
+    llmCents,
+    infraCents,
+    payrollCents,
+    totalCents: chipsCents + (llmCents ?? 0) + infraCents + payrollCents,
+  };
 }
 
 export function orgFinance(args: {
@@ -174,5 +185,7 @@ export function sumFinance(list: OrgFinance[]): FinanceTotals {
 
 /** Custos ainda zerados: a margem mostrada seria igual à receita. */
 export function costsConfigured(s: CostSettings | undefined): boolean {
-  return !!s && (s.chip_monthly_cents > 0 || s.infra_fixed_monthly_cents > 0 || s.usd_brl > 0);
+  return (
+    !!s && (s.chip_monthly_cents > 0 || s.infra_fixed_monthly_cents > 0 || s.payroll_monthly_cents > 0 || s.usd_brl > 0)
+  );
 }

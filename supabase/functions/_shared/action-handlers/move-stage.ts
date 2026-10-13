@@ -116,6 +116,45 @@ async function readActiveCustomPipeEntry(
 }
 
 /**
+ * Põe o lead na etapa do funil custom: anda o card aberto se houver, senão cria.
+ *
+ * Ler e depois criar não é atômico — webhook e outra execução podem criar o
+ * card entre as duas coisas. O índice `uq_pipeline_entries_um_card_sem_negocio`
+ * recusa o segundo com 23505; aí o card de quem ganhou É o card, e relemos
+ * para andar com ele em vez de falhar a ação.
+ */
+async function moverOuCriarCardCustom(
+  supabase: ActionInput["supabase"],
+  organizationId: string,
+  pipelineId: string,
+  leadId: string,
+  stageId: string,
+  now: string,
+): Promise<void> {
+  for (let tentativa = 0; tentativa < 2; tentativa++) {
+    const existingEntry = await readActiveCustomPipeEntry(supabase, organizationId, pipelineId, leadId);
+    if (existingEntry) {
+      const { error } = await supabase.rpc("fn_entrada_custom_atualizar", {
+        p_entry_id: existingEntry.id,
+        p_patch: { stage_id: stageId, stage_changed_at: now },
+      });
+      if (error) throw error;
+      return;
+    }
+    const { error } = await supabase.rpc("fn_entrada_custom_criar", {
+      p_lead_id: leadId,
+      p_organization_id: organizationId,
+      p_pipeline_id: pipelineId,
+      p_stage_id: stageId,
+      p_entered_at: now,
+      p_stage_changed_at: now,
+    });
+    if (!error) return;
+    if (error.code !== "23505" || tentativa > 0) throw error;
+  }
+}
+
+/**
  * Mover O NEGÓCIO QUE DISPAROU, quando a execução sabe qual é.
  *
  * ── POR QUE ISTO EXISTE ───────────────────────────────────────────────────
@@ -181,7 +220,9 @@ async function moverNegocioQueDisparou(
   // destino custom e destino de outra org, e é ela que passa pela etapa de
   // sucesso da origem quando o chamador pede — aqui não pedimos, porque quem
   // chamou já está NA etapa que disparou o workflow.
-  const { error: rpcError } = await supabase.rpc("mover_negocio", {
+  // Card sem negócio indo para funil onde o lead já tem um é FUNDIDO no de lá:
+  // a RPC devolve o id que sobreviveu, e é ele que vai no resultado.
+  const { data: movedId, error: rpcError } = await supabase.rpc("mover_negocio", {
     p_entry_id: entryId,
     p_target_pipeline_id: alvo.id,
     p_target_stage_key: stageKey,
@@ -196,7 +237,12 @@ async function moverNegocioQueDisparou(
   return {
     success: true,
     message: `Negócio movido para ${slug}/${stageKey}`,
-    data: { target_stage: stageKey, target_pipe: slug, entry_id: entryId, moved: "pipeline" },
+    data: {
+      target_stage: stageKey,
+      target_pipe: slug,
+      entry_id: typeof movedId === "string" ? movedId : entryId,
+      moved: "pipeline",
+    },
   };
 }
 
@@ -329,58 +375,15 @@ export async function moveStage(input: ActionInput): Promise<ActionResult> {
     };
   }
 
-  const existingEntry = await readActiveCustomPipeEntry(
-    supabase,
-    organizationId,
-    pipeline.id,
-    leadId,
-  );
-
   const now = new Date().toISOString();
-  if (existingEntry) {
-    const { error } = await supabase.rpc("fn_entrada_custom_atualizar", {
-      p_entry_id: existingEntry.id,
-      p_patch: { stage_id: stageRow.id, stage_changed_at: now },
-    });
-    if (error) throw error;
-  } else {
-    const { error } = await supabase.rpc("fn_entrada_custom_criar", {
-      p_lead_id: leadId,
-      p_organization_id: organizationId,
-      p_pipeline_id: pipeline.id,
-      p_stage_id: stageRow.id,
-      p_entered_at: now,
-      p_stage_changed_at: now,
-    });
-    if (error) throw error;
-  }
+  await moverOuCriarCardCustom(supabase, organizationId, pipeline.id, leadId, stageRow.id, now);
 
   // Auto-transition on is_final_positive
   if (stageRow.is_final_positive) {
     if (stageRow.target_pipeline_id && stageRow.target_stage_id) {
-      const targetEntry = await readActiveCustomPipeEntry(
-        supabase,
-        organizationId,
-        stageRow.target_pipeline_id,
-        leadId,
+      await moverOuCriarCardCustom(
+        supabase, organizationId, stageRow.target_pipeline_id, leadId, stageRow.target_stage_id, now,
       );
-      if (targetEntry) {
-        const { error } = await supabase.rpc("fn_entrada_custom_atualizar", {
-          p_entry_id: targetEntry.id,
-          p_patch: { stage_id: stageRow.target_stage_id, stage_changed_at: now },
-        });
-        if (error) throw error;
-      } else {
-        const { error } = await supabase.rpc("fn_entrada_custom_criar", {
-          p_lead_id: leadId,
-          p_organization_id: organizationId,
-          p_pipeline_id: stageRow.target_pipeline_id,
-          p_stage_id: stageRow.target_stage_id,
-          p_entered_at: now,
-          p_stage_changed_at: now,
-        });
-        if (error) throw error;
-      }
     } else if (stageRow.target_pipe_type && stageRow.target_stage_key) {
       const transPipe = stageRow.target_pipe_type;
       const transStage = stageRow.target_stage_key;

@@ -15,6 +15,9 @@ import {
 } from "../useLeadAllPipelines";
 import { usePipeOps } from "../../pipe-ops";
 import { notifyError, toAppError } from "@/shared/errors";
+import { useLossReasonGate } from "../../loss-reason-gate";
+import { etapaDoLeadEhDePerda } from "../../lib/etapa-de-perda";
+import { ETAPA_DE_PERDA_INDISPONIVEL } from "@/contracts/pipe/perda";
 
 interface UsePipeHandlersResult {
   isMutating: boolean;
@@ -31,22 +34,38 @@ export function useLeadPipeHandlers(leadId: string | null | undefined): UsePipeH
   const addToCustom = useAddLeadToCustomPipe();
   const moveInCustom = useMoveLeadInCustomPipe();
   const removeFromCustom = useRemoveLeadFromCustomPipe();
+  const { capturarMotivoDaPerda } = useLossReasonGate();
 
   const isMutating =
     addToStandard.isPending || moveInStandard.isPending ||
     removeFromStandard.isPending || addToCustom.isPending ||
     moveInCustom.isPending || removeFromCustom.isPending;
 
+  /**
+   * Etapa de perda pede o motivo (porta única) e o grava no metadata ANTES do
+   * move. `false` = cancelou ou a gravação falhou: não move.
+   */
+  const motivoSeForPerda = async (
+    entryId: string,
+    stage: { role?: string | null; isFinalNegative?: boolean } | undefined,
+    stageName: string | undefined,
+  ): Promise<boolean> => {
+    if (!etapaDoLeadEhDePerda(stage)) return true;
+    return (await capturarMotivoDaPerda({ entryIds: [entryId], stageName })) !== null;
+  };
+
   const moveStage = async (pipeline: PipelineStatus, newStageId: string) => {
     if (!leadId) return;
     if (pipeline.type === "standard" && pipeline.pipeId) {
+      const stage = pipeline.stages.find((s) => s.id === newStageId);
+      if (!(await motivoSeForPerda(pipeline.pipeId, stage, stage?.label))) return;
       await moveInStandard.mutateAsync({ pipeId: pipeline.pipeId, pipeType: pipeline.pipeType, newStageId });
-      const stageName = pipeline.stages.find((s) => s.id === newStageId)?.label;
-      toast.success(`Movido para "${stageName}"`);
+      toast.success(`Movido para "${stage?.label}"`);
     } else if (pipeline.type === "custom" && pipeline.entryId) {
+      const stage = pipeline.stages.find((s) => s.id === newStageId);
+      if (!(await motivoSeForPerda(pipeline.entryId, stage, stage?.name))) return;
       await moveInCustom.mutateAsync({ entry_id: pipeline.entryId, pipeline_id: pipeline.pipelineId, stage_id: newStageId });
-      const stageName = pipeline.stages.find((s) => s.id === newStageId)?.name;
-      toast.success(`Movido para "${stageName}"`);
+      toast.success(`Movido para "${stage?.name}"`);
     }
   };
 
@@ -63,6 +82,13 @@ export function useLeadPipeHandlers(leadId: string | null | undefined): UsePipeH
 
   const addToPipeline = async (pipeline: PipelineStatus, stageId: string) => {
     if (!leadId) return;
+    // Guarda própria, não só a UI: entrar no funil já perdido gravaria a perda
+    // sem motivo. A perda só nasce pelo movimento, que pede o motivo.
+    const stages: { id: string; role?: string | null; isFinalNegative?: boolean }[] = pipeline.stages;
+    if (etapaDoLeadEhDePerda(stages.find((s) => s.id === stageId))) {
+      toast.error(ETAPA_DE_PERDA_INDISPONIVEL);
+      return;
+    }
     try {
       if (pipeline.type === "standard") {
         await addToStandard.mutateAsync({ leadId, pipeType: pipeline.pipeType, stageId });

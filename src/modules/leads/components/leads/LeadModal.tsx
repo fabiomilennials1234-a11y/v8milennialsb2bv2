@@ -37,6 +37,7 @@ import { useLeadHistory } from "../../hooks/useLeadTimeline";
 import { ScheduleFollowUpButton } from "@/modules/engagement/components/followups/ScheduleFollowUpButton";
 import { usePipeOps } from "../../pipe-ops";
 import { destinosDeSistema } from "@/contracts/pipe";
+import { ETAPA_DE_PERDA_INDISPONIVEL, isEtapaDePerda } from "@/contracts/pipe/perda";
 import { cn } from "@/lib/utils";
 import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -248,10 +249,10 @@ export function LeadModal({
   const stageOptions = useMemo(() => {
     if (selectedPipe.startsWith("std:")) {
       const pipeType = selectedPipe.slice(4);
-      return (stagesByPipe[pipeType] || []).map(s => ({ value: s.value, label: s.label }));
+      return (stagesByPipe[pipeType] || []).map(s => ({ value: s.value, label: s.label, isLoss: s.isLoss === true }));
     }
     if (selectedPipe.startsWith("custom:") && customStages.length > 0) {
-      return customStages.map(s => ({ value: s.id, label: s.name }));
+      return customStages.map(s => ({ value: s.id, label: s.name, isLoss: isEtapaDePerda(s) }));
     }
     return [];
   }, [selectedPipe, stagesByPipe, customStages]);
@@ -259,9 +260,12 @@ export function LeadModal({
   // Auto-select first stage when pipe changes or stages load
   useEffect(() => {
     if (selectedPipe && stageOptions.length > 0 && !selectedStage) {
-      setSelectedStage(stageOptions[0].value);
+      // Default nunca cai na etapa de perda: nascer perdido gravaria a perda sem motivo.
+      const primeira = stageOptions.find((o) => !o.isLoss);
+      if (primeira) setSelectedStage(primeira.value);
     }
   }, [selectedPipe, stageOptions, selectedStage]);
+  const etapaSelecionadaEhPerda = stageOptions.find((o) => o.value === selectedStage)?.isLoss === true;
 
   const fieldValuesKey = lead?.id ?? "";
   const fieldValuesSnapshot = fieldValues.length > 0
@@ -393,7 +397,7 @@ export function LeadModal({
 
       // Insert lead into selected funnel/stage
       let pipeInserted = false;
-      if (showPipeSelector && !isEditing && leadId && selectedPipe && selectedStage) {
+      if (showPipeSelector && !isEditing && leadId && selectedPipe && selectedStage && !etapaSelecionadaEhPerda) {
         try {
           if (selectedPipe === "std:whatsapp") {
             await createPipeWhatsapp.mutateAsync({ lead_id: leadId, status: selectedStage, organization_id: currentTeamMember.organization_id });
@@ -648,7 +652,14 @@ export function LeadModal({
                               </SelectTrigger>
                               <SelectContent>
                                 {stageOptions.map((opt) => (
-                                  <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                                  <SelectItem
+                                    key={opt.value}
+                                    value={opt.value}
+                                    disabled={opt.isLoss}
+                                    title={opt.isLoss ? ETAPA_DE_PERDA_INDISPONIVEL : undefined}
+                                  >
+                                    {opt.label}
+                                  </SelectItem>
                                 ))}
                               </SelectContent>
                             </Select>

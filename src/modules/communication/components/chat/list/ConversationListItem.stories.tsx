@@ -73,3 +73,29 @@ export const SemLead: Story = {
     },
   },
 };
+
+const caixaRiofix = { id: "inst-001", nome: "Riofix", kind: "whatsapp" as const };
+
+/** Responsável do lead no lugar do nome da caixa; caixa vai no tooltip. */
+export const ComResponsavel: Story = {
+  args: {
+    caixa: caixaRiofix,
+    stageLabel: "Vendido",
+    responsavel: { nome: "Ana S.", nomeCompleto: "Ana Paula Souza" },
+  },
+};
+
+export const SemResponsavel: Story = {
+  args: { caixa: caixaRiofix, stageLabel: "Vendido", responsavel: null },
+};
+
+/** Várias caixas marcadas: a bolinha ganha a cor da caixa antes do nome. */
+export const ResponsavelEmVariasCaixas: Story = {
+  args: {
+    caixa: caixaRiofix,
+    variasCaixas: true,
+    stageLabel: "Vendido",
+    responsavel: { nome: "Ana S.", nomeCompleto: "Ana Paula Souza" },
+    tambemEm: [{ id: "inst-002", nome: "Oficial", kind: "whatsapp" as const }],
+  },
+};

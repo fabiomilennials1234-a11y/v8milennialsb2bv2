@@ -126,7 +126,11 @@ vi.mock("@/modules/workflows/hooks/useAutoFollowUp", () => ({
 }));
 vi.mock("@/lib/analytics", () => ({ track: (...a: unknown[]) => h.track(...a), trackModuleVisit: vi.fn() }));
 vi.mock("@/shared/hooks/useLogLeadAction", () => ({ useLogLeadAction: () => h.logAction }));
-vi.mock("@/modules/leads", () => ({ CompareceuModal: () => null }));
+vi.mock("@/modules/leads", async () => ({
+  CompareceuModal: () => null,
+  // A porta do motivo é a REAL — o diálogo vive no shell, não no fluxo.
+  useLossReasonGate: (await import("@/modules/leads/loss-reason-gate")).useLossReasonGate,
+}));
 vi.mock("@/modules/carteira/components/proposal/TinyErpConfirmOrderDialog", () => ({ TinyErpConfirmOrderDialog: () => null }));
 vi.mock("@/modules/carteira/components/proposal/CadastroExternoConfirmDialog", () => ({ CadastroExternoConfirmDialog: () => null }));
 vi.mock("@/modules/carteira/hooks/useTinyErp", () => ({ useTinyErpStatus: () => ({ data: { connected: false } }) }));
@@ -203,6 +207,8 @@ import { useFunilMoveFlow } from "@/modules/pipelines/components/funis/useFunilM
 import { usePaginatedFunil } from "@/modules/pipelines/hooks/model/usePaginatedFunil";
 
 import { __limparEcosProprios } from "@/modules/pipelines/lib/funil-move-cache";
+import { LossReasonGateProvider } from "@/modules/leads/loss-reason-gate";
+import { MockPipeOpsProvider } from "@/modules/leads/pipe-ops/testing";
 
 /** Avança o relógio falso (ecos de 30 ms, janela de 1 s do Realtime). */
 const sleep = (ms: number) => vi.advanceTimersByTimeAsync(ms);
@@ -260,7 +266,15 @@ function semear(stages: any[], origem: string) {
 async function montar(slug: string, stages: any[], origem: string) {
   semear(stages, origem);
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  render(<QueryClientProvider client={qc}><Harness pipeline={pipe(slug)} stages={stages} /></QueryClientProvider>);
+  render(
+    <QueryClientProvider client={qc}>
+      <MockPipeOpsProvider port={{ useLossReasons: (() => ({ data: [{ id: "lr-1", name: "Sem budget" }] })) as never }}>
+        <LossReasonGateProvider>
+          <Harness pipeline={pipe(slug)} stages={stages} />
+        </LossReasonGateProvider>
+      </MockPipeOpsProvider>
+    </QueryClientProvider>,
+  );
   await waitFor(() => expect(boardAtual.isLoading).toBe(false), { timeout: 5000 });
   await waitFor(() => expect(qc.isFetching()).toBe(0));
   S.page = []; S.counts = 0; S.escritas = [];

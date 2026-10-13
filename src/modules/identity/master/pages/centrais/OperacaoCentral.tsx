@@ -45,7 +45,7 @@ import { notifyError } from "@/shared/errors";
 import { MasterPageHeader } from "../../components/MasterPageHeader";
 import { MasterKanban, type KanbanColumnDef } from "../../components/MasterKanban";
 import { OverdueTag, TicketDetail } from "../../components/support/TicketDetail";
-import { SEVERIDADE_TONE } from "../../lib/ticket-tones";
+import { KIND_BADGE_TONE, KIND_CARD_TONE, SEVERIDADE_TONE } from "../../lib/ticket-tones";
 import { useMasterAuth } from "../../hooks/useMasterAuth";
 import {
   useClaimSupportTicket,
@@ -61,6 +61,7 @@ import { useMasterSupportUnread } from "../../hooks/useMasterSupportUnread";
 import { COMPLEXITY_LABELS, KIND_LABELS, type DiagnosisComplexity, type DiagnosisKind } from "../../lib/ticket-diagnosis";
 import { OperacaoMoveDialog, type PendingMove } from "../../components/support/OperacaoMoveDialog";
 import {
+  CLOSED_COLUMNS,
   OPERACAO_COLUMNS,
   OPERACAO_COLUMN_HINTS,
   OPERACAO_COLUMN_LABELS,
@@ -320,7 +321,7 @@ export default function OperacaoCentral() {
           }}
           onMove={doMove}
           onOpen={(t) => setOpenId(t.id)}
-          columnLimit={{ concluido: 8, aguardando: 12 }}
+          columnLimit={{ concluido: 8, recusada: 8, aguardando: 12 }}
           emptyLabel={(c) => (hasFilters ? "Nenhum com esses filtros." : c === "aberto" ? "Fila limpa." : "Nada aqui.")}
           renderCard={(t) => (
             <TicketCard
@@ -381,7 +382,7 @@ function summarize(tickets: MasterSupportTicket[], digests: ReadonlyMap<string, 
     if (col === "andamento") andamento++;
     // Sem dono só conta na fila antes do trabalho: depois da resposta, dono não importa mais.
     if ((col === "aberto" || col === "diagnostico") && !t.assigned_master_user_id) semDono++;
-    if (col !== "concluido" && isReopenAlert(t)) reabertos++;
+    if (!CLOSED_COLUMNS.has(col) && isReopenAlert(t)) reabertos++;
     // OP-7: custo real só existe depois da execução — conta pela data dela.
     if (d?.executed_at && new Date(d.executed_at) >= inicioMes) {
       executados++;
@@ -404,11 +405,13 @@ function TicketCard({
   mine: boolean;
 }) {
   const alerta = isReopenAlert(ticket);
+  const kind = digest?.kind as DiagnosisKind | undefined;
 
   return (
     <article
       className={cn(
         "rounded-2xl border border-card-border bg-card p-3 shadow-relevo transition-[box-shadow,transform] duration-150 ease-standard hover:-translate-y-px hover:shadow-relevo-alto",
+        kind && KIND_CARD_TONE[kind],
         alerta && "border-destructive/40",
       )}
     >
@@ -442,9 +445,9 @@ function TicketCard({
             Cliente parado
           </Badge>
         )}
-        {digest && (
-          <Badge variant="soft" className="text-[10px]">
-            {KIND_LABELS[digest.kind as DiagnosisKind]} · complexidade{" "}
+        {digest && kind && (
+          <Badge variant="soft" className={cn("text-[10px]", KIND_BADGE_TONE[kind])}>
+            {KIND_LABELS[kind]} · complexidade{" "}
             {COMPLEXITY_LABELS[digest.complexity as DiagnosisComplexity].toLowerCase()}
           </Badge>
         )}
@@ -590,7 +593,7 @@ function TicketDrawer({
               ))}
             </SelectContent>
           </Select>
-          {col !== "concluido" &&
+          {!CLOSED_COLUMNS.has(col) &&
             (ticket.assigned_master_user_id ? (
               <Button
                 variant="ghost"

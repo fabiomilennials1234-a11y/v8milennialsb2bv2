@@ -47,6 +47,7 @@ import { Separator } from "@/components/ui/separator";
 import { ChannelBadge } from "@/modules/communication/components/chat/ChannelBadge";
 import { useCustomPipelines, useCustomPipelineStages, usePipelineDisplayConfig } from "@/modules/pipelines";
 import { destinosDeSistema } from "@/contracts/pipe";
+import { ETAPA_DE_PERDA_INDISPONIVEL, isEtapaDePerda } from "@/contracts/pipe/perda";
 import { isStandardDestination } from "@/lib/lead/lead-destinations";
 import { useCurrentTeamMember } from "@/modules/identity";
 import type { LeadDestination } from "@/modules/communication/hooks/useWhatsAppLeadIntegration";
@@ -123,8 +124,10 @@ export function SocialCreateLeadDialog({
     if (isSubmitting) return false;
     if (!name.trim()) return false;
     if (destination === "custom" && (!customPipelineId || !customStageId)) return false;
+    // Nascer perdido gravaria a perda sem motivo (a opção já vem desabilitada).
+    if (destination === "custom" && isEtapaDePerda(customStages.find((s) => s.id === customStageId))) return false;
     return true;
-  }, [isSubmitting, name, destination, customPipelineId, customStageId]);
+  }, [isSubmitting, name, destination, customPipelineId, customStageId, customStages]);
 
   const handleSubmit = () => {
     if (!canSubmit) return;
@@ -278,7 +281,12 @@ export function SocialCreateLeadDialog({
                 </SelectTrigger>
                 <SelectContent>
                   {customStages.map((stage) => (
-                    <SelectItem key={stage.id} value={stage.id}>
+                    <SelectItem
+                      key={stage.id}
+                      value={stage.id}
+                      disabled={isEtapaDePerda(stage)}
+                      title={isEtapaDePerda(stage) ? ETAPA_DE_PERDA_INDISPONIVEL : undefined}
+                    >
                       <div className="flex items-center gap-2">
                         <div
                           className="w-3 h-3 rounded-full"

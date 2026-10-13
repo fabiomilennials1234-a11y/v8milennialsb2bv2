@@ -197,8 +197,10 @@ import {
   readDirection,
   readEventType,
   readMessageStatus,
-  OUTBOUND_STATUS_RANK,
+  mesclarStatusNaLinha,
   type InboundEventType,
+  type LinhaDeStatus,
+  type MessageStatusUpdate,
 } from "../_shared/notificame-inbound.ts";
 import { isMissingTableError } from "../_shared/notificame-schema-guard.ts";
 import { mirrorContactAvatar } from "../_shared/notificame-avatar.ts";
@@ -298,6 +300,14 @@ const IP_ALLOWLIST_REMEDY =
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
 const NOTIFICAME_WEBHOOK_SECRET = Deno.env.get("NOTIFICAME_WEBHOOK_SECRET") ?? "";
+
+/**
+ * Espera antes da SEGUNDA busca de um status que não achou linha. O `ERROR` e o
+ * `SENT` da mesma mensagem saem juntos do fornecedor e chegam em qualquer ordem
+ * (medido: 1,7s de diferença); sem esperar, o primeiro a chegar é parkado. Só
+ * vale para evento COM `providerMessageId` — sem ele, esperar não muda nada.
+ */
+const STATUS_RETRY_MS = Number(Deno.env.get("NOTIFICAME_STATUS_RETRY_MS") ?? "2000") || 0;
 
 /**
  * VOCABULÁRIO FECHADO de motivos de parking.
@@ -1136,30 +1146,40 @@ Deno.serve(withErrorBoundary(FUNCTION_NAME, async (req: Request) => {
     // seguintes o usam como chave. Sem isso a recusa da Meta cai em
     // `status_no_match` e o defeito volta a ser invisível — foi o que aconteceu
     // com a primeira versão deste bloco.
+    type Linha = LinhaDeStatus & { id: string };
     const colunas = "id, status, raw_payload, provider_message_id";
-    const porExternalId = await admin
-      .from("channel_messages")
-      .select(colunas)
-      .eq("organization_id", organizationId)
-      .eq("external_id", st.messageId)
-      .limit(1);
+    const acharLinha = async (alvo: MessageStatusUpdate): Promise<Linha | null> => {
+      const porExternalId = await admin
+        .from("channel_messages")
+        .select(colunas)
+        .eq("organization_id", organizationId)
+        .eq("external_id", alvo.messageId)
+        .limit(1);
+      const achada = (porExternalId.data as Linha[] | null)?.[0] ?? null;
+      if (achada || !alvo.providerMessageId) return achada;
 
-    type Linha = {
-      id: string;
-      status: string | null;
-      raw_payload: unknown;
-      provider_message_id: string | null;
-    };
-    let linha = (porExternalId.data as Linha[] | null)?.[0] ?? null;
-
-    if (!linha && st.providerMessageId) {
       const porProvider = await admin
         .from("channel_messages")
         .select(colunas)
         .eq("organization_id", organizationId)
-        .eq("provider_message_id", st.providerMessageId)
+        .eq("provider_message_id", alvo.providerMessageId)
         .limit(1);
-      linha = (porProvider.data as Linha[] | null)?.[0] ?? null;
+      return (porProvider.data as Linha[] | null)?.[0] ?? null;
+    };
+
+    let linha = await acharLinha(st);
+
+    // ─── A RECUSA QUE CHEGA ANTES DA CHAVE ────────────────────────────────
+    //
+    // Medido em produção (30/09, Chique): o `ERROR 131047` chegou 1,7s ANTES do
+    // `SENT` que grava o `provider_message_id`. Sem a chave, a recusa não acha a
+    // linha, é parkada, e a mensagem fica "enviada" para sempre — 168 eventos
+    // nesse estado até 13/10. Uma segunda tentativa curta resolve o caso comum
+    // (os dois callbacks saem juntos do fornecedor); o resto é reaplicado quando
+    // a chave aparecer (ver `reaplicarParkados` abaixo).
+    if (!linha && st.providerMessageId && STATUS_RETRY_MS > 0) {
+      await new Promise((r) => setTimeout(r, STATUS_RETRY_MS));
+      linha = await acharLinha(st);
     }
 
     if (!linha) {
@@ -1179,64 +1199,93 @@ Deno.serve(withErrorBoundary(FUNCTION_NAME, async (req: Request) => {
     // progride: é ele que carrega o `provider_message_id`, e é essa gravação que
     // permite ao evento SEGUINTE (a recusa) achar esta linha. Tratar "mesmo
     // status" como ruído e sair sem escrever foi o defeito da primeira versão.
-    //
-    // O STATUS, esse sim, só avança. Callbacks chegam fora de ordem e um
-    // DELIVERED atrasado não pode apagar um READ. `failed` fica FORA da escala de
-    // propósito: recusa vale sempre, inclusive depois de "entregue" — foi
-    // exatamente a sequência que a Meta produziu (SENT e, 2s depois, ERROR).
-    const progride = st.status === "failed" ||
-      (OUTBOUND_STATUS_RANK[st.status] ?? 99) >
-        (OUTBOUND_STATUS_RANK[linha.status ?? "pending"] ?? 0);
+    // As regras de mescla moram em `mesclarStatusNaLinha`.
+    const aplicar = async (alvo: Linha, ev: MessageStatusUpdate, cru: unknown) => {
+      const { patch, progride } = mesclarStatusNaLinha(alvo, ev, cru, new Date());
+      const upd = await admin
+        .from("channel_messages")
+        .update(patch)
+        .eq("id", alvo.id)
+        .select("id");
+      const depois: Linha = {
+        ...alvo,
+        ...(patch.status ? { status: patch.status } : {}),
+        provider_message_id: patch.provider_message_id ?? alvo.provider_message_id,
+        raw_payload: patch.raw_payload,
+      };
+      return { error: upd.error, progride, depois };
+    };
 
-    const anterior = (typeof linha.raw_payload === "object" && linha.raw_payload
-      ? linha.raw_payload as Record<string, unknown>
-      : {});
+    const cruDoEvento = (p: unknown): unknown =>
+      typeof p === "object" && p !== null
+        ? (p as Record<string, unknown>).messageStatus
+        : undefined;
 
-    const eventoAnterior = (typeof anterior.status_event === "object" && anterior.status_event
-      ? anterior.status_event as Record<string, unknown>
-      : {});
+    const chaveEraNova = !linha.provider_message_id && !!st.providerMessageId;
+    const resultado = await aplicar(linha, st, cruDoEvento(payload));
 
-    const upd = await admin
-      .from("channel_messages")
-      .update({
-        // `raw_payload` é MESCLADO: a coluna guarda a requisição e a resposta do
-        // envio, e o PostgREST substitui o jsonb inteiro. Escrever só o
-        // `status_event` apagaria a evidência que motivou esta fatia.
-        ...(progride ? { status: st.status } : {}),
-        // A chave de correlação, gravada pelo PRIMEIRO callback que casar. Um
-        // evento sem ela não pode apagar o que o anterior guardou.
-        ...(st.providerMessageId ? { provider_message_id: st.providerMessageId } : {}),
-        raw_payload: {
-          ...anterior,
-          status_event: {
-            ...eventoAnterior,
-            code: st.status,
-            provider_code: st.providerCode,
-            detail: st.detail,
-            // Só grava se veio; um evento sem ele não pode apagar o que o
-            // anterior guardou — é a chave de correlação.
-            at: new Date().toISOString(),
-          },
-        },
-      })
-      .eq("id", linha.id)
-      .select("id");
-
-    if (upd.error) {
+    if (resultado.error) {
       const stored = await park({
         reason: "status_no_match",
         payload,
         organizationId,
         eventType,
-        error: upd.error.message,
+        error: resultado.error.message,
       });
       return await parkResponse(stored, "status_no_match");
+    }
+
+    // ─── REAPLICAR O QUE FOI PARKADO SEM CHAVE ────────────────────────────
+    //
+    // Este evento acabou de gravar o `provider_message_id` pela primeira vez.
+    // Qualquer callback da MESMA mensagem que chegou antes dele foi parkado como
+    // `status_no_match` — e é aqui, e só aqui, que ele passa a ter onde cair.
+    //
+    // Falha nesta etapa NUNCA derruba o 200: o evento corrente já foi aplicado,
+    // e o parkado continua na fila, inspecionável, como estava.
+    if (chaveEraNova) {
+      try {
+        const { data: parkados } = await admin
+          .from(PARK_TABLE)
+          .select("id, payload")
+          .eq("organization_id", organizationId)
+          .eq("status", "parked")
+          .eq("reason", "status_no_match")
+          .eq("payload->messageStatus->>providerMessageId", st.providerMessageId)
+          .order("received_at", { ascending: true })
+          .limit(10);
+
+        let atual = resultado.depois;
+        for (const p of (parkados ?? []) as Array<{ id: string; payload: unknown }>) {
+          const ev = readMessageStatus(p.payload);
+          if (!ev) continue;
+          const r = await aplicar(atual, ev, cruDoEvento(p.payload));
+          if (r.error) continue;
+          atual = r.depois;
+          await admin
+            .from(PARK_TABLE)
+            .update({
+              status: "processed",
+              resolved_at: new Date().toISOString(),
+              last_error: `reaplicado na linha ${atual.id}`,
+            })
+            .eq("id", p.id);
+        }
+      } catch (err) {
+        await logRuntime({
+          organizationId,
+          module: "webhook",
+          action: "notificame_status_replay_failed",
+          status: "error",
+          errorMessage: (err as Error)?.message ?? "erro ao reaplicar status parkado",
+        });
+      }
     }
 
     return json(200, {
       status: "updated",
       message_status: st.status,
-      advanced: progride,
+      advanced: resultado.progride,
     });
   }
 

@@ -1577,7 +1577,7 @@
             "ApiKeyAuth": []
           }
         ],
-        "description": "Abre um Negócio para um Lead **que já existe**. Não aceita Lead embutido — crie a pessoa antes com `POST /leads`. A Procedência é gravada como `api`. `pipeline` aceita o id (uuid) ou o slug de **qualquer** funil da organização, de sistema ou personalizado; em funil personalizado, `stage` aceita o `stage_key` ou o `id` da etapa (os dois vêm no catálogo `GET /pipelines`). Abrir um segundo Negócio no mesmo funil **funciona** (é recompra) e a resposta traz `warning`. Escopo: deal:write.",
+        "description": "Abre um Negócio para um Lead **que já existe**. Não aceita Lead embutido — crie a pessoa antes com `POST /leads`. A Procedência é gravada como `api`. `pipeline` aceita o id (uuid) ou o slug de **qualquer** funil da organização, de sistema ou personalizado; em funil personalizado, `stage` aceita o `stage_key` ou o `id` da etapa (os dois vêm no catálogo `GET /pipelines`). Abrir um segundo Negócio no mesmo funil **funciona** (é recompra) e a resposta traz `warning`. Se o Lead já está no funil num card **sem** Negócio (entrou pelo site, import ou automação), o Negócio nasce nesse card, que fica na etapa em que está — `stage` não move o card; use `POST /deals/{id}/move`. Escopo: deal:write.",
         "parameters": [
           {
             "name": "Idempotency-Key",

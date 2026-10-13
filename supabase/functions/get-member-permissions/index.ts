@@ -2,6 +2,7 @@ import { requireAuth, AuthError, authErrorResponse } from "../_shared/user-auth.
 import { withErrorBoundary } from "../_shared/error-boundary.ts";
 import { getCorsHeaders } from "../_shared/cors.ts";
 import { withSecurityHeaders } from "../_shared/security-headers.ts";
+import { resolvePermissions } from "./resolve.ts";
 
 Deno.serve(withErrorBoundary("get-member-permissions", async (req) => {
   const origin = req.headers.get("Origin") ?? undefined;
@@ -57,19 +58,26 @@ Deno.serve(withErrorBoundary("get-member-permissions", async (req) => {
       );
     }
 
-    // Montar resultado
-    const result: Record<string, boolean> = {};
-    for (const feat of features || []) {
-      if (auth.isAdmin || auth.isMaster) {
-        result[feat.key] = true;
-      } else if (feat.is_admin_only) {
-        result[feat.key] = false;
-      } else if (overrideMap.has(feat.key)) {
-        result[feat.key] = overrideMap.get(feat.key)!;
-      } else {
-        result[feat.key] = feat.default_value;
-      }
-    }
+    // Padrão da organização: o mesmo degrau que `has_feature_permission` usa
+    // entre o override do membro e o catálogo.
+    const { data: orgDefaultRows, error: orgErr } = await supabase
+      .from("organization_feature_defaults")
+      .select("feature_key, enabled")
+      .eq("organization_id", auth.organizationId);
+
+    if (orgErr) throw orgErr;
+
+    const orgDefaults = new Map(
+      (orgDefaultRows || []).map((o: { feature_key: string; enabled: boolean }) => [o.feature_key, o.enabled]),
+    );
+
+    const result = resolvePermissions({
+      features: features || [],
+      isAdmin: auth.isAdmin,
+      isMaster: auth.isMaster,
+      memberOverrides: overrideMap,
+      orgDefaults,
+    });
 
     return new Response(
       JSON.stringify({

@@ -50,6 +50,7 @@ import {
 } from "@/components/ui/accordion";
 import { cn } from "@/lib/utils";
 import { FAQ_CATEGORIES, type FaqItem } from "@/modules/platform/lib/faq-data";
+import { isTerminal } from "@/modules/platform/lib/ticket-lifecycle";
 
 const FAQ_ICON_MAP: Record<string, LucideIcon> = {
   HelpCircle,
@@ -91,7 +92,7 @@ export default function Faq() {
   const { data: articles = [], isLoading: artigosCarregando } = useHelpArticles();
   const { data: tickets = [] } = useSupportTickets();
   const temArtigos = articles.some((a) => a.is_published);
-  const abertos = tickets.filter((t) => t.status !== "resolvido" && t.status !== "fechado").length;
+  const abertos = tickets.filter((t) => !isTerminal(t.status) && t.status !== "resolvido").length;
   // Sem artigo publicado a aba Artigos é um convite vazio: abre no FAQ.
   const [aba, setAba] = useState<string | null>(null);
   const abaAtiva = aba ?? (artigosCarregando || temArtigos ? "artigos" : "faq");

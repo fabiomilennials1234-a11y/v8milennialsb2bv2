@@ -48,6 +48,8 @@ type ComposerState = "IDLE" | "TYPING" | "RECORDING" | "TRAY_OPEN";
 export interface MobileComposerContextualProps {
   conversationKey: string;
   phoneNumber: string;
+  /** Conversa de grupo: o envio vai para o JID `<id>@g.us`, não para um telefone. */
+  isGroup?: boolean;
   contactName: string;
   instanceName: string;
   instanceId: string;
@@ -77,6 +79,7 @@ type TrayAction = typeof TRAY_ITEMS[number]["id"];
 export function MobileComposerContextual({
   conversationKey,
   phoneNumber,
+  isGroup = false,
   contactName,
   instanceName,
   instanceId,
@@ -145,6 +148,7 @@ export function MobileComposerContextual({
     try {
       await sendMessage.mutateAsync({
         phoneNumber,
+        isGroup,
         message: message.trim(),
         instanceName,
         instanceId,
@@ -154,7 +158,7 @@ export function MobileComposerContextual({
     } catch (err) {
       notifyError(err, { fallback: "Não foi possível enviar." });
     }
-  }, [message, instanceName, phoneNumber, instanceId, leadId, sendMessage, setMessage]);
+  }, [message, instanceName, phoneNumber, isGroup, instanceId, leadId, sendMessage, setMessage]);
 
   const handleAudioRecorded = useCallback(async (audioBlob: Blob) => {
     setIsRecording(false);
@@ -163,6 +167,7 @@ export function MobileComposerContextual({
       const base64 = await readMediaAsDataUrl(mp3);
       await sendMedia.mutateAsync({
         phoneNumber,
+        isGroup,
         instanceName,
         instanceId,
         mediaType: "audio",
@@ -174,7 +179,7 @@ export function MobileComposerContextual({
     } catch (err) {
       notifyError(err, { fallback: "Não foi possível enviar áudio." });
     }
-  }, [phoneNumber, instanceName, instanceId, sendMedia, leadId]);
+  }, [phoneNumber, isGroup, instanceName, instanceId, sendMedia, leadId]);
 
   const handleFileSelected = useCallback(async (file: File) => {
     setTrayOpen(false);
@@ -209,6 +214,7 @@ export function MobileComposerContextual({
     try {
       await sendMedia.mutateAsync({
         phoneNumber,
+        isGroup,
         instanceName,
         instanceId,
         mediaType: kind,
@@ -228,7 +234,7 @@ export function MobileComposerContextual({
     } catch (err) {
       notifyError(err, { fallback: "Não foi possível enviar arquivo." });
     }
-  }, [pendingAttachment, attachmentCaption, isSending, phoneNumber, instanceName, instanceId, leadId, sendMedia, clearPendingAttachment]);
+  }, [pendingAttachment, attachmentCaption, isSending, phoneNumber, isGroup, instanceName, instanceId, leadId, sendMedia, clearPendingAttachment]);
 
   const handleSlashSelect = useCallback(async (template: MessageTemplate) => {
     const leadCtx: LeadContext = {
@@ -253,6 +259,7 @@ export function MobileComposerContextual({
       try {
         await sendMedia.mutateAsync({
           phoneNumber,
+          isGroup,
           instanceName,
           instanceId,
           mediaType: template.media_type,
@@ -271,7 +278,7 @@ export function MobileComposerContextual({
     // Template de texto → preenche input para revisão antes de enviar.
     setMessage(resolved);
     inputRef.current?.focus();
-  }, [leadForTemplates, selectedContact, phoneNumber, instanceName, instanceId, leadId, teamMember, sendMedia, setMessage]);
+  }, [leadForTemplates, selectedContact, phoneNumber, isGroup, instanceName, instanceId, leadId, teamMember, sendMedia, setMessage]);
 
   const handleTrayAction = useCallback((action: TrayAction) => {
     switch (action) {

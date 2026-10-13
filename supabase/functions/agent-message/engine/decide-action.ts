@@ -18,6 +18,7 @@ import {
 import { determineNextState as determineNextStateExternal } from "../../_shared/copilot/state-machine.ts";
 import { getPipeEntry, type PipelineEntry } from "../../_shared/pipeline-adapter.ts";
 import { funnelRefsFromRules } from "../../_shared/copilot/kanban-rules.ts";
+import type { TurnAction } from "./action-plan.ts";
 
 const NON_FUNNEL_AXES = new Set(["campanha", "upsell_base", "upsell_gestao"]);
 
@@ -41,6 +42,12 @@ export interface ProcessLLMResponseResult {
     params: Record<string, unknown>;
     tenant_id: string;
   }>;
+  /**
+   * TODAS as tool_calls com JSON válido, na ordem do LLM, com o tool name
+   * original — entrada de `planTurnActions`. `actionToExecute`/`extraToolCalls`
+   * seguem por retrocompat (a detecção de tool inline decide pela 1ª chamada).
+   */
+  toolCalls: TurnAction[];
   finishReason: string;
 }
 
@@ -54,6 +61,7 @@ export function processLLMResponse(
     | { action: string; params: Record<string, unknown>; tenant_id: string }
     | null = null;
   const extraToolCalls: ProcessLLMResponseResult["extraToolCalls"] = [];
+  const toolCalls: TurnAction[] = [];
   let nextState = conversation.state;
 
   const choice = response.choices?.[0];
@@ -78,7 +86,10 @@ export function processLLMResponse(
   // actionToExecute; os demais vão para extraToolCalls. JSON corrompido =
   // log error + skip (nunca enfileira params vazios).
   if (message.tool_calls && message.tool_calls.length > 0) {
-    const parsed: Array<{ toolName: string; entry: typeof actionToExecute }> = [];
+    const parsed: Array<{
+      toolName: string;
+      entry: { action: string; params: Record<string, unknown>; tenant_id: string } | null;
+    }> = [];
     for (const toolCall of message.tool_calls) {
       const toolName = toolCall.function.name;
       let toolParams: Record<string, unknown> | null = null;
@@ -108,10 +119,13 @@ export function processLLMResponse(
       for (let i = 1; i < parsed.length; i++) {
         if (parsed[i].entry) extraToolCalls.push(parsed[i].entry!);
       }
+      for (const p of parsed) {
+        if (p.entry) toolCalls.push({ ...p.entry, toolName: p.toolName, origin: "llm" });
+      }
     }
   }
 
-  return { nextState, actionToExecute, assistantMessage, extraToolCalls, finishReason };
+  return { nextState, actionToExecute, assistantMessage, extraToolCalls, toolCalls, finishReason };
 }
 
 /**
@@ -271,6 +285,7 @@ export async function enqueueAutomationActions(
   leadId: string,
   currentState: string,
   capabilities: any,
+  opts?: { skipStageMove?: boolean },
 ): Promise<void> {
   try {
     const automationActions = capabilities.automation_actions;
@@ -319,6 +334,10 @@ export async function enqueueAutomationActions(
         action_config: actionConfig,
         current_state: currentState,
         ...(pipelineRef ? { pipeline_ref: pipelineRef } : {}),
+        // O turno tem ADVANCE_STAGE explícito: a etapa escolhida pelo LLM vence
+        // o moveToStage/moveToPipe configurado (a ordem do worker não é
+        // garantida — sem isso a automação sobrescreveria o card).
+        ...(opts?.skipStageMove ? { skip_stage_move: true } : {}),
       },
       idempotencyKey,
     });
@@ -389,12 +408,14 @@ export async function enqueuePipelineStageUpdate(
   organizationId: string,
   leadId: string,
   turnCount: number,
-  actionToExecute: any,
+  anchor: { action: string } | null,
   capabilities?: any,
 ): Promise<void> {
   try {
-    // advance_stage será enfileirado como tool call — não duplicar
-    if (actionToExecute?.action === "ADVANCE_STAGE") {
+    // `anchor` = stageAnchor(plano do turno): ADVANCE_STAGE do plano se houver,
+    // senão SCHEDULE_MEETING, senão a ação principal. advance_stage explícito é
+    // enfileirado como tool call — não duplicar com o auto-avanço por turno.
+    if (anchor?.action === "ADVANCE_STAGE") {
       return;
     }
 
@@ -429,7 +450,7 @@ export async function enqueuePipelineStageUpdate(
 
     let target: EngineStageRow | null = null;
 
-    if (actionToExecute?.action === "SCHEDULE_MEETING") {
+    if (anchor?.action === "SCHEDULE_MEETING") {
       target = stages.find((s) => s.stage_role === "meeting_booked") ?? null;
       if (!target) {
         console.log(

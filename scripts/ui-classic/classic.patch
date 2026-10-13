@@ -4123,6 +4123,55 @@ index 65bfe657e..cfbd2ac92 100644
        isCreating={isCreating}
        onCreate={criar}
        open={open}
+diff --git a/classic/src/modules/leads/components/lead-card/campos-de-origem-da-campanha.ts b/classic/src/modules/leads/components/lead-card/campos-de-origem-da-campanha.ts
+new file mode 100644
+index 000000000..5c5a8584c
+--- /dev/null
++++ b/classic/src/modules/leads/components/lead-card/campos-de-origem-da-campanha.ts
+@@ -0,0 +1,23 @@
++import type { LeadCardFieldGroup } from "./types";
++
++const UTMS = [
++  ["utm_source", "UTM Source"],
++  ["utm_medium", "UTM Medium"],
++  ["utm_campaign", "UTM Campaign"],
++  ["utm_content", "UTM Content"],
++  ["utm_term", "UTM Term"],
++] as const;
++
++/** Tracking vem da captura do lead, nunca de edição manual no painel. */
++export function camposDeOrigemDaCampanha(lead: Record<string, unknown>): LeadCardFieldGroup[] {
++  const campos = UTMS.map(([chave, rotulo]) => ({
++    chave,
++    rotulo,
++    valor: typeof lead[chave] === "string" && lead[chave].trim() ? lead[chave] : null,
++    somenteLeitura: true,
++    tipo: "texto" as const,
++  }));
++  return campos.some(campo => campo.valor !== null)
++    ? [{ titulo: "Origem da campanha", campos }]
++    : [];
++}
+diff --git a/classic/src/modules/leads/components/lead-card/useLeadCardData.ts b/classic/src/modules/leads/components/lead-card/useLeadCardData.ts
+index d5e33040e..bd3f930ad 100644
+--- a/classic/src/modules/leads/components/lead-card/useLeadCardData.ts
++++ b/classic/src/modules/leads/components/lead-card/useLeadCardData.ts
+@@ -14,6 +14,7 @@ import { deriveLeadStanding } from "../../lib/lead-relacao-situacao";
+ import { useOrgUsaLeiDoErp } from "../../hooks/useOrgUsaLeiDoErp";
+ import { useCafeJurereCadastro } from "../../hooks/useCafeJurereCadastro";
+ import { aplicarCadastroCafeJurere } from "../../lib/cafe-jurere-cadastro";
++import { camposDeOrigemDaCampanha } from "./campos-de-origem-da-campanha";
+ import type {
+   LeadCardData,
+   LeadCardDeal,
+@@ -359,6 +360,7 @@ export function useLeadCardData(leadId: string | null, isOpen: boolean): LeadCar
+           { somenteLeitura: true, chave: "qualification_tier", rotulo: "Qualificação", valor: texto(l, "qualification_tier"), tipo: "texto", vazio: "Sem qualificação" },
+         ],
+       },
++      ...camposDeOrigemDaCampanha(l),
+       ...(orgVazios.length > 0
+         ? [{ titulo: "Campos a preencher", campos: orgVazios }]
+         : []),
 diff --git a/classic/src/modules/leads/components/lead-detail/hooks/useLeadDetailRealtime.ts b/classic/src/modules/leads/components/lead-detail/hooks/useLeadDetailRealtime.ts
 index 980e2d02f..0a165192b 100644
 --- a/classic/src/modules/leads/components/lead-detail/hooks/useLeadDetailRealtime.ts
@@ -4644,15 +4693,15 @@ index 6aeb2f49c..423a8184b 100644
        } else if (pipeType === "upsell") {
 diff --git a/classic/src/modules/leads/hooks/useLeadPhones.ts b/classic/src/modules/leads/hooks/useLeadPhones.ts
 new file mode 100644
-index 000000000..8805f287b
+index 000000000..d8afe80b4
 --- /dev/null
 +++ b/classic/src/modules/leads/hooks/useLeadPhones.ts
 @@ -0,0 +1,111 @@
 +import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 +import { supabase } from "@/integrations/supabase/client";
 +import {
++  erroDeTelefone,
 +  leadPhoneFromRow,
-+  mensagemDoErroDeTelefone,
 +  ordenarTelefones,
 +  type LeadPhone,
 +  type LeadPhoneRow,
@@ -4720,7 +4769,7 @@ index 000000000..8805f287b
 +          is_primary: t.isPrimary,
 +        })),
 +      });
-+      if (error) throw new Error(mensagemDoErroDeTelefone(error));
++      if (error) throw erroDeTelefone(error);
 +    },
 +    onSettled: () => invalidarTelefones(qc, leadId),
 +  });
@@ -4736,7 +4785,7 @@ index 000000000..8805f287b
 +        p_phone: phone,
 +        p_label: label?.trim() || null,
 +      } as never);
-+      if (error) throw new Error(mensagemDoErroDeTelefone(error, "Não foi possível nomear o contato"));
++      if (error) throw erroDeTelefone(error);
 +    },
 +    onSettled: () => invalidarTelefones(qc, leadId),
 +  });
@@ -4750,7 +4799,7 @@ index 000000000..8805f287b
 +        p_deal_id: dealId,
 +        p_lead_phone_id: leadPhoneId,
 +      });
-+      if (error) throw new Error(mensagemDoErroDeTelefone(error, "Não foi possível escolher o telefone do negócio"));
++      if (error) throw erroDeTelefone(error);
 +    },
 +    onSettled: () =>
 +      Promise.all([
@@ -5418,10 +5467,10 @@ index 000000000..8bead654d
 +}
 diff --git a/classic/src/modules/leads/lib/lead-phones.ts b/classic/src/modules/leads/lib/lead-phones.ts
 new file mode 100644
-index 000000000..aefea4cdd
+index 000000000..c2bc37d50
 --- /dev/null
 +++ b/classic/src/modules/leads/lib/lead-phones.ts
-@@ -0,0 +1,117 @@
+@@ -0,0 +1,135 @@
 +import { formatPhoneBR } from "@/shared/format/phone";
 +
 +/**
@@ -5528,16 +5577,34 @@ index 000000000..aefea4cdd
 +  lead_not_found: "Lead não encontrado. Atualize a ficha.",
 +};
 +
-+export function mensagemDoErroDeTelefone(
++/** A frase da tela para uma recusa CONHECIDA das RPCs de telefone; `null` se não for uma. */
++export function recusaDeTelefone(
 +  error: { code?: string; message?: string } | null | undefined,
-+  fallback = "Não foi possível salvar os telefones",
-+): string {
++): string | null {
 +  const msg = error?.message ?? "";
 +  if (RECUSAS[msg]) return RECUSAS[msg];
 +  // idx_leads_org_phone_unique: o número escolhido como principal já é o
 +  // principal de OUTRO lead da organização.
 +  if (error?.code === "23505") return "Este número já é o principal de outro lead da organização";
-+  return fallback;
++  return null;
++}
++
++export function mensagemDoErroDeTelefone(
++  error: { code?: string; message?: string } | null | undefined,
++  fallback = "Não foi possível salvar os telefones",
++): string {
++  return recusaDeTelefone(error) ?? fallback;
++}
++
++/**
++ * O que a mutation lança: recusa conhecida vira a frase da tela; o resto sobe
++ * ORIGINAL, para `toAppError` classificar, relatar e dar a referência
++ * (ADR-0038). Embrulhar tudo num `Error` genérico apagava a causa — foi assim
++ * que um "Não foi possível salvar os telefones" chegou sem pista nenhuma.
++ */
++export function erroDeTelefone(error: { code?: string; message?: string }): unknown {
++  const recusa = recusaDeTelefone(error);
++  return recusa ? new Error(recusa) : error;
 +}
 diff --git a/classic/src/modules/leads/lib/lead-realtime-relevance.ts b/classic/src/modules/leads/lib/lead-realtime-relevance.ts
 new file mode 100644

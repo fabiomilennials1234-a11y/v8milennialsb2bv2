@@ -1,6 +1,4 @@
-import { describe, it, expect } from "vitest";
 import {
-  isTerminalRole,
   terminalKind,
   toFunnelRows,
   availableFunnelsToAdd,
@@ -8,19 +6,18 @@ import {
 } from "./contextPanelFunnelHelpers";
 import type { PipelineStatus } from "@/modules/leads";
 
-describe("isTerminalRole / terminalKind", () => {
-  it("won e lost são terminais", () => {
-    expect(isTerminalRole("won")).toBe(true);
-    expect(isTerminalRole("lost")).toBe(true);
-    expect(terminalKind("won")).toBe("won");
-    expect(terminalKind("lost")).toBe("lost");
+describe("terminalKind", () => {
+  it("ganho pelo papel; perda pelo predicado único (lost OU is_final_negative)", () => {
+    expect(terminalKind({ role: "won", isLoss: false })).toBe("won");
+    expect(terminalKind({ role: "lost", isLoss: true })).toBe("lost");
+    // Mustang/Riofix: `perdido_desqualificado` é role open + is_final_negative.
+    expect(terminalKind({ role: "open", isLoss: true })).toBe("lost");
   });
   it("open/meeting/null não são terminais", () => {
-    expect(isTerminalRole("open")).toBe(false);
-    expect(isTerminalRole("meeting_booked")).toBe(false);
-    expect(isTerminalRole(null)).toBe(false);
-    expect(isTerminalRole(undefined)).toBe(false);
-    expect(terminalKind("open")).toBeNull();
+    expect(terminalKind({ role: "open", isLoss: false })).toBeNull();
+    expect(terminalKind({ role: "meeting_booked", isLoss: false })).toBeNull();
+    expect(terminalKind({ role: null, isLoss: false })).toBeNull();
+    expect(terminalKind(null)).toBeNull();
   });
 });
 
@@ -51,6 +48,20 @@ describe("toFunnelRows", () => {
     expect(rows[0].entryId).toBe("entry-1");
     expect(rows[0].currentStageKey).toBe("novo");
     expect(rows[0].stages.find((s) => s.key === "ganho")?.role).toBe("won");
+  });
+
+  it("marca isLoss por role lost OU is_final_negative (etapa de perda só pela flag)", () => {
+    const rows = toFunnelRows([
+      standard({
+        stages: [
+          { id: "novo", label: "Novo", color: "#aaa", role: "open" },
+          { id: "perdido_desqualificado", label: "Perdido", color: "#f00", role: "open", isFinalNegative: true },
+          { id: "perda", label: "Perda", color: "#f00", role: "lost" },
+        ],
+      }),
+    ]);
+    const isLoss = Object.fromEntries(rows[0].stages.map((s) => [s.key, s.isLoss]));
+    expect(isLoss).toEqual({ novo: false, perdido_desqualificado: true, perda: true });
   });
 
   it("sem display config, cai no label do próprio pipeline", () => {

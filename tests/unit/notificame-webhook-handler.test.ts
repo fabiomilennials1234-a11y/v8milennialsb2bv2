@@ -101,6 +101,8 @@ beforeEach(async () => {
   setDenoEnv("NOTIFICAME_WEBHOOK_IPS", "0.0.0.0/0");
   setDenoEnv("SUPABASE_URL", "https://x.supabase.co");
   setDenoEnv("SUPABASE_SERVICE_ROLE_KEY", "service-role");
+  // A segunda busca de um status sem linha espera 2s em produção; aqui, não.
+  setDenoEnv("NOTIFICAME_STATUS_RETRY_MS", "0");
 
   state.mock = createMockSupabase();
   state.mock.mockTable("notificame_subaccounts", [{ id: SUB_ID, organization_id: ORG }]);
@@ -307,6 +309,78 @@ describe("MESSAGE_STATUS — a recusa da Meta chega até a linha", () => {
     expect(res.status).toBe(200);
     const atualizadas = state.mock!.getUpdated("channel_messages");
     expect(atualizadas[atualizadas.length - 1]).toMatchObject({ status: "failed" });
+  });
+
+  /**
+   * A RECUSA QUE CHEGA ANTES DA CHAVE — 30/09, Chique.
+   *
+   * O `ERROR 131047` chegou 1,7s ANTES do `SENT` que grava o
+   * `provider_message_id`. Parkado como `status_no_match`, e a mensagem seguiu
+   * "enviada" na tela. Quando o `SENT` grava a chave, o que estava parkado com o
+   * mesmo id tem que cair na linha.
+   */
+  it("o SENT que grava a chave reaplica a recusa parkada antes dele", async () => {
+    const PROVIDER_ID = "QlFES2Zka2d4L1JkMXdqb3poczVJeVRITFJtT0VOc3FZTjIw";
+    const recusaParkada = {
+      type: "MESSAGE_STATUS",
+      messageId: "7d312141-6062-4832-83d2-339c95cce47d",
+      messageStatus: {
+        code: "ERROR",
+        providerMessageId: PROVIDER_ID,
+        error: {
+          code: 131047,
+          details: "Message failed to send because more than 24 hours have passed since the customer last replied to this number.",
+          message: "Re-engagement message",
+        },
+      },
+    };
+    state.mock!.mockTable("notificame_webhook_events", [{
+      id: "parkado-1",
+      organization_id: ORG,
+      status: "parked",
+      reason: "status_no_match",
+      received_at: "2026-09-30T13:21:38.949Z",
+      payload: recusaParkada,
+      // O dublê compara a chave LITERAL — o código filtra pelo caminho jsonb.
+      "payload->messageStatus->>providerMessageId": PROVIDER_ID,
+    }]);
+
+    const res = await post({
+      type: "MESSAGE_STATUS",
+      messageId: ID_MENSAGEM,
+      messageStatus: { code: "SENT", providerMessageId: PROVIDER_ID },
+    });
+    expect(res.status).toBe(200);
+
+    const atualizadas = state.mock!.getUpdated("channel_messages");
+    const final = atualizadas[atualizadas.length - 1] as Record<string, unknown>;
+    expect(final).toMatchObject({ status: "failed", provider_message_id: PROVIDER_ID });
+    expect((final.raw_payload as Record<string, Record<string, unknown>>).status_event)
+      .toMatchObject({ provider_code: "131047" });
+
+    // E o parkado sai da fila — senão a próxima inspeção o conta como perdido.
+    expect(state.mock!.getUpdated("notificame_webhook_events")[0])
+      .toMatchObject({ id: "parkado-1", status: "processed" });
+  });
+
+  it("parkado de OUTRA mensagem não é tocado", async () => {
+    state.mock!.mockTable("notificame_webhook_events", [{
+      id: "parkado-alheio",
+      organization_id: ORG,
+      status: "parked",
+      reason: "status_no_match",
+      payload: { type: "MESSAGE_STATUS", messageId: "x", messageStatus: { code: "ERROR", providerMessageId: "OUTRO" } },
+      "payload->messageStatus->>providerMessageId": "OUTRO",
+    }]);
+
+    await post({
+      type: "MESSAGE_STATUS",
+      messageId: ID_MENSAGEM,
+      messageStatus: { code: "SENT", providerMessageId: "ESTE" },
+    });
+
+    expect(state.mock!.getUpdated("channel_messages")[0]).toMatchObject({ status: "sent" });
+    expect(state.mock!.getUpdated("notificame_webhook_events")).toHaveLength(0);
   });
 
   it("status de mensagem que não é desta org é GUARDADO, nunca aplicado", async () => {

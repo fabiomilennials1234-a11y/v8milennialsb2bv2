@@ -15,6 +15,11 @@ import {
 import { getPipeEntry, tryResolvePipelineId, updatePipeEntryById } from "../pipeline-adapter.ts";
 import type { PipelineRef } from "../pipeline-adapter.ts";
 import type { ActionResult } from "./types.ts";
+import { isCopilotCanceled } from "../copilot/cancellation.ts";
+import {
+  buildSameTurnHandoffMarker,
+  type SameTurnHandoffMarker,
+} from "../copilot/same-turn-handoff.ts";
 
 /**
  * Transferência atômica via RPC. Usada pelo agent-engine antes de enfileirar
@@ -23,13 +28,30 @@ import type { ActionResult } from "./types.ts";
  *
  * `pipelineRef` (SCRUM-628): funil onde procurar a etapa de "atendimento
  * humano" — vem das kanban rules do agente. Ausente → "whatsapp" (legado).
+ *
+ * `opts.skipHumanStageMove`: o turno também tem ADVANCE_STAGE explícito. A
+ * transferência roda INLINE antes da fila; mover o card para
+ * `atendimento_humano` aqui seria sobrescrito pela ADVANCE_STAGE logo depois
+ * (ordem do worker não é garantida). A etapa explícita do turno vence; o
+ * handoff continua marcado por `leads.ai_disabled` (RPC).
+ *
+ * `opts.captureHandoffMarker`: o turno também enfileira mídia. O worker de
+ * mídia cancela quando a IA está desligada — e este RPC a desliga. Lê o gate
+ * canônico antes e depois do RPC e devolve `handoffMarker` (carimbo do
+ * desligamento causado AQUI) só se a IA estava ligada antes. Ver
+ * `_shared/copilot/same-turn-handoff.ts`. Custo (até 5 leituras) só é pago
+ * quando pedido.
  */
 export async function immediateTransferHuman(
   supabase: SupabaseClient,
   leadId: string,
   pipelineRef?: PipelineRef,
-): Promise<{ success: boolean; error?: string }> {
+  opts?: { skipHumanStageMove?: boolean; captureHandoffMarker?: boolean },
+): Promise<{ success: boolean; error?: string; handoffMarker?: SameTurnHandoffMarker | null }> {
   try {
+    const gate = opts?.captureHandoffMarker ? await loadCancellationKey(supabase, leadId) : null;
+    const before = gate ? await isCopilotCanceled(supabase, gate.organizationId, gate.phone) : null;
+
     const { error } = await supabase.rpc("transfer_lead_to_human", {
       p_lead_id: leadId,
     });
@@ -39,15 +61,43 @@ export async function immediateTransferHuman(
       return { success: false, error: error.message };
     }
 
+    let handoffMarker: SameTurnHandoffMarker | null = null;
+    if (gate && before) {
+      const after = await isCopilotCanceled(supabase, gate.organizationId, gate.phone);
+      handoffMarker = buildSameTurnHandoffMarker(leadId, before, after);
+    }
+
     console.log("[immediateTransferHuman] Transfer executed atomically for lead:", leadId);
 
     // Move lead to human-handoff stage in the agent's pipeline (if org has one)
-    await moveLeadToHumanStage(supabase, leadId, pipelineRef ?? "whatsapp");
+    if (!opts?.skipHumanStageMove) {
+      await moveLeadToHumanStage(supabase, leadId, pipelineRef ?? "whatsapp");
+    }
 
-    return { success: true };
+    return opts?.captureHandoffMarker ? { success: true, handoffMarker } : { success: true };
   } catch (err) {
     console.warn("[immediateTransferHuman] Unexpected error:", err);
     return { success: false, error: String(err) };
+  }
+}
+
+/** Chave do gate de cancelamento (org + telefone) do lead. Falha → null. */
+async function loadCancellationKey(
+  supabase: SupabaseClient,
+  leadId: string,
+): Promise<{ organizationId: string; phone: string } | null> {
+  try {
+    const { data } = await supabase
+      .from("leads")
+      .select("organization_id, phone")
+      .eq("id", leadId)
+      .maybeSingle();
+    const organizationId = (data as { organization_id?: unknown } | null)?.organization_id;
+    const phone = (data as { phone?: unknown } | null)?.phone;
+    if (typeof organizationId !== "string" || typeof phone !== "string" || !phone) return null;
+    return { organizationId, phone };
+  } catch {
+    return null;
   }
 }
 

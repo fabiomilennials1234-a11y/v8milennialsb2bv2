@@ -52,6 +52,7 @@ import { getAvatarGradient } from "./avatarGradient";
 import { useNomeDoLeadPrimeiro } from "@/modules/communication/hooks/chat/useNomeDoLeadPrimeiro";
 import { useNomeCodContatoLead } from "@/modules/communication/hooks/chat/useNomeCodContatoLead";
 import type { CaixaDaLinha } from "@/modules/communication/lib/caixaUnificada";
+import type { ResponsavelDaLinha } from "@/modules/communication/lib/responsavelDaLinha";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -288,6 +289,74 @@ export interface ConversationListItemProps {
    * fala nos dois números".
    */
   tambemEm?: readonly CaixaDaLinha[];
+  /**
+   * O DONO do lead (`sale_responsible_id ?? pre_sale_responsible_id`), que
+   * ocupa o lugar onde a linha dizia o nome da caixa.
+   *
+   * `undefined` = não há o que afirmar (sem lead, carregando, falhou): o
+   * segmento não renderiza, para não piscar "Sem responsável" e depois o nome.
+   * `null` = o lead não tem dono. Ver `resolverResponsavelDaLinha`.
+   */
+  responsavel?: ResponsavelDaLinha | null;
+  /**
+   * Há mais de uma caixa marcada (modo unificado). Só então a bolinha da COR
+   * da caixa volta para antes do responsável: com uma caixa só ela repetiria o
+   * seletor; com várias é o que diz de qual número a conversa corre.
+   */
+  variasCaixas?: boolean;
+}
+
+/**
+ * Segmento "responsável" da linha (desktop e celular usam o mesmo).
+ * Bolinha neutra como a da etapa; a cor da caixa só aparece com várias caixas.
+ */
+export function SegmentoResponsavel({
+  responsavel,
+  caixa,
+  variasCaixas,
+  className,
+}: {
+  responsavel: ResponsavelDaLinha | null | undefined;
+  caixa?: CaixaDaLinha;
+  variasCaixas?: boolean;
+  className?: string;
+}) {
+  if (responsavel === undefined) {
+    // Sem dono a afirmar (sem lead, carregando, falhou). No modo unificado a
+    // linha ainda precisa dizer de qual número corre: volta o comportamento
+    // antigo — bolinha da cor + nome da caixa.
+    if (!(variasCaixas && caixa)) return null;
+    return (
+      <span className={cn("flex items-center gap-1", className)} title={`Caixa: ${caixa.nome}`} data-testid="linha-caixa">
+        <span
+          className="h-1.5 w-1.5 shrink-0 rounded-full"
+          style={{ backgroundColor: instanceColor(caixa.id) }}
+          aria-hidden
+        />
+        <span className="truncate">{caixa.nome}</span>
+      </span>
+    );
+  }
+  const rotuloResponsavel = responsavel ? responsavel.nomeCompleto : "Sem responsável";
+  const title = caixa
+    ? `Responsável: ${rotuloResponsavel} · Caixa: ${caixa.nome}`
+    : `Responsável: ${rotuloResponsavel}`;
+  return (
+    <span className={cn("flex items-center gap-1", className)} title={title} data-testid="linha-responsavel">
+      {variasCaixas && caixa ? (
+        <span
+          className="h-1.5 w-1.5 shrink-0 rounded-full"
+          style={{ backgroundColor: instanceColor(caixa.id) }}
+          aria-hidden
+        />
+      ) : (
+        <span className="h-1 w-1 shrink-0 rounded-full bg-current opacity-60" aria-hidden />
+      )}
+      <span className={cn("truncate", !responsavel && "italic opacity-60")}>
+        {responsavel ? responsavel.nome : "Sem responsável"}
+      </span>
+    </span>
+  );
 }
 
 export function ConversationListItem({
@@ -309,6 +378,8 @@ export function ConversationListItem({
   stageLabel,
   caixa,
   tambemEm,
+  responsavel,
+  variasCaixas,
 }: ConversationListItemProps) {
   const nomeDoLeadPrimeiro = useNomeDoLeadPrimeiro();
   const nomeCodContato = useNomeCodContatoLead();
@@ -469,27 +540,21 @@ export function ConversationListItem({
             )}
           </div>
 
-          {/* Andar 3 — metadados em 10,5 px, como no mockup: de qual caixa
-              corre · etapa · pediu atendente · o "fio". Etiquetas saíram da
+          {/* Andar 3 — metadados em 10,5 px, como no mockup: responsável
+              do lead · etapa · pediu atendente · o "fio". Etiquetas saíram da
               linha (moram no painel de contexto e no filtro "Tag"): eram elas
               que estouravam a linha quando o lead pedia atendente. Uma linha
               só, truncando — altura variável quebraria a lista virtualizada. */}
           <div className="mt-1 flex min-w-0 items-center gap-2 overflow-hidden text-[10.5px] leading-none text-muted-foreground group-data-[selected=true]/linha:text-primary-foreground/70">
-            {/* A cor é a MESMA que a bolha de chat dá ao número — duas
-                derivações dariam duas cores para a mesma caixa. */}
-            {caixa && (
-              <span
-                className="flex min-w-[4.5rem] max-w-[132px] shrink-[2] items-center gap-1"
-                title={`Caixa: ${caixa.nome}`}
-              >
-                <span
-                  className="w-1.5 h-1.5 rounded-full shrink-0"
-                  style={{ backgroundColor: instanceColor(caixa.id) }}
-                  aria-hidden
-                />
-                <span className="truncate">{caixa.nome}</span>
-              </span>
-            )}
+            {/* Quem responde pela conversa — o dono do lead. A caixa saiu do
+                texto (com uma caixa só repetia o seletor) e mora no tooltip;
+                com várias caixas volta como a bolinha da cor do número. */}
+            <SegmentoResponsavel
+              responsavel={responsavel}
+              caixa={caixa}
+              variasCaixas={variasCaixas}
+              className="min-w-[4.5rem] max-w-[132px] shrink-[2]"
+            />
             {/* No WhatsApp o nome do lead JÁ é o título da linha. No Instagram
                 o título é o @handle, então o lead vinculado ganha a meta. */}
             {!isWhatsApp && contact.lead_name && (

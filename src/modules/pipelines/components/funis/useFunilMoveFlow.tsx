@@ -6,10 +6,11 @@
  * (`pipeline_stages.stage_role`), nunca por slug — um funil custom com etapa
  * `won` ganha o fluxo de vendido igual (é o prêmio da fatia):
  *
- *   · `lost` (ou legado `is_final_negative` sem role) → diálogo de motivo da
- *     perda (SCRUM-369: motivo OBRIGATÓRIO, "Outro" exige texto; grava
- *     `loss_reason_id` + rótulo snapshotado `loss_reason` no metadata ANTES do
- *     move — o desfecho viaja com a transição);
+ *   · etapa de PERDA (`isEtapaDePerda`: `lost` ou `is_final_negative`) → a
+ *     porta única do motivo (`useLossReasonGate`, SCRUM-369: motivo
+ *     OBRIGATÓRIO, "Outro" exige texto; grava `loss_reason_id` + rótulo
+ *     snapshotado `loss_reason` no metadata ANTES do move — o desfecho viaja
+ *     com a transição). O diálogo é o mesmo de toda tela que move para perda;
  *   · `won` → guarda de valor (`useSaleValueGuard`, D1/SQL-I3) e, com TinyERP
  *     conectado, o modal de pedido (`tinyerp-push-order` lê `pipeline_entries`
  *     por id — funciona para QUALQUER funil). Cadastro Externo fica restrito ao
@@ -38,27 +39,9 @@ import { useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { notifyError } from "@/shared/errors";
 import { useQueryClient } from "@tanstack/react-query";
-import { Textarea } from "@/components/ui/textarea";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
 import { supabase } from "@/integrations/supabase/client";
 import { useOrganization, useCanDo } from "@/modules/identity";
-import { CompareceuModal } from "@/modules/leads";
+import { CompareceuModal, useLossReasonGate } from "@/modules/leads";
 import { useLogLeadAction } from "@/shared/hooks/useLogLeadAction";
 import { track } from "@/lib/analytics";
 import { triggerFollowUpAutomation } from "@/modules/workflows/hooks/useAutoFollowUp";
@@ -85,28 +68,13 @@ import {
 import { isWonStageKey, parseSaleValue } from "@/modules/pipelines/lib/sale-value-guard";
 import { useSaleValueGuard } from "@/modules/pipelines/hooks/useSaleValueGuard";
 import { SaleValueRequiredModal } from "@/shared/components/SaleValueRequiredModal";
-import { useLossReasons } from "@/modules/pipelines/hooks/config/useLossReasons";
-import {
-  exigeTextoLivre,
-  resolverMotivoDaPerda,
-  type MotivoDePerda,
-} from "@/modules/pipelines/lib/loss-reason";
+import { isEtapaDePerda, patchDaPerda } from "@/modules/pipelines/lib/loss-reason";
 import { SetMeetingDateModal } from "@/modules/pipelines/components/kanban/SetMeetingDateModal";
 import { RescheduleModal } from "@/modules/pipelines/components/legacy/confirmacao/RescheduleModal";
 import { AddMeetingModal } from "@/modules/pipelines/components/legacy/confirmacao/AddMeetingModal";
 import { DX_TARGET_KEYS } from "@/modules/pipelines/lib/meeting-dx";
 import { usePipelineDisplayConfig } from "@/modules/pipelines/hooks/config/usePipelineDisplayConfig";
 import { nomeDoFunil } from "@/contracts/pipe";
-
-/** Fallback quando a org não cadastrou motivos (mesma lista do PipePropostas). */
-const LOSS_REASONS_FALLBACK: MotivoDePerda[] = [
-  { value: "sem_budget", label: "Sem budget", doCatalogo: false },
-  { value: "concorrencia", label: "Concorrência", doCatalogo: false },
-  { value: "timing", label: "Timing errado", doCatalogo: false },
-  { value: "follow_up_fraco", label: "Follow-up fraco", doCatalogo: false },
-  { value: "produto_nao_adequado", label: "Produto não adequado", doCatalogo: false },
-  { value: "outro", label: "Outro", doCatalogo: false },
-];
 
 /**
  * Fallback LEGADO de destino quando a etapa de sucesso não declara
@@ -151,9 +119,6 @@ interface UseFunilMoveFlowParams {
 
 const roleDe = (stage: CustomPipelineStage): StageRole => stage.stage_role ?? "open";
 
-const ehLost = (stage: CustomPipelineStage): boolean =>
-  roleDe(stage) === "lost" || (roleDe(stage) === "open" && stage.is_final_negative);
-
 export function useFunilMoveFlow({
   pipeline,
   pipelines,
@@ -185,9 +150,7 @@ export function useFunilMoveFlow({
   const [wonValueLeadName, setWonValueLeadName] = useState<string | undefined>(undefined);
 
   // ── Estados dos interceptores ────────────────────────────────────────────
-  const [pendingLost, setPendingLost] = useState<{ entryId: string; stage: CustomPipelineStage } | null>(null);
-  const [selectedLossReason, setSelectedLossReason] = useState("");
-  const [lossReasonNote, setLossReasonNote] = useState("");
+  const { requestLossReason, portaAberta } = useLossReasonGate();
 
   const [pendingWonTiny, setPendingWonTiny] = useState<{
     entryId: string;
@@ -229,24 +192,6 @@ export function useFunilMoveFlow({
     entry: FunilFlowEntry;
   } | null>(null);
   const [processingCompareceu, setProcessingCompareceu] = useState(false);
-
-  // ── Motivos de perda (SCRUM-369) ─────────────────────────────────────────
-  const { data: dbLossReasons } = useLossReasons();
-  const lossReasons = useMemo<MotivoDePerda[]>(() => {
-    if (dbLossReasons && dbLossReasons.length > 0) {
-      return dbLossReasons.map((r) => ({ value: r.id, label: r.name, doCatalogo: true }));
-    }
-    return LOSS_REASONS_FALLBACK;
-  }, [dbLossReasons]);
-
-  const perdaResolvida = useMemo(
-    () => resolverMotivoDaPerda(selectedLossReason, lossReasonNote, lossReasons),
-    [selectedLossReason, lossReasonNote, lossReasons],
-  );
-  const precisaDeTexto = useMemo(
-    () => exigeTextoLivre(selectedLossReason, lossReasons),
-    [selectedLossReason, lossReasons],
-  );
 
   /**
    * Recarga pós-move DESTE funil — colunas de origem/destino + contagem; o
@@ -457,25 +402,24 @@ export function useFunilMoveFlow({
     [findEntry, pipeline, tinyStatus, organizationId, cadastroExternoEnabled, ehSystem, concluirWon],
   );
 
-  // ── Perdido (lost) ───────────────────────────────────────────────────────
-  const fecharLossDialog = useCallback(() => {
-    setPendingLost(null);
-    setSelectedLossReason("");
-    setLossReasonNote("");
-  }, []);
-
-  const handleLossConfirm = useCallback(async () => {
-    if (!pendingLost || !perdaResolvida) return;
-    const { entryId, stage } = pendingLost;
-    fecharLossDialog();
-    await completarMove(entryId, stage, {
-      metadataPatch: {
-        ...(perdaResolvida.id ? { loss_reason_id: perdaResolvida.id } : {}),
-        ...(perdaResolvida.texto ? { loss_reason: perdaResolvida.texto } : {}),
-      },
-    });
-    toast("Negócio marcado como perdido");
-  }, [pendingLost, perdaResolvida, fecharLossDialog, completarMove]);
+  // ── Perdido ──────────────────────────────────────────────────────────────
+  // O motivo entra pelo `metadataPatch` do `completarMove` (e não pelo
+  // `capturarMotivoDaPerda` da porta) para a escrita herdar o otimismo, o
+  // registro de eco e o rollback deste fluxo — a ordem metadata → move é a
+  // mesma.
+  const moverParaPerda = useCallback(
+    async (entryId: string, stage: CustomPipelineStage) => {
+      const perda = await requestLossReason({ stageName: stage.name });
+      if (!perda) {
+        // Porta fechada (sem provider) já avisou — um toast só.
+        if (portaAberta) toast("Operação cancelada");
+        return;
+      }
+      await completarMove(entryId, stage, { metadataPatch: patchDaPerda(perda) });
+      toast("Negócio marcado como perdido");
+    },
+    [requestLossReason, portaAberta, completarMove],
+  );
 
   // ── Compareceu → Orçamentos (ADR-0023 d4: MOVE, não copia) ───────────────
   const handleCompareceuConfirm = useCallback(
@@ -551,10 +495,8 @@ export function useFunilMoveFlow({
       }
 
       // 1. Perdido — motivo obrigatório antes do move (SCRUM-369).
-      if (ehLost(stage)) {
-        setSelectedLossReason("");
-        setLossReasonNote("");
-        setPendingLost({ entryId, stage });
+      if (isEtapaDePerda(stage)) {
+        void moverParaPerda(entryId, stage);
         return;
       }
 
@@ -610,7 +552,7 @@ export function useFunilMoveFlow({
       // 5. Move simples.
       void completarMove(entryId, stage);
     },
-    [findEntry, pipeline, stages, saleGuard, continuarWon, ehSystem, temTrilhoDx, completarMove],
+    [findEntry, pipeline, stages, saleGuard, continuarWon, ehSystem, temTrilhoDx, completarMove, moverParaPerda],
   );
 
   // ── Diálogos (renderizados pela página) ──────────────────────────────────
@@ -623,64 +565,6 @@ export function useFunilMoveFlow({
         onCancel={saleGuard.cancelSaleValue}
         leadName={wonValueLeadName}
       />
-
-      {/* Motivo da perda (SCRUM-369) — obrigatório; "Outro" exige texto */}
-      <AlertDialog
-        open={!!pendingLost}
-        onOpenChange={(open) => {
-          if (!open) fecharLossDialog();
-        }}
-      >
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Motivo da perda</AlertDialogTitle>
-            <AlertDialogDescription>
-              Sem o motivo, a perda vira só um número. É ele que responde onde o
-              funil está furando.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <div className="flex flex-col gap-2 px-1 py-2">
-            <Select value={selectedLossReason} onValueChange={setSelectedLossReason}>
-              <SelectTrigger>
-                <SelectValue placeholder="Selecionar motivo" />
-              </SelectTrigger>
-              <SelectContent>
-                {lossReasons.map((r) => (
-                  <SelectItem key={r.value} value={r.value}>
-                    {r.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            {precisaDeTexto && (
-              <Textarea
-                value={lossReasonNote}
-                onChange={(e) => setLossReasonNote(e.target.value)}
-                placeholder="Qual foi o motivo? (obrigatório)"
-                rows={3}
-                autoFocus
-              />
-            )}
-          </div>
-          <AlertDialogFooter>
-            <AlertDialogCancel
-              onClick={() => {
-                fecharLossDialog();
-                toast("Operação cancelada");
-              }}
-            >
-              Cancelar
-            </AlertDialogCancel>
-            <AlertDialogAction
-              onClick={handleLossConfirm}
-              disabled={!perdaResolvida}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-            >
-              Confirmar Perda
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
 
       {/* TinyERP: confirmar pedido no drag-to-vendido */}
       {pendingWonTiny && (

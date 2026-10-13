@@ -10,11 +10,18 @@ import type {
   StandardPipelineStatus,
   CustomPipelineStatus,
 } from "@/modules/leads";
+import { isEtapaDePerda } from "@/contracts/pipe/perda";
 
 export interface NormalizedStage {
   id: string;
   name: string;
   color: string;
+  /** Etapa de perda (`stage_role='lost'` ou flag legada) — pelo predicado único. */
+  isLoss: boolean;
+}
+
+function ehPerda(s: { role?: string | null; isFinalNegative?: boolean }): boolean {
+  return isEtapaDePerda({ stage_role: s.role, is_final_negative: s.isFinalNegative });
 }
 
 export function getPipelineKey(p: PipelineStatus): string {
@@ -62,7 +69,7 @@ export function getCurrentStageId(p: PipelineStatus): string | null {
 
 export function getNormalizedStages(p: PipelineStatus): NormalizedStage[] {
   if (p.type === "standard") {
-    return p.stages.map((s) => ({ id: s.id, name: s.label, color: s.color }));
+    return p.stages.map((s) => ({ id: s.id, name: s.label, color: s.color, isLoss: ehPerda(s) }));
   }
-  return p.stages.map((s) => ({ id: s.id, name: s.name, color: s.color }));
+  return p.stages.map((s) => ({ id: s.id, name: s.name, color: s.color, isLoss: ehPerda(s) }));
 }

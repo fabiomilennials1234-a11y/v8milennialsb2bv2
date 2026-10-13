@@ -1,8 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import {
+  erroDeTelefone,
   leadPhoneFromRow,
-  mensagemDoErroDeTelefone,
   ordenarTelefones,
   type LeadPhone,
   type LeadPhoneRow,
@@ -97,7 +97,7 @@ export function useSalvarTelefonesDoLead(leadId: string | null) {
           is_primary: t.isPrimary,
         })),
       });
-      if (error) throw new Error(mensagemDoErroDeTelefone(error));
+      if (error) throw erroDeTelefone(error);
     },
     onSettled: () => invalidarTelefones(qc, leadId),
   });
@@ -113,7 +113,7 @@ export function useNomearContatoDoTelefone(leadId: string | null) {
         p_phone: phone,
         p_label: label?.trim() || null,
       } as never);
-      if (error) throw new Error(mensagemDoErroDeTelefone(error, "Não foi possível nomear o contato"));
+      if (error) throw erroDeTelefone(error);
     },
     onSettled: () => invalidarTelefones(qc, leadId),
   });
@@ -127,7 +127,7 @@ export function useDefinirTelefoneDoNegocio() {
         p_deal_id: dealId,
         p_lead_phone_id: leadPhoneId,
       });
-      if (error) throw new Error(mensagemDoErroDeTelefone(error, "Não foi possível escolher o telefone do negócio"));
+      if (error) throw erroDeTelefone(error);
     },
     onSettled: () =>
       Promise.all([

@@ -12,7 +12,7 @@ import { useMutation, useQuery, useQueryClient, type QueryClient } from "@tansta
 import { supabase } from "@/integrations/supabase/client";
 import { useCurrentTeamMember } from "@/modules/identity";
 import { track } from "@/lib/analytics";
-import { formatPhoneForWhatsApp } from "@/modules/communication/lib/whatsapp";
+import { resolveWhatsAppDestination, type WhatsAppDestination } from "@/modules/communication/lib/whatsapp";
 import {
   friendlyWhatsAppSendError,
   whatsAppSendErrorMessage,
@@ -44,6 +44,18 @@ function readProviderMessageId(data: unknown): string | undefined {
 const INVALID_PHONE_MESSAGE =
   "Número de telefone inválido para WhatsApp. Confira o telefone no cadastro do lead (precisa ser um número brasileiro com DDD).";
 
+/** Grupo sem id utilizável — não é problema de cadastro de lead, então copy própria. */
+const INVALID_GROUP_MESSAGE = "Não foi possível identificar este grupo do WhatsApp. Recarregue a conversa.";
+
+/** SZ Chat só fala com números; não há rota para JID de grupo. */
+const SZ_CHAT_GROUP_MESSAGE = "Envio para grupo não está disponível nesta conexão";
+
+function resolveDestinationOrThrow(phoneNumber: string, isGroup: boolean | undefined): WhatsAppDestination {
+  const destination = resolveWhatsAppDestination(phoneNumber, isGroup);
+  if (!destination) throw new Error(isGroup ? INVALID_GROUP_MESSAGE : INVALID_PHONE_MESSAGE);
+  return destination;
+}
+
 // ─── Helpers privados ────────────────────────────────────────────────────────
 
 const SEND_TIMEOUT_MS = 15_000;
@@ -67,7 +79,7 @@ async function isSzChatInstanceCached(instanceId: string | null | undefined): Pr
   return result;
 }
 
-function recoveryContext(queryClient: QueryClient, org: string, phone: string, instanceId: string | null | undefined, sendId: string | undefined, content: string | null, mediaUrl?: string) {
+function recoveryContext(queryClient: QueryClient, org: string, phone: string, destination: WhatsAppDestination, instanceId: string | null | undefined, sendId: string | undefined, content: string | null, mediaUrl?: string) {
   const key = ["whatsapp_messages", org, phone, instanceId];
   const original = queryClient.getQueryData<WhatsAppMessage[]>(key)?.find(m => m.id === sendId);
   const since = new Date(new Date(original?.timestamp ?? Date.now()).getTime() - 1000).toISOString();
@@ -75,11 +87,10 @@ function recoveryContext(queryClient: QueryClient, org: string, phone: string, i
     onRetry: (attempt: number) => queryClient.setQueryData<WhatsAppMessage[]>(key, old =>
       (old ?? []).map(m => m.id === sendId ? { ...m, retry_attempt: attempt } : m)),
     confirm: async (): Promise<SendResponse | null> => {
-      const normalizedPhone = formatPhoneForWhatsApp(phone);
-      if (!instanceId || !normalizedPhone) return null;
+      if (!instanceId) return null;
       let q = supabase.from("whatsapp_messages").select("message_id")
         .eq("organization_id", org).eq("instance_id", instanceId)
-        .eq("phone_number", normalizedPhone).eq("direction", "outgoing")
+        .eq("phone_number", destination.phoneNumber).eq("direction", "outgoing")
         .in("status", ["sent", "delivered", "read", "played"])
         .gte("timestamp", since);
       q = original?.reply_context ? q.eq("reply_context->>messageId", original.reply_context.messageId) : q.is("reply_context", null);
@@ -220,6 +231,7 @@ export function useSendWhatsAppMessage() {
     retry: false, // one recovery controller owns the ten-attempt budget
     mutationFn: async ({
       phoneNumber,
+      isGroup,
       message,
       instanceName,
       instanceId,
@@ -228,6 +240,8 @@ export function useSendWhatsAppMessage() {
       replyContext,
     }: {
       phoneNumber: string;
+      /** `is_group` do contato: o destino vira o JID `<id>@g.us`. */
+      isGroup?: boolean;
       message: string;
       instanceName: string;
       instanceId?: string | null;
@@ -239,14 +253,15 @@ export function useSendWhatsAppMessage() {
         throw new Error("Usuário não vinculado à equipe");
       }
 
-      const formattedNumber = formatPhoneForWhatsApp(phoneNumber);
-      if (!formattedNumber) throw new Error(INVALID_PHONE_MESSAGE);
+      const destination = resolveDestinationOrThrow(phoneNumber, isGroup);
+      const formattedNumber = destination.number;
 
       const isSzChat = await isSzChatInstanceCached(instanceId);
 
       let data: Record<string, unknown>;
       let error: unknown;
 
+      if (isSzChat && isGroup) throw new Error(SZ_CHAT_GROUP_MESSAGE);
       if (isSzChat && replyContext) throw new Error("Respostas citadas não estão disponíveis nesta conexão");
       if (isSzChat) {
         const result = await invokeWithTimeout("sz-chat-send", {
@@ -254,7 +269,7 @@ export function useSendWhatsAppMessage() {
           organization_id: teamMember.organization_id,
           phone_number: formattedNumber,
           message,
-        }, SEND_TIMEOUT_MS, recoveryContext(queryClient, teamMember.organization_id, phoneNumber, instanceId, _sendId, message));
+        }, SEND_TIMEOUT_MS, recoveryContext(queryClient, teamMember.organization_id, phoneNumber, destination, instanceId, _sendId, message));
         data = result.data;
         error = result.error;
       } else {
@@ -273,7 +288,7 @@ export function useSendWhatsAppMessage() {
             ...(replyContext ? { replyid: replyContext.messageId } : {}),
             ...(leadId ? { lead_id: leadId } : {}),
           },
-        }, SEND_TIMEOUT_MS, recoveryContext(queryClient, teamMember.organization_id, phoneNumber, instanceId, _sendId, message));
+        }, SEND_TIMEOUT_MS, recoveryContext(queryClient, teamMember.organization_id, phoneNumber, destination, instanceId, _sendId, message));
         data = result.data;
         error = result.error;
       }
@@ -294,8 +309,9 @@ export function useSendWhatsAppMessage() {
         organization_id: teamMember.organization_id,
         instance_id: instanceId || null,
         message_id: messageId,
-        remote_jid: `${formattedNumber}@s.whatsapp.net`,
-        phone_number: phoneNumber,
+        remote_jid: destination.remoteJid,
+        phone_number: isGroup ? destination.phoneNumber : phoneNumber,
+        ...(isGroup ? { is_group: true } : {}),
         direction: "outgoing",
         message_type: "text",
         content: message,
@@ -327,7 +343,7 @@ export function useSendWhatsAppMessage() {
         organization_id: orgId || "",
         instance_id: instId || null,
         message_id: optimisticId,
-        remote_jid: `${phone}@s.whatsapp.net`,
+        remote_jid: variables.isGroup ? `${phone}@g.us` : `${phone}@s.whatsapp.net`,
         phone_number: phone,
         direction: "outgoing",
         message_type: "text",
@@ -364,6 +380,7 @@ export function useSendWhatsAppMessage() {
           id: context?.optimisticId ?? variables._sendId ?? makeOptimisticId(),
           retry_attempt: err instanceof Error && "retryAttempts" in err ? MAX_SEND_RETRIES : 0,
           phoneNumber: variables.phoneNumber,
+          ...(variables.isGroup ? { isGroup: true } : {}),
           instanceId: variables.instanceId ?? null,
           instanceName: variables.instanceName,
           replyContext: variables.replyContext,
@@ -431,6 +448,7 @@ export function useSendWhatsAppMedia() {
     retry: false, // one recovery controller owns the ten-attempt budget
     mutationFn: async ({
       phoneNumber,
+      isGroup,
       instanceName,
       instanceId,
       mediaType,
@@ -443,6 +461,8 @@ export function useSendWhatsAppMedia() {
       replyContext,
     }: {
       phoneNumber: string;
+      /** `is_group` do contato: o destino vira o JID `<id>@g.us`. */
+      isGroup?: boolean;
       instanceName: string;
       instanceId?: string | null;
       mediaType: "image" | "audio" | "document" | "video" | "sticker";
@@ -458,8 +478,8 @@ export function useSendWhatsAppMedia() {
         throw new Error("Usuário não vinculado à equipe");
       }
 
-      const formattedNumber = formatPhoneForWhatsApp(phoneNumber);
-      if (!formattedNumber) throw new Error(INVALID_PHONE_MESSAGE);
+      const destination = resolveDestinationOrThrow(phoneNumber, isGroup);
+      const formattedNumber = destination.number;
       const previous = unconfirmed.current;
       if (previous && previous.org === teamMember.organization_id && previous.media === media
         && previous.phone === formattedNumber && previous.instance === instanceId
@@ -482,11 +502,12 @@ export function useSendWhatsAppMedia() {
       }
 
       const isSzChat = await isSzChatInstanceCached(instanceId);
-      const recovery = recoveryContext(queryClient, teamMember.organization_id, phoneNumber, instanceId, _sendId, caption ?? null, mediaUrl);
+      const recovery = recoveryContext(queryClient, teamMember.organization_id, phoneNumber, destination, instanceId, _sendId, caption ?? null, mediaUrl);
 
       let data: Record<string, unknown>;
       let error: unknown;
 
+      if (isSzChat && isGroup) throw new Error(SZ_CHAT_GROUP_MESSAGE);
       if (isSzChat && replyContext) throw new Error("Respostas citadas não estão disponíveis nesta conexão");
       if (!isSzChat && !instanceId) throw new Error("Instância WhatsApp não identificada. Recarregue a página.");
       unconfirmed.current = {
@@ -571,8 +592,9 @@ export function useSendWhatsAppMedia() {
         organization_id: teamMember.organization_id,
         instance_id: instanceId || null,
         message_id: messageId,
-        remote_jid: `${formattedNumber}@s.whatsapp.net`,
-        phone_number: phoneNumber,
+        remote_jid: destination.remoteJid,
+        phone_number: isGroup ? destination.phoneNumber : phoneNumber,
+        ...(isGroup ? { is_group: true } : {}),
         direction: "outgoing",
         message_type: mediaType,
         content: caption || null,
@@ -610,7 +632,7 @@ export function useSendWhatsAppMedia() {
         organization_id: orgId || "",
         instance_id: instId || null,
         message_id: optimisticId,
-        remote_jid: `${phone}@s.whatsapp.net`,
+        remote_jid: variables.isGroup ? `${phone}@g.us` : `${phone}@s.whatsapp.net`,
         phone_number: phone,
         direction: "outgoing",
         message_type: variables.mediaType,
@@ -665,6 +687,7 @@ export function useSendWhatsAppMedia() {
           id: context?.optimisticId ?? variables._sendId ?? makeOptimisticId(),
           retry_attempt: err instanceof Error && "retryAttempts" in err ? MAX_SEND_RETRIES : 0,
           phoneNumber: variables.phoneNumber,
+          ...(variables.isGroup ? { isGroup: true } : {}),
           instanceId: variables.instanceId ?? null,
           instanceName: variables.instanceName,
           replyContext: variables.replyContext,
@@ -720,6 +743,7 @@ export function useRetryMessage() {
         _sendId: failed.id,
         replyContext: failed.replyContext,
         phoneNumber: failed.phoneNumber,
+        isGroup: failed.isGroup,
         instanceName: failed.instanceName,
         instanceId: failed.instanceId,
         mediaType: failed.mediaType as "image" | "audio" | "document" | "video",
@@ -731,6 +755,7 @@ export function useRetryMessage() {
         _sendId: failed.id,
         replyContext: failed.replyContext,
         phoneNumber: failed.phoneNumber,
+        isGroup: failed.isGroup,
         message: failed.message,
         instanceName: failed.instanceName,
         instanceId: failed.instanceId,

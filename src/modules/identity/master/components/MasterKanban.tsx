@@ -118,8 +118,10 @@ export function MasterKanban<T, C extends string>({
       <div
         role="region"
         aria-label={label}
-        className="-mx-4 flex snap-x snap-mandatory gap-3 overflow-x-auto px-4 pb-2 scrollbar-hide sm:mx-0 sm:px-0 lg:grid lg:snap-none lg:overflow-visible"
-        style={{ gridTemplateColumns: `repeat(${columns.length}, minmax(0, 1fr))` }}
+        className="-mx-4 flex snap-x snap-mandatory gap-3 overflow-x-auto px-4 pb-2 scrollbar-hide sm:mx-0 sm:px-0 lg:grid lg:snap-none"
+        // Abaixo de 200px o cartão deixa de ser legível: com colunas demais para a
+        // largura, o quadro rola na horizontal em vez de espremer.
+        style={{ gridTemplateColumns: `repeat(${columns.length}, minmax(200px, 1fr))` }}
       >
         {columns.map((col) => {
           const list = items[col.id];

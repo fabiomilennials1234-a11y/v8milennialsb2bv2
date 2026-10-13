@@ -23,7 +23,7 @@ export interface StandardPipelineStatus {
   closedAt?: string | null;
   currentStage: string | null;
   currentStageLabel: string | null;
-  stages: { id: string; label: string; color: string; role?: string | null }[];
+  stages: { id: string; label: string; color: string; role?: string | null; isFinalNegative?: boolean }[];
 }
 
 export interface CustomPipelineStatus {
@@ -37,7 +37,7 @@ export interface CustomPipelineStatus {
   closedAt?: string | null;
   currentStageId: string | null;
   currentStageName: string | null;
-  stages: { id: string; name: string; color: string; position: number; role?: string | null }[];
+  stages: { id: string; name: string; color: string; position: number; role?: string | null; isFinalNegative?: boolean }[];
 }
 
 export type PipelineStatus = StandardPipelineStatus | CustomPipelineStatus;
@@ -84,7 +84,9 @@ export function useLeadAllPipelines(leadId: string | null) {
           .order("id", { ascending: false }),
         supabase
           .from("pipeline_stages")
-          .select("pipeline_type, stage_key, name, color, position, stage_role")
+          // `is_final_negative` entra para `isEtapaDePerda`: funil com etapa de
+          // perda só pela flag (`stage_role = 'open'`) também pede o motivo.
+          .select("pipeline_type, stage_key, name, color, position, stage_role, is_final_negative")
           .eq("organization_id", orgId)
           .eq("is_active", true)
           .order("position", { ascending: true }),
@@ -94,7 +96,7 @@ export function useLeadAllPipelines(leadId: string | null) {
           .eq("is_active", true),
         supabase
           .from("pipeline_stages")
-          .select("id, pipeline_id, name, color, position, stage_key, stage_role")
+          .select("id, pipeline_id, name, color, position, stage_key, stage_role, is_final_negative")
           .eq("organization_id", orgId)
           .eq("is_active", true)
           .order("position", { ascending: true }),
@@ -126,14 +128,20 @@ export function useLeadAllPipelines(leadId: string | null) {
       const pipelines = (allPipelines ?? []) as { id: string; slug: string; type: string; name: string; color: string; icon: string }[];
 
       // Build stage lookup
-      const stagesByDbType = new Map<string, { id: string; label: string; color: string; role: string | null }[]>();
+      const stagesByDbType = new Map<string, { id: string; label: string; color: string; role: string | null; isFinalNegative: boolean }[]>();
       (dynamicStages || []).forEach((s) => {
         // `pipeline_type` é anulável desde que a etapa ganhou FK ao funil
         // (SCRUM-616): etapa de funil custom não tem tipo de sistema e é
         // indexada por `pipeline_id` no mapa de baixo, não aqui.
         if (!s.pipeline_type) return;
         const arr = stagesByDbType.get(s.pipeline_type) || [];
-        arr.push({ id: s.stage_key, label: s.name, color: s.color || "#64748b", role: (s as { stage_role?: string | null }).stage_role ?? null });
+        arr.push({
+          id: s.stage_key,
+          label: s.name,
+          color: s.color || "#64748b",
+          role: (s as { stage_role?: string | null }).stage_role ?? null,
+          isFinalNegative: s.is_final_negative === true,
+        });
         stagesByDbType.set(s.pipeline_type, arr);
       });
 
@@ -263,7 +271,14 @@ export function useLeadAllPipelines(leadId: string | null) {
           pipelineName: pipeline.name,
           pipelineColor: pipeline.color,
           pipelineIcon: pipeline.icon,
-          stages: stages.map((s) => ({ id: s.id, name: s.name, color: s.color ?? "#64748b", position: s.position ?? 0, role: (s as { stage_role?: string | null }).stage_role ?? null })),
+          stages: stages.map((s) => ({
+            id: s.id,
+            name: s.name,
+            color: s.color ?? "#64748b",
+            position: s.position ?? 0,
+            role: (s as { stage_role?: string | null }).stage_role ?? null,
+            isFinalNegative: s.is_final_negative === true,
+          })),
         };
 
         // O M1 também derrubou `custom_pipe_entries_pipeline_id_lead_id_key`, então

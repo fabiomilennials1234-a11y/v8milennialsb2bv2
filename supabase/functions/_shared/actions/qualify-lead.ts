@@ -43,6 +43,10 @@ export async function executeAutomation(
   // uuid ou slug; o adapter resolve os dois). Payload antigo sem a chave cai no
   // legado "whatsapp" — ações já enfileiradas continuam válidas.
   const pipelineRef = (payload.pipeline_ref as string) || "whatsapp";
+  // O turno que disparou a automação também tem ADVANCE_STAGE explícito: a
+  // etapa do turno vence — nada aqui move card de funil (moveToStage e
+  // moveToPipe). Tags, notificação, ai_disabled e promoção de shadow seguem.
+  const skipStageMove = payload.skip_stage_move === true;
 
   // Promover shadow lead antes de executar ações
   if (actionType === "qualify" || actionType === "disqualify") {
@@ -95,7 +99,7 @@ export async function executeAutomation(
     }
   }
 
-  if (actionConfig.moveToStage) {
+  if (actionConfig.moveToStage && !skipStageMove) {
     // SCRUM-628: escreve no funil do agente (pipeline_ref), com o ghost-stage
     // guard do adapter — moveToStage configurado num funil e aplicado noutro
     // não pode inventar etapa que o kanban não renderiza.
@@ -175,7 +179,10 @@ export async function executeAutomation(
     // adapter resolve; antes só confirmacao/propostas). Carteira segue à parte
     // (não é funil). Destino que não resolve → não move nada (nem deleta a
     // origem: mover não pode virar sumiço).
-    if (!carteira && moveToPipe.pipe !== "campanha") {
+    const funnelMove = !carteira && moveToPipe.pipe !== "campanha";
+    if (funnelMove && skipStageMove) {
+      console.log("[executeAutomation] moveToPipe ignorado: ADVANCE_STAGE explícito no mesmo turno");
+    } else if (funnelMove) {
       const targetId = await tryResolvePipelineId(supabase, organizationId, moveToPipe.pipe || "");
       if (targetId) {
         const guardedStage = await resolveActiveStageKey(

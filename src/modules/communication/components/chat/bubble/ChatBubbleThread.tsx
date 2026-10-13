@@ -41,6 +41,8 @@ export function ChatBubbleThread({
 }: ChatBubbleThreadProps) {
   const messagesQuery = useWhatsAppMessages(phoneNumber, instanceId);
   const failedMessages = useFailedMessages(phoneNumber, instanceId);
+  // A bolha não recebe o contato; o tipo da conversa vem das próprias linhas.
+  const isGroup = messagesQuery.data?.some((m) => m.is_group === true) ?? false;
 
   // Tique azul também pela bolha: `onMarkAsRead` abaixo só zera o badge interno
   // do CRM. A guarda de grupo é por mensagem (is_group), então não depende de a
@@ -125,6 +127,7 @@ export function ChatBubbleThread({
             canReply ? (
               <ChatBubbleComposer
                 phoneNumber={phoneNumber}
+                isGroup={isGroup}
                 instanceId={instanceId}
                 instanceName={instanceName}
                 canReply
@@ -138,6 +141,7 @@ export function ChatBubbleThread({
       ) : canReply ? (
         <ChatBubbleComposer
           phoneNumber={phoneNumber}
+          isGroup={isGroup}
           instanceId={instanceId}
           instanceName={instanceName}
           canReply

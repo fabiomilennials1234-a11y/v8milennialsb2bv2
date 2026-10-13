@@ -4,12 +4,14 @@
  * - useRescheduleMeeting: define nova data, volta o card pra `agendado` e
  *   reseta a confirmação pra `pendente` — tudo num update.
  * - useMarkLost: marca perdido — move pro stage final_negative da org +
- *   grava loss_reason_id no metadata.
+ *   grava o motivo (id do catálogo + rótulo snapshotado, `patchDaPerda`) no
+ *   metadata NA MESMA escrita do move.
  *
  * Read-modify-write no metadata para preservar as demais chaves.
  */
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { patchDaPerda, type PerdaResolvida } from "../../lib/loss-reason";
 
 async function readMetadata(entryId: string): Promise<Record<string, unknown>> {
   const { data, error } = await supabase
@@ -50,15 +52,16 @@ export function useMarkLost() {
     mutationFn: async ({
       entryId,
       lostStageKey,
-      lossReasonId,
+      perda,
     }: {
       entryId: string;
       lostStageKey: string;
-      lossReasonId?: string | null;
+      /** Obrigatório (SCRUM-369) — vem da porta única `useLossReasonGate`. */
+      perda: PerdaResolvida;
     }) => {
       const metadata = {
         ...(await readMetadata(entryId)),
-        ...(lossReasonId ? { loss_reason_id: lossReasonId } : {}),
+        ...patchDaPerda(perda),
       };
       const { error } = await supabase
         .from("pipeline_entries")

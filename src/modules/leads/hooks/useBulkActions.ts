@@ -1,5 +1,6 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { LEAD_RESPONSIBLE_MAP_KEY } from "./useLeads";
 
 /**
  * @deprecated SCRUM-633 — era o caminho por slug dos 3 pipes de sistema
@@ -112,6 +113,8 @@ export function useBulkAssign() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["pipeline_entries"] });
       qc.invalidateQueries({ queryKey: ["leads"] });
+      // Atribuição em massa troca o dono que a linha do inbox desenha.
+      qc.invalidateQueries({ queryKey: [LEAD_RESPONSIBLE_MAP_KEY] });
     },
   });
 }

@@ -10,6 +10,7 @@ import {
   type PipelineStatus,
   type StandardPipelineStatus,
 } from "../../../../hooks/useLeadAllPipelines";
+import { etapaDoLeadEhDePerda } from "../../../../lib/etapa-de-perda";
 import { usePipeOps } from "../../../../pipe-ops";
 import { useOrgFeatures } from "@/contexts/OrgFeaturesContext";
 import { useLogLeadAction } from "@/shared/hooks/useLogLeadAction";
@@ -194,7 +195,7 @@ export const CrossPipePanel = memo(function CrossPipePanel({
       pipeRef: p.pipeType,
       shortLabel: p.label,
       color: p.color,
-      stages: p.stages.map((s) => ({ key: s.id, label: s.label })),
+      stages: p.stages.map((s) => ({ key: s.id, label: s.label, isLoss: etapaDoLeadEhDePerda(s) })),
       currentKey: p.currentStage,
     }));
     for (const p of activeCustom) {
@@ -204,7 +205,7 @@ export const CrossPipePanel = memo(function CrossPipePanel({
         pipeRef: p.pipelineId,
         shortLabel: p.pipelineName,
         color: p.pipelineColor,
-        stages: p.stages.map((s) => ({ key: s.id, label: s.name })),
+        stages: p.stages.map((s) => ({ key: s.id, label: s.name, isLoss: etapaDoLeadEhDePerda(s) })),
         currentKey: p.currentStageId,
       });
     }

@@ -75,6 +75,7 @@ export {
   useMoveLeadInStandardPipe,
   useRemoveLeadFromStandardPipe,
 } from "./hooks/useLeadAllPipelines";
+export { etapaDoLeadEhDePerda } from "./lib/etapa-de-perda";
 export { temNegocioAberto, funisSemNegocioAberto } from "./lib/negocio-aberto";
 export type {
   StandardPipelineStatus,
@@ -331,6 +332,18 @@ export { LeadTabHistory } from "./components/lead/tabs/LeadTabHistory";
 // leads define a abstração (DIP); pipelines implementa+injeta via context.
 export type { PipeOpsPort, RescheduleModalSlotProps, MergedMeetingEditorSlotProps, FunnelOption, FunnelStageOption } from "./pipe-ops";
 export { PipeOpsContextProvider, usePipeOps } from "./pipe-ops";
+
+// Motivo da perda: porta ÚNICA de toda movimentação humana para etapa de perda.
+// Provider montado no App; `pipelines` (/funil) e `communication` (chat)
+// consomem por aqui — leads não importa pipelines.
+export {
+  LossReasonGateProvider,
+  useLossReasonGate,
+  persistirMotivoDaPerda,
+  type CapturaDoMotivo,
+  type PedidoDeMotivoDaPerda,
+  type RequestLossReason,
+} from "./loss-reason-gate";
 
 // CompareceuModal: apresentacional (só identity + onConfirm), movido de
 // pipelines para leads na inversão F7. pipelines consome via este barrel.

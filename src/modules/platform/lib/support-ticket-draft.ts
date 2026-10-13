@@ -127,6 +127,7 @@ export const STATUS_LABELS: Record<TicketStatus, string> = {
   aguardando_cliente: "Aguardando você",
   resolvido: "Resolvido",
   fechado: "Fechado",
+  recusado: "Recusado",
 };
 
 /** Rótulos vistos pelo suporte da Torque. */
@@ -136,6 +137,7 @@ export const STATUS_LABELS_STAFF: Record<TicketStatus, string> = {
   aguardando_cliente: "Aguardando cliente",
   resolvido: "Resolvido",
   fechado: "Fechado",
+  recusado: "Recusado",
 };
 
 /** Veredito do staff. O cliente nunca vê estes rótulos num seletor. */

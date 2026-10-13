@@ -68,6 +68,13 @@ export interface DealCardStage {
   nome: string;
   /** Etapa terminal — desenha diferente e encerra a trilha. */
   papel: "aberto" | "ganho" | "perdido";
+  /**
+   * Mover para ela pede o motivo da perda (`isEtapaDePerda`: `lost` OU
+   * `is_final_negative`). Separado de `papel` de propósito: `papel` desenha a
+   * trilha pelo `stage_role`; este só decide a PERGUNTA — uma etapa de perda
+   * só pela flag (Mustang/Riofix) não vira terminal na régua por causa disto.
+   */
+  ehPerda?: boolean;
 }
 
 export interface DealCardMove {

@@ -27,6 +27,7 @@ import {
   DEST_TO_PIPE_TYPE,
 } from "@/lib/lead/lead-destinations";
 import { destinosDeSistema } from "@/contracts/pipe";
+import { ETAPA_DE_PERDA_INDISPONIVEL, isEtapaDePerda } from "@/contracts/pipe/perda";
 import type { LeadDestination } from "@/modules/communication/hooks/useWhatsAppLeadIntegration";
 import { usePipeOps } from "../../../pipe-ops";
 import { useCampanhas } from "@/modules/campaigns/hooks/useCampanhas";
@@ -146,7 +147,7 @@ export function LeadCreateForm({
   const getStandardStages = (dest: string) => {
     const pipeType = DEST_TO_PIPE_TYPE[dest];
     if (!pipeType || !dynamicStagesByPipe[pipeType]) return [];
-    return dynamicStagesByPipe[pipeType].map((s) => ({ id: s.value, label: s.label }));
+    return dynamicStagesByPipe[pipeType].map((s) => ({ id: s.value, label: s.label, isLoss: s.isLoss === true }));
   };
 
   const standardStagesForCreate = getStandardStages(destination);
@@ -156,6 +157,9 @@ export function LeadCreateForm({
     if (destination === "campanha" && !campanhaId) return true;
     if (destination === "custom" && (!customPipelineId || !customStageId)) return true;
     if (isStandardDest && !stageId) return true;
+    // Nascer perdido gravaria a perda sem motivo (as opções já vêm desabilitadas).
+    if (destination === "custom" && isEtapaDePerda(customPipeStages.find((s) => s.id === customStageId))) return true;
+    if (isStandardDest && standardStagesForCreate.find((s) => s.id === stageId)?.isLoss) return true;
     return false;
   };
 
@@ -338,7 +342,12 @@ export function LeadCreateForm({
               </SelectTrigger>
               <SelectContent>
                 {standardStagesForCreate.map((s) => (
-                  <SelectItem key={s.id} value={s.id}>
+                  <SelectItem
+                    key={s.id}
+                    value={s.id}
+                    disabled={s.isLoss}
+                    title={s.isLoss ? ETAPA_DE_PERDA_INDISPONIVEL : undefined}
+                  >
                     {s.label}
                   </SelectItem>
                 ))}
@@ -357,7 +366,12 @@ export function LeadCreateForm({
               </SelectTrigger>
               <SelectContent>
                 {customPipeStages.map((s) => (
-                  <SelectItem key={s.id} value={s.id}>
+                  <SelectItem
+                    key={s.id}
+                    value={s.id}
+                    disabled={isEtapaDePerda(s)}
+                    title={isEtapaDePerda(s) ? ETAPA_DE_PERDA_INDISPONIVEL : undefined}
+                  >
                     <div className="flex items-center gap-2">
                       <div
                         className="w-3 h-3 rounded-full"

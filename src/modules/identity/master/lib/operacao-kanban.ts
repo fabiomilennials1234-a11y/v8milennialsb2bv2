@@ -10,8 +10,12 @@
  *     ─(alguém pega)→ Em andamento ─(resposta enviada)→ Aguardando confirmação
  *     ─(7 dias sem o cliente reabrir, cron)→ Concluído
  *
+ * Fora do caminho, a feature que o time decide não construir vai para Feature
+ * recusada (estado `recusado`, migration 20271117000100) — só chamado cujo
+ * diagnóstico é `feature`, e só pelo master. Terminal como Concluído.
+ *
  * Esse é o caminho natural. Desde a emenda de 2026-10-07 ao ADR-0018, o master
- * move LIVRE entre as cinco colunas, em qualquer direção, pela RPC auditada
+ * move LIVRE entre as colunas, em qualquer direção, pela RPC auditada
  * `master_ticket_move` (migration 20271108000300). O cliente continua só
  * reabrindo um chamado resolvido; o gatilho `enforce_support_ticket_write_rules`
  * tem a última palavra para qualquer caminho.
@@ -25,6 +29,7 @@ export const OPERACAO_COLUMNS = [
   "andamento",
   "aguardando",
   "concluido",
+  "recusada",
 ] as const;
 
 export type OperacaoColumn = (typeof OPERACAO_COLUMNS)[number];
@@ -35,6 +40,7 @@ export const OPERACAO_COLUMN_LABELS: Record<OperacaoColumn, string> = {
   andamento: "Em andamento",
   aguardando: "Aguardando confirmação",
   concluido: "Concluído",
+  recusada: "Feature recusada",
 };
 
 /** O que a coluna promete a quem olha — a linha de baixo do cabeçalho. */
@@ -44,6 +50,7 @@ export const OPERACAO_COLUMN_HINTS: Record<OperacaoColumn, string> = {
   andamento: "Alguém pegou",
   aguardando: "Resolvido, aguardando o cliente",
   concluido: "Fecha sozinho em 7 dias",
+  recusada: "Decidimos não construir",
 };
 
 /** OP-10: a terceira reabertura é sinal de que a correção não pegou. */
@@ -59,7 +66,12 @@ export interface OperacaoTicketFacts {
 /** O mínimo do diagnóstico que a derivação lê. `null` = sem diagnóstico. */
 export interface OperacaoDiagnosisFacts {
   customer_reply: string | null;
+  /** `DiagnosisKind`. Só `feature` pode ir para Feature recusada. */
+  kind: string;
 }
+
+/** Colunas de chamado encerrado: só o master tira um chamado delas. */
+export const CLOSED_COLUMNS: ReadonlySet<OperacaoColumn> = new Set(["concluido", "recusada"]);
 
 /** OP-8: a coluna vem do dado. */
 export function columnOf(
@@ -69,6 +81,8 @@ export function columnOf(
   switch (ticket.status) {
     case "fechado":
       return "concluido";
+    case "recusado":
+      return "recusada";
     case "resolvido":
     case "aguardando_cliente":
       return "aguardando";
@@ -94,15 +108,17 @@ export const OPERACAO_COLUMN_STATUS: Record<OperacaoColumn, TicketStatus> = {
   andamento: "em_andamento",
   aguardando: "resolvido",
   concluido: "fechado",
+  recusada: "recusado",
 };
 
 /**
  * O que a tela pergunta antes de gravar:
  * - `fechar`: o cliente não é avisado e só o master reabre;
  * - `resposta`: enviar a resposta pronta ao cliente, ou só mudar o estado;
- * - `reabrir`: o chamado estava fechado.
+ * - `recusar`: a feature não será construída; o cliente vê "Recusado";
+ * - `reabrir`: o chamado estava encerrado (fechado ou recusado).
  */
-export type MoveConfirmation = "fechar" | "resposta" | "reabrir";
+export type MoveConfirmation = "fechar" | "resposta" | "recusar" | "reabrir";
 
 /** Um movimento livre do master — uma chamada a `master_ticket_move`. */
 export interface OperacaoMove {
@@ -141,6 +157,9 @@ export function canMove(
 
   const from = columnOf(ticket, diagnosis);
   if (from === to) return { ok: false, reason: "O chamado já está nessa etapa." };
+  if (to === "recusada" && diagnosis?.kind !== "feature") {
+    return { ok: false, reason: "Só um chamado diagnosticado como feature vai para Feature recusada." };
+  }
 
   const status = OPERACAO_COLUMN_STATUS[to];
   return {
@@ -151,10 +170,16 @@ export function canMove(
       status,
       landsIn: columnOf({ status }, diagnosis),
       noop: status === ticket.status,
-      confirm:
-        to === "concluido" ? "fechar" : to === "aguardando" ? "resposta" : from === "concluido" ? "reabrir" : null,
+      confirm: confirmationFor(from, to),
     },
   };
+}
+
+function confirmationFor(from: OperacaoColumn, to: OperacaoColumn): MoveConfirmation | null {
+  if (to === "concluido") return "fechar";
+  if (to === "recusada") return "recusar";
+  if (to === "aguardando") return "resposta";
+  return CLOSED_COLUMNS.has(from) ? "reabrir" : null;
 }
 
 /** O que a tela diz quando o movimento não grava nada (`noop`). */
@@ -167,12 +192,13 @@ export function noopMessage(move: OperacaoMove): string {
 /** O que a tela diz quando o banco aceita o movimento. */
 export function moveSuccessMessage(move: OperacaoMove, sentReply: boolean): string {
   if (move.to === "concluido") return "Chamado concluído. O cliente não foi avisado.";
+  if (move.to === "recusada") return "Feature recusada. O cliente vê o chamado como Recusado.";
   if (move.to === "aguardando") {
     return sentReply
       ? "Resposta enviada. O chamado fecha sozinho em 7 dias se o cliente não reabrir."
       : "Marcado como resolvido, sem aviso ao cliente. Fecha sozinho em 7 dias.";
   }
-  const reaberto = move.from === "concluido" ? "Chamado reaberto. " : "";
+  const reaberto = CLOSED_COLUMNS.has(move.from) ? "Chamado reaberto. " : "";
   if (move.to === "aberto" && move.landsIn === "diagnostico") {
     return `${reaberto}O chamado tem diagnóstico: voltou para Diagnóstico feito.`;
   }

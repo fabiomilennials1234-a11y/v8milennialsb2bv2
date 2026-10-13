@@ -5,8 +5,11 @@
  * como chip clicável pra mover — sem sair da conversa. Move via
  * `useMovePipelineEntry` (escreve `pipeline_entries`, canônico; zero legacy).
  *
- * Etapa terminal (won/lost) registra/estorna receita+comissão via trigger
+ * Etapa de GANHO registra receita+comissão via trigger
  * (fn_capture_pipeline_stage_event → sale_events) — por isso exige confirmação.
+ * Etapa de PERDA (`lost` ou `is_final_negative`) passa pela porta única do
+ * motivo (`useLossReasonGate`): motivo obrigatório gravado no metadata ANTES do
+ * move; cancelar = nada escrito.
  */
 import { useEffect, useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -24,7 +27,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { useLeadAllPipelines, useLeadActionGates } from "@/modules/leads";
+import { useLeadAllPipelines, useLeadActionGates, useLossReasonGate } from "@/modules/leads";
 import {
   useMovePipelineEntry,
   useCreatePipelineEntry,
@@ -33,7 +36,6 @@ import {
 import {
   toFunnelRows,
   availableFunnelsToAdd,
-  isTerminalRole,
   terminalKind,
   type FunnelCardRow,
   type FunnelStageView,
@@ -56,6 +58,7 @@ export function ContextPanelFunnels({ leadId }: ContextPanelFunnelsProps) {
   const { data: pipelines = [], isLoading, isError, refetch } = useLeadAllPipelines(leadId);
   const { data: displayConfig = [] } = usePipelineDisplayConfig();
   const moveEntry = useMovePipelineEntry();
+  const { capturarMotivoDaPerda } = useLossReasonGate();
   const createEntry = useCreatePipelineEntry();
   // Mesma permissão do kanban (paridade — nada burla o gate no chat).
   const gates = useLeadActionGates(leadId);
@@ -109,11 +112,18 @@ export function ContextPanelFunnels({ leadId }: ContextPanelFunnelsProps) {
     );
   };
 
-  const onPickStage = (row: FunnelCardRow, stage: FunnelStageView) => {
+  const onPickStage = async (row: FunnelCardRow, stage: FunnelStageView) => {
     if (!canMove) return; // sem permissão (UI já desabilitada — guarda defensiva)
     const currentKey = pending[row.entryId] ?? row.currentStageKey;
     if (stage.key === currentKey) return; // já está nela
-    if (isTerminalRole(stage.role)) {
+    const kind = terminalKind(stage);
+    if (kind === "lost") {
+      // Motivo primeiro, gravado no metadata; cancelou ou falhou → não move.
+      const perda = await capturarMotivoDaPerda({ entryIds: [row.entryId], stageName: stage.label });
+      if (perda) doMove(row.entryId, stage);
+      return;
+    }
+    if (kind === "won") {
       setConfirm({ entryId: row.entryId, stage, funnelLabel: row.label });
       return;
     }
@@ -270,12 +280,12 @@ export function ContextPanelFunnels({ leadId }: ContextPanelFunnelsProps) {
                 <div className="flex flex-col gap-0.5">
                   {row.stages.map((s) => {
                     const active = s.key === currentKey;
-                    const terminal = isTerminalRole(s.role);
+                    const kind = terminalKind(s);
                     return (
                       <button
                         key={s.key}
                         type="button"
-                        onClick={() => onPickStage(row, s)}
+                        onClick={() => void onPickStage(row, s)}
                         className={cn(
                           "flex items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-[12.5px] transition-colors hover:bg-muted",
                           active && "bg-muted",
@@ -283,12 +293,12 @@ export function ContextPanelFunnels({ leadId }: ContextPanelFunnelsProps) {
                       >
                         <span
                           className="h-2 w-2 shrink-0 rounded-full"
-                          style={{ background: terminal ? (s.role === "won" ? "hsl(var(--success))" : "hsl(var(--destructive))") : row.color }}
+                          style={{ background: kind ? (kind === "won" ? "hsl(var(--success))" : "hsl(var(--destructive))") : row.color }}
                         />
                         <span className="min-w-0 flex-1 truncate">{s.label}</span>
-                        {terminal && (
+                        {kind && (
                           <span className="text-[9px] font-semibold uppercase tracking-wide text-muted-foreground/60">
-                            {s.role === "won" ? "ganho" : "perda"}
+                            {kind === "won" ? "ganho" : "perda"}
                           </span>
                         )}
                         {active && <Check className="h-3.5 w-3.5 shrink-0 text-primary" />}
@@ -304,21 +314,15 @@ export function ContextPanelFunnels({ leadId }: ContextPanelFunnelsProps) {
 
       {addButton}
 
-      {/* Confirmação de etapa terminal (registra/estorna receita + comissão) */}
+      {/* Confirmação de etapa de ganho (registra receita + comissão). A perda
+          não passa por aqui: pede o motivo pela porta única. */}
       <AlertDialog open={!!confirm} onOpenChange={(o) => !o && setConfirm(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>
-              {terminalKind(confirm?.stage.role) === "won"
-                ? "Marcar como Ganho?"
-                : "Marcar como Perdido?"}
-            </AlertDialogTitle>
+            <AlertDialogTitle>Marcar como Ganho?</AlertDialogTitle>
             <AlertDialogDescription>
               Mover para <b>{confirm?.stage.label}</b> em <b>{confirm?.funnelLabel}</b>{" "}
-              {terminalKind(confirm?.stage.role) === "won"
-                ? "registra uma venda no funil — entra no cálculo de receita e comissão."
-                : "registra uma perda no funil e afeta as métricas de conversão."}{" "}
-              Confirmar?
+              registra uma venda no funil — entra no cálculo de receita e comissão. Confirmar?
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

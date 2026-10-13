@@ -1,5 +1,12 @@
 import { describe, it, expect } from "vitest";
-import { exigeTextoLivre, resolverMotivoDaPerda, type MotivoDePerda } from "./loss-reason";
+import {
+  exigeTextoLivre,
+  isEtapaDePerda,
+  primeiraEtapaSemPerda,
+  patchDaPerda,
+  resolverMotivoDaPerda,
+  type MotivoDePerda,
+} from "./loss-reason";
 
 /**
  * SCRUM-369 — a captura do motivo da perda.
@@ -94,5 +101,58 @@ describe("exigeTextoLivre", () => {
 
   it("escolha inexistente não pede texto", () => {
     expect(exigeTextoLivre("nao-existe", DO_CATALOGO)).toBe(false);
+  });
+});
+
+describe("isEtapaDePerda — quando perguntar o motivo", () => {
+  it("stage_role lost é perda", () => {
+    expect(isEtapaDePerda({ stage_role: "lost", is_final_negative: false })).toBe(true);
+    expect(isEtapaDePerda({ stage_role: "lost" })).toBe(true);
+  });
+
+  it("is_final_negative com role open é perda (Mustang/Riofix `perdido_desqualificado`)", () => {
+    expect(isEtapaDePerda({ stage_role: "open", is_final_negative: true })).toBe(true);
+    expect(isEtapaDePerda({ stage_role: null, is_final_negative: true })).toBe(true);
+  });
+
+  it("etapa aberta, de reunião ou de ganho não é perda", () => {
+    expect(isEtapaDePerda({ stage_role: "open", is_final_negative: false })).toBe(false);
+    expect(isEtapaDePerda({ stage_role: "meeting_booked" })).toBe(false);
+    expect(isEtapaDePerda({ stage_role: "won", is_final_negative: null })).toBe(false);
+    expect(isEtapaDePerda({})).toBe(false);
+    expect(isEtapaDePerda(null)).toBe(false);
+    expect(isEtapaDePerda(undefined)).toBe(false);
+  });
+
+  it("won com is_final_negative NÃO é perda — o papel manda (SaleValueGuard/TinyERP)", () => {
+    expect(isEtapaDePerda({ stage_role: "won", is_final_negative: true })).toBe(false);
+  });
+});
+
+describe("primeiraEtapaSemPerda — default de seletor que não pode nascer perdido", () => {
+  it("pula etapas de perda e devolve a primeira aberta", () => {
+    const stages = [
+      { id: "p", stage_role: "lost" },
+      { id: "n", stage_role: "open", is_final_negative: true },
+      { id: "a", stage_role: "open", is_final_negative: false },
+    ];
+    expect(primeiraEtapaSemPerda(stages)?.id).toBe("a");
+  });
+
+  it("undefined quando só há perda ou lista vazia", () => {
+    expect(primeiraEtapaSemPerda([{ stage_role: "lost" }])).toBeUndefined();
+    expect(primeiraEtapaSemPerda([])).toBeUndefined();
+    expect(primeiraEtapaSemPerda(undefined)).toBeUndefined();
+  });
+});
+
+describe("patchDaPerda — o que vai para o metadata", () => {
+  it("do catálogo: id + rótulo snapshotado", () => {
+    expect(patchDaPerda({ id: "lr-1", texto: "Preço" })).toEqual({ loss_reason_id: "lr-1", loss_reason: "Preço" });
+  });
+
+  it("fallback/Outro: só o texto — nunca escreve null por cima de motivo anterior", () => {
+    expect(patchDaPerda({ id: null, texto: "Cliente sumiu" })).toEqual({ loss_reason: "Cliente sumiu" });
+    expect(patchDaPerda({ id: null, texto: null })).toEqual({});
   });
 });

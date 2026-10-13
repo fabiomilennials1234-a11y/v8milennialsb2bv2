@@ -24,6 +24,7 @@ import {
   MoreHorizontal,
   Trash2,
   FileDown,
+  ListChecks,
   Loader2,
   ArrowUpDown,
   Check,
@@ -87,6 +88,14 @@ interface DraggableKanbanBoardProps<T extends DraggableItem> {
   onDeleteAllLeads?: (stageId: string, stageTitle: string) => void;
   /** When provided, the column header three-dots menu shows "Exportar leads desta etapa" */
   onExportStage?: (stageId: string, stageTitle: string) => void;
+  /**
+   * Presente = o menu da coluna oferece "Selecionar todos desta etapa": marca a
+   * etapa INTEIRA, inclusive o que a paginação ainda não carregou. Quem chama
+   * busca os ids; o board só dispara e mostra o carregamento.
+   */
+  onSelectAllStage?: (stageId: string) => void;
+  /** Coluna cuja seleção completa está sendo buscada — item desabilitado e girando. */
+  selectingStageId?: string | null;
   /** Quando fornecido, cada coluna ganha o rodapé "+ Novo negócio" da etapa. */
   onCreateInColumn?: (stageId: string, stageTitle: string) => void;
   /** When true, drag-and-drop is disabled (permission denied) */
@@ -130,6 +139,8 @@ function DroppableColumn<T extends DraggableItem>({
   renderColumnExtra,
   onDeleteAllLeads,
   onExportStage,
+  onSelectAllStage,
+  selectingStageId,
   onCreateInColumn,
   sortKey,
   onSortChange,
@@ -142,6 +153,8 @@ function DroppableColumn<T extends DraggableItem>({
   renderColumnExtra?: (column: KanbanColumn<T>) => React.ReactNode;
   onDeleteAllLeads?: (stageId: string, stageTitle: string) => void;
   onExportStage?: (stageId: string, stageTitle: string) => void;
+  onSelectAllStage?: (stageId: string) => void;
+  selectingStageId?: string | null;
   onCreateInColumn?: (stageId: string, stageTitle: string) => void;
   sortKey?: ColumnSortKey;
   onSortChange?: (stageId: string, sortKey: ColumnSortKey) => void;
@@ -209,7 +222,7 @@ function DroppableColumn<T extends DraggableItem>({
         </span>
         {renderColumnExtra && renderColumnExtra(column)}
         <div className="ml-auto flex items-center gap-1">
-          {(onExportStage || onDeleteAllLeads || onSortChange) ? (
+          {(onSelectAllStage || onExportStage || onDeleteAllLeads || onSortChange) ? (
             <DropdownMenu>
               <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
                 <Button
@@ -251,6 +264,22 @@ function DroppableColumn<T extends DraggableItem>({
                     </DropdownMenuSub>
                     <DropdownMenuSeparator />
                   </>
+                )}
+                {onSelectAllStage && (
+                  <DropdownMenuItem
+                    disabled={selectingStageId === column.id}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onSelectAllStage(column.id);
+                    }}
+                  >
+                    {selectingStageId === column.id ? (
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    ) : (
+                      <ListChecks className="w-4 h-4 mr-2" />
+                    )}
+                    Selecionar todos desta etapa
+                  </DropdownMenuItem>
                 )}
                 {onExportStage && (
                   <DropdownMenuItem
@@ -444,6 +473,8 @@ export function DraggableKanbanBoard<T extends DraggableItem>({
   renderColumnExtra,
   onDeleteAllLeads,
   onExportStage,
+  onSelectAllStage,
+  selectingStageId,
   onCreateInColumn,
   disabled,
   closedGrouping,
@@ -617,6 +648,8 @@ export function DraggableKanbanBoard<T extends DraggableItem>({
               renderColumnExtra={renderColumnExtra}
               onDeleteAllLeads={onDeleteAllLeads}
               onExportStage={onExportStage}
+              onSelectAllStage={onSelectAllStage}
+              selectingStageId={selectingStageId}
               onCreateInColumn={onCreateInColumn}
               sortKey={columnSort}
               onSortChange={handleSortChange}

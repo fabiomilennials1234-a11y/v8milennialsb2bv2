@@ -65,6 +65,8 @@ export interface ChatComposerProps {
   conversationKey: string;
   /** Número do contato */
   phoneNumber: string;
+  /** Conversa de grupo: o envio vai para o JID `<id>@g.us`, não para um telefone. */
+  isGroup?: boolean;
   /** Nome do contato para placeholder */
   contactName: string;
   /** Nome da instância WhatsApp */
@@ -95,6 +97,7 @@ export interface ChatComposerProps {
 export function ChatComposer({
   conversationKey,
   phoneNumber,
+  isGroup = false,
   contactName,
   instanceName,
   instanceId,
@@ -216,6 +219,7 @@ export function ChatComposer({
     try {
       await sendMessage.mutateAsync({
         phoneNumber,
+        isGroup,
         message: text,
         instanceName,
         instanceId,
@@ -223,7 +227,7 @@ export function ChatComposer({
     } catch (err) {
       notifyError(err, { fallback: "Não foi possível enviar mensagem." });
     }
-  }, [message, isBusy, instanceName, phoneNumber, instanceId, sendMessage, setMessage]);
+  }, [message, isBusy, instanceName, phoneNumber, isGroup, instanceId, sendMessage, setMessage]);
 
   const handleSlashSelect = useCallback(async (template: MessageTemplate) => {
     const leadCtx: LeadContext = {
@@ -258,6 +262,7 @@ export function ChatComposer({
       try {
         await sendMedia.mutateAsync({
           phoneNumber,
+          isGroup,
           instanceName,
           instanceId,
           mediaType: template.media_type,
@@ -275,7 +280,7 @@ export function ChatComposer({
 
     // Template de texto → preenche input para revisão antes de enviar.
     setMessage(resolved);
-  }, [leadForTemplates, selectedContact, message, isBusy, phoneNumber, instanceName, instanceId, leadId, teamMember, sendMedia, setMessage]);
+  }, [leadForTemplates, selectedContact, message, isBusy, phoneNumber, isGroup, instanceName, instanceId, leadId, teamMember, sendMedia, setMessage]);
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     // Slash popover captura Enter para selecionar template
@@ -345,6 +350,7 @@ export function ChatComposer({
       const base64 = await readMediaAsDataUrl(selectedFile);
       await sendMedia.mutateAsync({
         phoneNumber,
+        isGroup,
         instanceName,
         instanceId,
         mediaType: asSticker ? "sticker" : kind,
@@ -366,7 +372,7 @@ export function ChatComposer({
     } finally {
       setIsPreparing(false);
     }
-  }, [selectedFile, instanceName, phoneNumber, instanceId, leadId, caption, sendMedia, sendAsSticker, clearAttachment, isPreparing]);
+  }, [selectedFile, instanceName, phoneNumber, isGroup, instanceId, leadId, caption, sendMedia, sendAsSticker, clearAttachment, isPreparing]);
 
   const handleAudioRecorded = useCallback(async (audioBlob: Blob) => {
     setIsRecording(false);
@@ -381,6 +387,7 @@ export function ChatComposer({
       const base64 = await readMediaAsDataUrl(blobToSend);
       await sendMedia.mutateAsync({
         phoneNumber,
+        isGroup,
         instanceName,
         instanceId,
         mediaType: "audio",
@@ -392,7 +399,7 @@ export function ChatComposer({
     } catch (err) {
       notifyError(err, { fallback: "Não foi possível enviar áudio." });
     }
-  }, [phoneNumber, instanceName, instanceId, sendMedia, leadId]);
+  }, [phoneNumber, isGroup, instanceName, instanceId, sendMedia, leadId]);
 
   // ─── Drop zone ──────────────────────────────────────────────────────────────
 

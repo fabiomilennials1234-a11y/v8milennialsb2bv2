@@ -46,7 +46,7 @@ function contato(phone: string, time: string, unread = 0) {
     is_group: false,
     lead_id: null,
     conversation_id: null,
-    archived_at: null,
+    archived_at: null as string | null,
   };
 }
 
@@ -408,5 +408,92 @@ describe("useWhatsAppMessagesRealtime — contato fora do cache (Fase B)", () =>
     for (const [, opcoes] of daLista) {
       expect(opcoes).toEqual({ cancelRefetch: false });
     }
+  });
+});
+
+// ─── Lead responde conversa arquivada → volta pra caixa de entrada ──────────
+//
+// Espelha o trigger `trg_unarchive_on_inbound` (migration 20271115000000). Sem isto, o patch
+// copiava o `archived_at` antigo e a conversa ficava em "Arquivadas" com a
+// mensagem nova dentro até o refetch (300 s).
+
+describe("useWhatsAppMessagesRealtime — desarquivar no inbound", () => {
+  const ARQUIVADA_EM = "2026-08-06T12:00:00Z";
+  const FONE = "5548999990007";
+
+  function arquivada(extra: Partial<ReturnType<typeof contato>> = {}) {
+    return {
+      ...contato(FONE, "2026-08-06T10:00:00Z"),
+      archived_at: ARQUIVADA_EM,
+      ...extra,
+    };
+  }
+
+  function evento(over: Record<string, unknown>) {
+    const base = insertDe(FONE, "2026-08-06T15:00:00Z", INST);
+    return { ...base, new: { ...base.new, ...over } };
+  }
+
+  it("incoming depois do arquivamento → archived_at vira null", () => {
+    const qc = setup([arquivada()]);
+    capturedOnEvent?.(evento({}));
+    expect(lista(qc)[0].archived_at).toBeNull();
+    expect(lista(qc)[0].last_message).toBe("mensagem nova");
+  });
+
+  it("outgoing (resposta nossa) não desarquiva", () => {
+    const qc = setup([arquivada()]);
+    capturedOnEvent?.(evento({ direction: "outgoing" }));
+    expect(lista(qc)[0].archived_at).toBe(ARQUIVADA_EM);
+    // O resto do patch continua valendo.
+    expect(lista(qc)[0].last_message_time).toBe("2026-08-06T15:00:00Z");
+  });
+
+  it("grupo (contato) não desarquiva", () => {
+    const qc = setup([arquivada({ is_group: true })]);
+    capturedOnEvent?.(evento({}));
+    expect(lista(qc)[0].archived_at).toBe(ARQUIVADA_EM);
+  });
+
+  it("grupo (mensagem: is_group / remote_jid @g.us) não desarquiva", () => {
+    const qc1 = setup([arquivada()]);
+    capturedOnEvent?.(evento({ is_group: true }));
+    expect(lista(qc1)[0].archived_at).toBe(ARQUIVADA_EM);
+
+    const qc2 = setup([arquivada()]);
+    capturedOnEvent?.(evento({ remote_jid: "120363000000000000@g.us" }));
+    expect(lista(qc2)[0].archived_at).toBe(ARQUIVADA_EM);
+  });
+
+  it("mensagem anterior ao arquivamento (evento atrasado) não desarquiva", () => {
+    const qc = setup([arquivada()]);
+    capturedOnEvent?.(evento({ timestamp: "2026-08-06T11:00:00Z" }));
+    expect(lista(qc)[0].archived_at).toBe(ARQUIVADA_EM);
+  });
+
+  it("UPDATE de mensagem incoming não desarquiva — só o INSERT, como o trigger", () => {
+    const qc = setup([arquivada()]);
+    capturedOnEvent?.({ ...evento({}), eventType: "UPDATE" });
+    expect(lista(qc)[0].archived_at).toBe(ARQUIVADA_EM);
+  });
+
+  it("vale também para a lista por conjunto (`multi:`) — a que /chat e a bolha leem", () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const key = chatQueryKeys.contactsMulti(ORG, [INST]);
+    queryClient.setQueryData(key, { contatos: [arquivada()], cheia: false });
+    renderHook(() => useWhatsAppMessagesRealtime(null, INST), {
+      wrapper: ({ children }: { children: ReactNode }) => (
+        <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+      ),
+    });
+
+    capturedOnEvent?.(evento({}));
+
+    const dado = queryClient.getQueryData(key) as {
+      contatos: ReturnType<typeof arquivada>[];
+      cheia: boolean;
+    };
+    expect(dado.contatos[0].archived_at).toBeNull();
+    expect(dado.cheia).toBe(false);
   });
 });

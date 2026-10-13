@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { formatPhoneForWhatsApp } from "../../src/modules/communication/lib/whatsapp";
+import { formatPhoneForWhatsApp, resolveWhatsAppDestination } from "../../src/modules/communication/lib/whatsapp";
 
 describe("formatPhoneForWhatsApp", () => {
   it("preserves the existing WhatsApp Business landline from the Jurere incident", () => {
@@ -112,5 +112,40 @@ describe("formatPhoneForWhatsApp", () => {
   it("is idempotent for an already-formatted number", () => {
     const once = formatPhoneForWhatsApp("11987654321");
     expect(formatPhoneForWhatsApp(once!)).toBe(once);
+  });
+});
+
+describe("resolveWhatsAppDestination", () => {
+  it("sends a group conversation to its @g.us JID", () => {
+    expect(resolveWhatsAppDestination("120363428385862417", true)).toEqual({
+      number: "120363428385862417@g.us",
+      remoteJid: "120363428385862417@g.us",
+      phoneNumber: "120363428385862417",
+    });
+    expect(resolveWhatsAppDestination("120363428385862417@g.us", true)?.number).toBe("120363428385862417@g.us");
+  });
+
+  it("keeps the legacy creator-timestamp group id", () => {
+    expect(resolveWhatsAppDestination("554899998888-1588888888", true)?.number).toBe("554899998888-1588888888@g.us");
+  });
+
+  it("decides group by the flag, not by the id's shape", () => {
+    expect(resolveWhatsAppDestination("120363428385862417", false)).toBeNull();
+    expect(resolveWhatsAppDestination("120363428385862417")).toBeNull();
+  });
+
+  it("keeps 1:1 numbers on the Brazilian normalization", () => {
+    expect(resolveWhatsAppDestination("11987654321", false)).toEqual({
+      number: "5511987654321",
+      remoteJid: "5511987654321@s.whatsapp.net",
+      phoneNumber: "5511987654321",
+    });
+  });
+
+  it("rejects garbage for both kinds", () => {
+    expect(resolveWhatsAppDestination("no phone", false)).toBeNull();
+    expect(resolveWhatsAppDestination("", true)).toBeNull();
+    expect(resolveWhatsAppDestination("grupo da recepção", true)).toBeNull();
+    expect(resolveWhatsAppDestination("5511987654321@s.whatsapp.net", true)).toBeNull();
   });
 });

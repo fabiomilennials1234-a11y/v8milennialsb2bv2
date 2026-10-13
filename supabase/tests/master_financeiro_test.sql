@@ -6,6 +6,7 @@
 --   - mensalidade e custos auditados; NULL apaga o contrato
 --   - vendas líquidas: estorno e sale_lost não contam
 --   - chips: só Uazapi, conectado ou não
+--   - folha (20271113000000): gravada, lida, preservada pela versão de 5 args
 --
 -- Run:
 --   supabase start && bash supabase/tests/run.sh
@@ -18,7 +19,7 @@ BEGIN;
 
 CREATE EXTENSION IF NOT EXISTS pgtap;
 
-SELECT plan(22);
+SELECT plan(28);
 
 -- ---------------------------------------------------------------------------
 -- Fixtures
@@ -111,6 +112,8 @@ SELECT throws_ok($$ SELECT public.master_set_org_monthly_fee('f1111111-aaaa-0000
   '42501', NULL, '(b) membro não define mensalidade');
 SELECT throws_ok($$ SELECT public.master_set_cost_settings(1, 1, 1, 1, 1) $$, '42501', NULL,
   '(b) membro não define custos');
+SELECT throws_ok($$ SELECT public.master_set_cost_settings(1, 1, 1, 1, 1, 1) $$, '42501', NULL,
+  '(b) membro não define custos nem pela versão com folha');
 
 SELECT set_config('request.jwt.claims',
   '{"sub":"f1111111-0002-0000-0000-000000001111","role":"authenticated"}', true);
@@ -165,12 +168,26 @@ SELECT lives_ok($$ SELECT public.master_set_cost_settings(4900, 500000, 0.40, 1.
 SELECT throws_ok($$ SELECT public.master_set_cost_settings(-1, 0, 0, 0, 0) $$, '23514', NULL,
   '(e) custo negativo é rejeitado');
 
+-- ---------------------------------------------------------------------------
+-- (f) Salários (20271113000000)
+-- ---------------------------------------------------------------------------
+SELECT lives_ok($$ SELECT public.master_set_cost_settings(4900, 500000, 4000000, 0.40, 1.60, 5.45) $$,
+  '(f) master grava a folha');
+SELECT is((SELECT payroll_monthly_cents FROM public.master_get_cost_settings()), 4000000,
+  '(f) a folha volta na leitura');
+SELECT lives_ok($$ SELECT public.master_set_cost_settings(5000, 500000, 0.40, 1.60, 5.45) $$,
+  '(f) a versão de 5 argumentos (front antigo) segue funcionando');
+SELECT is((SELECT payroll_monthly_cents FROM public.master_get_cost_settings()), 4000000,
+  '(f) a versão de 5 argumentos preserva a folha gravada');
+SELECT throws_ok($$ SELECT public.master_set_cost_settings(0, 0, -1, 0, 0, 0) $$, '23514', NULL,
+  '(f) folha negativa é rejeitada');
+
 SET LOCAL role postgres;
 SELECT is(
   (SELECT count(*)::int FROM public.master_audit_logs
     WHERE (action = 'ORG_MONTHLY_FEE' AND target_id = 'f1111111-aaaa-0000-0000-000000001111')
        OR (action = 'COST_SETTINGS' AND user_id = 'f1111111-0003-0000-0000-000000001111')),
-  3, '(e) duas mudanças de mensalidade e uma de custo auditadas');
+  5, '(e/f) duas mudanças de mensalidade e três de custo auditadas');
 
 SELECT * FROM finish();
 ROLLBACK;

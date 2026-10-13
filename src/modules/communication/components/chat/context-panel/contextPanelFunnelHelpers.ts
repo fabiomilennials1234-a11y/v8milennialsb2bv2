@@ -1,12 +1,12 @@
 /**
  * Helpers puros do card de Funis (ContextPanelFunnels) — normalização dos funis
- * do lead + detecção de etapa terminal (won/lost) + rótulo por org.
+ * do lead + detecção de etapa terminal (ganho / perda) + rótulo por org.
  *
  * Fora do componente pra serem testáveis sem montar o painel. A fonte é
  * `useLeadAllPipelines` (standard + custom); os rótulos de funis de sistema vêm
  * de `usePipelineDisplayConfig` (customizável por org — grill 2026-07-27).
  */
-import { funisSemNegocioAberto, type PipelineStatus } from "@/modules/leads";
+import { etapaDoLeadEhDePerda, funisSemNegocioAberto, type PipelineStatus } from "@/modules/leads";
 
 export interface FunnelStageView {
   key: string;
@@ -14,6 +14,12 @@ export interface FunnelStageView {
   stageId?: string;
   label: string;
   role: string | null;
+  /**
+   * Etapa de perda (`isEtapaDePerda`: `lost` OU `is_final_negative`). Mover
+   * para ela pede o motivo — inclusive em funil cuja etapa de perda só tem a
+   * flag (Mustang/Riofix: `perdido_desqualificado`, role `open`).
+   */
+  isLoss: boolean;
 }
 export interface FunnelCardRow {
   /** Chave única de UI = o negócio (entryId): o lead pode ter N no mesmo funil. */
@@ -26,15 +32,15 @@ export interface FunnelCardRow {
   stages: FunnelStageView[];
 }
 
-/** Etapa terminal = registra/estorna receita (ADR-0017). Exige confirmação. */
-export function isTerminalRole(role: string | null | undefined): boolean {
-  return role === "won" || role === "lost";
-}
-
-/** Verbo do aviso conforme o papel da etapa-alvo. */
-export function terminalKind(role: string | null | undefined): "won" | "lost" | null {
-  if (role === "won") return "won";
-  if (role === "lost") return "lost";
+/**
+ * Etapa terminal do ponto de vista do CLIQUE: ganho pede confirmação (registra
+ * receita, ADR-0017); perda pede o MOTIVO (porta única, `useLossReasonGate`).
+ * Não decide desfecho — só qual pergunta fazer antes do move (decisão B2d).
+ */
+export function terminalKind(stage: Pick<FunnelStageView, "role" | "isLoss"> | null | undefined): "won" | "lost" | null {
+  if (!stage) return null;
+  if (stage.isLoss) return "lost";
+  if (stage.role === "won") return "won";
   return null;
 }
 
@@ -119,7 +125,12 @@ export function toFunnelRows(
         label: labelByType.get(p.pipeType) ?? p.label,
         color: p.color,
         currentStageKey: p.currentStage,
-        stages: p.stages.map((s) => ({ key: s.id, label: s.label, role: s.role ?? null })),
+        stages: p.stages.map((s) => ({
+          key: s.id,
+          label: s.label,
+          role: s.role ?? null,
+          isLoss: etapaDoLeadEhDePerda(s),
+        })),
       });
     } else {
       if (!p.entryId) continue;
@@ -129,7 +140,13 @@ export function toFunnelRows(
         label: p.pipelineName,
         color: p.pipelineColor,
         currentStageKey: p.currentStageId,
-        stages: p.stages.map((s) => ({ key: s.id, stageId: s.id, label: s.name, role: s.role ?? null })),
+        stages: p.stages.map((s) => ({
+          key: s.id,
+          stageId: s.id,
+          label: s.name,
+          role: s.role ?? null,
+          isLoss: etapaDoLeadEhDePerda(s),
+        })),
       });
     }
   }

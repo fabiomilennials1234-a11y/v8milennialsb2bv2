@@ -1,16 +1,17 @@
 /**
  * Confirmação do movimento livre do master no kanban da Operação (emenda ao
- * ADR-0018). Três perguntas, uma por destino que muda o que o cliente vê:
+ * ADR-0018). Quatro perguntas, uma por destino que muda o que o cliente vê:
  *
  * - Concluído: o cliente não é avisado e só o master reabre.
  * - Aguardando confirmação: enviar a resposta pronta (lida aqui, antes) e
  *   marcar resolvido, OU só mudar o estado.
- * - Sair de Concluído: reabrir um chamado fechado.
+ * - Feature recusada: o cliente passa a ver "Recusado" e não reabre.
+ * - Sair de Concluído ou de Feature recusada: reabrir um chamado encerrado.
  *
  * Os demais movimentos são diretos — sem diálogo.
  */
 
-import { AlertTriangle, MessageSquareReply, RotateCcw } from "lucide-react";
+import { AlertTriangle, Ban, MessageSquareReply, RotateCcw } from "lucide-react";
 import {
   AlertDialog,
   AlertDialogCancel,
@@ -67,12 +68,38 @@ export function OperacaoMoveDialog({ pending, busy, onCancel, onConfirm }: Props
           </>
         )}
 
+        {pending && confirm === "recusar" && (
+          <>
+            <AlertDialogHeader>
+              <AlertDialogTitle className="flex items-center gap-2">
+                <Ban className="h-5 w-5 text-muted-foreground" aria-hidden />
+                Recusar a feature?
+              </AlertDialogTitle>
+              <AlertDialogDescription asChild>
+                <div className="space-y-2 text-sm">
+                  <p className="font-medium text-foreground">{pending.ticketTitle}</p>
+                  <p>
+                    O cliente passa a ver o chamado como Recusado e não consegue reabrir. Nenhuma mensagem é
+                    enviada: explique o motivo na conversa do chamado.
+                  </p>
+                </div>
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel disabled={busy}>Cancelar</AlertDialogCancel>
+              <Button disabled={busy} onClick={() => onConfirm({ sendReply: false })}>
+                {busy ? "Recusando…" : "Recusar feature"}
+              </Button>
+            </AlertDialogFooter>
+          </>
+        )}
+
         {pending && confirm === "reabrir" && (
           <>
             <AlertDialogHeader>
               <AlertDialogTitle className="flex items-center gap-2">
                 <RotateCcw className="h-5 w-5 text-muted-foreground" aria-hidden />
-                Reabrir chamado fechado?
+                {pending.move.from === "recusada" ? "Reabrir feature recusada?" : "Reabrir chamado fechado?"}
               </AlertDialogTitle>
               <AlertDialogDescription asChild>
                 <div className="space-y-2 text-sm">

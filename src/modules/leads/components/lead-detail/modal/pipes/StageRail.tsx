@@ -20,6 +20,8 @@ export interface StageRailStage {
   /** stage_key for system pipes, uuid for custom pipes. */
   key: string;
   label: string;
+  /** Etapa de perda (`isEtapaDePerda`) — o move pede o motivo antes. */
+  isLoss?: boolean;
 }
 
 export interface StageRailPipe {
@@ -214,6 +216,7 @@ const StageRailExpanded = memo(function StageRailExpanded({
         pipeId: pipe.recordId,
         stageKey: stage.key,
         stageLabel: stage.label,
+        isLoss: stage.isLoss,
       });
     } else {
       onMove({
@@ -221,6 +224,7 @@ const StageRailExpanded = memo(function StageRailExpanded({
         entryId: pipe.recordId,
         stageId: stage.key,
         stageLabel: stage.label,
+        isLoss: stage.isLoss,
       });
     }
   };

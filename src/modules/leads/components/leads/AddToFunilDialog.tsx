@@ -25,6 +25,7 @@ import {
 } from "@/components/ui/select";
 import type { PipeOpsPort } from "../../pipe-ops";
 import { notifyError } from "@/shared/errors";
+import { ETAPA_DE_PERDA_INDISPONIVEL, isEtapaDePerda } from "@/contracts/pipe/perda";
 
 /**
  * Item de menu "Adicionar a funil". Só renderiza quando a org tem ≥1 funil
@@ -69,6 +70,9 @@ export function AddToFunilDialog({
 
   const handleSubmit = async () => {
     if (!pipelineId || !stageId) return;
+    // Defensivo: a opção nem é selecionável. Entrar no funil já perdido
+    // gravaria a perda sem motivo — perda só pelo movimento, que pede o motivo.
+    if (isEtapaDePerda(stages.find((s) => s.id === stageId))) return;
     try {
       await addLead.mutateAsync({
         pipeline_id: pipelineId,
@@ -112,7 +116,12 @@ export function AddToFunilDialog({
               <SelectTrigger><SelectValue placeholder="Selecionar etapa" /></SelectTrigger>
               <SelectContent>
                 {stages.map((s) => (
-                  <SelectItem key={s.id} value={s.id}>
+                  <SelectItem
+                    key={s.id}
+                    value={s.id}
+                    disabled={isEtapaDePerda(s)}
+                    title={isEtapaDePerda(s) ? ETAPA_DE_PERDA_INDISPONIVEL : undefined}
+                  >
                     <span className="flex items-center gap-2">
                       {s.color && (
                         <span
