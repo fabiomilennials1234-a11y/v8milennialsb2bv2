@@ -269,6 +269,7 @@ function SocialComposer({
   onAbrirLocalizacao,
   onAbrirContato,
   lastIncomingAt,
+  threadCarregada,
   respondendoA,
   onCancelarResposta,
   instanceIdDoCanal,
@@ -292,6 +293,12 @@ function SocialComposer({
   onAbrirLocalizacao: () => void;
   onAbrirContato: () => void;
   lastIncomingAt: string | null;
+  /**
+   * A thread já chegou do banco. Sem isto, o instante entre abrir a conversa e
+   * a consulta voltar pareceria "o cliente nunca escreveu" — e o aviso de
+   * janela fechada piscaria em toda conversa aberta.
+   */
+  threadCarregada: boolean;
   /**
    * A mensagem que esta vai citar, se houver. O estado mora na VIEW porque quem
    * o cria é a barra de ações da BOLHA, que não é filha do composer.
@@ -335,7 +342,12 @@ function SocialComposer({
   const organizationId = teamMember?.organization_id ?? null;
 
   const enviar = sender;
-  const janela = socialReplyWindow(lastIncomingAt);
+  // No canal oficial, thread carregada sem nenhuma mensagem recebida É janela
+  // fechada: a Meta só aceita template até o cliente escrever. No Direct não há
+  // conversa sem o cliente ter escrito primeiro, então ali segue "não sei".
+  const janela = socialReplyWindow(lastIncomingAt, new Date(), {
+    semRecebidaEhFechada: canal === "whatsapp_oficial" && threadCarregada,
+  });
 
   /** Publica o arquivo e guarda a URL — o fornecedor BUSCA, não recebe bytes. */
   const publicar = async (file: File) => {
@@ -946,6 +958,7 @@ export function SocialChatView({
         onCancelarResposta={() => setRespondendoA(null)}
         instanceIdDoCanal={selectedContact.messaging_channel_id}
         lastIncomingAt={ultimaRecebidaEm}
+        threadCarregada={!isLoading}
       />
 
       <ImagePreviewModal

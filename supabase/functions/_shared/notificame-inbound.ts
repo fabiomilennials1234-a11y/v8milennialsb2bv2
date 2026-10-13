@@ -476,6 +476,87 @@ export function readMessageStatus(payload: unknown): MessageStatusUpdate | null 
   };
 }
 
+/** O que `mesclarStatusNaLinha` precisa saber da linha de `channel_messages`. */
+export interface LinhaDeStatus {
+  status: string | null;
+  raw_payload: unknown;
+  provider_message_id: string | null;
+}
+
+/** O patch para `channel_messages` — só as colunas que de fato mudam. */
+export interface PatchDeStatus {
+  status?: OutboundStatus;
+  provider_message_id?: string;
+  raw_payload: Record<string, unknown>;
+}
+
+/**
+ * Aplica um callback de status a uma linha — PURA, para ser provada sem handler.
+ *
+ * TRÊS regras, cada uma de um defeito medido em produção:
+ *
+ * 1. `failed` é TERMINAL. A Meta não "desrecusa": medido em 30/09 (Chique), o
+ *    `ERROR 131047` chegou 1,7s ANTES do `SENT` da mesma mensagem. Com `failed`
+ *    fora da escala, o `SENT` atrasado contava como progresso (rank 1 > 0) e a
+ *    tela voltava a dizer "enviado" para uma mensagem que nunca saiu.
+ *
+ * 2. O MOTIVO não é apagado por um evento sem motivo. Medido em 13/10 (Sampaio e
+ *    Moraes): seis recusas gravadas com `detail` e `provider_code` nulos, e a
+ *    vendedora vendo só "falhou". Cada callback sobrescrevia os dois campos com
+ *    o que trazia — e um evento de falha SEM `error` apagava o do anterior.
+ *
+ * 3. O corpo cru da FALHA é guardado (`failure_raw`). Sem ele, quando o motivo
+ *    vem num campo que o leitor não conhece, não há como descobrir qual — foi
+ *    exatamente o que travou o diagnóstico de 13/10.
+ */
+export function mesclarStatusNaLinha(
+  linha: LinhaDeStatus,
+  st: MessageStatusUpdate,
+  messageStatusCru: unknown,
+  /** O relógio vem de FORA: este módulo é puro (ver o teste estrutural). */
+  agora: Date,
+): { patch: PatchDeStatus; progride: boolean } {
+  const jaFalhou = linha.status === "failed";
+  const progride = !jaFalhou && (
+    st.status === "failed" ||
+    (OUTBOUND_STATUS_RANK[st.status] ?? 99) >
+      (OUTBOUND_STATUS_RANK[linha.status ?? "pending"] ?? 0)
+  );
+
+  const anterior = isRecord(linha.raw_payload) ? linha.raw_payload : {};
+  const eventoAnterior = isRecord(anterior.status_event) ? anterior.status_event : {};
+  const motivoAnterior = (campo: string): string | null =>
+    typeof eventoAnterior[campo] === "string" ? eventoAnterior[campo] as string : null;
+
+  const statusEvent: Record<string, unknown> = {
+    ...eventoAnterior,
+    code: st.status,
+    provider_code: st.providerCode ?? motivoAnterior("provider_code"),
+    detail: st.detail ?? motivoAnterior("detail"),
+    at: agora.toISOString(),
+  };
+  if (st.status === "failed" && messageStatusCru !== undefined) {
+    statusEvent.failure_raw = messageStatusCru;
+  }
+
+  return {
+    progride,
+    patch: {
+      ...(progride ? { status: st.status } : {}),
+      // A chave de correlação, gravada pelo PRIMEIRO callback que casar. Um
+      // evento sem ela não pode apagar o que o anterior guardou.
+      ...(st.providerMessageId ? { provider_message_id: st.providerMessageId } : {}),
+      // `raw_payload` é MESCLADO: a coluna guarda a requisição e a resposta do
+      // envio, e o PostgREST substitui o jsonb inteiro.
+      raw_payload: { ...anterior, status_event: statusEvent },
+    },
+  };
+}
+
+function isRecord(v: unknown): v is Record<string, unknown> {
+  return typeof v === "object" && v !== null && !Array.isArray(v);
+}
+
 // ─── Direção ─────────────────────────────────────────────────────────────────
 
 export type InboundDirection = "incoming" | "outgoing";

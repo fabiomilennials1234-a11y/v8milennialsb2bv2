@@ -48,6 +48,7 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useCurrentTeamMember } from "@/modules/identity";
 import { traduzirRecusaDaMeta } from "@/modules/communication/lib/meta-send-errors";
+import { enviadaForaDaJanela } from "@/modules/communication/lib/social-window";
 
 import { chatQueryKeys } from "./shared/queryKeys";
 import type { SocialContact } from "./types";
@@ -145,17 +146,32 @@ export function useSocialMessages(contact: SocialContact | null) {
       // webhook quando a Meta responde. Ele é extraído AQUI para o componente não
       // precisar conhecer o formato do fornecedor — e porque sem isso a bolha só
       // mostra "Tentar novamente", que não diz o que consertar.
-      return ((data ?? []) as Array<SocialMessage & { raw_payload?: unknown }>).map((m) => {
+      const linhas = (data ?? []) as Array<SocialMessage & { raw_payload?: unknown }>;
+      const recebidasEm = linhas
+        .filter((m) => m.direction === "incoming")
+        .map((m) => m.timestamp);
+      return linhas.map((m) => {
         const raw = (m.raw_payload ?? {}) as Record<string, unknown>;
         const evento = (raw.status_event ?? {}) as Record<string, unknown>;
         const detalhe = typeof evento.detail === "string" ? evento.detail.trim() : "";
         const codigo = typeof evento.provider_code === "string" ? evento.provider_code : null;
         const recusa = traduzirRecusaDaMeta(codigo, detalhe);
+        // RECUSA SEM MOTIVO no canal oficial: o fornecedor às vezes devolve
+        // `failed` sem o código da Meta (13/10, Sampaio e Moraes — seis bolhas
+        // só com "falhou"). Se a própria thread mostra o envio fora da janela,
+        // a tela diz isso e aponta o template.
+        const semMotivoForaDaJanela = !recusa &&
+          m.status === "failed" &&
+          m.direction === "outgoing" &&
+          contact?.channel === "whatsapp_oficial" &&
+          enviadaForaDaJanela(m.timestamp, recebidasEm);
         return {
           ...m,
           failure_reason: recusa
             ? [recusa.mensagem, recusa.acao].filter(Boolean).join(" ")
-            : null,
+            : semMotivoForaDaJanela
+              ? "Recusada: o contato não escreveu nas 24 horas antes do envio. Fora dessa janela, só template aprovado é aceito."
+              : null,
           failure_code: recusa?.codigo ?? null,
         };
       });
