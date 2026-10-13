@@ -13408,6 +13408,7 @@ export type Database = {
         Row: {
           ai_disabled: boolean
           created_at: string
+          disabled_reason: string | null
           human_paused_until: string | null
           normalized_phone: string
           organization_id: string
@@ -13418,6 +13419,7 @@ export type Database = {
         Insert: {
           ai_disabled?: boolean
           created_at?: string
+          disabled_reason?: string | null
           human_paused_until?: string | null
           normalized_phone: string
           organization_id: string
@@ -13428,6 +13430,7 @@ export type Database = {
         Update: {
           ai_disabled?: boolean
           created_at?: string
+          disabled_reason?: string | null
           human_paused_until?: string | null
           normalized_phone?: string
           organization_id?: string
