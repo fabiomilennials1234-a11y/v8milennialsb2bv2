@@ -44,6 +44,15 @@ export function useBulkSelection() {
     });
   }, []);
 
+  /** Soma `ids` à seleção — nunca desmarca (ao contrário de `selectAll`). */
+  const addMany = useCallback((ids: string[]) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      for (const id of ids) next.add(id);
+      return next;
+    });
+  }, []);
+
   const clearSelection = useCallback(() => {
     setSelectedIds(new Set());
     setLastToggled(null);
@@ -59,9 +68,10 @@ export function useBulkSelection() {
       toggle,
       toggleRange,
       selectAll,
+      addMany,
       clearSelection,
       isSelected,
     }),
-    [selectedIds, toggle, toggleRange, selectAll, clearSelection, isSelected],
+    [selectedIds, toggle, toggleRange, selectAll, addMany, clearSelection, isSelected],
   );
 }
