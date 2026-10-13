@@ -127,6 +127,7 @@ GRANT EXECUTE ON FUNCTION public._repontar_dependentes_do_card(uuid, uuid) TO au
 -- SHARE ROW EXCLUSIVE deixa leitura passar e segura escrita por ~segundos.
 LOCK TABLE public.pipeline_entries IN SHARE ROW EXCLUSIVE MODE;
 
+CREATE SCHEMA IF NOT EXISTS backup;  -- existe em prod; banco novo depende de 20260916164400
 CREATE TABLE IF NOT EXISTS backup.cards_sem_negocio_fundidos_20271119 (
   fundido_em  timestamptz NOT NULL DEFAULT now(),
   mantido_id  uuid        NOT NULL,

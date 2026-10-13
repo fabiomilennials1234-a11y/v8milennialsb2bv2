@@ -61,8 +61,19 @@ function fakeSupabase(state: FakeState): SupabaseClient {
       return { data: null, error: null };
     };
 
-    // deno-lint-ignore no-explicit-any
-    const builder: any = {
+    interface Builder {
+      select: () => Builder;
+      eq: (column?: string, value?: string) => Builder;
+      in: () => Builder;
+      order: () => Builder;
+      limit: () => Promise<QueryResult>;
+      maybeSingle: () => Promise<QueryResult>;
+      single: () => Promise<QueryResult>;
+      insert: (row: Row) => Builder;
+      update: (row: Row) => Builder;
+      then: (onOk: (r: QueryResult) => unknown, onErr?: (e: unknown) => unknown) => Promise<unknown>;
+    }
+    const builder: Builder = {
       select: () => builder,
       eq: (column?: string, value?: string) => {
         if (column === "id" && value) lastEqId = value;
