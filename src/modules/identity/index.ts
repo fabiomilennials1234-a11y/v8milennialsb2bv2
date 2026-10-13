@@ -56,6 +56,7 @@ export {
   isVirtualTeamMember,
 } from "./org-team";
 export type { TeamMember } from "./org-team";
+export { useAvatarMap } from "./hooks/useAvatarMap";
 
 // ── Subscription guard ──────────────────────────────────────────────────────
 export { SubscriptionProtectedRoute } from "./components/SubscriptionProtectedRoute";
