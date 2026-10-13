@@ -2,6 +2,8 @@ import { memo, useMemo, useState } from "react";
 import { cn } from "@/lib/utils";
 import { useRankingData } from "@/modules/analytics/hooks/useDashboardMetrics";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { useAvatarMap } from "@/modules/identity";
 
 interface RankingPodiumProps {
   /** Intervalo global do Comando — o ranking segue o período selecionado. */
@@ -58,6 +60,7 @@ function formatK(value: number): string {
  */
 function RankingPodiumBase({ range, teamSalesTotal }: RankingPodiumProps) {
   const { data, isLoading } = useRankingData(undefined, undefined, range);
+  const avatarMap = useAvatarMap();
   const [mode, setMode] = useState<Mode>("vendas");
 
   const { ranked, totalLabel } = useMemo(() => {
@@ -174,7 +177,7 @@ function RankingPodiumBase({ range, teamSalesTotal }: RankingPodiumProps) {
                   )}>
                     {first ? "P1 — Líder" : `P${p.position}`}
                   </span>
-                  <div
+                  <Avatar
                     className={cn(
                       "mx-auto mb-2 mt-2.5 flex items-center justify-center rounded-2xl font-extrabold text-background",
                       first
@@ -183,8 +186,9 @@ function RankingPodiumBase({ range, teamSalesTotal }: RankingPodiumProps) {
                     )}
                     style={{ background: AV_COLORS[p.colorIdx] }}
                   >
-                    {initials(p.name)}
-                  </div>
+                    <AvatarImage src={avatarMap.get(p.id)} alt={p.name} className="object-cover" />
+                    <AvatarFallback className="bg-transparent">{initials(p.name)}</AvatarFallback>
+                  </Avatar>
                   <div className="truncate text-[13px] font-bold">{p.name}</div>
                   <div className={cn("mt-1 truncate font-extrabold tracking-[-0.04em] tabular-nums", first ? "text-[26px]" : "text-[21px]")}>
                     {p.valueLabel}
@@ -214,12 +218,13 @@ function RankingPodiumBase({ range, teamSalesTotal }: RankingPodiumProps) {
                     </td>
                     <td className="border-t border-border/60 py-2.5">
                       <span className="flex items-center gap-[9px] text-[13px] font-semibold">
-                        <span
+                        <Avatar
                           className="flex h-[26px] w-[26px] shrink-0 items-center justify-center rounded-lg text-[10px] font-extrabold text-background"
                           style={{ background: AV_COLORS[r.colorIdx] }}
                         >
-                          {initials(r.name)}
-                        </span>
+                          <AvatarImage src={avatarMap.get(r.id)} alt={r.name} className="object-cover" />
+                          <AvatarFallback className="bg-transparent">{initials(r.name)}</AvatarFallback>
+                        </Avatar>
                         {r.name}
                       </span>
                     </td>
