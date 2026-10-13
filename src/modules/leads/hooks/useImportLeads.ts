@@ -335,6 +335,8 @@ export interface ImportLeadsToCustomPipelineOptions {
   members?: { id: string; name: string }[];
   userColumnMapping?: Record<string, string>;
   sdrId?: string | null;
+  /** IDs das tags a aplicar aos leads importados. */
+  tagIds?: string[];
 }
 
 /**
@@ -356,6 +358,8 @@ export interface ImportLeadsToPipelineOptions {
   closerId?: string | null;
   metricsPeriodMonth?: number;
   metricsPeriodYear?: number;
+  /** IDs das tags a aplicar aos leads importados. */
+  tagIds?: string[];
 }
 
 /**
@@ -375,6 +379,8 @@ export interface ImportLeadsOnlyOptions {
   /** Mês (1-12) e ano em que estes leads devem contar nas métricas. */
   metricsPeriodMonth?: number;
   metricsPeriodYear?: number;
+  /** IDs das tags a aplicar aos leads importados. */
+  tagIds?: string[];
 }
 
 export interface ImportLeadsToFunnelOptions {
@@ -394,6 +400,8 @@ export interface ImportLeadsToFunnelOptions {
   /** Período para métricas: mês (1-12) e ano. Quando informado, leads importados contam no mês/ano indicado em vez do mês atual. */
   metricsPeriodMonth?: number;
   metricsPeriodYear?: number;
+  /** IDs das tags a aplicar aos leads importados. */
+  tagIds?: string[];
 }
 
 /** Normaliza nome para comparação (lowercase, sem acentos, trim). */
@@ -1311,6 +1319,7 @@ export function useImportLeads() {
         closer_id: options.closerId,
         metrics_period_month: options.metricsPeriodMonth,
         metrics_period_year: options.metricsPeriodYear,
+        tag_ids: options.tagIds && options.tagIds.length > 0 ? options.tagIds : undefined,
       });
 
       setLastReport(report);
@@ -1366,6 +1375,7 @@ export function useImportLeads() {
         custom_stages: options.stages,
         members: options.members,
         sdr_id: options.sdrId,
+        tag_ids: options.tagIds && options.tagIds.length > 0 ? options.tagIds : undefined,
       });
 
       setLastReport(report);
@@ -1430,6 +1440,7 @@ export function useImportLeads() {
         closer_id: options.closerId,
         metrics_period_month: options.metricsPeriodMonth,
         metrics_period_year: options.metricsPeriodYear,
+        tag_ids: options.tagIds && options.tagIds.length > 0 ? options.tagIds : undefined,
       });
 
       setLastReport(report);
@@ -1494,6 +1505,7 @@ export function useImportLeads() {
         sdr_id: options.responsibleId || undefined,
         metrics_period_month: options.metricsPeriodMonth,
         metrics_period_year: options.metricsPeriodYear,
+        tag_ids: options.tagIds && options.tagIds.length > 0 ? options.tagIds : undefined,
       });
 
       setLastReport(report);

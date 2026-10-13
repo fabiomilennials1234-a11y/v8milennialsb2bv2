@@ -123,6 +123,9 @@ interface ImportPayload {
   pipeline_id?: string;
   /** Etapa padrão: uuid de `pipeline_stages` OU stage_key. */
   pipeline_stage?: string;
+
+  // Tags a aplicar aos leads
+  tag_ids?: string[];
 }
 
 interface ImportReport {
@@ -192,6 +195,25 @@ async function applyCustomFields(
     .upsert(rows, { onConflict: "lead_id,field_id" });
   if (error) {
     console.error("[import-leads] applyCustomFields falhou", { leadId, error: error.message });
+  }
+}
+
+/**
+ * Aplica tags selecionadas a um lead. Ignora tags que não existem ou já estão
+ * associadas ao lead.
+ */
+async function applyTags(
+  supabase: ReturnType<typeof createClient>,
+  leadId: string,
+  tagIds: string[] | undefined,
+): Promise<void> {
+  if (!tagIds || tagIds.length === 0) return;
+  const rows = tagIds.map((tag_id) => ({ lead_id: leadId, tag_id }));
+  const { error } = await supabase
+    .from("lead_tags")
+    .upsert(rows, { onConflict: "lead_id,tag_id" });
+  if (error) {
+    console.error("[import-leads] applyTags falhou", { leadId, error: error.message });
   }
 }
 
@@ -588,6 +610,11 @@ async function importToCampaign(
             if (!existingTagLink) {
               await supabase.from("lead_tags").insert({ lead_id: existingLead.id, tag_id: tagId });
             }
+
+            // Add additional user-selected tags
+            if (payload.tag_ids) {
+              await applyTags(supabase, existingLead.id, payload.tag_ids);
+            }
           }
 
           await applyCustomFields(supabase, existingLead.id, lead.customFields, customFieldMap);
@@ -653,6 +680,12 @@ async function importToCampaign(
         }
 
         await supabase.from("lead_tags").insert({ lead_id: newLead.id, tag_id: tagId });
+
+        // Add additional user-selected tags
+        if (payload.tag_ids) {
+          await applyTags(supabase, newLead.id, payload.tag_ids);
+        }
+
         await applyCustomFields(supabase, newLead.id, lead.customFields, customFieldMap);
         if (formattedPhone) processedPhones.add(formattedPhone);
 
@@ -1030,6 +1063,11 @@ async function importToPipeline(
 
         // Campos personalizados → lead_custom_field_values (upsert por lead+field)
         await applyCustomFields(supabase, leadId, lead.customFields, customFieldMap);
+
+        // Tags do import → lead_tags (upsert por lead+tag)
+        if (payload.tag_ids) {
+          await applyTags(supabase, leadId, payload.tag_ids);
+        }
 
         // Etapa da linha (coluna Etapa da planilha) → stage_key
         const stageKeyForLead = resolveRowStageKey(lead.stage, stageAliases, defaultStageKey);
