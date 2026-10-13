@@ -13,6 +13,7 @@ import type { ActionResult } from "./types.ts";
 import { resolveDispatchContext, DispatchResolutionError } from "../whatsapp-dispatch.ts";
 import { isCopilotCanceled, logCopilotCancellation } from "../copilot/cancellation.ts";
 import { logEvent } from "../error-boundary.ts";
+import { isSameTurnHandoffCancel, SAME_TURN_HANDOFF_KEY } from "../copilot/same-turn-handoff.ts";
 import {
   DELIVERED_AT_KEY,
   isDeliveredSend,
@@ -457,8 +458,24 @@ export async function executeSendDocument(
   // Janela: user pode desligar "IA" entre AgentEngine decidir o envio e o
   // worker pegar a ação — sem este gate, o documento ainda é entregue mesmo
   // depois do toggle off. Fonte canônica: phone_ai_preferences > leads.ai_disabled.
+  //
+  // Exceção ESTREITA: a mídia decidida no mesmo turno de um handoff. O próprio
+  // turno desligou a IA (transfer inline) depois de decidir o envio; o payload
+  // traz o carimbo daquele desligamento e só ele libera (same-turn-handoff.ts).
+  // Humano que desligou antes do turno, ou depois dele, continua cancelando.
   const cancelCheck = await isCopilotCanceled(supabase, organizationId, lead.phone);
-  if (cancelCheck.canceled) {
+  const sameTurnHandoff = cancelCheck.canceled &&
+    isSameTurnHandoffCancel(cancelCheck, payload[SAME_TURN_HANDOFF_KEY], leadId);
+  if (sameTurnHandoff) {
+    logEvent("copilot_document_sent_after_same_turn_handoff", {
+      tags: {
+        "copilot.document_id": documentId,
+        "copilot.organization_id": organizationId,
+        "copilot.cancel_source": cancelCheck.source,
+      },
+    }).catch(() => {});
+  }
+  if (cancelCheck.canceled && !sameTurnHandoff) {
     logCopilotCancellation({
       organizationId,
       gate: "ai_action_send",

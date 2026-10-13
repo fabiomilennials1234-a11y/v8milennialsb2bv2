@@ -193,4 +193,26 @@ describe("isCopilotCanceled", () => {
       expect(r.systemDisabled).toBe(false);
     });
   });
+
+  it("disabledAt = phone_ai_preferences.set_at; humanPauseActive sinalizado mesmo com ai_disabled", async () => {
+    const { sb, mockTable } = createMockSupabase();
+    const future = new Date(Date.now() + 3_600_000).toISOString();
+    mockTable("phone_ai_preferences", [
+      { organization_id: ORG, normalized_phone: NORMALIZED, ai_disabled: true, set_at: "2026-10-13T12:00:00Z", human_paused_until: future },
+    ]);
+    const r = await isCopilotCanceled(sb, ORG, "+5511987654321");
+    expect(r.disabledAt).toBe("2026-10-13T12:00:00Z");
+    expect(r.humanPauseActive).toBe(true);
+  });
+
+  it("disabledAt no fallback leads = leads.ai_disabled_at", async () => {
+    const { sb, mockTable } = createMockSupabase();
+    mockTable("phone_ai_preferences", []);
+    mockTable("leads", [
+      { organization_id: ORG, normalized_phone: NORMALIZED, ai_disabled: true, ai_disabled_at: "2026-10-13T12:00:00Z", created_at: "2026-04-26T00:00:00Z" },
+    ]);
+    const r = await isCopilotCanceled(sb, ORG, "+5511987654321");
+    expect(r.source).toBe("leads");
+    expect(r.disabledAt).toBe("2026-10-13T12:00:00Z");
+  });
 });

@@ -34,6 +34,14 @@ export interface CancellationCheck {
    */
   systemDisabled: boolean;
   reason?: string;
+  /**
+   * Carimbo do desligamento vigente (`phone_ai_preferences.set_at` ou
+   * `leads.ai_disabled_at`). Identidade do evento de desligamento — usado pela
+   * prova de handoff do mesmo turno (same-turn-handoff.ts).
+   */
+  disabledAt?: string | null;
+  /** `human_paused_until` no futuro, mesmo quando `ai_disabled` decide antes. */
+  humanPauseActive?: boolean;
 }
 
 /**
@@ -72,7 +80,7 @@ export async function isCopilotCanceled(
     // human_paused_until (pausa temporária quando humano assume — RC human-pause).
     const { data: pref, error: prefErr } = await supabase
       .from("phone_ai_preferences")
-      .select("ai_disabled, human_paused_until, set_by")
+      .select("ai_disabled, human_paused_until, set_by, set_at")
       .eq("organization_id", organizationId)
       .eq("normalized_phone", normalized)
       .maybeSingle();
@@ -80,6 +88,9 @@ export async function isCopilotCanceled(
     if (prefErr) {
       console.warn("[isCopilotCanceled] phone_ai_preferences read failed:", prefErr.message);
     } else if (pref) {
+      const humanPauseActive = Boolean(
+        pref.human_paused_until && new Date(pref.human_paused_until as string) > new Date(),
+      );
       // ai_disabled (toggle permanente) tem prioridade sobre a pausa temporária.
       if (pref.ai_disabled) {
         // set_by IS NULL → desligamento em massa do sistema (reativável no inbound).
@@ -89,16 +100,19 @@ export async function isCopilotCanceled(
           ai_disabled: true,
           source: "phone_ai_preferences",
           systemDisabled: pref.set_by == null,
+          disabledAt: (pref.set_at as string | null) ?? null,
+          humanPauseActive,
         };
       }
       // Pausa humana ativa: human_paused_until no futuro.
-      if (pref.human_paused_until && new Date(pref.human_paused_until as string) > new Date()) {
+      if (humanPauseActive) {
         return {
           canceled: true,
           ai_disabled: false,
           source: "human_pause",
           systemDisabled: false,
           reason: "human_pause_active",
+          humanPauseActive: true,
         };
       }
       return { canceled: false, ai_disabled: false, source: "phone_ai_preferences", systemDisabled: false };
@@ -126,6 +140,7 @@ export async function isCopilotCanceled(
         source: "leads",
         // Sem ai_disabled_at = assinatura do bulk SQL (toggle manual sempre grava _at).
         systemDisabled: disabled && lead.ai_disabled_at == null,
+        disabledAt: disabled ? ((lead.ai_disabled_at as string | null) ?? null) : null,
       };
     }
 
