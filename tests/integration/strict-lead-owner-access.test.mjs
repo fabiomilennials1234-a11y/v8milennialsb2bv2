@@ -10,6 +10,8 @@ const { PGlite } = require('@electric-sql/pglite');
 const read = p => readFileSync(new URL(p, import.meta.url), 'utf8');
 const migration = read('../../supabase/migrations/20271117000101_strict_lead_owner_access.sql');
 const rollback = read('../../supabase/migrations/rollback/20271117000101_strict_lead_owner_access.sql');
+const readers = read('../../supabase/migrations/20271117000102_strict_lead_owner_readers.sql');
+const readersRollback = read('../../supabase/migrations/rollback/20271117000102_strict_lead_owner_readers.sql');
 const id = n => `10000000-0000-0000-0000-${String(n).padStart(12, '0')}`;
 const orgA = id(1), orgB = id(2);
 const admin = id(11), member = id(12), peer = id(13), other = id(14), inactive = id(15), master = id(16);
@@ -28,6 +30,8 @@ async function setup(enableMigration = true) {
     ALTER TABLE leads ADD COLUMN notes text, ADD COLUMN responsible_id uuid,
       ADD COLUMN responsible_user_id uuid, ADD COLUMN claimed_by uuid;
     ALTER TABLE pipeline_entries ADD COLUMN deal_id uuid, ADD COLUMN notes text;
+    CREATE TABLE deals(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),organization_id uuid,source_lead_id uuid);
+    GRANT SELECT,INSERT ON deals TO authenticated,service_role;
     CREATE TABLE lead_owners (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), organization_id uuid,
       lead_id uuid, team_member_id uuid, role text);
     ALTER TABLE lead_owners ENABLE ROW LEVEL SECURITY;
@@ -84,6 +88,87 @@ const leads = org => `SELECT id FROM leads WHERE organization_id='${org}' ORDER 
 const entries = org => `SELECT lead_id AS id FROM negocio_projetado WHERE organization_id='${org}' ORDER BY lead_id`;
 const ids = rows => rows.map(r => r.id);
 const denied = error => error.code === '42501';
+
+async function setupReaders(db) {
+  await db.exec(read('./fixtures/strict-lead-readers-schema.sql'));
+  await db.exec(read('./fixtures/strict-lead-reader-functions.sql'));
+  await db.exec(`
+    GRANT SELECT ON team_members TO authenticated;
+    CREATE POLICY fixture_team ON team_members FOR SELECT TO authenticated USING(true);
+    INSERT INTO pipelines VALUES ('${id(60)}','${orgA}','propostas','system');
+    CREATE TRIGGER snapshot_responsibles BEFORE INSERT ON pipeline_entries
+      FOR EACH ROW EXECUTE FUNCTION pipeline_entries_snapshot_responsibles();
+    UPDATE leads SET normalized_phone='5511'||right(id::text,8),phone='5511'||right(id::text,8);
+    INSERT INTO next_best_actions(organization_id,lead_id,title,reason,priority)
+      SELECT organization_id,id,'Action '||id,'Private reason',10 FROM leads;
+    INSERT INTO field_changes(organization_id,entity_type,entity_id,field_name,new_value)
+      SELECT organization_id,'lead',id,'notes','private note' FROM leads;
+    INSERT INTO whatsapp_messages(organization_id,lead_id,normalized_phone,phone_number,content,search_tsv)
+      SELECT organization_id,NULL,normalized_phone,phone,'Contrato reservado',to_tsvector('portuguese','Contrato reservado') FROM leads;
+  `);
+}
+
+test('actual definer readers, related data, phone-only messages, service and rollback', async () => {
+  const db=await setup();
+  try {
+    await setupReaders(db);
+    const uf = `SELECT id FROM get_leads_by_uf('RS',60,'${orgA}') ORDER BY id`;
+    const actions = `SELECT lead_id AS id FROM get_next_best_actions(100,'${orgA}') ORDER BY lead_id`;
+    const fields = `SELECT * FROM get_lead_field_changes('${leadPeer}',50)`;
+    const messages = `SELECT normalized_phone FROM whatsapp_messages WHERE organization_id='${orgA}' ORDER BY normalized_phone`;
+    const search = `SELECT phone_number FROM search_messages('${orgA}','contrato',100,0) ORDER BY phone_number`;
+    const health = `SELECT get_funnel_health_stage_leads('${orgA}','2000-01-01','2100-01-01','entraram') AS data`;
+    const productivity = `SELECT get_productivity_activity_leads('${orgA}','2000-01-01','2100-01-01','novos_leads') AS data`;
+    assert.equal((await asUser(db,member,uf)).length,4);
+    assert.equal((await asUser(db,member,actions)).length,4);
+    assert.equal((await asUser(db,member,fields)).length,1);
+    assert.equal((await asUser(db,member,search)).length,4);
+    const definitions=`SELECT oid::regprocedure::text AS signature,pg_get_functiondef(oid) AS definition FROM pg_proc WHERE pronamespace='public'::regnamespace ORDER BY oid`;
+    const before=(await db.query(definitions)).rows;
+    await db.exec(readers);
+    // Backend push checks the recipient, regardless of the worker's JWT.
+    await db.exec(`INSERT INTO user_roles(user_id,role) VALUES('${member}','admin')`);
+    assert.equal((await db.query(`SELECT private.chat_scope_for_recipient('${member}','${orgA}','${leadPeer}',NULL) AS allowed`)).rows[0].allowed,false);
+    assert.equal((await db.query(`SELECT private.chat_scope_for_recipient('${member}','${orgA}','${leadOwn}',NULL) AS allowed`)).rows[0].allowed,true);
+    await db.exec(`INSERT INTO messaging_channels VALUES('${id(80)}','${orgA}','instagram');
+      INSERT INTO lead_social_identities VALUES('${id(81)}','${orgA}','${leadOwn}','instagram','social:own');`);
+    assert.equal((await asUser(db,member,`SELECT private.strict_channel_visible('${orgA}',NULL,'${id(80)}','social:own',NULL) AS allowed`))[0].allowed,true);
+    assert.equal((await asUser(db,member,`SELECT private.strict_channel_visible('${orgA}',NULL,'${id(80)}','social:other',NULL) AS allowed`))[0].allowed,false);
+    assert.equal((await asUser(db,member,`SELECT private.strict_channel_visible('${orgA}',NULL,NULL,'551100000031',NULL) AS allowed`))[0].allowed,true);
+    assert.deepEqual(ids(await asUser(db,member,uf)),[leadOwn,leadPipe]);
+    assert.deepEqual(ids(await asUser(db,member,actions)),[leadOwn,leadPipe]);
+    assert.deepEqual(await asUser(db,member,fields),[]);
+    assert.equal((await asUser(db,member,messages)).length,2);
+    assert.equal((await asUser(db,member,search)).length,2);
+    assert.equal((await asUser(db,member,health))[0].data.length,2);
+    assert.equal((await asUser(db,member,productivity))[0].data.length,2);
+    for (const sql of [uf,actions,search]) assert.equal((await asUser(db,admin,sql)).length,4);
+    assert.equal((await asUser(db,admin,health))[0].data.length,4);
+    assert.equal((await asUser(db,null,health,'service_role'))[0].data.length,4);
+    assert.equal((await asUser(db,other,`SELECT * FROM get_leads_by_uf('RS',60,'${orgB}')`)).length,1);
+    assert.deepEqual(await asUser(db,other,uf),[]);
+    await assert.rejects(asUser(db,member,'SELECT * FROM private.leads'),denied);
+    await db.exec(readersRollback);
+    assert.deepEqual((await db.query(definitions)).rows,before,'rollback restores every original RPC exactly');
+    assert.equal((await asUser(db,member,search)).length,4);
+  } finally { await db.close(); }
+});
+
+test('real proposal snapshot permits inherited owners, but rejects self-claim and new assignees', async () => {
+  const db=await setup();
+  try {
+    await setupReaders(db);
+    const insert=(lead,assigned,metadata='{}') => `INSERT INTO pipeline_entries(organization_id,lead_id,pipeline_id,assigned_to,metadata)
+      VALUES('${orgA}','${lead}','${id(60)}',${assigned ? `'${assigned}'` : 'NULL'},'${metadata}') RETURNING metadata`;
+    const result=await asUser(db,member,insert(leadOwn,tmMember));
+    assert.equal(result[0].metadata.sale_responsible_id,tmMember);
+    assert.equal((await asUser(db,member,insert(leadPipe,tmMember))).length,1);
+    for(const sql of [insert(leadFree,tmMember),insert(leadOwn,tmPeer),insert(leadOwn,tmMember,JSON.stringify({closer_id:tmPeer}))])
+      await assert.rejects(asUser(db,member,sql),denied);
+    await db.exec(`INSERT INTO deals VALUES('${id(70)}','${orgA}','${leadOwn}')`);
+    assert.equal((await asUser(db,member,`UPDATE pipeline_entries SET deal_id='${id(70)}' WHERE id='${id(41)}' RETURNING id`)).length,1);
+  } finally { await db.close(); }
+});
 
 test('baseline reproduces the exposure; opt-in restricts actual rows and projections', async () => {
   const db = await setup(false);

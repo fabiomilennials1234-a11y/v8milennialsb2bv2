@@ -12,6 +12,8 @@ AS $$
   SELECT ARRAY(
     SELECT o.id FROM public.organizations o
     WHERE o.feature_flags @> '{"strict_lead_owner_access":true}'::jsonb
+      AND COALESCE(auth.role(), '') <> 'service_role'
+      AND (auth.uid() IS NOT NULL OR COALESCE(auth.role(), '') IN ('authenticated', 'anon'))
       AND NOT COALESCE(public.is_master_user(), false)
       AND NOT EXISTS (
         SELECT 1 FROM public.team_members tm
@@ -57,6 +59,25 @@ REVOKE ALL ON FUNCTION private.strict_lead_is_owned(uuid, uuid) FROM PUBLIC, ano
 GRANT USAGE ON SCHEMA private TO authenticated, service_role;
 GRANT EXECUTE ON FUNCTION private.strict_lead_member_orgs() TO authenticated, service_role;
 GRANT EXECUTE ON FUNCTION private.strict_lead_is_owned(uuid, uuid) TO authenticated, service_role;
+
+-- Used only when opening a NEW deal for a lead already visible to the caller.
+-- Accept self or an existing owner, never a new assignee.
+CREATE FUNCTION private.strict_lead_owner_allowed(p_org uuid, p_lead uuid, p_member text)
+RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER SET search_path = '' AS $$
+  SELECT p_member IS NULL OR EXISTS (
+    SELECT 1 FROM public.team_members tm JOIN public.leads l ON l.organization_id=tm.organization_id
+    WHERE tm.id::text=p_member AND tm.organization_id=p_org AND tm.is_active
+      AND l.id=p_lead AND (
+        tm.user_id=auth.uid()
+        OR tm.id IN (l.pre_sale_responsible_id,l.sale_responsible_id,l.sdr_id,l.closer_id,l.responsible_id)
+        OR EXISTS (SELECT 1 FROM public.lead_owners o WHERE o.lead_id=l.id AND o.organization_id=p_org AND o.team_member_id=tm.id)
+        OR EXISTS (SELECT 1 FROM public.pipeline_entries pe WHERE pe.lead_id=l.id AND pe.organization_id=p_org
+          AND (pe.assigned_to=tm.id OR tm.id::text IN (pe.metadata->>'pre_sale_responsible_id',pe.metadata->>'sale_responsible_id',pe.metadata->>'sdr_id',pe.metadata->>'closer_id',pe.metadata->>'responsible_id')))
+      )
+  )
+$$;
+REVOKE ALL ON FUNCTION private.strict_lead_owner_allowed(uuid,uuid,text) FROM PUBLIC,anon;
+GRANT EXECUTE ON FUNCTION private.strict_lead_owner_allowed(uuid,uuid,text) TO authenticated,service_role;
 
 -- Restrictive policies intersect with existing tenant/plan policies. An admin
 -- from another org, gestor, or per-member view_all override cannot widen this.
@@ -126,12 +147,31 @@ BEGIN
     RAISE EXCEPTION 'Apenas administradores podem atribuir responsáveis nesta organização.' USING ERRCODE = '42501';
   END IF;
 
+  IF TG_OP='INSERT' AND TG_TABLE_NAME='pipeline_entries' THEN
+    IF NOT private.strict_lead_is_owned(NEW.organization_id, NEW.lead_id)
+       OR NOT private.strict_lead_owner_allowed(NEW.organization_id, NEW.lead_id, NEW.assigned_to::text) THEN
+      RAISE EXCEPTION 'Apenas administradores podem atribuir responsáveis nesta organização.' USING ERRCODE='42501';
+    END IF;
+    FOREACH v_key IN ARRAY ARRAY['pre_sale_responsible_id','sale_responsible_id','sdr_id','closer_id','responsible_id'] LOOP
+      IF NOT private.strict_lead_owner_allowed(NEW.organization_id, NEW.lead_id, NEW.metadata->>v_key) THEN
+        RAISE EXCEPTION 'Apenas administradores podem atribuir responsáveis nesta organização.' USING ERRCODE='42501';
+      END IF;
+    END LOOP;
+    RETURN NEW;
+  END IF;
+
   IF TG_OP = 'UPDATE' AND (
     v_new->'organization_id' IS DISTINCT FROM v_old->'organization_id'
     OR v_new->'id' IS DISTINCT FROM v_old->'id'
     OR (TG_TABLE_NAME = 'pipeline_entries' AND (
       v_new->'lead_id' IS DISTINCT FROM v_old->'lead_id'
-      OR v_new->'deal_id' IS DISTINCT FROM v_old->'deal_id'
+      OR (v_new->'deal_id' IS DISTINCT FROM v_old->'deal_id' AND NOT (
+        v_old->>'deal_id' IS NULL AND EXISTS (
+          SELECT 1 FROM public.deals d WHERE d.id=(v_new->>'deal_id')::uuid
+            AND d.organization_id=(v_new->>'organization_id')::uuid
+            AND d.source_lead_id=(v_new->>'lead_id')::uuid
+        )
+      ))
     ))
   ) THEN
     RAISE EXCEPTION 'Apenas administradores podem alterar os vínculos deste registro.' USING ERRCODE = '42501';

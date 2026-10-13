@@ -8,5 +8,6 @@ DROP POLICY IF EXISTS strict_owner_leads_update ON public.leads;
 DROP POLICY IF EXISTS strict_owner_leads_delete ON public.leads;
 DROP POLICY IF EXISTS strict_owner_pipeline_entries ON public.pipeline_entries;
 DROP FUNCTION IF EXISTS private.guard_strict_lead_assignment();
+DROP FUNCTION IF EXISTS private.strict_lead_owner_allowed(uuid,uuid,text);
 DROP FUNCTION IF EXISTS private.strict_lead_is_owned(uuid, uuid);
 DROP FUNCTION IF EXISTS private.strict_lead_member_orgs();
