@@ -1,4 +1,5 @@
 import { useMemo, useState, type ReactNode } from "react";
+import { toast } from "sonner";
 import { DraggableKanbanBoard, type KanbanColumn } from "@/modules/pipelines/components/kanban/DraggableKanbanBoard";
 import { ExportStageDialog } from "@/modules/pipelines/components/kanban/ExportStageDialog";
 import { CardEffectsHost, LeadCard, useEntradasEmDesfecho, type LeadCardData, type LeadMetrics } from "@/modules/leads";
@@ -6,10 +7,17 @@ import { StageWorkflowsBadge } from "@/modules/pipelines/components/kanban/Stage
 import { MergedFunnelCardActions } from "@/modules/pipelines/components/kanban/MergedFunnelCardActions";
 import { useCustomPipeStageWorkflows, useCustomPipeWorkflowCounts } from "@/modules/workflows/hooks/useStageWorkflows";
 import type { StageData } from "@/modules/pipelines/hooks/model/usePaginatedPipeline";
+import {
+  fetchStageEntryRefs,
+  SELECT_ALL_STAGE_CAP,
+  type FunilFilterParams,
+  type StageEntryRef,
+} from "@/modules/pipelines/hooks/model/usePaginatedFunil";
 import { useCanDo } from "@/modules/identity";
 import { useBulkSelection } from "@/shared/hooks/useBulkSelection";
 import { BulkActionBar } from "@/modules/leads/components/bulk-actions/BulkActionBar";
 import { useCreateAcaoDoDia } from "@/modules/engagement/hooks/useAcoesDoDia";
+import { notifyError } from "@/shared/errors";
 import type { CustomPipelineStage } from "@/contracts/pipe";
 import { projectSaleValue } from "./funil-card-value";
 import { cardClosedAt, cardOutcome } from "./funil-card-outcome";
@@ -90,6 +98,12 @@ interface FunilKanbanProps {
   renderStageBadge?: (col: { id: string; title: string }) => ReactNode;
   /** "+" ao pé da coluna — só onde a página sabe criar direto na etapa. */
   onCreateInStage?: (stage: CustomPipelineStage) => void;
+  /**
+   * Recorte ativo do board (`usePaginatedFunil().filterParams`). Presente = o
+   * menu da coluna oferece "Selecionar todos desta etapa", que busca a etapa
+   * inteira com ESTE recorte — o mesmo que a coluna pagina.
+   */
+  filterParams?: FunilFilterParams;
 }
 
 function FunilStageBadge({
@@ -142,6 +156,7 @@ export function FunilKanban({
   onDeleteAllLeads,
   renderStageBadge,
   onCreateInStage,
+  filterParams,
 }: FunilKanbanProps) {
   const createAcaoDoDia = useCreateAcaoDoDia();
   const { allowed: canMovePipe } = useCanDo("move_pipe_record");
@@ -151,6 +166,38 @@ export function FunilKanban({
   const { data: workflowCounts = {} } = useCustomPipeWorkflowCounts(pipelineId);
   const [stageToExport, setStageToExport] = useState<{ id: string; title: string; count: number } | null>(null);
   const bulk = useBulkSelection();
+  // Negócios buscados pelo "Selecionar todos desta etapa" — inclusive os que a
+  // coluna ainda não carregou. A barra filtra `leadIds` pela seleção e age
+  // sobre `entryIds`: id que não estiver nessas listas some em silêncio.
+  const [fetchedRefs, setFetchedRefs] = useState<StageEntryRef[]>([]);
+  const [selectingStageId, setSelectingStageId] = useState<string | null>(null);
+
+  const selectAllStage = async (stageKey: string) => {
+    if (!filterParams) return;
+    setSelectingStageId(stageKey);
+    try {
+      const { refs, truncated } = await fetchStageEntryRefs({ pipelineId, stageKey, filterParams });
+      setFetchedRefs((prev) => {
+        const known = new Set(prev.map((r) => r.entryId));
+        return [...prev, ...refs.filter((r) => !known.has(r.entryId))];
+      });
+      bulk.addMany(refs.map((r) => r.leadId));
+      if (truncated) {
+        toast.warning(
+          `A etapa passa de ${SELECT_ALL_STAGE_CAP.toLocaleString("pt-BR")} negócios — selecionamos os ${SELECT_ALL_STAGE_CAP.toLocaleString("pt-BR")} mais recentes.`,
+        );
+      }
+    } catch (err) {
+      notifyError(err, { fallback: "Não foi possível selecionar a etapa.", context: { feature: "funil-selecionar-etapa" } });
+    } finally {
+      setSelectingStageId(null);
+    }
+  };
+
+  const clearSelection = () => {
+    bulk.clearSelection();
+    setFetchedRefs([]);
+  };
 
   // Cards ganhos e perdidos ficam empilhados na coluna, por mês do desfecho.
   // Exceção: o card cuja onda de ganho/perda ainda vai tocar fica solto até
@@ -181,7 +228,7 @@ export function FunilKanban({
   );
 
   // Ordered lead ids (shift-select em range) — só o que está CARREGADO.
-  const allLeadIds = useMemo(
+  const loadedLeadIds = useMemo(
     () =>
       stages.flatMap((s) =>
         ((stageData[s.stage_key]?.items ?? []) as FunilEntry[])
@@ -190,6 +237,20 @@ export function FunilKanban({
       ),
     [stages, stageData],
   );
+
+  // Negócios que a barra enxerga: carregados + buscados pela seleção da etapa.
+  const knownRefs = useMemo(() => {
+    const byEntry = new Map<string, string>();
+    for (const s of stages) {
+      for (const e of (stageData[s.stage_key]?.items ?? []) as FunilEntry[]) {
+        if (e.lead_id) byEntry.set(e.id, e.lead_id);
+      }
+    }
+    for (const r of fetchedRefs) if (!byEntry.has(r.entryId)) byEntry.set(r.entryId, r.leadId);
+    return byEntry;
+  }, [stages, stageData, fetchedRefs]);
+
+  const barLeadIds = useMemo(() => [...new Set(knownRefs.values())], [knownRefs]);
 
   // Papel semântico por `stage_key`, resolvido no CLIENTE a partir das etapas
   // que o board já carregou. É o que aposenta a lista de slugs chumbados do
@@ -298,6 +359,8 @@ export function FunilKanban({
         disabled={!canMovePipe}
         closedGrouping={closedGrouping}
         onDeleteAllLeads={onDeleteAllLeads}
+        onSelectAllStage={filterParams ? (stageKey) => void selectAllStage(stageKey) : undefined}
+        selectingStageId={selectingStageId}
         onCreateInColumn={
           onCreateInStage
             ? (stageKey) => {
@@ -354,7 +417,7 @@ export function FunilKanban({
             selected={bulk.isSelected(card.leadId || "")}
             onSelect={(e) => {
               const lid = card.leadId || "";
-              if (e.shiftKey) bulk.toggleRange(lid, allLeadIds);
+              if (e.shiftKey) bulk.toggleRange(lid, loadedLeadIds);
               else bulk.toggle(lid);
             }}
             onClick={() => {
@@ -388,20 +451,19 @@ export function FunilKanban({
       <CardEffectsHost />
       <BulkActionBar
         selectedIds={bulk.selectedIds}
-        onClear={bulk.clearSelection}
-        leadIds={allLeadIds}
+        onClear={clearSelection}
+        leadIds={barLeadIds}
         escopoFunil={{
           pipelineId,
-          entryIds: stages.flatMap((s) =>
-            ((stageData[s.stage_key]?.items ?? []) as FunilEntry[])
-              .filter((entry) => !!entry.lead_id && bulk.selectedIds.has(entry.lead_id))
-              .map((entry) => entry.id)),
+          entryIds: [...knownRefs]
+            .filter(([, leadId]) => bulk.selectedIds.has(leadId))
+            .map(([entryId]) => entryId),
         }}
         onDisparar={
           onDisparar
             ? (leadIds) => {
                 onDisparar(leadIds);
-                bulk.clearSelection();
+                clearSelection();
               }
             : undefined
         }

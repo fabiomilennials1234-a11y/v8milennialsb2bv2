@@ -241,7 +241,69 @@ export function usePaginatedFunil(
     isLoading,
     isLoadingCounts: countsQuery.isLoading,
     organizationId,
+    /** Recorte ativo — quem busca a etapa inteira (selecionar todos) reusa o MESMO. */
+    filterParams,
   };
+}
+
+export type FunilFilterParams = ReturnType<typeof sharedRpcFilterParams>;
+
+/** Teto do "Selecionar todos desta etapa": acima disso a barra age sobre os primeiros. */
+export const SELECT_ALL_STAGE_CAP = 5_000;
+/** Linhas por ida — o PostgREST corta resposta de RPC em 1.000 (db-max-rows). */
+const SELECT_ALL_PAGE_SIZE = 1_000;
+
+export interface StageEntryRef {
+  entryId: string;
+  leadId: string;
+}
+
+/**
+ * Todos os negócios de UMA etapa dentro do recorte ativo, inclusive os que a
+ * coluna ainda não carregou. Pagina `get_pipeline_page` pelo mesmo cursor
+ * (`created_at` do último) que a coluna usa, com os mesmos filtros — o que se
+ * seleciona é exatamente o que a coluna mostraria rolando até o fim.
+ *
+ * Herda o limite do cursor estrito (`created_at < cursor`): entradas com o
+ * MESMO `created_at` na fronteira de uma página de 1.000 ficam de fora, como
+ * já ficam no "carregar mais" da coluna.
+ */
+export async function fetchStageEntryRefs({
+  pipelineId,
+  stageKey,
+  filterParams,
+  cap = SELECT_ALL_STAGE_CAP,
+  pageSize = SELECT_ALL_PAGE_SIZE,
+}: {
+  pipelineId: string;
+  stageKey: string;
+  filterParams: FunilFilterParams;
+  cap?: number;
+  pageSize?: number;
+}): Promise<{ refs: StageEntryRef[]; truncated: boolean }> {
+  const refs: StageEntryRef[] = [];
+  let cursor: string | null = null;
+  for (;;) {
+    const { data, error } = await supabase.rpc(
+      "get_pipeline_page",
+      rpcArgs({
+        ...filterParams,
+        p_pipeline_id: pipelineId,
+        p_stage_id: stageKey,
+        p_page_size: pageSize,
+        p_cursor: cursor,
+      }),
+    );
+    if (error) throw error;
+    const rows = (data ?? []) as Array<{ id: string; lead_id: string | null; created_at: string }>;
+    for (const row of rows) {
+      if (!row.lead_id) continue;
+      if (refs.length >= cap) return { refs, truncated: true };
+      refs.push({ entryId: row.id, leadId: row.lead_id });
+    }
+    if (rows.length < pageSize) return { refs, truncated: false };
+    cursor = rows[rows.length - 1].created_at;
+  }
 }
 
 /** Variáveis do move na página unificada. */

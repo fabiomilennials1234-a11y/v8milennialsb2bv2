@@ -321,7 +321,7 @@ function FunilPageInner() {
     [controller.paginatedFilters, controller.metricsRange, extra, closedStatusKeys, timeParams],
   );
 
-  const { stageData, isLoading: loadingBoard } = usePaginatedFunil(pipeline?.id, stages, filters);
+  const { stageData, isLoading: loadingBoard, filterParams } = usePaginatedFunil(pipeline?.id, stages, filters);
 
   const allItems = useMemo(
     () => stages.flatMap((s) => stageData[s.stage_key]?.items ?? []),
@@ -909,6 +909,7 @@ function FunilPageInner() {
                 pipelineId={pipeline.id}
                 stages={stages}
                 stageData={stageData}
+                filterParams={filterParams}
                 onMove={handleMove}
                 onRemoveEntry={canDeleteCards ? (id) => setRemoveEntryId(id) : undefined}
                 onClickEntry={(entry) => openDeal(entry.id, entry.lead_id)}
