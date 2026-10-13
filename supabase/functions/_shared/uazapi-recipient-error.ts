@@ -1,5 +1,3 @@
-// deno-lint-ignore-file no-explicit-any
-
 /**
  * Uazapi signals "recipient has no WhatsApp account" — a permanent,
  * client-addressable condition — with HTTP 500 on /send/text and /send/media,
@@ -18,7 +16,7 @@ const TEXT_MARKER = "is not on whatsapp";
 
 export function isRecipientNotOnWhatsApp(errBody: unknown): boolean {
   if (typeof errBody !== "object" || errBody === null) return false;
-  const body = errBody as Record<string, any>;
+  const body = errBody as Record<string, unknown>;
 
   for (const key of [body.error_key, body.code, body.error_code]) {
     if (typeof key === "string" && KEY_PATTERN.test(key)) return true;
