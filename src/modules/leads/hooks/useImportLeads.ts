@@ -288,6 +288,8 @@ export interface EdgeFunctionReport {
   incomplete?: number;
   errors: { row: number; reason: string }[];
   distribution?: Record<string, number>;
+  /** Presente quando o import levou etiquetas. */
+  tags?: { leads: number; failed: number };
 }
 
 interface ParsedLead {
@@ -1319,7 +1321,7 @@ export function useImportLeads() {
         closer_id: options.closerId,
         metrics_period_month: options.metricsPeriodMonth,
         metrics_period_year: options.metricsPeriodYear,
-        tag_ids: options.tagIds && options.tagIds.length > 0 ? options.tagIds : undefined,
+        tag_ids: options.tagIds?.length ? options.tagIds : undefined,
       });
 
       setLastReport(report);
@@ -1375,7 +1377,7 @@ export function useImportLeads() {
         custom_stages: options.stages,
         members: options.members,
         sdr_id: options.sdrId,
-        tag_ids: options.tagIds && options.tagIds.length > 0 ? options.tagIds : undefined,
+        tag_ids: options.tagIds?.length ? options.tagIds : undefined,
       });
 
       setLastReport(report);
@@ -1440,7 +1442,7 @@ export function useImportLeads() {
         closer_id: options.closerId,
         metrics_period_month: options.metricsPeriodMonth,
         metrics_period_year: options.metricsPeriodYear,
-        tag_ids: options.tagIds && options.tagIds.length > 0 ? options.tagIds : undefined,
+        tag_ids: options.tagIds?.length ? options.tagIds : undefined,
       });
 
       setLastReport(report);
@@ -1505,7 +1507,7 @@ export function useImportLeads() {
         sdr_id: options.responsibleId || undefined,
         metrics_period_month: options.metricsPeriodMonth,
         metrics_period_year: options.metricsPeriodYear,
-        tag_ids: options.tagIds && options.tagIds.length > 0 ? options.tagIds : undefined,
+        tag_ids: options.tagIds?.length ? options.tagIds : undefined,
       });
 
       setLastReport(report);

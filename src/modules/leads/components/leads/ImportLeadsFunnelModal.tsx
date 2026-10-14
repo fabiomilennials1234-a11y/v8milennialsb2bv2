@@ -15,6 +15,7 @@ import {
   type FunnelDestination,
 } from "../../hooks/useImportLeads";
 import { useLeadCustomFields } from "../../hooks/useLeadCustomFields";
+import { ImportTagsField, ImportTagsOutcome } from "./ImportTagsField";
 import { useCanDo } from "@/modules/identity";
 import { usePipeOps } from "../../pipe-ops";
 import { NOME_DE_FABRICA } from "@/contracts/pipe";
@@ -108,6 +109,7 @@ export function ImportLeadsFunnelContent({
   const [selectedStageKey, setSelectedStageKey] = useState<string>("");
   const [selectedResponsibleId, setSelectedResponsibleId] = useState<string>("");
   const [selectedMetricsPeriod, setSelectedMetricsPeriod] = useState<string>("current");
+  const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const pipelineType = PIPELINE_TYPE[destination];
@@ -196,6 +198,7 @@ export function ImportLeadsFunnelContent({
         sdrId: selectedResponsibleId === "none" ? undefined : selectedResponsibleId || undefined,
         metricsPeriodMonth: metricsOpt?.month,
         metricsPeriodYear: metricsOpt?.year,
+        tagIds: selectedTagIds,
       });
       setStep("complete");
       await Promise.all([
@@ -220,6 +223,7 @@ export function ImportLeadsFunnelContent({
     setSelectedStageKey("");
     setSelectedResponsibleId("");
     setSelectedMetricsPeriod("current");
+    setSelectedTagIds([]);
     resetImport();
     onDone?.();
   };
@@ -470,6 +474,7 @@ export function ImportLeadsFunnelContent({
                   </SelectContent>
                 </Select>
               </div>
+              <ImportTagsField value={selectedTagIds} onChange={setSelectedTagIds} totalLeads={totalLeads} />
               <div className="flex justify-end gap-2 pt-4 border-t">
                 <Button variant="outline" onClick={() => setStep("upload")}>
                   Voltar
@@ -565,6 +570,8 @@ export function ImportLeadsFunnelContent({
                   )}
                 </div>
               )}
+
+              <ImportTagsOutcome report={lastReport} />
 
               <p className="text-sm text-center text-muted-foreground">
                 Os leads já estão em {nomeDoDestino}.

@@ -321,6 +321,7 @@ export { CustomFieldsManager } from "./components/leads/CustomFieldsManager";
 export { ExportLeadsContent } from "./components/leads/ExportLeadsModal";
 export { ImportLeadsFunnelContent } from "./components/leads/ImportLeadsFunnelModal";
 export { ImportLeadsContent, ImportLeadsModal } from "./components/leads/ImportLeadsModal";
+export { ImportTagsField, ImportTagsOutcome } from "./components/leads/ImportTagsField";
 
 // ── Components: lead form internals usadas cross-module ────────────────────
 export { LeadDetailContent } from "./components/lead/LeadDetailContent";

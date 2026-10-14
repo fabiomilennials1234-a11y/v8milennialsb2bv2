@@ -28,7 +28,7 @@ import {
   type FilePreviewResult,
 } from "../../hooks/useImportLeads";
 import { useLeadCustomFields } from "../../hooks/useLeadCustomFields";
-import { useTags } from "../../hooks/useTags";
+import { ImportTagsField, ImportTagsOutcome } from "./ImportTagsField";
 import { useCanDo, useTeamMembers } from "@/modules/identity";
 import { downloadLeadsImportTemplate } from "@/lib/leadsImportTemplate";
 import { toast } from "sonner";
@@ -103,7 +103,6 @@ export function ImportLeadsContent({ onDone }: ImportLeadsContentProps) {
 
   const queryClient = useQueryClient();
   const { data: members = [] } = useTeamMembers();
-  const { data: allTags = [] } = useTags();
   const { parseCSV, importLeadsOnly, resetImport, progress, result, lastReport } = useImportLeads();
   const { data: customFields = [] } = useLeadCustomFields();
   const { allowed: canImport, isLoading: permLoading } = useCanDo("import_leads");
@@ -181,7 +180,7 @@ export function ImportLeadsContent({ onDone }: ImportLeadsContentProps) {
         responsibleId: selectedResponsibleId === "none" ? undefined : selectedResponsibleId || undefined,
         metricsPeriodMonth: metricsOpt?.month,
         metricsPeriodYear: metricsOpt?.year,
-        tagIds: selectedTagIds.length > 0 ? selectedTagIds : undefined,
+        tagIds: selectedTagIds,
       });
       setStep("complete");
       await queryClient.invalidateQueries({ queryKey: ["leads"] });
@@ -423,38 +422,7 @@ export function ImportLeadsContent({ onDone }: ImportLeadsContentProps) {
             </Select>
           </div>
 
-          <div className="space-y-2">
-            <Label>Adicionar tags aos leads</Label>
-            <p className="text-xs text-muted-foreground -mt-1">
-              Selecione uma ou mais tags para aplicar a todos os leads importados.
-            </p>
-            {allTags.length === 0 ? (
-              <p className="text-xs text-muted-foreground italic">Nenhuma tag cadastrada ainda.</p>
-            ) : (
-              <div className="flex flex-wrap gap-2">
-                {allTags.map((tag) => (
-                  <button
-                    key={tag.id}
-                    type="button"
-                    onClick={() => {
-                      setSelectedTagIds((prev) =>
-                        prev.includes(tag.id)
-                          ? prev.filter((id) => id !== tag.id)
-                          : [...prev, tag.id]
-                      );
-                    }}
-                    className={`px-3 py-1.5 rounded-full text-sm font-medium transition-all ${
-                      selectedTagIds.includes(tag.id)
-                        ? "bg-primary text-primary-foreground ring-2 ring-primary/50"
-                        : "bg-muted text-muted-foreground hover:bg-muted/80"
-                    }`}
-                  >
-                    {tag.name}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
+          <ImportTagsField value={selectedTagIds} onChange={setSelectedTagIds} totalLeads={totalLeads} />
 
           <div className="p-3 bg-muted/50 rounded-lg">
             <p className="text-xs text-muted-foreground">
@@ -547,6 +515,8 @@ export function ImportLeadsContent({ onDone }: ImportLeadsContentProps) {
               )}
             </div>
           )}
+
+          <ImportTagsOutcome report={lastReport} />
 
           <p className="text-sm text-center text-muted-foreground">
             Os leads já estão no cadastro. Nenhum negócio foi criado.
