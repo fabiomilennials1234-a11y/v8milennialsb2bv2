@@ -356,7 +356,7 @@ A interface clássica herda o plugin: `classic/vite.config.ts` faz `mergeConfig`
 1. **Durante os 7 dias seguintes ao corte**, o EasyPanel continua de pé, como volta rápida pelo DNS (item (f)).
 2. **Passados os 7 dias**, e só então:
    1. Desative o hook de deploy **627383107** no EasyPanel. **Feito em 2026-10-14** (`active=false`, não apagado).
-   2. Pare o app no EasyPanel: `docker service scale v8_mvp_teste=0` na VPS. Não mexa em nenhum outro serviço (`calls`, n8n, `torque-lp`, `quote-documents`, `milennials_*`).
+   2. Pare o app no EasyPanel: `docker service scale v8_mvp_teste=0` na VPS. **Feito em 2026-10-14** (serviço mantido, não removido). Não mexa em nenhum outro serviço (`calls`, n8n, `torque-lp`, `quote-documents`, `milennials_*`).
 
 **Rollback depois do passo 2:** o Worker passa a ser a **única** origem do front. Para voltar à VPS é preciso fazer **as duas coisas**: escalar `v8_mvp_teste=1` (e reativar o hook 627383107, se os merges novos tiverem de chegar lá) **e** apagar as duas Worker Routes (`torquecrm.com.br/*` e `www.torquecrm.com.br/*`). Apagar só as rotas, com o serviço em zero, derruba o site.
 3. **Enquanto o `Dockerfile` existir**, o teste `build-env-drift` mantém os dois builds iguais. Ao apagar o `Dockerfile`, apague também esse teste.
