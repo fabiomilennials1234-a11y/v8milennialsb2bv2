@@ -50,3 +50,7 @@ Quando `mode === "pre_register"`:
 - `401`: JWT inválido ou `X-Internal-Api-Key` ausente/inválido.
 - `403`: Não é admin da org, `user_creation_key` não corresponde à org ou limite do plano.
 - `409`: Email já cadastrado / já convidado / já na lista de pré-cadastro.
+- `422`: Supabase Auth recusou a senha (fraca/vazada/curta/sem tipos de caractere) ou o e-mail. `message` em português, por motivo.
+- `429`: limite de requisições do Supabase Auth.
+- `400`/`502`: recusa desconhecida do Auth (4xx / 5xx). `message` genérica; detalhe técnico só em `runtime_logs` (`stage=auth_create_user`).
+- Tradução: `_shared/auth-create-error.ts` (`mapAuthCreateError`).

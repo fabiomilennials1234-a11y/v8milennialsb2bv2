@@ -17,6 +17,7 @@ import { withSecurityHeaders } from "../_shared/security-headers.ts";
 import { requireAuth, AuthError, authErrorResponse } from "../_shared/user-auth.ts";
 import { logRuntime } from "../_shared/logger.ts";
 import { evaluateSeatQuota } from "../_shared/seat-quota.ts";
+import { authCreateErrorLogDetail, mapAuthCreateError } from "../_shared/auth-create-error.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -220,17 +221,36 @@ serve(withErrorBoundary('create-org-user', async (req) => {
       user_metadata: { full_name: name || email.split("@")[0] },
     });
     if (createError) {
-      const msg = createError.message?.toLowerCase() ?? "";
-      if (msg.includes("already") || msg.includes("already been") || msg.includes("already registered")) {
-        return jsonResponse(
-          { success: false, error: "Conflict", message: "Este email já está cadastrado." },
-          409,
-          corsHeaders
-        );
+      // O Auth recusa em inglês; repassar o texto cru fazia o front mostrar erro
+      // genérico (só exibe frase PT). A tradução vive em _shared/auth-create-error.ts.
+      // O texto técnico (e-mail mascarado, sem senha) vai só para runtime_logs.
+      const mapped = mapAuthCreateError(createError);
+      if (mapped.kind !== "email_exists") {
+        const authErr = createError as unknown as { code?: unknown; status?: unknown; reasons?: unknown };
+        await logRuntime({
+          organizationId,
+          module: "auth",
+          action: "create_user",
+          status: "error",
+          entityType: "user",
+          triggeredBy: authCtx.userId,
+          errorMessage: `auth.admin.createUser recusou: ${authCreateErrorLogDetail(createError)}`,
+          payloadSnapshot: {
+            stage: "auth_create_user",
+            kind: mapped.kind,
+            auth_code: typeof authErr.code === "string" ? authErr.code : null,
+            auth_status: typeof authErr.status === "number" ? authErr.status : null,
+            reasons: Array.isArray(authErr.reasons) ? authErr.reasons : null,
+          },
+        });
       }
       return jsonResponse(
-        { success: false, error: "Create failed", message: createError.message },
-        400,
+        {
+          success: false,
+          error: mapped.kind === "email_exists" ? "Conflict" : "Create failed",
+          message: mapped.message,
+        },
+        mapped.status,
         corsHeaders
       );
     }
