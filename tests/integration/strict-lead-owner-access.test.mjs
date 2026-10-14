@@ -12,6 +12,8 @@ const migration = read('../../supabase/migrations/20271117000101_strict_lead_own
 const rollback = read('../../supabase/migrations/rollback/20271117000101_strict_lead_owner_access.sql');
 const readers = read('../../supabase/migrations/20271117000102_strict_lead_owner_readers.sql');
 const readersRollback = read('../../supabase/migrations/rollback/20271117000102_strict_lead_owner_readers.sql');
+const guard = read('../../supabase/migrations/20271117000103_strict_lead_scope_initplan_guard.sql');
+const guardRollback = read('../../supabase/migrations/rollback/20271117000103_strict_lead_scope_initplan_guard.sql');
 const id = n => `10000000-0000-0000-0000-${String(n).padStart(12, '0')}`;
 const orgA = id(1), orgB = id(2);
 const admin = id(11), member = id(12), peer = id(13), other = id(14), inactive = id(15), master = id(16);
@@ -151,6 +153,79 @@ test('actual definer readers, related data, phone-only messages, service and rol
     await db.exec(readersRollback);
     assert.deepEqual((await db.query(definitions)).rows,before,'rollback restores every original RPC exactly');
     assert.equal((await asUser(db,member,search)).length,4);
+  } finally { await db.close(); }
+});
+
+// Same rows, cheaper plan: 20271117000103 hoists the strict-org check out of the
+// per-row SECURITY DEFINER calls. Every read path must return exactly what 102 returned.
+test('initplan guard keeps every scoped read identical and rolls back to the 102 predicates', async () => {
+  const db=await setup();
+  try {
+    await setupReaders(db);
+    await db.exec(`
+      CREATE TABLE lead_tags(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),lead_id uuid,tag_id uuid);
+      ALTER TABLE lead_tags ENABLE ROW LEVEL SECURITY;
+      CREATE POLICY fixture_tags ON lead_tags FOR SELECT TO authenticated USING(true);
+      GRANT SELECT ON lead_tags,channel_messages TO authenticated;
+      ALTER TABLE channel_messages ENABLE ROW LEVEL SECURITY;
+      CREATE POLICY fixture_channel ON channel_messages FOR SELECT TO authenticated USING(true);
+      INSERT INTO lead_tags(lead_id) SELECT id FROM leads UNION ALL SELECT NULL;
+      INSERT INTO channel_messages(id,organization_id,lead_id,phone_number)
+        SELECT gen_random_uuid(),organization_id,id,normalized_phone FROM leads;
+    `);
+    await db.exec(readers);
+    const asCaller = async (user, sql) => {
+      await db.exec(`BEGIN; SELECT set_config('request.jwt.claim.sub','${user}',true);
+        SELECT set_config('request.jwt.claims','${JSON.stringify({ sub: user, role: 'authenticated' })}',true);`);
+      try { return (await db.query(sql)).rows; } finally { await db.exec('ROLLBACK'); }
+    };
+    const reads = {
+      uf: `SELECT id FROM get_leads_by_uf('RS',60,'${orgA}') ORDER BY id`,
+      search: `SELECT phone_number FROM search_messages('${orgA}','contrato',100,0) ORDER BY phone_number`,
+      rlsMessages: `SELECT normalized_phone FROM whatsapp_messages ORDER BY normalized_phone`,
+      rlsTags: `SELECT lead_id FROM lead_tags ORDER BY lead_id NULLS LAST`,
+      rlsChannel: `SELECT lead_id FROM channel_messages ORDER BY lead_id`,
+    };
+    const views = {
+      messages: `SELECT normalized_phone FROM private.whatsapp_messages ORDER BY normalized_phone`,
+      tags: `SELECT lead_id FROM private.lead_tags ORDER BY lead_id NULLS LAST`,
+      channel: `SELECT lead_id FROM private.channel_messages ORDER BY lead_id`,
+    };
+    // A denial is an outcome too: record the SQLSTATE so it is compared like rows.
+    const outcome = p => p.catch(e => ({ error: e.code }));
+    const snapshot = async () => {
+      const out = {};
+      for (const user of [member, peer, admin, other]) {
+        for (const [k, sql] of Object.entries(reads)) out[`${user}:${k}`] = await outcome(asUser(db, user, sql));
+        for (const [k, sql] of Object.entries(views)) out[`${user}:view:${k}`] = await outcome(asCaller(user, sql));
+      }
+      return out;
+    };
+    const shape = `SELECT 'view:'||viewname AS k, definition AS v FROM pg_views WHERE schemaname='private'
+      UNION ALL SELECT 'policy:'||tablename, qual FROM pg_policies WHERE policyname='strict_owner_related_select'
+      UNION ALL SELECT 'manifest:'||relation_name, predicate FROM private.strict_lead_scope_manifest ORDER BY 1`;
+    const before = await snapshot();
+    const shapeBefore = (await db.query(shape)).rows;
+    assert.deepEqual(ids(before[`${member}:uf`]), [leadOwn, leadPipe], 'control: 102 is enforcing');
+    const memberTags = before[`${member}:rlsTags`].map(r => r.lead_id);
+    assert.ok(memberTags.includes(leadOwn) && !memberTags.includes(leadPeer) && !memberTags.includes(leadFree),
+      'control: lead_ref policy hides peer and unassigned leads');
+
+    await db.exec(guard);
+    assert.deepEqual(await snapshot(), before, 'same rows for every user on every path');
+    const unguarded = (await db.query(`SELECT relation_name FROM private.strict_lead_scope_manifest
+      WHERE predicate ~ '^private\\.strict_(phone|channel|lead_ref)_visible\\('`)).rows;
+    assert.deepEqual(unguarded, [], 'no per-row strict call without the statement-level guard');
+    for (const rel of ['whatsapp_messages', 'channel_messages', 'lead_tags']) {
+      const { definition } = (await db.query(`SELECT definition FROM pg_views WHERE schemaname='private' AND viewname='${rel}'`)).rows[0];
+      assert.match(definition, /strict_lead_member_orgs/, `${rel} evaluates the org list once`);
+    }
+    await db.exec(guard);
+    assert.deepEqual(await snapshot(), before, 'idempotent');
+
+    await db.exec(guardRollback);
+    assert.deepEqual((await db.query(shape)).rows, shapeBefore, 'rollback restores the 102 predicates exactly');
+    await db.exec(readersRollback);
   } finally { await db.close(); }
 });
 
