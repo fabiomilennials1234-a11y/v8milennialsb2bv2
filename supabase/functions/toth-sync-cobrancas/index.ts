@@ -30,7 +30,11 @@
  *   - `{ data_inicio, data_fim }` em `aaaa-mm-dd` — sobrepõe a janela padrão
  *     (reconcilia só com as duas datas: com uma, o recorte do ERP é incerto);
  *   - `{ full: true }` — desliga a janela e varre tudo (reconciliação completa,
- *     a única que alcança título vencido antes da janela).
+ *     a única que alcança título vencido antes da janela). Tem cursor próprio
+ *     (`cobrancas_full_cursor`): repita até ele voltar a NULL;
+ *   - `{ full: true, daily: true }` — o que o cron da madrugada manda: igual a
+ *     `full`, mas sai sem tocar no ERP se a volta completa já fechou nas
+ *     últimas 20h (`last_cobrancas_full_sweep_at`).
  */
 
 import { createClient, SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
@@ -70,6 +74,12 @@ import {
   tothBatchEvidence,
   type ReconcileWindow,
 } from "../_shared/erp/sync/reconcile-titulos.ts";
+import {
+  dailyFullSweepDue,
+  endOfRunCursorPatch,
+  sweepCursor,
+  type SweepMode,
+} from "../_shared/erp/sync/full-sweep.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -151,7 +161,9 @@ Deno.serve(
 
     const { data: conn } = await admin
       .from("toth_connections")
-      .select("id, erp_sync_mode, status, cobrancas_cursor")
+      .select(
+        "id, erp_sync_mode, status, cobrancas_cursor, cobrancas_full_cursor, last_cobrancas_full_sweep_at",
+      )
       .eq("organization_id", organizationId)
       .maybeSingle();
 
@@ -160,6 +172,36 @@ Deno.serve(
     }
     if (conn.erp_sync_mode === "off") {
       return json({ skipped: true, reason: "sync_mode_off" }, cors);
+    }
+
+    const body = await req.clone().json().catch(() => ({}));
+    // `full` tem cursor próprio (ver `_shared/erp/sync/full-sweep.ts`): janela e
+    // varredura completa não avançam o cursor uma da outra.
+    const mode: SweepMode = body.full === true ? "full" : "window";
+
+    // `daily`: a varredura completa da madrugada. O cron dispara várias vezes
+    // por noite porque a volta precisa de várias execuções; depois que ela
+    // fecha, as de sobra saem aqui, antes de tocar no ERP.
+    if (
+      mode === "full" &&
+      body.daily === true &&
+      !dailyFullSweepDue(
+        {
+          fullCursor: (conn.cobrancas_full_cursor as string | null) ?? null,
+          lastSweepAt: (conn.last_cobrancas_full_sweep_at as string | null) ?? null,
+        },
+        new Date(),
+      )
+    ) {
+      return json(
+        {
+          success: true,
+          skipped: true,
+          reason: "daily_full_sweep_done",
+          last_full_sweep_at: conn.last_cobrancas_full_sweep_at,
+        },
+        cors,
+      );
     }
 
     const creds = await loadTothCredentials(admin, organizationId);
@@ -175,7 +217,7 @@ Deno.serve(
     // linha: os mesmos primeiros 600 clientes eram varridos a cada execução e a
     // carga nunca passava deles — 600 de 12.609, indefinidamente. `id` é
     // estável, então `> cursor` avança de verdade.
-    const cursor = conn.cobrancas_cursor as string | null;
+    const cursor = sweepCursor(mode, conn);
 
     /**
      * Busca os alvos em páginas de 1.000.
@@ -230,11 +272,12 @@ Deno.serve(
       // Fim da volta com cursor adiantado: zera e devolve, para que o próximo
       // clique (ou o cron) recomece do início em vez de ficar preso no fim.
       if (cursor) {
+        const nowIso = new Date().toISOString();
         await admin
           .from("toth_connections")
-          .update({ cobrancas_cursor: null, last_cobrancas_sync_at: new Date().toISOString() })
+          .update({ ...endOfRunCursorPatch(mode, null, nowIso), last_cobrancas_sync_at: nowIso })
           .eq("id", conn.id);
-        return json({ success: true, ciclo_completo: true, stats: null }, cors);
+        return json({ success: true, mode, ciclo_completo: true, stats: null }, cors);
       }
       return json(
         {
@@ -254,7 +297,6 @@ Deno.serve(
     // recalculasse "hoje", uma execução que cruzasse a meia-noite classificaria
     // dois títulos de mesmo vencimento de formas diferentes.
     const todayIso = new Date().toISOString().slice(0, 10);
-    const body = await req.clone().json().catch(() => ({}));
 
     // Janela LIGADA por padrão desde 18/08, quando o fornecedor esclareceu a
     // semântica: casa a parcela emitida OU que vence OU que teve alteração no
@@ -268,7 +310,7 @@ Deno.serve(
     // A mesma janela em ISO, para a reconciliação comparar com `vencimento`.
     // null = não reconcilia (janela com uma data só: o recorte do ERP é incerto).
     let reconcileWindow: ReconcileWindow | null = "full";
-    if (body.full !== true) {
+    if (mode === "window") {
       const custom: Record<string, string> = {};
       const customIso: Record<string, string> = {};
       for (const [param, raw] of [
@@ -463,15 +505,20 @@ Deno.serve(
     // depois e gravava null, ela apagava o diagnóstico do sync de clientes: em
     // 20/08 a carga falhou em 12.500 registros e o erro sumiu quatro segundos
     // depois, obrigando a caçar a causa no log do Postgres.
+    const nowIso = new Date().toISOString();
     await admin
       .from("toth_connections")
       .update({
         // Lote cheio → há mais adiante, guarda onde parou. Lote curto → a volta
         // terminou, zera para o próximo ciclo reprocessar tudo (título muda de
-        // status com o tempo, então revisitar é o comportamento desejado).
-        cobrancas_cursor:
+        // status com o tempo, então revisitar é o comportamento desejado). Só o
+        // cursor do próprio modo.
+        ...endOfRunCursorPatch(
+          mode,
           clients.length === MAX_CLIENTS_PER_RUN ? clients[clients.length - 1].id : null,
-        last_cobrancas_sync_at: new Date().toISOString(),
+          nowIso,
+        ),
+        last_cobrancas_sync_at: nowIso,
         ...(errors.length > 0 ? { last_error: errors[0] } : {}),
       })
       .eq("id", conn.id);
@@ -481,12 +528,13 @@ Deno.serve(
       module: "general",
       action: "toth_sync_cobrancas",
       status: "success",
-      payloadSnapshot: { ...stats, truncated: clients.length === MAX_CLIENTS_PER_RUN },
+      payloadSnapshot: { ...stats, mode, truncated: clients.length === MAX_CLIENTS_PER_RUN },
     });
 
     return json(
       {
         success: true,
+        mode,
         stats,
         // Silêncio sobre truncamento lê-se como "cobriu tudo". Diga quando não cobriu.
         truncated: clients.length === MAX_CLIENTS_PER_RUN,

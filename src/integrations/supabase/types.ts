@@ -16901,12 +16901,14 @@ export type Database = {
           clientes_situacoes: string | null
           clientes_somente_com_compra: boolean
           cobrancas_cursor: string | null
+          cobrancas_full_cursor: string | null
           connected_at: string | null
           created_at: string
           erp_sync_mode: string
           flow_base_url: string | null
           id: string
           last_clientes_sync_at: string | null
+          last_cobrancas_full_sweep_at: string | null
           last_cobrancas_sync_at: string | null
           last_error: string | null
           last_pedidos_sync_at: string | null
@@ -16931,12 +16933,14 @@ export type Database = {
           clientes_situacoes?: string | null
           clientes_somente_com_compra?: boolean
           cobrancas_cursor?: string | null
+          cobrancas_full_cursor?: string | null
           connected_at?: string | null
           created_at?: string
           erp_sync_mode?: string
           flow_base_url?: string | null
           id?: string
           last_clientes_sync_at?: string | null
+          last_cobrancas_full_sweep_at?: string | null
           last_cobrancas_sync_at?: string | null
           last_error?: string | null
           last_pedidos_sync_at?: string | null
@@ -16961,12 +16965,14 @@ export type Database = {
           clientes_situacoes?: string | null
           clientes_somente_com_compra?: boolean
           cobrancas_cursor?: string | null
+          cobrancas_full_cursor?: string | null
           connected_at?: string | null
           created_at?: string
           erp_sync_mode?: string
           flow_base_url?: string | null
           id?: string
           last_clientes_sync_at?: string | null
+          last_cobrancas_full_sweep_at?: string | null
           last_cobrancas_sync_at?: string | null
           last_error?: string | null
           last_pedidos_sync_at?: string | null
@@ -23016,7 +23022,10 @@ export type Database = {
         Args: never
         Returns: undefined
       }
-      invoke_toth_sync: { Args: { p_fn: string }; Returns: undefined }
+      invoke_toth_sync: {
+        Args: { p_body?: Json; p_fn: string }
+        Returns: undefined
+      }
       invoke_whatsapp_dlq_replay: { Args: never; Returns: undefined }
       invoke_whatsapp_health_monitor: { Args: never; Returns: undefined }
       invoke_whatsapp_instance_reaper: { Args: never; Returns: undefined }
