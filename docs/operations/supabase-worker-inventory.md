@@ -151,6 +151,7 @@ Não aplicado neste pacote. Rollback futuro remove somente `isGroupYes`, preserv
 | 142 | inv5-public-tables-readable-by-anon | `17 4 * * *` | SQL / verificar fanout indireto |
 | 143 | toth-sync-clientes | `31 * * * *` † (antes `0 * * * *`) | invoke_toth_sync |
 | 144 | toth-sync-cobrancas | `15 */2 * * *` | invoke_toth_sync |
+| — | toth-sync-cobrancas-full-diario | `0,10,20,45,55 5,6 * * *` (02:00–03:55 BRT; sai cedo depois que a volta fecha) | invoke_toth_sync(`{"full":true,"daily":true}`) — `20271121000000` |
 | 146 | process-blast-recipients | `* * * * *` | invoke_process_blast_recipients |
 | 151 | avisos-varredura-followups | `0 10 * * *` | SQL / verificar fanout indireto |
 | 152 | avisos-varredura-reuniao-proxima | `3-59/15 * * * *` † (antes `*/15 * * * *`) | SQL / verificar fanout indireto |
