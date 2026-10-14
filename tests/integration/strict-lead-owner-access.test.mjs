@@ -14,6 +14,8 @@ const readers = read('../../supabase/migrations/20271117000102_strict_lead_owner
 const readersRollback = read('../../supabase/migrations/rollback/20271117000102_strict_lead_owner_readers.sql');
 const guard = read('../../supabase/migrations/20271117000103_strict_lead_scope_initplan_guard.sql');
 const guardRollback = read('../../supabase/migrations/rollback/20271117000103_strict_lead_scope_initplan_guard.sql');
+const scopeGuard = read('../../supabase/migrations/20271117000104_can_see_chat_scope_strict_guard.sql');
+const scopeGuardRollback = read('../../supabase/migrations/rollback/20271117000104_can_see_chat_scope_strict_guard.sql');
 const id = n => `10000000-0000-0000-0000-${String(n).padStart(12, '0')}`;
 const orgA = id(1), orgB = id(2);
 const admin = id(11), member = id(12), peer = id(13), other = id(14), inactive = id(15), master = id(16);
@@ -158,7 +160,7 @@ test('actual definer readers, related data, phone-only messages, service and rol
 
 // Same rows, cheaper plan: 20271117000103 hoists the strict-org check out of the
 // per-row SECURITY DEFINER calls. Every read path must return exactly what 102 returned.
-test('initplan guard keeps every scoped read identical and rolls back to the 102 predicates', async () => {
+test('initplan and chat-scope guards keep every scoped read identical and roll back to 102', async () => {
   const db=await setup();
   try {
     await setupReaders(db);
@@ -185,6 +187,9 @@ test('initplan guard keeps every scoped read identical and rolls back to the 102
       rlsMessages: `SELECT normalized_phone FROM whatsapp_messages ORDER BY normalized_phone`,
       rlsTags: `SELECT lead_id FROM lead_tags ORDER BY lead_id NULLS LAST`,
       rlsChannel: `SELECT lead_id FROM channel_messages ORDER BY lead_id`,
+      chatScope: `SELECT l.id, public.can_see_chat_scope(l.organization_id,l.id,l.normalized_phone) AS by_lead,
+        public.can_see_chat_scope(l.organization_id,NULL,l.normalized_phone) AS by_phone,
+        public.can_see_chat_scope(NULL,NULL,NULL) AS no_org FROM leads l ORDER BY l.id`,
     };
     const views = {
       messages: `SELECT normalized_phone FROM private.whatsapp_messages ORDER BY normalized_phone`,
@@ -222,7 +227,10 @@ test('initplan guard keeps every scoped read identical and rolls back to the 102
     }
     await db.exec(guard);
     assert.deepEqual(await snapshot(), before, 'idempotent');
+    await db.exec(scopeGuard);
+    assert.deepEqual(await snapshot(), before, 'can_see_chat_scope flag guard returns the same answers');
 
+    await db.exec(scopeGuardRollback);
     await db.exec(guardRollback);
     assert.deepEqual((await db.query(shape)).rows, shapeBefore, 'rollback restores the 102 predicates exactly');
     await db.exec(readersRollback);
