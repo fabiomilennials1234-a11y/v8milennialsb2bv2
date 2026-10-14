@@ -28,6 +28,7 @@ import {
   type FilePreviewResult,
 } from "../../hooks/useImportLeads";
 import { useLeadCustomFields } from "../../hooks/useLeadCustomFields";
+import { ImportTagsField, ImportTagsOutcome } from "./ImportTagsField";
 import { useCanDo, useTeamMembers } from "@/modules/identity";
 import { downloadLeadsImportTemplate } from "@/lib/leadsImportTemplate";
 import { toast } from "sonner";
@@ -96,6 +97,7 @@ export function ImportLeadsContent({ onDone }: ImportLeadsContentProps) {
   const [userColumnMapping, setUserColumnMapping] = useState<Record<string, string>>({});
   const [selectedResponsibleId, setSelectedResponsibleId] = useState<string>("");
   const [selectedMetricsPeriod, setSelectedMetricsPeriod] = useState<string>("current");
+  const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
   const [showErrors, setShowErrors] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -178,6 +180,7 @@ export function ImportLeadsContent({ onDone }: ImportLeadsContentProps) {
         responsibleId: selectedResponsibleId === "none" ? undefined : selectedResponsibleId || undefined,
         metricsPeriodMonth: metricsOpt?.month,
         metricsPeriodYear: metricsOpt?.year,
+        tagIds: selectedTagIds,
       });
       setStep("complete");
       await queryClient.invalidateQueries({ queryKey: ["leads"] });
@@ -198,6 +201,7 @@ export function ImportLeadsContent({ onDone }: ImportLeadsContentProps) {
     setUserColumnMapping({});
     setSelectedResponsibleId("");
     setSelectedMetricsPeriod("current");
+    setSelectedTagIds([]);
     resetImport();
     onDone?.();
   };
@@ -418,6 +422,8 @@ export function ImportLeadsContent({ onDone }: ImportLeadsContentProps) {
             </Select>
           </div>
 
+          <ImportTagsField value={selectedTagIds} onChange={setSelectedTagIds} totalLeads={totalLeads} />
+
           <div className="p-3 bg-muted/50 rounded-lg">
             <p className="text-xs text-muted-foreground">
               Estes leads entram <strong>sem negócio</strong>. Colunas de funil na planilha (Etapa, Valor, Produto) são
@@ -509,6 +515,8 @@ export function ImportLeadsContent({ onDone }: ImportLeadsContentProps) {
               )}
             </div>
           )}
+
+          <ImportTagsOutcome report={lastReport} />
 
           <p className="text-sm text-center text-muted-foreground">
             Os leads já estão no cadastro. Nenhum negócio foi criado.

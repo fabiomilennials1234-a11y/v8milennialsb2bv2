@@ -28,6 +28,7 @@ import {
   type ResolvedPipeline,
 } from "../_shared/pipeline-adapter.ts";
 import { unauthorizedResponse } from "../_shared/auth.ts";
+import { applyImportTags, resolveImportTagIds, type ImportTagsReport } from "./import-tags.ts";
 
 /**
  * Explica, na linha do relatório de importação, por que a linha não entrou no funil.
@@ -123,6 +124,9 @@ interface ImportPayload {
   pipeline_id?: string;
   /** Etapa padrão: uuid de `pipeline_stages` OU stage_key. */
   pipeline_stage?: string;
+
+  /** Etiquetas para todos os leads do import. Não confiável até `resolveImportTagIds`. */
+  tag_ids?: unknown;
 }
 
 interface ImportReport {
@@ -134,6 +138,7 @@ interface ImportReport {
   incomplete: number;
   errors: { row: number; reason: string }[];
   distribution?: Record<string, number>;
+  tags?: ImportTagsReport;
 }
 
 // ─── Helpers ─────────────────────────────────────────────
@@ -426,6 +431,7 @@ async function importToCampaign(
   leads: ParsedLead[],
   payload: ImportPayload,
   report: ImportReport,
+  importedLeadIds: Set<string>,
 ): Promise<void> {
   const {
     organization_id: organizationId,
@@ -591,6 +597,7 @@ async function importToCampaign(
           }
 
           await applyCustomFields(supabase, existingLead.id, lead.customFields, customFieldMap);
+          importedLeadIds.add(existingLead.id);
           if (formattedPhone) processedPhones.add(formattedPhone);
           continue;
         }
@@ -654,6 +661,7 @@ async function importToCampaign(
 
         await supabase.from("lead_tags").insert({ lead_id: newLead.id, tag_id: tagId });
         await applyCustomFields(supabase, newLead.id, lead.customFields, customFieldMap);
+        importedLeadIds.add(newLead.id);
         if (formattedPhone) processedPhones.add(formattedPhone);
 
         report.created++;
@@ -791,6 +799,7 @@ async function importToPipeline(
   leads: ParsedLead[],
   payload: ImportPayload,
   report: ImportReport,
+  importedLeadIds: Set<string>,
 ): Promise<void> {
   const {
     organization_id: organizationId,
@@ -1030,6 +1039,7 @@ async function importToPipeline(
 
         // Campos personalizados → lead_custom_field_values (upsert por lead+field)
         await applyCustomFields(supabase, leadId, lead.customFields, customFieldMap);
+        importedLeadIds.add(leadId);
 
         // Etapa da linha (coluna Etapa da planilha) → stage_key
         const stageKeyForLead = resolveRowStageKey(lead.stage, stageAliases, defaultStageKey);
@@ -1276,6 +1286,16 @@ Deno.serve(
       );
     }
 
+    // Antes de qualquer escrita: etiqueta inválida recusa o import inteiro em vez
+    // de importar os leads sem a etiqueta que a pessoa pediu.
+    const importTags = await resolveImportTagIds(supabaseEarly, organizationId!, body.tag_ids);
+    if (!importTags.ok) {
+      return new Response(
+        JSON.stringify({ success: false, error: importTags.error }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
+
     // 5. Validate each lead
     const validLeads: ParsedLead[] = [];
     const report: ImportReport = { total: body.leads.length, created: 0, updated: 0, rejected: 0, incomplete: 0, errors: [] };
@@ -1293,25 +1313,37 @@ Deno.serve(
 
     // 6. Process valid leads
     const supabase = supabaseEarly; // reuse client created in step 3
+    const importedLeadIds = new Set<string>();
+    let processingError: Error | null = null;
 
     try {
       if (body.destination === "campaign") {
-        await importToCampaign(supabase, validLeads, { ...body, organization_id: organizationId }, report);
+        await importToCampaign(supabase, validLeads, { ...body, organization_id: organizationId }, report, importedLeadIds);
       } else {
         // funnel | custom_pipeline | pipeline — os três colapsam no motor
         // único por pipeline_id (SCRUM-635). "leads" entra no mesmo motor e
         // sai antes da escrita da entry.
-        await importToPipeline(supabase, validLeads, { ...body, organization_id: organizationId }, report);
+        await importToPipeline(supabase, validLeads, { ...body, organization_id: organizationId }, report, importedLeadIds);
       }
     } catch (err) {
-      console.error("[import-leads] Processing error:", err);
+      processingError = err as Error;
+    }
+
+    // Também quando o processamento cai no meio: os leads já gravados recebem
+    // as etiquetas, para o estado parcial bater com o que a pessoa pediu.
+    if (importTags.tagIds.length > 0) {
+      report.tags = await applyImportTags(supabase, importedLeadIds, importTags.tagIds);
+    }
+
+    if (processingError) {
+      console.error("[import-leads] Processing error:", processingError);
 
       await logRuntime({
         organizationId: organizationId,
         module: "pipe_dispatch",
         action: "import_leads",
         status: "error",
-        errorMessage: (err as Error).message,
+        errorMessage: processingError.message,
         entityType: "user",
         entityId: userId,
         payloadSnapshot: {
@@ -1322,7 +1354,7 @@ Deno.serve(
       });
 
       return new Response(
-        JSON.stringify({ success: false, error: (err as Error).message, report }),
+        JSON.stringify({ success: false, error: processingError.message, report }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
@@ -1341,6 +1373,7 @@ Deno.serve(
         created: report.created,
         updated: report.updated,
         rejected: report.rejected,
+        tags: report.tags,
       },
     });
 

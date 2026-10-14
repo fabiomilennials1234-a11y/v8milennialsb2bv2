@@ -10,6 +10,8 @@ import {
   useImportLeads,
   parseFilePreview,
   KNOWN_LEAD_FIELDS,
+  ImportTagsField,
+  ImportTagsOutcome,
   type FilePreviewResult,
 } from "@/modules/leads";
 import { useLeadCustomFields } from "@/modules/leads";
@@ -68,6 +70,7 @@ export function ImportCustomPipelineContent({
   const [userColumnMapping, setUserColumnMapping] = useState<Record<string, string>>({});
   const [selectedStageId, setSelectedStageId] = useState<string>("");
   const [selectedResponsibleId, setSelectedResponsibleId] = useState<string>("");
+  const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
   const [showErrors, setShowErrors] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -153,6 +156,7 @@ export function ImportCustomPipelineContent({
         members: memberOptions,
         userColumnMapping: Object.keys(fullMapping).length ? fullMapping : undefined,
         sdrId: selectedResponsibleId === "none" ? undefined : selectedResponsibleId || undefined,
+        tagIds: selectedTagIds,
       });
       // Invalidar caches do React Query pra UI refletir os leads importados
       // imediatamente (sem precisar refresh manual ou esperar staleTime).
@@ -179,6 +183,7 @@ export function ImportCustomPipelineContent({
     setUserColumnMapping({});
     setSelectedStageId("");
     setSelectedResponsibleId("");
+    setSelectedTagIds([]);
     resetImport();
     onDone?.();
   };
@@ -405,6 +410,8 @@ export function ImportCustomPipelineContent({
             </Select>
           </div>
 
+          <ImportTagsField value={selectedTagIds} onChange={setSelectedTagIds} totalLeads={totalLeads} />
+
           <div className="flex justify-end gap-2 pt-4 border-t">
             <Button variant="outline" onClick={() => setStep("upload")}>Voltar</Button>
             <Button onClick={handleImport} disabled={!selectedStageId || !canImport || permLoading}>
@@ -489,6 +496,8 @@ export function ImportCustomPipelineContent({
               )}
             </div>
           )}
+
+          <ImportTagsOutcome report={lastReport} />
 
           <p className="text-sm text-center text-muted-foreground">
             {lastReport && lastReport.errors.length > 0

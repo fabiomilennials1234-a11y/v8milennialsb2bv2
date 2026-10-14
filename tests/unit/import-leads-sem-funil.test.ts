@@ -120,6 +120,40 @@ describe("importLeadsOnly — o corpo que sai", () => {
     expect(relatorio).toMatchObject({ total: 2, imported: 2, updated: 0, duplicates: 0, invalid: 0 });
   });
 
+  it("leva as etiquetas escolhidas", async () => {
+    const file = planilhaComDuasLinhas();
+    const { result } = renderHook(() => useImportLeads(), { wrapper: wrapper() });
+
+    await result.current.importLeadsOnly(file, { tagIds: ["tag-vip", "tag-feira"] });
+
+    const corpo = JSON.parse(fetchMock.mock.calls[0][1].body);
+    expect(corpo.tag_ids).toEqual(["tag-vip", "tag-feira"]);
+  });
+
+  it("sem etiqueta escolhida, não manda tag_ids", async () => {
+    const file = planilhaComDuasLinhas();
+    const { result } = renderHook(() => useImportLeads(), { wrapper: wrapper() });
+
+    await result.current.importLeadsOnly(file, { tagIds: [] });
+
+    const corpo = JSON.parse(fetchMock.mock.calls[0][1].body);
+    expect("tag_ids" in corpo).toBe(false);
+  });
+
+  it("repassa a recusa de etiqueta da edge para a tela", async () => {
+    fetchMock.mockResolvedValue({
+      ok: false,
+      status: 400,
+      json: async () => ({ success: false, error: "Uma das etiquetas escolhidas não existe mais nesta organização." }),
+    });
+    const file = planilhaComDuasLinhas();
+    const { result } = renderHook(() => useImportLeads(), { wrapper: wrapper() });
+
+    await expect(result.current.importLeadsOnly(file, { tagIds: ["tag-sumida"] })).rejects.toThrow(
+      /etiquetas escolhidas não existe/,
+    );
+  });
+
   it("não chama a edge quando a planilha não rende nenhum lead", async () => {
     mockParse.mockImplementation((_f: unknown, opts: ParseOpts) => opts.complete({ data: [] }));
     const file = new File(["\n"], "vazia.csv", { type: "text/csv" });
