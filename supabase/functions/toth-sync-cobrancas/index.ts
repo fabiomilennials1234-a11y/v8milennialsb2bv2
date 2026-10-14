@@ -20,9 +20,17 @@
  *
  * Auth dual: `x-cron-secret` (org no corpo) ou `Authorization` (org do JWT).
  *
+ * 🔴 **Título pago SOME da resposta** — o Toth não o devolve com saldo 0. Por
+ * isso, depois de cada lote bem-sucedido, `reconcileMissingTitulos` fecha como
+ * `pago` o título aberto daqueles clientes que deixou de vir (Chamado
+ * 065e4890). Com janela, só fecha o que vence DENTRO dela — o que vence fora
+ * pode faltar por estar fora; com `full`, fecha todo ausente.
+ *
  * Body opcional:
- *   - `{ data_inicio, data_fim }` em `aaaa-mm-dd` — sobrepõe a janela padrão;
- *   - `{ full: true }` — desliga a janela e varre tudo (reconciliação).
+ *   - `{ data_inicio, data_fim }` em `aaaa-mm-dd` — sobrepõe a janela padrão
+ *     (reconcilia só com as duas datas: com uma, o recorte do ERP é incerto);
+ *   - `{ full: true }` — desliga a janela e varre tudo (reconciliação completa,
+ *     a única que alcança título vencido antes da janela).
  */
 
 import { createClient, SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
@@ -40,11 +48,23 @@ import {
   extractRows,
   formatTothDate,
   mapTothCobrancaToCanonical,
+  shiftIsoDate,
   TothMappingError,
 } from "../_shared/erp/toth-mappers.ts";
 import { TOTH_PROVIDER_ID } from "../_shared/erp/toth-provider.ts";
-import { supabaseTituloStore } from "../_shared/erp/sync/titulo-store.ts";
+import type { CanonicalTitulo } from "../_shared/erp/types.ts";
+import {
+  supabaseTituloReconcileStore,
+  supabaseTituloStore,
+} from "../_shared/erp/sync/titulo-store.ts";
 import { upsertCanonicalTitulo } from "../_shared/erp/sync/upsert-titulo.ts";
+import {
+  RECONCILE_GUARD_MAX_RATIO,
+  RECONCILE_GUARD_MIN_COUNT,
+  reconcileMissingTitulos,
+  tothBatchEvidence,
+  type ReconcileWindow,
+} from "../_shared/erp/sync/reconcile-titulos.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -240,8 +260,12 @@ Deno.serve(
     // Overrides: `{ data_inicio, data_fim }` em aaaa-mm-dd, ou `{ full: true }`
     // para varrer sem janela (reconciliação completa, mais cara).
     const window: Record<string, string> = {};
+    // A mesma janela em ISO, para a reconciliação comparar com `vencimento`.
+    // null = não reconcilia (janela com uma data só: o recorte do ERP é incerto).
+    let reconcileWindow: ReconcileWindow | null = "full";
     if (body.full !== true) {
       const custom: Record<string, string> = {};
+      const customIso: Record<string, string> = {};
       for (const [param, raw] of [
         ["dataInicio", body.data_inicio],
         ["dataFim", body.data_fim],
@@ -252,22 +276,44 @@ Deno.serve(
           return json({ error: `${param} inválido: use aaaa-mm-dd (recebido "${raw}")` }, cors, 400);
         }
         custom[param] = formatted;
+        customIso[param] = raw.trim();
       }
-      Object.assign(
-        window,
-        Object.keys(custom).length > 0
-          ? custom
-          : buildCobrancaWindow(todayIso, {
-              backDays: WINDOW_BACK_DAYS,
-              forwardDays: WINDOW_FORWARD_DAYS,
-            }),
-      );
+      if (Object.keys(custom).length > 0) {
+        Object.assign(window, custom);
+        reconcileWindow =
+          customIso.dataInicio && customIso.dataFim
+            ? { from: customIso.dataInicio, to: customIso.dataFim }
+            : null;
+      } else {
+        Object.assign(
+          window,
+          buildCobrancaWindow(todayIso, {
+            backDays: WINDOW_BACK_DAYS,
+            forwardDays: WINDOW_FORWARD_DAYS,
+          }),
+        );
+        reconcileWindow = {
+          from: shiftIsoDate(todayIso, -WINDOW_BACK_DAYS),
+          to: shiftIsoDate(todayIso, WINDOW_FORWARD_DAYS),
+        };
+      }
     }
 
     const batches = chunkCnpjs(
       clients.map((c) => String(c.cnpj ?? "")),
       CNPJ_BATCH_SIZE,
     );
+    // Lote → clientes, pela mesma normalização de `chunkCnpjs`. Um CNPJ pode
+    // ter mais de um cliente casado; todos entram na reconciliação do lote.
+    const clientIdsByCnpj = new Map<string, string[]>();
+    for (const c of clients) {
+      const cnpj = String(c.cnpj ?? "").replace(/\D/g, "");
+      if (!cnpj) continue;
+      const ids = clientIdsByCnpj.get(cnpj);
+      if (ids) ids.push(c.id);
+      else clientIdsByCnpj.set(cnpj, [c.id]);
+    }
+    const reconcileStore = supabaseTituloReconcileStore(admin);
 
     const stats = {
       clients: 0,
@@ -278,6 +324,12 @@ Deno.serve(
       skipped: 0,
       failed: 0,
       batchesFailed: 0,
+      /** Títulos ausentes da resposta fechados como `pago`. */
+      reconciled: 0,
+      /** Lotes em que a trava recusou fechar (resposta suspeita). */
+      reconcileRefused: 0,
+      /** Lotes cuja resposta não provava ausência (erro, forma, linha sem id). */
+      reconcileSkipped: 0,
     };
     const errors: string[] = [];
 
@@ -317,10 +369,24 @@ Deno.serve(
         continue;
       }
 
+      // Ids que o ERP devolveu neste lote — a reconciliação fecha o que faltar.
+      // Upsert que falha não tira o id daqui: o título veio, só não gravou.
+      const returnedIds: string[] = [];
+      let unmapped = 0;
+
       for (const cobranca of extractRows(payload)) {
         stats.titulos++;
+        let canonical: CanonicalTitulo;
         try {
-          const canonical = mapTothCobrancaToCanonical(cobranca, todayIso);
+          canonical = mapTothCobrancaToCanonical(cobranca, todayIso);
+        } catch (err) {
+          stats.failed++;
+          unmapped++;
+          if (err instanceof TothMappingError && errors.length < 3) errors.push(err.message);
+          continue;
+        }
+        returnedIds.push(canonical.externalId);
+        try {
           const result = await upsertCanonicalTitulo(store, {
             organizationId,
             source: TOTH_PROVIDER_ID,
@@ -329,9 +395,38 @@ Deno.serve(
           if (result.action === "created") stats.created++;
           else if (result.action === "updated") stats.updated++;
           else stats.skipped++;
-        } catch (err) {
+        } catch {
           stats.failed++;
-          if (err instanceof TothMappingError && errors.length < 3) errors.push(err.message);
+        }
+      }
+
+      if (reconcileWindow) {
+        try {
+          const outcome = await reconcileMissingTitulos(reconcileStore, {
+            organizationId,
+            source: TOTH_PROVIDER_ID,
+            clientIds: batch.flatMap((cnpj) => clientIdsByCnpj.get(cnpj) ?? []),
+            evidence: tothBatchEvidence(payload, { externalIds: returnedIds, unmapped }),
+            window: reconcileWindow,
+          });
+          if (outcome.action === "reconciled") {
+            stats.reconciled += outcome.closed;
+          } else if (outcome.action === "refused") {
+            stats.reconcileRefused++;
+            if (errors.length < 3) {
+              errors.push(
+                `Reconciliação recusada num lote: fecharia ${outcome.wouldClose} de ${outcome.open} ` +
+                  `títulos abertos (trava: mais de ${RECONCILE_GUARD_MAX_RATIO * 100}% e de ` +
+                  `${RECONCILE_GUARD_MIN_COUNT}). Nada foi fechado — confira a resposta do ERP.`,
+              );
+            }
+          } else if (outcome.reason !== "no_clients") {
+            stats.reconcileSkipped++;
+          }
+        } catch (err) {
+          // Falha ao reconciliar não desfaz o upsert do lote nem para os outros.
+          stats.reconcileSkipped++;
+          if (errors.length < 3) errors.push(err instanceof Error ? err.message : String(err));
         }
       }
 
