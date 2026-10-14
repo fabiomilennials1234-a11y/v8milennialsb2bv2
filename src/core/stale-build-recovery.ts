@@ -38,6 +38,10 @@ const STALE_CHUNK_PATTERNS = [
 export function isStaleChunkError(reason: unknown): boolean {
   if (reason instanceof Error && reason.name === "ChunkLoadError") return true;
   const message = reason instanceof Error ? reason.message : typeof reason === "string" ? reason : "";
+  // `response.json()` sobre uma página HTML de erro (502/504 do proxy) dá
+  // `Unexpected token '<', "<!doctype"... is not valid JSON`: é API fora, não
+  // build velho. Reload não cura e a tela "versão nova" ficaria presa.
+  if (/is not valid JSON/i.test(message) || /JSON\.parse/i.test(message)) return false;
   return !!message && STALE_CHUNK_PATTERNS.some((re) => re.test(message));
 }
 
