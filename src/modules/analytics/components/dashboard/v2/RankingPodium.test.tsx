@@ -48,7 +48,9 @@ describe("RankingPodium profile photos", () => {
   it("shows member photos in the podium and remaining ranking rows", async () => {
     render(<RankingPodium range={range} />);
     expect(await screen.findByRole("img", { name: "Ana Silva" })).toHaveAttribute("src", "/ana.png");
+    expect(await screen.findByRole("img", { name: "Ana Silva" })).toHaveAttribute("data-podium-avatar");
     expect(await screen.findByRole("img", { name: "Diego Alves" })).toHaveAttribute("src", "/diego.png");
+    expect(await screen.findByRole("img", { name: "Diego Alves" })).toHaveAttribute("data-podium-avatar");
   });
 
   it("keeps initials when the member has no photo or the photo fails", async () => {

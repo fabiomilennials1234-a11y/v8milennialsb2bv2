@@ -186,7 +186,7 @@ function RankingPodiumBase({ range, teamSalesTotal }: RankingPodiumProps) {
                     )}
                     style={{ background: AV_COLORS[p.colorIdx] }}
                   >
-                    <AvatarImage src={avatarMap.get(p.id)} alt={p.name} className="object-cover" />
+                    <AvatarImage src={avatarMap.get(p.id)} alt={p.name} loading="lazy" data-podium-avatar className="object-cover" />
                     <AvatarFallback className="bg-transparent">{initials(p.name)}</AvatarFallback>
                   </Avatar>
                   <div className="truncate text-[13px] font-bold">{p.name}</div>
@@ -222,7 +222,7 @@ function RankingPodiumBase({ range, teamSalesTotal }: RankingPodiumProps) {
                           className="flex h-[26px] w-[26px] shrink-0 items-center justify-center rounded-lg text-[10px] font-extrabold text-background"
                           style={{ background: AV_COLORS[r.colorIdx] }}
                         >
-                          <AvatarImage src={avatarMap.get(r.id)} alt={r.name} className="object-cover" />
+                          <AvatarImage src={avatarMap.get(r.id)} alt={r.name} loading="lazy" data-podium-avatar className="object-cover" />
                           <AvatarFallback className="bg-transparent">{initials(r.name)}</AvatarFallback>
                         </Avatar>
                         {r.name}
