@@ -22,6 +22,13 @@ import { SupportRealtimeAnnouncement } from "@/modules/platform/components/suppo
 import { SessionDeadBanner } from "@/modules/communication/components/whatsapp/SessionDeadBanner";
 import { QuickBlastProgressPanel } from "@/modules/leads/components/bulk-actions/QuickBlastProgressPanel";
 
+/**
+ * Checklist flutuante de onboarding (canto sup. direito). DESLIGADO (2026-10-14,
+ * pedido do CTO): a primeira entrada empilhava widgets por cima do produto.
+ * Religar é esta linha.
+ */
+const ONBOARDING_CHECKLIST_ENABLED = false;
+
 // Rotas onde o checklist NÃO deve aparecer
 const CHECKLIST_HIDDEN_PATTERNS = [
   /^\/auth/,
@@ -94,9 +101,9 @@ function MainLayoutInner({ children }: MainLayoutProps) {
     onShowHelp: toggleHelp,
   });
 
-  const showChecklist = !CHECKLIST_HIDDEN_PATTERNS.some((pattern) =>
-    pattern.test(location.pathname),
-  );
+  const showChecklist =
+    ONBOARDING_CHECKLIST_ENABLED &&
+    !CHECKLIST_HIDDEN_PATTERNS.some((pattern) => pattern.test(location.pathname));
 
   const isFullBleed = FULL_BLEED_PATTERNS.some((pattern) =>
     pattern.test(location.pathname),
