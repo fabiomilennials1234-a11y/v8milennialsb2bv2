@@ -164,6 +164,12 @@ describe("isStaleChunkError", () => {
     expect(isStaleChunkError(new Error("Cannot read properties of undefined"))).toBe(false);
     expect(isStaleChunkError(undefined)).toBe(false);
   });
+
+  it("não confunde JSON.parse de página HTML (API 502/504) com chunk velho", () => {
+    expect(
+      isStaleChunkError(new SyntaxError(`Unexpected token '<', "<!DOCTYPE "... is not valid JSON`)),
+    ).toBe(false);
+  });
 });
 
 // Chamado 39ff2cd1, print das 18:39 UTC: o JS do app rodou (sidebar visível),
