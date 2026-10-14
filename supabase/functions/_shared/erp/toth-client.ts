@@ -82,6 +82,44 @@ export class TothRequestError extends Error {
 }
 
 /**
+ * O ERP não conseguiu validar o login porque a INFRAESTRUTURA dele caiu (banco
+ * fora, pool de conexões cheio) — transitório, não credencial.
+ *
+ * É um `TothRequestError` de propósito: todo chamador que já trata erro de
+ * transporte como "tente de novo depois" passa a tratar este também, sem marcar
+ * a conexão como `expired`. Subclasse, e não só a classe-mãe, para que o
+ * chamador que itera lotes possa abortar a execução em vez de martelar o login
+ * de um servidor que está fora.
+ */
+export class TothUnavailableError extends TothRequestError {
+  constructor(message: string) {
+    super(message, null);
+    this.name = "TothUnavailableError";
+  }
+}
+
+/**
+ * Mensagens de erro do ERP que indicam queda de infraestrutura, não recusa de
+ * credencial.
+ *
+ * 🔴 Chamado 065e4890: em 13/10 03:31 UTC o banco do ERP da Café Jurerê caiu e o
+ * login respondeu 200 com `Erro RDBMS:Load: Cannot open connection` no corpo.
+ * Como todo erro no corpo do login virava `TothAuthError`, a conexão foi marcada
+ * `expired` e o cron parou TODOS os syncs até alguém redigitar uma senha que
+ * nunca esteve errada.
+ *
+ * Lista fechada de sinais de banco/conexão (RDBMS, JDBC, SQLException, pool), e
+ * não o contrário ("tudo que não parece senha é transitório"): mensagem
+ * desconhecida segue sendo credencial, que é o lado que pede ação humana.
+ */
+const INFRA_ERROR =
+  /\brdbms\b|cannot open connection|connection (refused|reset|timed out)|could not (get|open|acquire|create) (a |the )?(jdbc )?connection|\bjdbc\b|sqlexception|too many connections|indispon[ií]vel|unavailable/i;
+
+export function isInfrastructureErrorMessage(message: string): boolean {
+  return INFRA_ERROR.test(message);
+}
+
+/**
  * Corta o corpo pra caber em log sem virar despejo de PII.
  *
  * Quando o corpo é a página de erro do servidor de aplicação, o texto útil é
@@ -278,9 +316,18 @@ export class TothClient {
       // Corpo não-JSON: pode ser o token em texto puro. `extractLoginToken` trata.
     }
 
-    // Credencial errada também pode voltar como 200 com erro no corpo.
+    // Credencial errada também pode voltar como 200 com erro no corpo — e banco
+    // do ERP fora do ar também. Só o primeiro desliga a integração.
     const apiError = extractApiError(parsed);
-    if (apiError) throw new TothAuthError(`O ERP recusou o login: ${apiError}`);
+    if (apiError) {
+      const motivo = this.scrubPassword(apiError);
+      if (isInfrastructureErrorMessage(apiError)) {
+        throw new TothUnavailableError(
+          `O ERP está fora do ar (falha na infraestrutura dele, não na senha): ${motivo}`,
+        );
+      }
+      throw new TothAuthError(`O ERP recusou o login: ${motivo}`);
+    }
 
     const token = extractLoginToken(parsed);
     if (!token) {
@@ -291,6 +338,15 @@ export class TothClient {
     }
     this.token = token;
     return token;
+  }
+
+  /**
+   * Tira a senha de uma mensagem vinda do corpo do login antes de ela ir para
+   * `last_error` e `runtime_logs`. Exceção de banco às vezes ecoa a string de
+   * conexão; a senha do ERP não pode sair daqui.
+   */
+  private scrubPassword(text: string): string {
+    return this.password ? text.split(this.password).join("***") : text;
   }
 
   /** GET autenticado. */
