@@ -27,6 +27,13 @@ import { useSupportPanel } from "./SupportPanelContext";
 
 type Phase = "idle" | "modal" | "coach" | "done";
 
+/**
+ * Kill-switch. DESLIGADO (2026-10-14, pedido do CTO): a primeira entrada empilhava
+ * avisos sobre o suporte. Desligado, o efeito de entrada nem arma — a fase fica
+ * "idle" e nada renderiza. O FAB do dock continua sendo a porta do suporte.
+ */
+const ENABLED = false;
+
 const ENTRY_DELAY_MS = 800;
 const SETTLE_POLL_MS = 250;
 const FAB_SELECTOR = SUPPORT_FAB_SELECTOR;
@@ -50,7 +57,7 @@ export function SupportAnnouncement() {
   // Um timer fixo abria o modal por cima do loader de chunk/auth — ou, se o FAB
   // ainda não existia aos 800ms, desistia e o anúncio morria pra sessão.
   useEffect(() => {
-    if (!userId) return;
+    if (!ENABLED || !userId) return;
 
     let intervalId: number | null = null;
     let delayId: number | null = null;

@@ -7414,10 +7414,10 @@ index f09ea1c75..63c04b877 100644
    return null;
  }
 diff --git a/classic/src/modules/platform/components/layout/MainLayout.tsx b/classic/src/modules/platform/components/layout/MainLayout.tsx
-index 64976bc8c..4d1ab20b5 100644
+index 64976bc8c..3a04c38c6 100644
 --- a/classic/src/modules/platform/components/layout/MainLayout.tsx
 +++ b/classic/src/modules/platform/components/layout/MainLayout.tsx
-@@ -16,6 +16,7 @@ import { MobileChatProvider, useMobileChatContext } from "@/contexts/MobileChatC
+@@ -16,11 +16,19 @@ import { MobileChatProvider, useMobileChatContext } from "@/contexts/MobileChatC
  import { ChatBubble } from "@/modules/communication/components/chat/bubble";
  import { FloatingDock } from "@/modules/platform/components/dock/FloatingDock";
  import { SupportFab } from "@/modules/platform/components/support/SupportFab";
@@ -7425,7 +7425,32 @@ index 64976bc8c..4d1ab20b5 100644
  import { SupportAccess } from "../support/SupportAccess";
  import { SupportRealtimeAnnouncement } from "@/modules/platform/components/support/announcement/SupportRealtimeAnnouncement";
  import { SessionDeadBanner } from "@/modules/communication/components/whatsapp/SessionDeadBanner";
-@@ -168,6 +169,8 @@ function MainLayoutInner({ children }: MainLayoutProps) {
+ import { QuickBlastProgressPanel } from "@/modules/leads/components/bulk-actions/QuickBlastProgressPanel";
+ 
++/**
++ * Checklist flutuante de onboarding (canto sup. direito). DESLIGADO (2026-10-14,
++ * pedido do CTO): a primeira entrada empilhava widgets por cima do produto.
++ * Religar é esta linha.
++ */
++const ONBOARDING_CHECKLIST_ENABLED = false;
++
+ // Rotas onde o checklist NÃO deve aparecer
+ const CHECKLIST_HIDDEN_PATTERNS = [
+   /^\/auth/,
+@@ -93,9 +101,9 @@ function MainLayoutInner({ children }: MainLayoutProps) {
+     onShowHelp: toggleHelp,
+   });
+ 
+-  const showChecklist = !CHECKLIST_HIDDEN_PATTERNS.some((pattern) =>
+-    pattern.test(location.pathname),
+-  );
++  const showChecklist =
++    ONBOARDING_CHECKLIST_ENABLED &&
++    !CHECKLIST_HIDDEN_PATTERNS.some((pattern) => pattern.test(location.pathname));
+ 
+   const isFullBleed = FULL_BLEED_PATTERNS.some((pattern) =>
+     pattern.test(location.pathname),
+@@ -168,6 +176,8 @@ function MainLayoutInner({ children }: MainLayoutProps) {
          <SupportFab />
          <SupportRealtimeAnnouncement />
        </SupportAccess>
@@ -7554,6 +7579,49 @@ index bd0936570..38a13c171 100644
              checked={preferencias.sound_enabled}
              onCheckedChange={(v) => aplicar({ sound_enabled: v })}
            />
+diff --git a/classic/src/modules/platform/components/support/SupportAnnouncement.tsx b/classic/src/modules/platform/components/support/SupportAnnouncement.tsx
+index 19395078c..8f4304cdf 100644
+--- a/classic/src/modules/platform/components/support/SupportAnnouncement.tsx
++++ b/classic/src/modules/platform/components/support/SupportAnnouncement.tsx
+@@ -27,6 +27,13 @@ import { useSupportPanel } from "./SupportPanelContext";
+ 
+ type Phase = "idle" | "modal" | "coach" | "done";
+ 
++/**
++ * Kill-switch. DESLIGADO (2026-10-14, pedido do CTO): a primeira entrada empilhava
++ * avisos sobre o suporte. Desligado, o efeito de entrada nem arma — a fase fica
++ * "idle" e nada renderiza. O FAB do dock continua sendo a porta do suporte.
++ */
++const ENABLED = false;
++
+ const ENTRY_DELAY_MS = 800;
+ const SETTLE_POLL_MS = 250;
+ const FAB_SELECTOR = SUPPORT_FAB_SELECTOR;
+@@ -50,7 +57,7 @@ export function SupportAnnouncement() {
+   // Um timer fixo abria o modal por cima do loader de chunk/auth — ou, se o FAB
+   // ainda não existia aos 800ms, desistia e o anúncio morria pra sessão.
+   useEffect(() => {
+-    if (!userId) return;
++    if (!ENABLED || !userId) return;
+ 
+     let intervalId: number | null = null;
+     let delayId: number | null = null;
+diff --git a/classic/src/modules/platform/components/support/announcement/SupportRealtimeAnnouncement.tsx b/classic/src/modules/platform/components/support/announcement/SupportRealtimeAnnouncement.tsx
+index 77823e239..cf97a2504 100644
+--- a/classic/src/modules/platform/components/support/announcement/SupportRealtimeAnnouncement.tsx
++++ b/classic/src/modules/platform/components/support/announcement/SupportRealtimeAnnouncement.tsx
+@@ -19,8 +19,10 @@ import { SupportRealtimeNudge } from "./SupportRealtimeNudge";
+  * `const { isMaster } = useMasterAuth()` → decisão "none" quando master.
+  *
+  * Kill-switch em ENABLED: desligar a feature inteira é uma linha.
++ * DESLIGADO (2026-10-14, pedido do CTO): a primeira entrada empilhava avisos
++ * sobre o suporte. O FAB do dock continua sendo a porta do suporte.
+  */
+-const ENABLED = true;
++const ENABLED = false;
+ 
+ export function SupportRealtimeAnnouncement() {
+   const [decision, setDecision] = useState<Announcement | null>(null);
 diff --git a/classic/src/modules/platform/hooks/use-sw-update.ts b/classic/src/modules/platform/hooks/use-sw-update.ts
 index 76afbc226..1848457df 100644
 --- a/classic/src/modules/platform/hooks/use-sw-update.ts
