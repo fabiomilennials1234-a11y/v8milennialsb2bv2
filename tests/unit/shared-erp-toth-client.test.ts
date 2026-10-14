@@ -8,6 +8,8 @@ import {
   TothClient,
   TothAuthError,
   TothRequestError,
+  TothUnavailableError,
+  isInfrastructureErrorMessage,
   preview,
 } from "../../supabase/functions/_shared/erp/toth-client";
 
@@ -82,6 +84,76 @@ describe("login", () => {
     expect(err.message).not.toContain("s3nh4");
     expect(err.bodyPreview).toBe("");
   });
+
+  // Chamado 065e4890: em 13/10 o banco do ERP caiu, o login respondeu 200 com
+  // `Erro RDBMS:Load: Cannot open connection` no corpo, isso virou TothAuthError
+  // e a conexão foi marcada `expired` — todos os syncs pararam até alguém
+  // redigitar uma senha que nunca esteve errada.
+  it("🔴 banco do ERP fora do ar no login é TRANSITÓRIO, não credencial inválida", async () => {
+    const { impl } = fakeFetch([res([{ error: "Erro RDBMS:Load: Cannot open connection" }])]);
+    const client = new TothClient(CREDS, { fetchImpl: impl });
+
+    const err = await client.login().catch((e: Error) => e);
+
+    expect(err).toBeInstanceOf(TothRequestError);
+    expect(err).toBeInstanceOf(TothUnavailableError);
+    expect(err).not.toBeInstanceOf(TothAuthError);
+    expect((err as Error).message).toContain("Cannot open connection");
+  });
+
+  it("o mesmo vale quando a queda acontece na reautenticação no meio do uso", async () => {
+    const { impl } = fakeFetch([
+      res({ token: "T1" }),
+      res([{ error: "Acesso nao autorizado! " }]),
+      res({ erro: "java.sql.SQLException: Cannot open connection" }),
+    ]);
+    const client = new TothClient(CREDS, { fetchImpl: impl });
+
+    const err = await client.postForm("cobrancas", { cnpj: "1" }).catch((e: Error) => e);
+
+    expect(err).toBeInstanceOf(TothUnavailableError);
+    expect(err).not.toBeInstanceOf(TothAuthError);
+  });
+
+  it("credencial errada no corpo continua sendo TothAuthError", async () => {
+    const { impl } = fakeFetch([res([{ error: "Usuario ou senha invalidos" }])]);
+    const client = new TothClient(CREDS, { fetchImpl: impl });
+
+    const err = await client.login().catch((e: Error) => e);
+
+    expect(err).toBeInstanceOf(TothAuthError);
+    expect(err).not.toBeInstanceOf(TothRequestError);
+  });
+
+  it("não ecoa a senha se o ERP a devolver dentro da mensagem de erro", async () => {
+    const { impl } = fakeFetch([
+      res([{ error: "Erro RDBMS:Load: Cannot open connection (user=milennialstech password=s3nh4)" }]),
+    ]);
+    const client = new TothClient(CREDS, { fetchImpl: impl });
+
+    const err = (await client.login().catch((e: Error) => e)) as Error;
+
+    expect(err.message).not.toContain("s3nh4");
+  });
+});
+
+describe("isInfrastructureErrorMessage", () => {
+  it.each([
+    "Erro RDBMS:Load: Cannot open connection",
+    "java.sql.SQLException: Io exception: Connection refused",
+    "Could not get JDBC Connection",
+    "FATAL: too many connections for role",
+    "Serviço indisponível",
+  ])("reconhece queda de infraestrutura: %s", (msg) => {
+    expect(isInfrastructureErrorMessage(msg)).toBe(true);
+  });
+
+  it.each(["Usuario ou senha invalidos", "Acesso nao autorizado! ", "Usuário bloqueado"])(
+    "não confunde recusa de credencial: %s",
+    (msg) => {
+      expect(isInfrastructureErrorMessage(msg)).toBe(false);
+    },
+  );
 });
 
 describe("get", () => {

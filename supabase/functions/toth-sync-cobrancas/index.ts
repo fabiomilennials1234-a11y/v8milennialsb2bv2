@@ -40,7 +40,12 @@ import { withErrorBoundary } from "../_shared/error-boundary.ts";
 import { logRuntime } from "../_shared/logger.ts";
 import { timingSafeCompare } from "../_shared/auth.ts";
 import { resolveAdminOrg } from "../_shared/erp/erp-admin-auth.ts";
-import { TothClient, TothAuthError, TothRequestError } from "../_shared/erp/toth-client.ts";
+import {
+  TothClient,
+  TothAuthError,
+  TothRequestError,
+  TothUnavailableError,
+} from "../_shared/erp/toth-client.ts";
 import { loadTothCredentials, tothUrlPolicy } from "../_shared/erp/toth-credentials.ts";
 import {
   buildCobrancaWindow,
@@ -350,6 +355,24 @@ Deno.serve(
           await admin
             .from("toth_connections")
             .update({ status: "expired", last_error: err.message })
+            .eq("id", conn.id);
+          await logRuntime({
+            organizationId,
+            module: "general",
+            action: "toth_sync_cobrancas",
+            status: "error",
+            errorMessage: err.message,
+            payloadSnapshot: { ...stats },
+          });
+          return json({ error: err.message, stats }, cors);
+        }
+        // ERP fora do ar (banco dele caiu): aborta SEM marcar `expired` — é
+        // transitório, e o próximo cron tenta de novo do mesmo cursor. Seguir
+        // para o próximo lote só repetiria o login num servidor que está fora.
+        if (err instanceof TothUnavailableError) {
+          await admin
+            .from("toth_connections")
+            .update({ last_error: err.message })
             .eq("id", conn.id);
           await logRuntime({
             organizationId,
