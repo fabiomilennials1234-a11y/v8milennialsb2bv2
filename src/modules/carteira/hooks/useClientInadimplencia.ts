@@ -1,7 +1,10 @@
 /**
  * useClientInadimplencia — a Carteira Client's delinquency signal, derived from
- * its Títulos (S9, ADR-0020). Reads titulos_receber (written by the Omie sync in
+ * its Títulos (S9, ADR-0020). Reads titulos_receber (written by the ERP syncs in
  * the integrations BC) and applies the pure computeInadimplencia projection.
+ *
+ * `vencimento` entra no select porque o selo usa a mesma régua do card de
+ * títulos: status `atrasado` OU vencimento passado (Chamado 065e4890).
  */
 
 import { useQuery } from "@tanstack/react-query";
@@ -20,7 +23,7 @@ export function useClientInadimplencia(clientId: string | null | undefined) {
       if (!organizationId || !clientId) return EMPTY;
       const { data, error } = await supabase
         .from("titulos_receber")
-        .select("status, valor")
+        .select("status, valor, vencimento")
         .eq("organization_id", organizationId)
         .eq("client_id", clientId);
       if (error) throw error;
