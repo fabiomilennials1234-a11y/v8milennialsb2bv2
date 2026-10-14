@@ -13,7 +13,10 @@
   // `wrangler dev` cai para outra data e a paridade local deixa de testar o
   // runtime que vai para produção.
   "compatibility_date": "2026-10-01",
-  "workers_dev": true,
+  // Desligado ao fim da quarentena (2026-10-14): com o domínio real servido
+  // pelas Worker Routes, o *.workers.dev seria uma segunda origem pública do
+  // mesmo front (checklist (d) de docs/DEPLOY_CLOUDFLARE.md).
+  "workers_dev": false,
   "preview_urls": false,
   "upload_source_maps": false,
   "assets": {

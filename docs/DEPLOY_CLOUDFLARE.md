@@ -1,12 +1,14 @@
-# Deploy do front na Cloudflare (teste em `*.workers.dev`)
+# Deploy do front na Cloudflare
 
-Este guia serve o **mesmo front que está no ar** em `torquecrm.com.br` a partir da Cloudflare, numa URL de teste separada. O objetivo é provar que a Cloudflare entrega exatamente o que o nginx entrega hoje.
+> **Estado em 2026-10-14: em produção, quarentena concluída.** Desde 2026-10-07 (~16:50 UTC) `torquecrm.com.br` e `www` são servidos pelo Worker `torque-front`, pelas Worker Routes da zona. Em 2026-10-14 o hook 627383107 do EasyPanel foi desativado e o `*.workers.dev` foi desligado (`workers_dev: false`). As seções sobre a fase de teste abaixo ficam como registro histórico.
+
+Este guia nasceu para servir o **mesmo front** a partir da Cloudflare, numa URL de teste separada, e provar que a Cloudflare entrega exatamente o que o nginx entregava.
 
 A publicação de rotina é do CI: a cada push na `main`, o GitHub Actions builda e publica em degraus, com rollback automático (ver [Pipeline de deploy (CI)](#pipeline-de-deploy-ci)). Os comandos à mão de [Publicar](#publicar-quatro-comandos) continuam valendo para a fase de teste e para o ensaio local.
 
-**Produção não é afetada.** O domínio `torquecrm.com.br` continua apontando para o nginx no EasyPanel, porque nada aqui mexe em DNS. Se algo der errado, basta apagar o Worker (ver [Desfazer](#desfazer)).
+**Histórico (fase de teste):** durante a prova, o domínio seguia no nginx do EasyPanel. **Hoje o Worker é a única origem do front**; ver [Quarentena e desligamento do EasyPanel](#quarentena-e-desligamento-do-easypanel) para o rollback.
 
-Este guia é o par do [`DEPLOY_EASYPANEL.md`](./DEPLOY_EASYPANEL.md), que continua valendo para produção.
+O [`DEPLOY_EASYPANEL.md`](./DEPLOY_EASYPANEL.md) descreve o caminho antigo, mantido só como rollback.
 
 ---
 
@@ -208,7 +210,7 @@ Rollback troca só a versão do código e dos assets. Não mexe em rotas, domín
 >
 > Confira no Actions que o rollback rodou de fato.
 
-**Drill de rollback.** **Run workflow** com `drill` marcado. O pipeline publica, passa no B e força o rollback automático, para exercitar o caminho que só roda quando produção quebra. O drill só é aceito enquanto `CF_SMOKE_URL` for `*.workers.dev`; o `ci-deploy` recusa no domínio real.
+**Drill de rollback.** **Run workflow** com `drill` marcado. O pipeline publica, passa no B e força o rollback automático, para exercitar o caminho que só roda quando produção quebra. O drill só é aceito enquanto `CF_SMOKE_URL` for `*.workers.dev`; o `ci-deploy` recusa no domínio real. **Desde 2026-10-14 o drill não roda mais:** o `*.workers.dev` está desligado (`workers_dev: false`) e o `CF_SMOKE_URL` é o domínio real.
 
 ### Segredos e variáveis
 
@@ -221,7 +223,7 @@ Os dois environments já existem no GitHub, os dois restritos à branch `main`. 
 | `front-build` | `SENTRY_AUTH_TOKEN` | **secret** (já existe) | Token de **organização** (`sntrys_`, escopo `org:ci`). Ver [Sentry](#sentry-na-build). |
 | `front-production` | `CLOUDFLARE_API_TOKEN` | **secret** (já existe) | Token da conta, **Workers → Editor**, só no Worker `torque-front`. |
 | `front-production` | `CLOUDFLARE_ACCOUNT_ID` | variável | id da conta (32 hex) |
-| `front-production` | `CF_SMOKE_URL` | variável | `https://torque-front.torquecrm.workers.dev` até o corte; `https://torquecrm.com.br` depois. |
+| `front-production` | `CF_SMOKE_URL` | variável | `https://torquecrm.com.br` (desde 2026-10-07; antes do corte era o `*.workers.dev`, hoje desligado). |
 
 As demais (`VITE_INVITE_API_URL`, `VITE_SENTRY_ENVIRONMENT`, `VITE_SENTRY_REPLAY_ON_ERROR_RATE`) ficam vazias, como no EasyPanel: com o convite vazio, o app cai no Supabase. Os defaults do `Dockerfile` (DSN do Sentry, `SENTRY_ORG`, `SENTRY_PROJECT`, `SENTRY_URL`, `VITE_CHAT_*`, `VITE_UI_SWITCH`) estão escritos no workflow. O EasyPanel não sobrescreve nenhum deles (medido em 2026-10-07).
 
@@ -347,14 +349,16 @@ A interface clássica herda o plugin: `classic/vite.config.ts` faz `mergeConfig`
    - Em CI, sem terminal, um `custom_domain` no config sobrescreve origem e DNS sem perguntar (`cli.js:159598-159600`).
    - O teste `wrangler-config` impede `routes` no arquivo.
 2. **Trocar a variável:** `CF_SMOKE_URL` = `https://torquecrm.com.br` no environment `front-production`.
-3. **Abrir um PR** com `workers_dev: false` no `wrangler.jsonc`, ajustando o teste `wrangler-config.test.ts`. O `triggers deploy` do pipeline desliga o `*.workers.dev` no deploy desse PR (item (d)).
+3. **Abrir um PR** com `workers_dev: false` no `wrangler.jsonc`, ajustando o teste `wrangler-config.test.ts`. O `triggers deploy` do pipeline desliga o `*.workers.dev` no deploy desse PR (item (d)). Sem rota nem domínio no config, o wrangler só loga `No targets deployed` e não falha; as Worker Routes do painel não são tocadas, porque o deploy só mexe no que está no config. **Feito em 2026-10-14**, no fim da quarentena.
 
 ### Quarentena e desligamento do EasyPanel
 
 1. **Durante os 7 dias seguintes ao corte**, o EasyPanel continua de pé, como volta rápida pelo DNS (item (f)).
 2. **Passados os 7 dias**, e só então:
-   1. Desative o hook de deploy **627383107** no EasyPanel.
-   2. Pare o app no EasyPanel.
+   1. Desative o hook de deploy **627383107** no EasyPanel. **Feito em 2026-10-14** (`active=false`, não apagado).
+   2. Pare o app no EasyPanel: `docker service scale v8_mvp_teste=0` na VPS. Não mexa em nenhum outro serviço (`calls`, n8n, `torque-lp`, `quote-documents`, `milennials_*`).
+
+**Rollback depois do passo 2:** o Worker passa a ser a **única** origem do front. Para voltar à VPS é preciso fazer **as duas coisas**: escalar `v8_mvp_teste=1` (e reativar o hook 627383107, se os merges novos tiverem de chegar lá) **e** apagar as duas Worker Routes (`torquecrm.com.br/*` e `www.torquecrm.com.br/*`). Apagar só as rotas, com o serviço em zero, derruba o site.
 3. **Enquanto o `Dockerfile` existir**, o teste `build-env-drift` mantém os dois builds iguais. Ao apagar o `Dockerfile`, apague também esse teste.
 
 ---
@@ -581,7 +585,7 @@ Nada disto é feito agora. É o que precisa estar resolvido antes de `torquecrm.
 
 - [ ] **(b) A zona precisa ir para a Cloudflare.** Custom Domain exige que a zona `torquecrm.com.br` esteja na Cloudflare, ou seja, trocar os nameservers saindo da Hostinger. Antes, copie **todos** os registros: MX, `send.` (Resend), `calls.`, n8n e o que mais houver.
 - [ ] **(f) Rollback de DNS.** Baixe o TTL dias antes. Deixe escrito como voltar os registros para o nginx.
-- [ ] **(d) `workers_dev: false` depois do corte.** Senão o `*.workers.dev` continua sendo uma segunda origem pública do mesmo front.
+- [x] **(d) `workers_dev: false` depois do corte** (2026-10-14). Senão o `*.workers.dev` continua sendo uma segunda origem pública do mesmo front.
 - [ ] **(m) `www.torquecrm.com.br`.** Hoje ele serve o mesmo front (200, nginx). Precisa de Custom Domain também, ou de um redirect para `torquecrm.com.br`.
 - [ ] **(n) HTTP → HTTPS.** Hoje o Traefik responde 308 de `http://` para `https://`. Na Cloudflare:
   - ligue **Always Use HTTPS**;
