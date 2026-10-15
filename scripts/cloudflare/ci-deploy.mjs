@@ -447,7 +447,7 @@ export function assertCredentials(env) {
   if (problems.length > 0) throw new DeployUsageError(`${problems.join("\n")}\nNada foi publicado.`);
 }
 
-/** A pasta que o wrangler.jsonc publica, com a build dual inteira e sem source map. */
+/** A pasta que o wrangler.jsonc publica, com a entrada da V5 e sem source map. */
 export function assertAssetsReady(dir = ASSETS_DIR) {
   const missing = [...REQUIRED_FILES, "_headers", ".assetsignore"].filter((name) => !fs.existsSync(path.join(dir, name)));
   if (missing.length > 0) throw new DeployUsageError(`${dir} incompleto (${missing.join(", ")}): baixe o artefato do job build`);

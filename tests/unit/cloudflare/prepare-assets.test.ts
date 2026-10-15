@@ -6,7 +6,7 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import config from "../../../cloudflare/headers.json";
-import { PrepareError, prepareAssets, readRegularFile, scanContent } from "../../../scripts/cloudflare/prepare-assets.mjs";
+import { PrepareError, REQUIRED_FILES, prepareAssets, readRegularFile, scanContent } from "../../../scripts/cloudflare/prepare-assets.mjs";
 
 /**
  * Caixa de areia: TODO caminho que estes testes passam ao prepareAssets fica em
@@ -239,10 +239,24 @@ describe("recusa de propósito", () => {
     expect(fs.existsSync(path.join(from, "index.html"))).toBe(true);
   });
 
-  it("build que não é a dual", () => {
+  it("build sem a entrada da V5", () => {
+    for (const name of ["index.html", "sw.js"]) {
+      dualBuild();
+      fs.rmSync(path.join(from, name));
+      expectRefusal(new RegExp(`${name.replace(".", "\\.")} ausente`));
+      fs.rmSync(from, { recursive: true, force: true });
+      fs.mkdirSync(from, { recursive: true });
+    }
+  });
+
+  it("a clássica (rollback inerte) não é exigida, mas vai no artefato quando o build:dual a gera", () => {
     dualBuild();
     fs.rmSync(path.join(from, "index.classic.html"));
-    expectRefusal(/index\.classic\.html ausente/);
+    fs.rmSync(path.join(from, "sw.classic.js"));
+    expect(REQUIRED_FILES).toEqual(["index.html", "sw.js"]);
+    run();
+    expect(fs.existsSync(path.join(out, "index.html"))).toBe(true);
+    expect(fs.existsSync(path.join(out, "index.classic.html"))).toBe(false);
   });
 
   it.each([

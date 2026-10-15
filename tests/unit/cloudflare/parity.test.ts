@@ -95,11 +95,9 @@ describe("compare", () => {
     expect(SECURITY_HEADERS).toEqual(Object.keys(config.profiles.app).map((name) => name.toLowerCase()));
   });
 
-  it("Div12: corpo diferente só onde o cookie-cases.json declara", () => {
-    const declared = COOKIE_CASES.filter((c: { div?: string }) => c.div);
-    expect(declared.map((c: { cookie: string; div: string }) => [c.cookie, c.div])).toEqual([["a=1,torque_ui=v5", "Div12"]]);
-    const result = compare(GET("/", { allow: { body: "Div12" } }), side(200, {}, "classic"), side(200, {}, "v5"), ctx);
-    expect(result).toMatchObject({ outcome: "EXPECTED-DIFF", divs: ["Div12"] });
+  it("Div12 aposentada (2026-10-14): o cookie não escolhe interface, nenhuma variante tem divergência", () => {
+    expect(DIVS).not.toHaveProperty("Div12");
+    expect(COOKIE_CASES.every((c: unknown) => c === null || typeof c === "string")).toBe(true);
   });
 });
 
@@ -169,7 +167,7 @@ describe("buildMatrix — Div13 (/50x.html)", () => {
       fs.mkdirSync(path.dirname(path.join(dir, rel)), { recursive: true });
       fs.writeFileSync(path.join(dir, rel), content);
     };
-    for (const name of ["index.html", "index.classic.html", "_headers", ".assetsignore", "assets/index-A.js", "lp/v1/index.html"]) write(name);
+    for (const name of ["index.html", "_headers", ".assetsignore", "assets/index-A.js", "lp/v1/index.html"]) write(name);
     if (with50x) write("50x.html", "<html>nginx</html>");
     return dir;
   }
@@ -192,5 +190,41 @@ describe("buildMatrix — Div13 (/50x.html)", () => {
     const testCase = GET("/50x.html", { allow: { body: "Div13" } });
     expect(compare(testCase, side(200, {}, "nginx"), side(200, {}, "index"), ctx)).toMatchObject({ outcome: "EXPECTED-DIFF", divs: ["Div13"] });
     expect(compare(testCase, side(200, {}, "nginx"), side(404, {}, "x"), ctx).outcome).toBe("FAIL");
+  });
+});
+
+describe("buildMatrix — interface única (V5)", () => {
+  function assetsDir() {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "parity-v5-"));
+    const write = (rel: string, content = "x") => {
+      fs.mkdirSync(path.dirname(path.join(dir, rel)), { recursive: true });
+      fs.writeFileSync(path.join(dir, rel), content);
+    };
+    for (const name of ["_headers", ".assetsignore", "assets/index-A.js", "lp/v1/index.html"]) write(name);
+    write("index.html", "<html>V5</html>");
+    return dir;
+  }
+
+  it("`/` com cada variante de cookie exige o index da V5; a clássica direta exige 404 (sem precisar dela no artefato)", () => {
+    const dir = assetsDir();
+    try {
+      const cases = buildMatrix({ assetsDir: dir, allAssets: false });
+      const roots = cases.filter((c: { path: string; raw?: boolean }) => c.path === "/" && c.method === "GET" && !c.raw);
+      expect(roots).toHaveLength(COOKIE_CASES.length);
+      const v5 = side(200, {}, "<html>V5</html>");
+      const classic = side(200, {}, "<html>CLASSIC</html>");
+      for (const testCase of roots) {
+        expect(compare(testCase, v5, v5, ctx).outcome, testCase.label).toBe("PASS");
+        expect(compare(testCase, classic, classic, ctx).problems.join(), testCase.label).toMatch(/não serviu o index da V5/);
+      }
+      for (const p of ["/index.classic.html", "/sw.classic.js", "/sw.classic.js.map"]) {
+        const testCase = cases.find((c: { path: string }) => c.path === p);
+        expect(testCase, p).toBeDefined();
+        expect(compare(testCase, side(404), side(404, { "cache-control": "no-store, must-revalidate" }), ctx).outcome, p).toBe("EXPECTED-DIFF");
+        expect(compare(testCase, side(200, {}, "c"), side(200, {}, "c"), ctx).problems.join(), p).toMatch(/clássica servida/);
+      }
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
   });
 });

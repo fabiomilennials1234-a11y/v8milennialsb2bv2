@@ -1,6 +1,8 @@
 name: Deploy Front (Cloudflare)
 
-# Publica o front (SPA dual V5 + clássica) no Worker `torque-front`, em degraus:
+# Publica o front no Worker `torque-front`, em degraus. Serve só a V5 desde
+# 2026-10-14; a clássica segue no build dual como rollback inerte (não servida).
+# Degraus:
 # versão nova a 0 % → smoke A (com override) → 100 % → smoke B → rollback
 # automático se o B falhar. Operação, rollbacks e passo a passo do CTO:
 # docs/DEPLOY_CLOUDFLARE.md, seção "Pipeline".
@@ -101,7 +103,7 @@ jobs:
       # (@sentry/vite-plugin 5.4.0, medido: docs/DEPLOY_CLOUDFLARE.md, "Sentry"),
       # e token AUSENTE também não: a build sai sem upload, com ::warning::. Só
       # token PESSOAL (sntryu_) derruba, antes de buildar.
-      - name: Build dual (V5 + clássica) com upload de source map
+      - name: Build dual (V5 + clássica inerte) com upload de source map
         env:
           SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
         run: |

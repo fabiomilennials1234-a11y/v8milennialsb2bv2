@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 /**
- * Baixa o front que está no ar (as duas builds), para a Cloudflare servir
- * EXATAMENTE o mesmo artefato que o nginx — e a paridade poder provar isso.
+ * Baixa o front que está no ar, para comparar hosts servindo EXATAMENTE o
+ * mesmo artefato — e a paridade poder provar isso. Desde 2026-10-14 só a V5 é
+ * servida (a clássica é 404 no ar), então só ela é extraída.
  *
  *   node scripts/cloudflare/extract-prod.mjs [--origin https://torquecrm.com.br] [--out cloudflare/.prod-dist]
  *
@@ -12,15 +13,15 @@
  * Só leitura: GET, no máximo 6 ao mesmo tempo, sem credencial.
  *
  * De onde vem cada arquivo:
- *   - index.html / sw.js (cookie torque_ui=v5) e index.classic.html / sw.classic.js;
- *   - assets/**: o grafo de referências a partir desses quatro (cada chunk
+ *   - index.html e sw.js (sem cookie: o cookie não escolhe mais nada);
+ *   - assets/**: o grafo de referências a partir desses dois (cada chunk
  *     cita os que importa). No artefato extraído da imagem em 2026-10-05 esse
  *     grafo alcançava 466 de 466 arquivos;
  *   - os arquivos de public/ deste checkout, cada um conferido no ar (se o
  *     prod devolve o index do SPA, o arquivo não está lá e fica de fora);
  *     dotfiles (.well-known/) saem do checkout, porque o nginx não os serve;
  *   - manifest.webmanifest (gerado pelo build) e 50x.html (da imagem do nginx).
- * No fim, os quatro de cima são baixados de novo: se mudaram, o prod
+ * No fim, os dois de cima são baixados de novo: se mudaram, o prod
  * redeployou no meio e a extração é descartada.
  */
 import fs from "node:fs";
@@ -34,10 +35,8 @@ const PUBLIC_DIR = path.join(REPO_ROOT, "public");
 const CONCURRENCY = 6;
 
 const ROOTS = [
-  { rel: "index.classic.html", path: "/index.classic.html", cookie: null },
-  { rel: "index.html", path: "/index.html", cookie: "torque_ui=v5" },
-  { rel: "sw.classic.js", path: "/sw.classic.js", cookie: null },
-  { rel: "sw.js", path: "/sw.js", cookie: "torque_ui=v5" },
+  { rel: "index.html", path: "/index.html" },
+  { rel: "sw.js", path: "/sw.js" },
 ];
 const EXTRA_ROOT_FILES = ["manifest.webmanifest", "50x.html"];
 
@@ -57,9 +56,8 @@ export async function extractProd({ origin = DEFAULT_ORIGIN, out = DEFAULT_OUT, 
   // Antes de qualquer rede ou `rm -rf`.
   out = assertSafeOutDir(out, allowedRoot);
 
-  const get = async (pathname, cookie = null) => {
+  const get = async (pathname) => {
     const headers = { "user-agent": "torque-cf-extract/1.0" };
-    if (cookie) headers.cookie = cookie;
     const response = await fetch(new URL(pathname, origin), { headers, redirect: "manual", signal: AbortSignal.timeout(30_000) });
     return { status: response.status, body: Buffer.from(await response.arrayBuffer()) };
   };
@@ -73,12 +71,12 @@ export async function extractProd({ origin = DEFAULT_ORIGIN, out = DEFAULT_OUT, 
 
   const rootHashes = {};
   for (const root of ROOTS) {
-    const response = await get(root.path, root.cookie);
+    const response = await get(root.path);
     if (response.status !== 200) throw new Error(`${root.path}: HTTP ${response.status}`);
     save(root.rel, response.body);
     rootHashes[root.rel] = sha256(response.body);
   }
-  const spaShell = fs.readFileSync(path.join(out, "index.classic.html"));
+  const spaShell = fs.readFileSync(path.join(out, "index.html"));
 
   // public/ deste checkout + os dois que não vêm de public/.
   const warnings = [];
@@ -128,7 +126,7 @@ export async function extractProd({ origin = DEFAULT_ORIGIN, out = DEFAULT_OUT, 
   }
 
   for (const root of ROOTS) {
-    const response = await get(root.path, root.cookie);
+    const response = await get(root.path);
     if (sha256(response.body) !== rootHashes[root.rel]) {
       fs.rmSync(out, { recursive: true, force: true });
       throw new Error("o prod redeployou durante a extração — rode de novo");

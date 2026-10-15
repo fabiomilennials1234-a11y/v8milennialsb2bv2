@@ -3,8 +3,10 @@
  * O smoke do deploy decide se a versão nova recebe tráfego e se a promovida
  * fica. Um smoke que aceita o host errado promove front quebrado; um que
  * recusa o host certo trava todo deploy. Aqui ele roda contra um host falso
- * (o `send` dublado) que imita o Worker — a escolha de interface vem do
- * próprio `uiFromCookie` do Worker — e cada teste quebra uma coisa só.
+ * (o `send` dublado) que imita o Worker — a rota vem do próprio
+ * `resolveRoute` do Worker — e cada teste quebra uma coisa só. `legacy` imita
+ * a versão de antes de 2026-10-14 (clássica sem cookie), alvo possível de um
+ * rollback.
  */
 import fs from "node:fs";
 import os from "node:os";
@@ -12,8 +14,10 @@ import path from "node:path";
 import ts from "typescript";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import config from "../../../cloudflare/headers.json";
-import { uiFromCookie } from "../../../cloudflare/src/routing";
+import { resolveRoute } from "../../../cloudflare/src/routing";
+import cookieCases from "../../../scripts/cloudflare/cookie-cases.json";
 import {
+  CLASSIC_PATHS,
   EXIT,
   LIMITS,
   OVERRIDE_HEADER,
@@ -75,14 +79,15 @@ function headersOf(testCase: TestCase): Record<string, string> {
  * `version`: o X-Torque-Version das respostas do Worker (null = versão antiga,
  * sem o header). `/assets/*` nunca leva o header: não passa pelo Worker.
  */
-function fakeHost({ origin = WORKERS_DEV, mutate, version = VERSION }: { origin?: string; mutate?: Mutate; version?: string | null } = {}) {
+function fakeHost({ origin = WORKERS_DEV, mutate, version = VERSION, legacy = false }: { origin?: string; mutate?: Mutate; version?: string | null; legacy?: boolean } = {}) {
   const robots = new URL(origin).hostname.endsWith(".workers.dev");
   const calls: { origin: string; testCase: TestCase; options?: unknown }[] = [];
   const send = vi.fn(async (base: string, testCase: TestCase, options?: unknown): Promise<Response> => {
     calls.push({ origin: base, testCase, options });
     const headers = headersOf(testCase);
     const cookie = headers.cookie ?? null;
-    const ui = uiFromCookie(cookie);
+    // Versão antiga: clássica sem cookie, V5 só com `torque_ui=v5` exato.
+    const ui = legacy ? (/(?:^|;\s*)torque_ui=v5(?:;|$)/i.test(cookie ?? "") ? "v5" : "classic") : "v5";
     const p = testCase.path;
     const worker = (status: number, body: Buffer | string, type: string) => {
       const h = new Headers({ "content-type": type, "cache-control": config.cache.noStore, ...APP });
@@ -91,10 +96,11 @@ function fakeHost({ origin = WORKERS_DEV, mutate, version = VERSION }: { origin?
       return { url: base + p, status, headers: h, body: Buffer.from(body) };
     };
     let response: Response;
-    if (p === "/" || p === "/index.html") response = worker(200, file(ui === "v5" ? "index.html" : "index.classic.html"), "text/html");
-    else if (p === "/index.classic.html" || p === "/leads") response = worker(200, file("index.classic.html"), "text/html");
-    else if (p === "/sw.js") response = worker(200, file(ui === "v5" ? "sw.js" : "sw.classic.js"), "application/javascript");
-    else if (p === "/sw.classic.js") response = worker(200, file("sw.classic.js"), "application/javascript");
+    const route = p.startsWith("/assets/") ? null : resolveRoute(new URL(p, base), testCase.method);
+    if (legacy && (p === "/index.classic.html" || p === "/sw.classic.js")) {
+      response = worker(200, file(p.slice(1)), p.endsWith(".js") ? "application/javascript" : "text/html");
+    } else if (route?.kind === "index" || route?.kind === "spa") response = worker(200, file(ui === "v5" ? "index.html" : "index.classic.html"), "text/html");
+    else if (route?.kind === "service-worker") response = worker(200, file(ui === "v5" ? "sw.js" : "sw.classic.js"), "application/javascript");
     else if (p.startsWith("/assets/")) {
       const local = path.join(dir, p.slice(1));
       response = fs.existsSync(local)
@@ -133,15 +139,25 @@ describe("runSmoke — host saudável", () => {
     expect(problems(result)).toEqual([]);
     expect(result.outcome).toBe("PASS");
     const paths = host.calls.map((c) => c.testCase.path);
-    for (const p of ["/index.classic.html", "/index.html", "/sw.js", "/sw.classic.js", "/leads", "/api/v1/leads", "/assets/index-V5.js", "/assets/vendor-V5.js", "/assets/index-V5.css", "/assets/index-CL.js", "/assets/index-V5.js.map", "/assets/index-CL.js.map"]) {
+    for (const p of ["/index.html", "/sw.js", "/leads", "/api/v1/leads", "/assets/index-V5.js", "/assets/vendor-V5.js", "/assets/index-V5.css", "/assets/index-V5.js.map", ...CLASSIC_PATHS]) {
       expect(paths, p).toContain(p);
     }
-    // Uma requisição de `/` por variante de cookie medida em produção.
-    expect(paths.filter((p) => p === "/").length).toBe(14);
+    // Uma requisição de `/` por variante de cookie (cookie-cases.json), todas → V5.
+    expect(paths.filter((p) => p === "/").length).toBe(cookieCases.cases.length);
+    // Os chunks da clássica não são pedidos: nenhum index servido os cita.
+    expect(paths).not.toContain("/assets/index-CL.js");
   });
 
   it("autoconsistente (sem --assets): PASS com o próprio host como referência", async () => {
     expect((await run({})).outcome).toBe("PASS");
+  });
+
+  it("autoconsistente contra a versão de antes de 2026-10-14 (rollback): PASS — o contrato da interface única só vale com --assets", async () => {
+    const host = fakeHost({ legacy: true });
+    expect(problems(await run({}, host))).toEqual([]);
+    const paths = host.calls.map((c) => c.testCase.path);
+    for (const p of CLASSIC_PATHS) expect(paths).not.toContain(p);
+    expect(host.calls.filter((c) => c.testCase.path === "/").map((c) => headersOf(c.testCase).cookie ?? null)).toEqual([null]);
   });
 
   it("domínio real sem X-Robots-Tag: PASS", async () => {
@@ -172,29 +188,44 @@ describe("runSmoke — cada quebra vira FAIL", () => {
     return problems(result).join("\n");
   };
 
-  it("`/` sem cookie servindo a V5", async () => {
-    const out = await broken((p, { cookie }, r) => (p === "/" && !cookie ? { ...r, body: file("index.html") } : r));
-    expect(out).toMatch(/GET \/ \[cookie: \(nenhum\)\] → classic: corpo difere/);
+  it("versão de antes de 2026-10-14 (clássica sem cookie) com --assets → FAIL: o deploy deste código exige a interface única", async () => {
+    const result = await runSmoke({ url: WORKERS_DEV, assetsDir: dir, send: fakeHost({ legacy: true }).send });
+    expect(result.outcome).toBe("FAIL");
+    expect(problems(result).join("\n")).toMatch(/GET \/index\.html: corpo difere de index\.html/);
   });
 
-  it("variante de cookie com a interface errada (o `a=1,torque_ui=v5` do nginx, Div12)", async () => {
-    const out = await broken((p, { cookie }, r) => (p === "/" && cookie === "a=1,torque_ui=v5" ? { ...r, body: file("index.classic.html") } : r));
-    expect(out).toMatch(/a=1,torque_ui=v5.*corpo difere/);
+  it.each([null, "torque_ui=classic", "a=1,torque_ui=classic", "torque_ui="])("`/` [cookie: %s] servindo a clássica", async (bad) => {
+    const out = await broken((p, { cookie }, r) => (p === "/" && cookie === bad ? { ...r, body: file("index.classic.html") } : r));
+    expect(out).toMatch(/GET \/ \[cookie: .*\] → V5: corpo difere de index\.html/);
+  });
+
+  it("caminho da clássica servido (200) → FAIL", async () => {
+    for (const classicPath of CLASSIC_PATHS) {
+      const out = await broken((p, _c, r) => (p === classicPath ? { ...r, status: 200, body: file(classicPath.slice(1)) } : r));
+      expect(out).toContain(`GET ${classicPath} → 404 (clássica não é servida): status 200 (esperado 404)`);
+    }
+  });
+
+  it("404 da clássica que não veio do Worker (sem no-store) → FAIL", async () => {
+    const out = await broken((p, _c, r) => {
+      if (p === "/sw.classic.js") r.headers.set("cache-control", "public, max-age=600");
+      return r;
+    });
+    expect(out).toMatch(/sw\.classic\.js → 404.*cache-control/);
   });
 
   it("index servido diferente do artefato (--assets)", async () => {
-    const out = await broken((p, _c, r) => (p === "/index.classic.html" ? { ...r, body: Buffer.from("<html>outro</html>") } : r));
-    expect(out).toMatch(/index\.classic\.html: corpo difere de index\.classic\.html/);
+    const out = await broken((p, _c, r) => (p === "/index.html" ? { ...r, body: Buffer.from("<html>outro</html>") } : r));
+    expect(out).toMatch(/GET \/index\.html: corpo difere de index\.html/);
   });
 
-  it("sw.js da V5 diferente do arquivo", async () => {
-    const out = await broken((p, { cookie }, r) => (p === "/sw.js" && cookie ? { ...r, body: Buffer.from("/* velho */") } : r));
-    expect(out).toMatch(/sw da V5: corpo difere de sw\.js/);
-  });
-
-  it("autoconsistente: /sw.js com cookie da V5 devolvendo o sw da clássica", async () => {
-    const out = await broken((p, _c, r) => (p === "/sw.js" ? { ...r, body: file("sw.classic.js") } : r), {});
-    expect(out).toMatch(/serviu o sw da clássica com o cookie da V5/);
+  it("sw.js diferente do arquivo, com ou sem cookie", async () => {
+    expect(await broken((p, { cookie }, r) => (p === "/sw.js" && !cookie ? { ...r, body: Buffer.from("/* velho */") } : r))).toMatch(
+      /sw\.js \[cookie: \(nenhum\)\] → sw da V5: corpo difere de sw\.js/,
+    );
+    expect(await broken((p, { cookie }, r) => (p === "/sw.js" && cookie ? { ...r, body: file("sw.classic.js") } : r))).toMatch(
+      /sw\.js \[cookie: torque_ui=classic\] → sw da V5: corpo difere de sw\.js/,
+    );
   });
 
   it("chunk de entrada com outro conteúdo, sem cache imutável ou 404", async () => {
@@ -205,7 +236,7 @@ describe("runSmoke — cada quebra vira FAIL", () => {
         return r;
       }),
     ).toMatch(/vendor-V5\.js: cache-control: "no-cache"/);
-    expect(await broken((p, _c, r) => (p === "/assets/index-CL.js" ? { ...r, status: 404 } : r), {})).toMatch(/index-CL\.js: status 404/);
+    expect(await broken((p, _c, r) => (p === "/assets/vendor-V5.js" ? { ...r, status: 404 } : r), {})).toMatch(/vendor-V5\.js: status 404/);
   });
 
   it("source map servido", async () => {
@@ -280,16 +311,16 @@ describe("runSmoke — cada quebra vira FAIL", () => {
     expect(problems(result).join()).toMatch(/vendor-V5\.js: erro de rede: ECONNRESET/);
   });
 
-  it("sem os dois index não há referência: para cedo, com FAIL", async () => {
-    const host = fakeHost({ mutate: (p, _c, r) => (p === "/index.classic.html" ? { ...r, status: 503 } : r) });
+  it("sem o index não há referência: para cedo, com FAIL", async () => {
+    const host = fakeHost({ mutate: (p, _c, r) => (p === "/index.html" ? { ...r, status: 503 } : r) });
     const result = await run({}, host);
     expect(result.outcome).toBe("FAIL");
-    expect(host.calls.length).toBe(2);
+    expect(host.calls.length).toBe(1);
   });
 
-  it("V5 e clássica iguais: o cookie não está trocando nada", async () => {
-    const out = await broken((p, _c, r) => (p === "/index.html" ? { ...r, body: file("index.classic.html") } : r), {});
-    expect(out).toMatch(/são iguais/);
+  it("autoconsistente: `/` diferente do `/index.html` que o host serve", async () => {
+    const out = await broken((p, _c, r) => (p === "/" ? { ...r, body: Buffer.from("<html>outro</html>") } : r), {});
+    expect(out).toMatch(/GET \/ \[cookie: \(nenhum\)\] → V5: corpo difere de index\.html/);
   });
 });
 
@@ -404,12 +435,12 @@ describe("utilidades", () => {
 describe("runSmoke — prova de versão (X-Torque-Version)", () => {
   const OTHER = "9a8b7c6d-5e4f-4a3b-8c2d-1e0f9a8b7c6d";
 
-  it("override ignorado em silêncio (a versão ANTERIOR responde) → FAIL logo nos index, sem avaliar o resto", async () => {
+  it("override ignorado em silêncio (a versão ANTERIOR responde) → FAIL logo no index, sem avaliar o resto", async () => {
     const host = fakeHost({ version: OTHER });
     const result = await run({ assetsDir: dir, override: VERSION }, host);
     expect(result.outcome).toBe("FAIL");
     expect(problems(result).join("\n")).toContain(`versão ${OTHER} respondeu (esperada ${VERSION})`);
-    expect(host.calls).toHaveLength(2);
+    expect(host.calls).toHaveLength(1);
   });
 
   it("versão sem o header (anterior à prova) → FAIL, a não ser com allowMissingVersion (rollback para versão antiga)", async () => {

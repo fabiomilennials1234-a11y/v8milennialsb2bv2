@@ -10,7 +10,7 @@
  */
 import { proxyApi } from "./api-proxy";
 import { CACHE, ROBOTS_HEADER, ROBOTS_VALUE, VERSION_HEADER, applyProfile, type Profile } from "./headers";
-import { encodePath, logPath, resolveRoute, type Route } from "./routing";
+import { INDEX_ASSET, encodePath, logPath, resolveRoute, type Route } from "./routing";
 
 function plain(status: number, text: string, extra?: Record<string, string>): Response {
   return new Response(text, {
@@ -89,7 +89,7 @@ async function handle(route: Route, request: Request, url: URL, env: Env): Promi
       return serveLanding(env, request, url, route.path);
     case "spa": {
       const exact = route.path.endsWith("/") ? null : await fetchAsset(env, request, url, route.path);
-      const response = exact ?? (await fetchAsset(env, request, url, route.fallback));
+      const response = exact ?? (await fetchAsset(env, request, url, INDEX_ASSET));
       return response ? applyProfile(response, "app", CACHE.noStore) : notFound();
     }
   }
@@ -109,7 +109,7 @@ export default {
     let response: Response;
 
     try {
-      const resolved = resolveRoute(url, request.method, request.headers.get("cookie"));
+      const resolved = resolveRoute(url, request.method);
       route = resolved.kind;
       response = await handle(resolved, request, url, env);
     } catch (error) {

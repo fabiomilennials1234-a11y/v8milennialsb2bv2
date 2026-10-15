@@ -431,7 +431,9 @@ intocado. `cloudflare/` é inerte até alguém rodar `cf:deploy` com a conta do
 CTO. Contrato do Worker `torque-front` (`cloudflare/wrangler.jsonc`):
 - `/assets/*` sai direto do servidor de assets; todo o resto passa pelo Worker
   (`run_worker_first`). `routing.ts` replica a precedência do nginx
-  (`Dockerfile:117-180`); cookie `torque_ui` escolhe V5 ou clássica.
+  (`Dockerfile:117-180`). Desde 2026-10-14 serve só a V5 (cookie `torque_ui`
+  ignorado; `/index.classic.html`, `/sw.classic.js` e `.map` = 404); a clássica
+  vai no artefato, inerte, como rollback.
 - Headers: fonte única `cloudflare/headers.json`, espelho do `Dockerfile`;
   `tests/unit/cloudflare/headers-drift.test.ts` quebra se divergirem. Mudou
   header no nginx → muda o JSON no mesmo PR.
