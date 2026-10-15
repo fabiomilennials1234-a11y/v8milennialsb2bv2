@@ -1,3 +1,13 @@
+---
+type: feature
+title: Pergunta com botões (WhatsApp Menu)
+status: active
+created: 2026-09-21
+updated: 2026-10-15
+tags: [workflows, whatsapp, question-buttons]
+related: []
+owner: gabriel
+---
 # Pergunta com botões — implementação candidata
 
 Node exclusivo de automações WhatsApp, `question_buttons`. Não altera contratos de nodes Copilot. Uma mensagem com até três opções, cada ID estável ligado a uma saída; alternativas `other_response`, `timeout` e `send_failure`. Imagem fixa opcional armazenada em bucket privado.
