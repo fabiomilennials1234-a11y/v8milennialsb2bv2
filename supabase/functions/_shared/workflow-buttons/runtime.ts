@@ -1,7 +1,7 @@
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import type { WhatsAppInstance } from "../whatsapp-client.ts";
 import { sendMenuViaInstance } from "../whatsapp-dispatch.ts";
-import { enforceWhatsAppRateLimit, getLeadPhone } from "../action-handlers/whatsapp-helpers.ts";
+import { enforceWhatsAppRateLimit, getLeadPhone, resolveVariables } from "../action-handlers/whatsapp-helpers.ts";
 import { logRuntime } from "../logger.ts";
 import { resolveWorkflowQuestionImageUrl } from "./image.ts";
 
@@ -41,6 +41,7 @@ export async function sendWorkflowButtonQuestion(input: {
   if (reservation.data.send !== true) return;
   await sendReservedQuestion(supabase, instance.data as WhatsAppInstance, {
     id: reservation.data.id, organization_id: organizationId, instance_id: instanceId, phone, content: data,
+    lead_id: leadId, context,
   });
 }
 
@@ -50,6 +51,10 @@ interface ReservedQuestion {
   instance_id: string;
   phone: string;
   content: Record<string, unknown>;
+  lead_id: string;
+  execution_id?: string;
+  /** Execution context for variable resolution; queued rows load it at send time. */
+  context?: Record<string, unknown>;
 }
 
 /** Only the transaction that changes queued → sending receives send ownership. */
@@ -66,7 +71,14 @@ export async function sendQueuedWorkflowQuestions(supabase: SupabaseClient): Pro
       return failed.error ? 1 : 0;
     }
     await enforceWhatsAppRateLimit(supabase, question.instance_id);
-    await sendReservedQuestion(supabase, instance.data as WhatsAppInstance, question);
+    // Context only matters when the frozen text carries a variable; a plain text costs no extra read.
+    let context: Record<string, unknown> | undefined;
+    if (String(question.content?.text ?? "").includes("{{")) {
+      const execution = await supabase.from("workflow_executions").select("context")
+        .eq("id", question.execution_id).eq("organization_id", question.organization_id).maybeSingle();
+      context = (execution.data?.context ?? undefined) as Record<string, unknown> | undefined;
+    }
+    await sendReservedQuestion(supabase, instance.data as WhatsAppInstance, { ...question, context });
     return 0;
   }));
   return { errors: results.reduce((sum: number, value: number) => sum + value, 0) };
@@ -76,12 +88,27 @@ async function sendReservedQuestion(supabase: SupabaseClient, instance: WhatsApp
   const { id: occurrenceId, organization_id: organizationId, phone, content: data } = question;
   const buttons = data.buttons as { id: string; label: string }[];
   let definitelyNotSent = true;
+  let notSentReason: "image_unavailable" | "send_preflight_failed" = "image_unavailable";
   try {
     // /send/menu is deliberately single-attempt in UazapiClient. trackId is for reconciliation only.
     const imageButton = await resolveWorkflowQuestionImageUrl(supabase, organizationId, data.image);
+    notSentReason = "send_preflight_failed";
+    // Same resolver as the legacy menu node, at send time over the frozen text.
+    // Button labels stay literal: the reply matches by id.
+    const rawText = String(data.text ?? "");
+    const text = await resolveVariables(supabase, question.lead_id, rawText, question.context);
+    // A text that resolves to nothing is never sent: it routes to Falha no envio.
+    if (!text.trim()) throw new Error("question_buttons_empty_text");
+    if (text !== rawText) {
+      // The chat mirror projects content.text on acceptance: the CRM must show what the lead receives.
+      const persisted = await supabase.from("workflow_button_questions")
+        .update({ content: { ...data, text } }).eq("id", occurrenceId).eq("organization_id", organizationId)
+        .eq("state", "sending");
+      if (persisted.error) throw new Error("question_buttons_text_persistence_failed");
+    }
     definitelyNotSent = false;
     const sent = await sendMenuViaInstance(supabase, instance, phone, {
-      type: "button", text: data.text as string, imageButton,
+      type: "button", text, imageButton,
       choices: buttons.map(button => `${button.label}|${occurrenceId}:${button.id}`),
     }, {
       trackSource: "workflow-question-buttons", trackId: occurrenceId, idempotencyKey: occurrenceId, requiredProvider: "uazapi",
@@ -104,7 +131,7 @@ async function sendReservedQuestion(supabase: SupabaseClient, instance: WhatsApp
   } catch {
     if (definitelyNotSent) {
       const failed = await supabase.rpc("fail_workflow_button_question", {
-        p_id: occurrenceId, p_organization_id: organizationId, p_reason: "image_unavailable",
+        p_id: occurrenceId, p_organization_id: organizationId, p_reason: notSentReason,
       });
       if (!failed.error) return;
     }

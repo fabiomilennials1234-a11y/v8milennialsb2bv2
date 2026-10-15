@@ -30,6 +30,8 @@ export interface TemplateTextareaHandle {
 }
 
 interface TemplateTextareaProps {
+  /** Liga o `<Label htmlFor>` do painel ao campo. */
+  id?: string;
   value: string;
   onChange: (value: string) => void;
   placeholder?: string;
@@ -37,7 +39,7 @@ interface TemplateTextareaProps {
 }
 
 export const TemplateTextarea = forwardRef<TemplateTextareaHandle, TemplateTextareaProps>(
-  ({ value, onChange, placeholder, rows = 4 }, ref) => {
+  ({ id, value, onChange, placeholder, rows = 4 }, ref) => {
     const textareaRef = useRef<HTMLTextAreaElement>(null);
 
     useImperativeHandle(ref, () => ({
@@ -100,6 +102,7 @@ export const TemplateTextarea = forwardRef<TemplateTextareaHandle, TemplateTexta
     return (
       <div className="space-y-2">
         <Textarea
+          id={id}
           ref={textareaRef}
           value={value}
           onChange={(e) => onChange(e.target.value)}

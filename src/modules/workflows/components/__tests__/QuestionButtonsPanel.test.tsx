@@ -97,4 +97,12 @@ describe("Pergunta com botões — configuração", () => {
     expect(screen.getByLabelText("Botão 1")).toHaveValue("Comercial");
     expect(screen.getByLabelText("Prazo de resposta (horas)")).toHaveValue(12);
   });
+  it("oferece variáveis na mensagem e grava a inserida no texto", () => {
+    const onUpdate = vi.fn();
+    render(<WorkflowUiSession><QuestionButtonsPanel onUpdate={onUpdate}
+      data={{ type: "question_buttons", text: "Olá ", timeoutHours: 24, buttons: [{ id: "a", label: "A" }] }} /></WorkflowUiSession>);
+    (screen.getByLabelText("Mensagem") as HTMLTextAreaElement).setSelectionRange(4, 4);
+    fireEvent.click(screen.getByTitle("Clique para inserir {{primeiro_nome}}"));
+    expect(onUpdate).toHaveBeenCalledWith({ text: "Olá {{primeiro_nome}}" });
+  });
 });
