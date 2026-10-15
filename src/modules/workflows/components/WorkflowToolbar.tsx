@@ -44,9 +44,8 @@ interface WorkflowToolbarProps {
   onExport?: () => void;
   /** Abre o Sheet de configurações já na aba pedida. */
   onOpenSettings?: (tab: "reenrollment" | "analytics") => void;
-  /** Tipos que não devem aparecer no menu (ex.: nó gateado por feature flag). */
+  /** Tipos que não devem aparecer no menu (ex.: JavaScript sem sandbox). */
   hiddenNodeTypes?: WorkflowNodeType[];
-  questionButtonsEnabled?: boolean;
 }
 
 export function WorkflowToolbar({
@@ -65,11 +64,10 @@ export function WorkflowToolbar({
   onExport,
   onOpenSettings,
   hiddenNodeTypes = [],
-  questionButtonsEnabled = false,
 }: WorkflowToolbarProps) {
   const navigate = useNavigate();
 
-  const visibleGroups = visibleNodeGroups(hiddenNodeTypes, questionButtonsEnabled);
+  const visibleGroups = visibleNodeGroups(hiddenNodeTypes);
 
   return (
     <div className="flex flex-wrap items-center justify-between gap-2.5 rounded-card border border-card-border bg-card px-3 py-2.5 shadow-relevo">

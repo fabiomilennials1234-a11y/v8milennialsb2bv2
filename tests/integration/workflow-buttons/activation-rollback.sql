@@ -15,7 +15,7 @@ BEGIN
     RAISE EXCEPTION 'FAIL ingress privileges';
   END IF;
   INSERT INTO public.organizations(id,name,slug,is_sandbox,feature_flags)
-    VALUES(org,'Workflow button inbox rollback test','button-rollback-'||org,true,'{"workflow_question_buttons":true}'),
+    VALUES(org,'Workflow button inbox rollback test','button-rollback-'||org,true,'{}'),
           (other_org,'Workflow button inbox isolation test','button-rollback-'||other_org,true,'{}');
   INSERT INTO public.leads(id,organization_id,name,phone) VALUES(lead,org,'Synthetic inbox recipient','5548999990000');
   INSERT INTO public.org_quotas(organization_id,resource_key,plan_base) VALUES(org,'max_whatsapp_instances',1)
@@ -54,11 +54,11 @@ BEGIN
   EXCEPTION WHEN check_violation THEN NULL; END;
   UPDATE public.workflows SET definition=graph WHERE id=wf;
   IF has_function_privilege('anon','public.guard_workflow_button_activation()','EXECUTE') OR has_function_privilege('authenticated','public.guard_workflow_button_activation()','EXECUTE') OR has_function_privilege('service_role','public.guard_workflow_button_activation()','EXECUTE') THEN RAISE EXCEPTION 'FAIL activation trigger grants'; END IF;
-  UPDATE public.organizations SET feature_flags='{}' WHERE id=org;
-  BEGIN
-    UPDATE public.workflows SET is_active=true WHERE id=wf;
-    RAISE EXCEPTION 'FAIL activated gate off';
-  EXCEPTION WHEN check_violation THEN NULL; END;
+  -- Sem a chave da pergunta (com outra flag qualquer): ativação de definição válida passa.
+  UPDATE public.workflows SET is_active=false WHERE id=wf;
+  UPDATE public.organizations SET feature_flags='{"unified_message_node":true}' WHERE id=org;
+  UPDATE public.workflows SET is_active=true WHERE id=wf;
+  IF NOT (SELECT is_active FROM public.workflows WHERE id=wf) THEN RAISE EXCEPTION 'FAIL activation without feature flag'; END IF;
 END $test$;
 RESET ROLE;
 SELECT 'PASS activation validation' AS result;

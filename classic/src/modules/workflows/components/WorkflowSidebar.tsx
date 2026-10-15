@@ -1,7 +1,6 @@
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { useFeatureFlag } from "@/modules/platform";
-import { QUESTION_BUTTONS_FLAG, type ActionNodeData } from "@/types/workflow";
+import type { ActionNodeData } from "@/types/workflow";
 import { ActionTypeSelector } from "./sidebar-panels/ActionTypeSelector";
 import { getGuidedConditionFields } from '../lib/guided-condition-summary';
 import { useState } from 'react';
@@ -79,6 +78,12 @@ interface WorkflowSidebarProps {
   onUpdateNode: (nodeId: string, data: Partial<WorkflowNodeData>) => void;
   onDeleteNode?: (nodeId: string) => void;
   onDuplicateNode?: (nodeId: string) => void;
+  /**
+   * Converte a ação em pergunta com botões (`convertLegacyMenuNode`): troca o
+   * nó E as arestas, por isso não passa por `onUpdateNode`. Chamado ao escolher
+   * "WhatsApp Menu" no seletor e pelo cartão do nó legado.
+   */
+  onConvertToQuestionButtons?: (nodeId: string) => void;
   allNodes?: WorkflowNode[];
 }
 
@@ -92,9 +97,9 @@ export function WorkflowSidebar({
   onUpdateNode,
   onDeleteNode,
   onDuplicateNode,
+  onConvertToQuestionButtons,
   allNodes = [],
 }: WorkflowSidebarProps) {
-  const { enabled: buttonsEnabled } = useFeatureFlag(QUESTION_BUTTONS_FLAG);
   const [expanded, setExpanded] = useState(false);
   if (!selectedNode) return null;
 
@@ -110,11 +115,8 @@ export function WorkflowSidebar({
   };
 
   const handleActionUpdate = (updates: Partial<ActionNodeData>) => {
-    if (updates.actionType === "send_whatsapp_menu" && buttonsEnabled && nodeType !== "question_buttons") {
-      const action = nodeData as ActionNodeData;
-      handleUpdate({ type: "question_buttons", label: action.label, text: action.messageTemplate ?? "",
-        instanceId: action.whatsappInstanceId || undefined,
-        buttons: [{ id: crypto.randomUUID(), label: "Opção 1" }], timeoutHours: 24 });
+    if (updates.actionType === "send_whatsapp_menu" && nodeType === "action" && onConvertToQuestionButtons) {
+      onConvertToQuestionButtons(selectedNode.id);
     } else if (nodeType === "question_buttons" && updates.actionType && updates.actionType !== "send_whatsapp_menu") {
       handleUpdate({ type: "action", label: nodeData.label, ...updates });
     } else {
@@ -127,7 +129,8 @@ export function WorkflowSidebar({
       case "trigger":
         return <TriggerPanel data={nodeData as any} onUpdate={handleUpdate} />;
       case "action":
-        return <ActionPanel data={nodeData as ActionNodeData} onUpdate={handleActionUpdate} />;
+        return <ActionPanel data={nodeData as ActionNodeData} onUpdate={handleActionUpdate}
+          onConvertLegacyMenu={onConvertToQuestionButtons ? () => onConvertToQuestionButtons(selectedNode.id) : undefined} />;
       case "condition":
         if ((nodeData as ConditionNodeData).guidedCondition) {
           const legacyReview = getLegacyConditionReview(nodeData as ConditionNodeData);

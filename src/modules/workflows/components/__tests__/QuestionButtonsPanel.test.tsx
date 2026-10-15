@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { render, screen, fireEvent } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { WorkflowUiSession } from "../../../../../tests/helpers/workflow-ui-session";
 import { QuestionButtonsPanel } from "../sidebar-panels/QuestionButtonsPanel";
@@ -50,6 +50,30 @@ describe("Pergunta com botões — configuração", () => {
     expect(screen.queryByRole("option", { name: "Canal Meta" })).not.toBeInTheDocument();
     fireEvent.click(instanceOption);
     expect(select).toHaveTextContent("TorqueSDR");
+  });
+  it.each([
+    ["evolution", true],
+    ["notificame", true],
+    ["uazapi", false],
+  ])("avisa quando a org não tem instância Uazapi (org com %s → aviso: %s)", async (provider, warns) => {
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const table = new URL(String(input)).pathname.split("/").pop();
+      let rows: unknown[] = [];
+      if (table === "team_members") rows = [{ id: "member", user_id: "user", role: "admin", organization_id: "org", is_active: true }];
+      if (table === "whatsapp_instances") rows = [{ id: "i1", instance_name: "Número", provider, status: "connected" }];
+      const headers = new Headers(init?.headers);
+      return Response.json(headers.get("accept")?.includes("vnd.pgrst.object") ? (rows[0] ?? null) : rows);
+    }));
+    render(<WorkflowUiSession userId="user"><QuestionButtonsPanel data={{ type: "question_buttons", text: "Escolha", buttons: [{ id: "a", label: "Vendas" }], timeoutHours: 24 }} onUpdate={vi.fn()} /></WorkflowUiSession>);
+    const warning = "Botões só são enviados por instância Uazapi; sem ela o fluxo segue pela saída Falha no envio.";
+    if (warns) expect(await screen.findByText(warning)).toBeInTheDocument();
+    else {
+      await screen.findByRole("combobox", { name: "Instância WhatsApp" });
+      await waitFor(() => expect(vi.mocked(fetch).mock.calls.filter(([url]) => String(url).includes("/whatsapp_instances")).length).toBeGreaterThanOrEqual(2));
+      // Deixa a resposta da consulta da org chegar ao render antes de afirmar ausência.
+      await new Promise(resolve => setTimeout(resolve, 50));
+      expect(screen.queryByText(warning)).not.toBeInTheDocument();
+    }
   });
   it("mostra saídas distintas e preserva conexão da opção após renomear e reordenar", () => {
     const data: QuestionButtonsNodeData = { type: "question_buttons", text: "Escolha", timeoutHours: 24, buttons: [{ id: "sales", label: "Vendas" }, { id: "help", label: "Suporte" }] };

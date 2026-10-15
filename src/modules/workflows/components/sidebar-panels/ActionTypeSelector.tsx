@@ -1,17 +1,18 @@
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { getActionCategories, ACTION_LABELS, UNIFIED_MESSAGE_NODE_FLAG, QUESTION_BUTTONS_FLAG, isDiscontinuedAction, type WorkflowActionType } from "@/types/workflow";
+import { getActionCategories, ACTION_LABELS, UNIFIED_MESSAGE_NODE_FLAG, isDiscontinuedAction, type WorkflowActionType } from "@/types/workflow";
 import { DiscontinuedNotice } from "../DiscontinuedNotice";
 import { useFeatureFlag } from "@/modules/platform";
 import { useOrgFeatures } from "@/contexts/OrgFeaturesContext";
 
 export function ActionTypeSelector({ value, onChange }: { value: WorkflowActionType; onChange: (value: WorkflowActionType) => void }) {
   const { enabled: unifiedEnabled } = useFeatureFlag(UNIFIED_MESSAGE_NODE_FLAG);
-  const { enabled: buttonsEnabled } = useFeatureFlag(QUESTION_BUTTONS_FLAG);
   const { hasFeature } = useOrgFeatures();
   const categories = getActionCategories(unifiedEnabled)
     .filter(category => category.label !== "Negócios" || hasFeature("deals"))
-    .map(category => category.label === "Comunicação" && (buttonsEnabled || value === "send_whatsapp_menu") && !category.actions.includes("send_whatsapp_menu")
+    // "WhatsApp Menu" (pergunta com botões) é padrão para toda org — inclusive
+    // com o nó unificado, cujo picker colapsa os envios legados.
+    .map(category => category.label === "Comunicação" && !category.actions.includes("send_whatsapp_menu")
       ? { ...category, actions: [...category.actions, "send_whatsapp_menu" as const] } : category);
   return <div className="space-y-2">
     <Label htmlFor="workflow-action-type">Tipo de Ação</Label>

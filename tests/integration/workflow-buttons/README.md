@@ -9,7 +9,7 @@ SUPABASE_PROJECT_REF=<authorized-project-ref> node tests/integration/workflow-bu
 
 The runner also requires `SUPABASE_ACCESS_TOKEN`. It refuses to run when the candidate schema or leftover fixtures already exist. A separate query verifies cleanup after success or failure. Lock timeout is two seconds; statement timeout is twenty seconds. Existing triggers remain enabled. Synthetic organizations receive a single instance quota and are sandboxed; their workflows remain inactive. Fixture RPC calls execute as `service_role`, the same database role used by the backend.
 
-Covers service-only grants, server-owned immutable snapshot, tenant isolation, reservation/replay, replies before acceptance, first **persisted** eligible response despite reversed processing order, single branch resolution, acceptance-based deadline, cancellation with late acceptance, and default-off feature gating.
+Covers service-only grants, server-owned immutable snapshot, tenant isolation, reservation/replay, replies before acceptance, first **persisted** eligible response despite reversed processing order, single branch resolution, acceptance-based deadline, cancellation with late acceptance, and freeze/activation for organizations without any feature flag (the per-org gate was removed in `20271122000000_workflow_buttons_sem_flag.sql`, which every suite applies after the candidate migrations).
 
 The base suite does not prove cross-session races, durable HTTP ingress order, restart recovery, timeout processing, provider delivery, UI behavior, or live workflow routing.
 

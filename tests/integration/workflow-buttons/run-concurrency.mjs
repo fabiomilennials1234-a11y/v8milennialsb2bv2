@@ -14,7 +14,7 @@ async function query(sql) {
   if (!response.ok) throw new Error((await response.json()).message || `HTTP ${response.status}`);
   return response.json();
 }
-const migrations = ['20271020000060_workflow_button_questions.sql', '20271020000062_workflow_button_inbox.sql', '20271020000063_workflow_button_send_recovery.sql', '20271020000064_workflow_button_queue.sql']
+const migrations = ['20271020000060_workflow_button_questions.sql', '20271020000062_workflow_button_inbox.sql', '20271020000063_workflow_button_send_recovery.sql', '20271020000064_workflow_button_queue.sql', '20271122000000_workflow_buttons_sem_flag.sql']
   .map(file => readFileSync(new URL(`../../../supabase/migrations/${file}`, import.meta.url), 'utf8').replaceAll('public.', `${schema}.`)).join('\n');
 const tables = ['organizations','leads','whatsapp_instances','workflows','workflow_executions','whatsapp_messages','workflow_execution_steps','workflow_guided_versions'];
 const definition = {nodes: [{id:'ask',type:'question_buttons',data:{text:'Synthetic race',timeoutHours:24,buttons:[{id:'a',label:'A'}]}}, ...['a','other','timeout','failure'].map(id=>({id,type:'end',data:{}}))], edges: [['button:a','a'],['other_response','other'],['timeout','timeout'],['send_failure','failure']].map(([sourceHandle,target])=>({source:'ask',sourceHandle,target}))};
@@ -28,7 +28,7 @@ try {
   for (const firstKind of ['button','other']) {
     const org=randomUUID(), lead=randomUUID(), instance=randomUUID(), wf=randomUUID(), execution=randomUUID();
     const fixture = await query(`BEGIN; SET LOCAL ROLE service_role;
-      INSERT INTO ${schema}.organizations(id,name,slug,is_sandbox,feature_flags) VALUES('${org}','Synthetic concurrency','race-${org}',true,'{"workflow_question_buttons":true}');
+      INSERT INTO ${schema}.organizations(id,name,slug,is_sandbox,feature_flags) VALUES('${org}','Synthetic concurrency','race-${org}',true,'{}');
       INSERT INTO ${schema}.leads(id,organization_id,name,phone) VALUES('${lead}','${org}','Synthetic recipient','5548999990000');
       INSERT INTO ${schema}.whatsapp_instances(id,organization_id,instance_name,status,provider) VALUES('${instance}','${org}','synthetic-no-credentials','connected','uazapi');
       INSERT INTO ${schema}.workflows(id,organization_id,name,trigger_type,definition,is_active,re_enrollment_enabled) VALUES('${wf}','${org}','Synthetic race','manual',${literal(JSON.stringify(definition))}::jsonb,false,true);
