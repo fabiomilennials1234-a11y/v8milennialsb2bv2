@@ -70,8 +70,6 @@ export async function handleWorkflowQuestionImage(req: Request): Promise<Respons
     await requireAuth(req, { organizationId, requireOrganization: true });
     const permission = await caller.rpc("can_administer_guided_workflow", { p_organization_id: organizationId });
     if (permission.error || permission.data !== true) return json({ error: "Sem permissão para editar automações." }, 403);
-    const org = await caller.from("organizations").select("feature_flags").eq("id", organizationId).maybeSingle();
-    if (org.error || org.data?.feature_flags?.workflow_question_buttons !== true) return json({ error: "Pergunta com botões ainda não está liberada nesta organização." }, 403);
     const storage = createAdminClient("workflow-question-image").storage.from(QUESTION_IMAGE_BUCKET);
     if (isPreview) {
       if (previewRequest?.action !== "preview" || !isQuestionImagePath(previewRequest?.path, organizationId)) return json({ error: "Imagem indisponível para esta organização." }, 403);

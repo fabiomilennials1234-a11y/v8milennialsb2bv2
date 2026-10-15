@@ -52,9 +52,8 @@ interface WorkflowToolbarProps {
   workflowId?: string;
   onExport?: () => void;
   onOpenSettings?: () => void;
-  /** Tipos que não devem aparecer no menu (ex.: nó gateado por feature flag). */
+  /** Tipos que não devem aparecer no menu (ex.: JavaScript sem sandbox). */
   hiddenNodeTypes?: WorkflowNodeType[];
-  questionButtonsEnabled?: boolean;
 }
 
 interface NodeOption {
@@ -128,7 +127,6 @@ export function WorkflowToolbar({
   onExport,
   onOpenSettings,
   hiddenNodeTypes = [],
-  questionButtonsEnabled = false,
 }: WorkflowToolbarProps) {
   const navigate = useNavigate();
 
@@ -137,7 +135,7 @@ export function WorkflowToolbar({
   const visibleGroups = ADD_NODE_GROUPS
     .map((group) => ({
       ...group,
-      options: group.options.filter((opt) => !hiddenNodeTypes.includes(opt.type) && (opt.type !== "question_buttons" || questionButtonsEnabled)),
+      options: group.options.filter((opt) => !hiddenNodeTypes.includes(opt.type)),
     }))
     .filter((group) => group.options.length > 0);
 

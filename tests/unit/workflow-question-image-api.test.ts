@@ -7,7 +7,7 @@ const workflowId = "22222222-2222-4222-8222-222222222222";
 const png = Uint8Array.from(Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl6ZmcAAAAASUVORK5CYII=", "base64"));
 afterEach(() => vi.unstubAllGlobals());
 
-function storageApi(options: { allowed?: boolean; enabled?: boolean; visible?: boolean; incoming?: boolean } = {}) {
+function storageApi(options: { allowed?: boolean; visible?: boolean; incoming?: boolean } = {}) {
   const requests: Array<{ path: string; method: string; headers: Headers }> = [];
   const env: Record<string, string> = { SUPABASE_URL: "https://db.test", SUPABASE_ANON_KEY: "anon", SUPABASE_SERVICE_ROLE_KEY: "service" };
   vi.stubGlobal("Deno", { env: { get: (key: string) => env[key] } });
@@ -24,7 +24,7 @@ function storageApi(options: { allowed?: boolean; enabled?: boolean; visible?: b
       "/rest/v1/master_users": null,
       "/rest/v1/team_members": { id: "member", organization_id: org, role: "admin" },
       "/rest/v1/rpc/can_administer_guided_workflow": options.allowed ?? true,
-      "/rest/v1/organizations": { feature_flags: { workflow_question_buttons: options.enabled ?? true } },
+      // Sem "/rest/v1/organizations": a flag saiu; consultar organizations quebra o teste.
     };
     if (!(path in data)) throw new Error(`Unexpected HTTP ${path}`);
     return Response.json(data[path]);
@@ -61,7 +61,7 @@ describe("Upload privado de imagem da pergunta", () => {
     expect((await handleWorkflowQuestionImage(request(`44444444-4444-4444-8444-444444444444/${own.split("/")[1]}`))).status).toBe(403);
     expect(requests.filter(item => item.path.startsWith("/storage/"))).toHaveLength(count);
   });
-  it.each([{ visible: false }, { allowed: false }, { enabled: false }])("nega acesso sem workflow, permissão ou gate: %j", async options => {
+  it.each([{ visible: false }, { allowed: false }])("nega acesso sem workflow ou permissão: %j", async options => {
     const requests = storageApi(options);
     expect((await handleWorkflowQuestionImage(upload())).status).toBe(403);
     expect(requests.some(item => item.path.startsWith("/storage/"))).toBe(false);
@@ -90,12 +90,14 @@ describe("Upload privado de imagem da pergunta", () => {
     const write = requests.find(item => item.path.startsWith("/storage/v1/object/workflow-question-images/"));
     expect(write?.headers.get("x-upsert")).toBe("false");
     expect(requests.find(item => item.path === "/rest/v1/workflows")?.headers.get("authorization")).toBe("Bearer caller");
+    // Org sem chave de feature flag: o upload não consulta mais organizations.
+    expect(requests.some(item => item.path === "/rest/v1/organizations")).toBe(false);
   });
 });
 
 
-it("prévia do chat autoriza pela mensagem visível mesmo com gate desligado", async () => {
-  storageApi({ enabled: false, allowed: false });
+it("prévia do chat autoriza pela mensagem visível mesmo sem permissão de edição", async () => {
+  storageApi({ allowed: false });
   const response = await handleWorkflowQuestionImage(new Request("https://edge.test/workflow-question-image", {
     method: "POST", headers: { Authorization: "Bearer caller", "Content-Type": "application/json" },
     body: JSON.stringify({ action: "chat_preview", messageId: workflowId }),

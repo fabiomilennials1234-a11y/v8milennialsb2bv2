@@ -1009,8 +1009,6 @@ export interface QuestionButtonsNodeData {
   [key: string]: unknown;
 }
 
-export const QUESTION_BUTTONS_FLAG = "workflow_question_buttons";
-
 export type WorkflowNodeData =
   | QuestionButtonsNodeData
   | TriggerNodeData

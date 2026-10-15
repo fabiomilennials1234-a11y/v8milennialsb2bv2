@@ -3,7 +3,7 @@
  * "Automações · Editor").
  *
  * Mesmos grupos e mesmo filtro do menu "Adicionar Nó" (`visibleNodeGroups`):
- * o JavaScript continua oculto, "Pergunta com botões" segue a flag. Clicar num
+ * o JavaScript continua oculto. Clicar num
  * bloco chama o MESMO handler do menu — nada de arrastar, nada de caminho novo.
  */
 import { useState } from "react";
@@ -16,17 +16,15 @@ import { visibleNodeGroups } from "@/modules/workflows/lib/node-groups";
 export function WorkflowPalette({
   onAddNode,
   hiddenNodeTypes = [],
-  questionButtonsEnabled = false,
   className,
 }: {
   onAddNode: (type: WorkflowNodeType) => void;
   hiddenNodeTypes?: WorkflowNodeType[];
-  questionButtonsEnabled?: boolean;
   className?: string;
 }) {
   const [query, setQuery] = useState("");
   const q = query.trim().toLowerCase();
-  const groups = visibleNodeGroups(hiddenNodeTypes, questionButtonsEnabled)
+  const groups = visibleNodeGroups(hiddenNodeTypes)
     .map((g) => ({ ...g, options: g.options.filter((o) => !q || o.label.toLowerCase().includes(q)) }))
     .filter((g) => g.options.length > 0);
 

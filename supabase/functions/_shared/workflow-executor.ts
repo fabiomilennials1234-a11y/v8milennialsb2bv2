@@ -212,13 +212,6 @@ export async function executeWorkflow(params: ExecuteWorkflowParams): Promise<Ex
 
   if (params.questionButtonsDefinition) definition = params.questionButtonsDefinition;
   if (definition.nodes.some(node => node.type === "question_buttons")) {
-    const feature = params.questionButtonsDefinition ? null : await supabase.from("organizations")
-      .select("feature_flags").eq("id", organizationId).maybeSingle();
-    if (!params.questionButtonsDefinition && (feature?.error || feature?.data?.feature_flags?.workflow_question_buttons !== true)) {
-      const error = "Pergunta com botões não habilitada para organização";
-      await updateExecution(supabase, executionId, "failed", params.currentNodeId ?? null, params.loopCounters ?? {}, error);
-      return { success: false, status: "failed", error, stepsExecuted: 0 };
-    }
     const frozen = await supabase.rpc("freeze_workflow_button_definition", {
       p_execution_id: executionId, p_organization_id: organizationId,
     });
