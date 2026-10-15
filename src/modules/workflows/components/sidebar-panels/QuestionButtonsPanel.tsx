@@ -1,5 +1,5 @@
+import { useRef } from "react";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { ArrowUp, ArrowDown, Trash2, Plus, Info } from "lucide-react";
@@ -8,6 +8,8 @@ import { findNodeConfigIssues } from "@/contracts/workflows/node-requirements";
 import { useWhatsAppInstances, useWhatsAppInstancesForUser } from "@/modules/communication";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { QuestionButtonsImage } from "./QuestionButtonsImage";
+import { VariableInserter } from "@/modules/workflows/components/VariableInserter";
+import { TemplateTextarea, type TemplateTextareaHandle } from "@/modules/workflows/components/TemplateTextarea";
 
 interface Props {
   data: QuestionButtonsNodeData;
@@ -16,6 +18,7 @@ interface Props {
 }
 
 export function QuestionButtonsPanel({ data, onUpdate, workflowId }: Props) {
+  const textRef = useRef<TemplateTextareaHandle>(null);
   const instancesQuery = useWhatsAppInstancesForUser();
   const instances = (instancesQuery.data ?? []).filter(instance => instance.provider === "uazapi");
   // O aviso olha a ORG, não o acesso do usuário: em "instância da conversa" o
@@ -53,8 +56,9 @@ export function QuestionButtonsPanel({ data, onUpdate, workflowId }: Props) {
     </div>}
     <div className="space-y-2">
       <Label htmlFor="question-message">Mensagem</Label>
-      <Textarea id="question-message" value={data.text} rows={4}
-        onChange={(event) => onUpdate({ text: event.target.value })} />
+      <VariableInserter onInsert={variable => textRef.current?.insertAtCursor(variable)} />
+      <TemplateTextarea ref={textRef} id="question-message" value={data.text} rows={4}
+        onChange={text => onUpdate({ text })} />
     </div>
     <div className="space-y-3">
       <QuestionButtonsImage workflowId={workflowId} image={data.image} onChange={image => onUpdate({ image })} />

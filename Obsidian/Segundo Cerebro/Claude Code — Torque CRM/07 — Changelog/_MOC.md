@@ -178,3 +178,4 @@ owner: claude-agent
 - [[2026-10-09-motivo-da-perda-porta-unica|Motivo da perda — porta única em toda movimentação humana]] 🔵 wip
 - [[2026-10-13-copilot-handoff-pegajoso|Copilot — handoff pegajoso e texto do turno de transferência]] 🔵 wip
 - [[2026-10-14-whatsapp-menu-sem-flag|WhatsApp Menu (pergunta com botões) padrão para todas as orgs]] 🔵 wip
+- [[2026-10-15-whatsapp-menu-variaveis|WhatsApp Menu — variáveis {{x}} no texto da pergunta]] 🔵 wip

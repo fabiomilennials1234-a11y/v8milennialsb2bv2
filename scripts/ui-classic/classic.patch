@@ -8554,6 +8554,36 @@ index 000000000..8f41158f9
 +    isSaving: mutation.isPending,
 +  };
 +}
+diff --git a/classic/src/modules/workflows/components/TemplateTextarea.tsx b/classic/src/modules/workflows/components/TemplateTextarea.tsx
+index 8247c949f..964d9d47e 100644
+--- a/classic/src/modules/workflows/components/TemplateTextarea.tsx
++++ b/classic/src/modules/workflows/components/TemplateTextarea.tsx
+@@ -32,6 +32,8 @@ export interface TemplateTextareaHandle {
+ }
+ 
+ interface TemplateTextareaProps {
++  /** Liga o `<Label htmlFor>` do painel ao campo. */
++  id?: string;
+   value: string;
+   onChange: (value: string) => void;
+   placeholder?: string;
+@@ -39,7 +41,7 @@ interface TemplateTextareaProps {
+ }
+ 
+ export const TemplateTextarea = forwardRef<TemplateTextareaHandle, TemplateTextareaProps>(
+-  ({ value, onChange, placeholder, rows = 4 }, ref) => {
++  ({ id, value, onChange, placeholder, rows = 4 }, ref) => {
+     const textareaRef = useRef<HTMLTextAreaElement>(null);
+ 
+     useImperativeHandle(ref, () => ({
+@@ -102,6 +104,7 @@ export const TemplateTextarea = forwardRef<TemplateTextareaHandle, TemplateTexta
+     return (
+       <div className="space-y-2">
+         <Textarea
++          id={id}
+           ref={textareaRef}
+           value={value}
+           onChange={(e) => onChange(e.target.value)}
 diff --git a/classic/src/modules/workflows/components/WorkflowSidebar.tsx b/classic/src/modules/workflows/components/WorkflowSidebar.tsx
 index 0b444abbc..f74abfe76 100644
 --- a/classic/src/modules/workflows/components/WorkflowSidebar.tsx
@@ -8798,11 +8828,13 @@ index 000000000..cf9d74354
 +  );
 +}
 diff --git a/classic/src/modules/workflows/components/sidebar-panels/QuestionButtonsPanel.tsx b/classic/src/modules/workflows/components/sidebar-panels/QuestionButtonsPanel.tsx
-index a078b8a0f..570e0acf1 100644
+index a078b8a0f..ab9669ef6 100644
 --- a/classic/src/modules/workflows/components/sidebar-panels/QuestionButtonsPanel.tsx
 +++ b/classic/src/modules/workflows/components/sidebar-panels/QuestionButtonsPanel.tsx
-@@ -2,10 +2,10 @@ import { Input } from "@/components/ui/input";
- import { Textarea } from "@/components/ui/textarea";
+@@ -1,13 +1,15 @@
++import { useRef } from "react";
+ import { Input } from "@/components/ui/input";
+-import { Textarea } from "@/components/ui/textarea";
  import { Label } from "@/components/ui/label";
  import { Button } from "@/components/ui/button";
 -import { ArrowUp, ArrowDown, Trash2, Plus } from "lucide-react";
@@ -8813,9 +8845,16 @@ index a078b8a0f..570e0acf1 100644
 +import { useWhatsAppInstances, useWhatsAppInstancesForUser } from "@/modules/communication";
  import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
  import { QuestionButtonsImage } from "./QuestionButtonsImage";
++import { VariableInserter } from "@/modules/workflows/components/VariableInserter";
++import { TemplateTextarea, type TemplateTextareaHandle } from "@/modules/workflows/components/TemplateTextarea";
  
-@@ -18,6 +18,10 @@ interface Props {
+ interface Props {
+   data: QuestionButtonsNodeData;
+@@ -16,8 +18,13 @@ interface Props {
+ }
+ 
  export function QuestionButtonsPanel({ data, onUpdate, workflowId }: Props) {
++  const textRef = useRef<TemplateTextareaHandle>(null);
    const instancesQuery = useWhatsAppInstancesForUser();
    const instances = (instancesQuery.data ?? []).filter(instance => instance.provider === "uazapi");
 +  // O aviso olha a ORG, não o acesso do usuário: em "instância da conversa" o
@@ -8825,7 +8864,7 @@ index a078b8a0f..570e0acf1 100644
    const issues = findNodeConfigIssues([{ id: "question", type: "question_buttons", data }], [])
      .filter(issue => !issue.missing.startsWith("destino da saída"));
    const move = (index: number, direction: number) => {
-@@ -26,6 +30,10 @@ export function QuestionButtonsPanel({ data, onUpdate, workflowId }: Props) {
+@@ -26,6 +33,10 @@ export function QuestionButtonsPanel({ data, onUpdate, workflowId }: Props) {
      onUpdate({ buttons });
    };
    return <div className="space-y-6">
@@ -8836,6 +8875,18 @@ index a078b8a0f..570e0acf1 100644
      <div className="space-y-2">
        <Label htmlFor="question-instance">Instância WhatsApp</Label>
        <Select value={data.instanceId === null ? "" : data.instanceId ?? "conversation"} onValueChange={value => onUpdate({ instanceId: value === "conversation" ? undefined : value })} disabled={instancesQuery.isLoading}>
+@@ -45,8 +56,9 @@ export function QuestionButtonsPanel({ data, onUpdate, workflowId }: Props) {
+     </div>}
+     <div className="space-y-2">
+       <Label htmlFor="question-message">Mensagem</Label>
+-      <Textarea id="question-message" value={data.text} rows={4}
+-        onChange={(event) => onUpdate({ text: event.target.value })} />
++      <VariableInserter onInsert={variable => textRef.current?.insertAtCursor(variable)} />
++      <TemplateTextarea ref={textRef} id="question-message" value={data.text} rows={4}
++        onChange={text => onUpdate({ text })} />
+     </div>
+     <div className="space-y-3">
+       <QuestionButtonsImage workflowId={workflowId} image={data.image} onChange={image => onUpdate({ image })} />
 diff --git a/classic/src/modules/workflows/lib/convertLegacyMenuNode.ts b/classic/src/modules/workflows/lib/convertLegacyMenuNode.ts
 new file mode 100644
 index 000000000..e18077f69
