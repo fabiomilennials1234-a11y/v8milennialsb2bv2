@@ -37,8 +37,8 @@ describe("cloudflare/wrangler.jsonc", () => {
     expect(config.observability.redact_query_string).toBe(true);
   });
 
-  it("só workers.dev, sem URL de preview, sem source map enviado", () => {
-    expect(config.workers_dev).toBe(true);
+  it("sem workers.dev (fim da quarentena), sem URL de preview, sem source map enviado", () => {
+    expect(config.workers_dev).toBe(false);
     expect(config.preview_urls).toBe(false);
     expect(config.upload_source_maps).toBe(false);
   });
