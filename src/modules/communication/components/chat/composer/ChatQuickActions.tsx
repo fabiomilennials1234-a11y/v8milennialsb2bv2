@@ -46,7 +46,7 @@ export function ChatQuickActions({
         onClick={onAttach}
         disabled={disabled}
         aria-label="Anexar arquivo"
-        title="Anexar imagem, vídeo ou documento"
+        title="Anexar imagem, vídeo ou documento (ou cole com Ctrl/⌘+V)"
         className={QUICK_ACTION_BUTTON}
       >
         <Paperclip className="w-[18px] h-[18px]" />

@@ -10,7 +10,7 @@
  *  6. Cancelar limpa o anexo pendente
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor, createEvent } from "@testing-library/react";
 
 // ─── Mocks ────────────────────────────────────────────────────────────────────
 
@@ -237,5 +237,63 @@ describe("ChatBubbleComposer — anexos", () => {
     expect(screen.queryByText("proposta.pdf")).not.toBeInTheDocument();
     expect(screen.getByLabelText("Anexar arquivo")).toBeInTheDocument();
     expect(mockMediaMutateAsync).not.toHaveBeenCalled();
+  });
+});
+
+// ─── Colar imagem (Ctrl/⌘+V) — mesmo attachFile do input ───────────────────────
+
+function clipboardData({ images = [] as File[], text = "" } = {}) {
+  return {
+    items: images.map((f) => ({ kind: "file", type: f.type, getAsFile: () => f })),
+    files: images,
+    getData: (fmt: string) => (fmt === "text/plain" ? text : ""),
+  };
+}
+
+describe("ChatBubbleComposer — colar imagem", () => {
+  beforeEach(() => {
+    mockMediaMutateAsync.mockClear();
+    mockToast.mockClear();
+  });
+
+  it("imagem colada vira o anexo pendente e envia como image", async () => {
+    render(<ChatBubbleComposer {...BASE_PROPS} />);
+    const field = screen.getByLabelText("Mensagem");
+    const ev = createEvent.paste(field, {
+      clipboardData: clipboardData({ images: [new File(["png"], "image.png", { type: "image/png" })] }),
+    });
+    fireEvent(field, ev);
+    expect(ev.defaultPrevented).toBe(true);
+
+    await waitFor(() => expect(document.querySelector("img")).not.toBeNull());
+    expect(screen.getByText(/^print-\d{8}-\d{6}\.png$/)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Enviar" }));
+    await waitFor(() =>
+      expect(mockMediaMutateAsync).toHaveBeenCalledWith(
+        expect.objectContaining({ mediaType: "image", mimetype: "image/png" }),
+      ),
+    );
+  });
+
+  it("imagem em formato recusado (tiff) cai no mesmo toast do input", async () => {
+    render(<ChatBubbleComposer {...BASE_PROPS} />);
+    const field = screen.getByLabelText("Mensagem");
+    fireEvent(field, createEvent.paste(field, {
+      clipboardData: clipboardData({ images: [new File(["x"], "scan.tiff", { type: "image/tiff" })] }),
+    }));
+    await waitFor(() =>
+      expect(mockToast).toHaveBeenCalledWith(expect.objectContaining({ title: "Anexo inválido" })),
+    );
+    expect(document.querySelector("img")).toBeNull();
+  });
+
+  it("texto colado segue nativo, sem anexo", () => {
+    render(<ChatBubbleComposer {...BASE_PROPS} />);
+    const field = screen.getByLabelText("Mensagem");
+    const ev = createEvent.paste(field, { clipboardData: clipboardData({ text: "ok" }) });
+    fireEvent(field, ev);
+    expect(ev.defaultPrevented).toBe(false);
+    expect(screen.getByLabelText("Anexar arquivo")).toBeInTheDocument();
   });
 });
