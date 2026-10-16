@@ -240,7 +240,11 @@ export interface LeadCardData {
   edicao?: {
     preVenda: { id: string; name: string } | null;
     venda: { id: string; name: string } | null;
-    /** Co-donos (`lead_owners.role = 'co'`), só leitura nesta fatia. Ausente = nenhum. */
+    /**
+     * Co-donos (`lead_owners.role = 'co'`). Ausente = a org não usa N donos e a
+     * ficha não desenha o controle; array (mesmo vazio) = usa, e a ficha deixa
+     * adicionar co-donos.
+     */
     coDonos?: { id: string; name: string }[];
     preQualificacao: string | null;
     qualificacao: string | null;

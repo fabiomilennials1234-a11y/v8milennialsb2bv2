@@ -396,7 +396,9 @@ export function useLeadCardData(leadId: string | null, isOpen: boolean): LeadCar
       edicao: {
         preVenda: membroDoJoin(l, "pre_sale_responsible"),
         venda: membroDoJoin(l, "sale_responsible"),
-        ...(coDonos.length > 0 ? { coDonos } : {}),
+        // Presente (mesmo vazio) = a org usa N donos e a ficha desenha o controle
+        // de co-donos; ausente = org sem a flag, ficha como sempre foi.
+        ...(donosMultiplos ? { coDonos } : {}),
         preQualificacao: texto(l, "pre_qualification_tier"),
         qualificacao: texto(l, "qualification_tier"),
         atualizadoEm: texto(l, "updated_at"),
@@ -459,6 +461,7 @@ export function useLeadCardData(leadId: string | null, isOpen: boolean): LeadCar
     podeEditarDocumento,
     lead,
     donosDoLead,
+    donosMultiplos,
     dealsMap,
     produtosPorNegocio,
     vendasMap,

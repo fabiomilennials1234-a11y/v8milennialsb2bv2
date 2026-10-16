@@ -8,6 +8,14 @@ import { useUpdateLead } from "../../../../hooks/useLeads";
 import { useLogLeadAction } from "@/shared/hooks/useLogLeadAction";
 import { useOptimisticConflictHandler } from "@/shared/hooks/useOptimisticConflictHandler";
 import { useLeadActionGates } from "../../hooks/useLeadActionGates";
+import { useLeadOwnersEnabled } from "../../../../hooks/useLeadOwners";
+import {
+  recusaDeDonos,
+  useAddLeadOwner,
+  useRemoveLeadOwner,
+  useTransferLeadOwner,
+} from "../../../../hooks/useLeadOwnersMutations";
+import { notifyError } from "@/shared/errors";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 
@@ -46,6 +54,12 @@ export const ResponsibleSlot = memo(function ResponsibleSlot({
   const logAction = useLogLeadAction();
   const handleConflict = useOptimisticConflictHandler();
   const { canReassign } = useLeadActionGates(leadId);
+  const donosMultiplos = useLeadOwnersEnabled();
+  const transfer = useTransferLeadOwner(leadId);
+  const addCoOwner = useAddLeadOwner(leadId);
+  const removeCoOwner = useRemoveLeadOwner(leadId);
+  // Padrão do CTO (08/10): quem passa o lead adiante continua como co-dono.
+  const [keepPrevious, setKeepPrevious] = useState(true);
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
   const denied = !canReassign.allowed;
@@ -54,19 +68,60 @@ export const ResponsibleSlot = memo(function ResponsibleSlot({
     m.name.toLowerCase().includes(search.toLowerCase())
   );
 
+  /**
+   * Esvaziar o slot é UPDATE, e o gatilho do banco decide sozinho o destino de
+   * quem saiu pela ORIGEM da linha (principal vindo do backfill sai de vez;
+   * vindo de transferência vira co-dono). Aqui a escolha do checkbox manda,
+   * igual nos dois casos: manter = garantir a linha de co-dono; não manter =
+   * apagá-la. As duas RPCs são idempotentes. PT409 = a pessoa ainda é principal
+   * no OUTRO papel, e então não há o que ajustar.
+   */
+  const ajustarCoDonoDeQuemSaiu = async (saiuId: string) => {
+    try {
+      if (keepPrevious) await addCoOwner.mutateAsync(saiuId);
+      else await removeCoOwner.mutateAsync(saiuId);
+    } catch (err) {
+      if ((err as { code?: string })?.code === "PT409") return;
+      notifyError(err, {
+        fallback: "O responsável saiu, mas não foi possível ajustar o co-dono.",
+        message: recusaDeDonos(err as { code?: string; message?: string }),
+      });
+    }
+  };
+
   const handleSelect = async (memberId: string | null) => {
     const next = memberId === currentMember?.id ? null : memberId;
     const newName = members.find((m) => m.id === next)?.name ?? "Nenhum";
     try {
-      await updateLead.mutateAsync({
-        id: leadId,
-        [field]: next,
-        ...(expectedUpdatedAt ? { expectedUpdatedAt } : {}),
-      } as Parameters<typeof updateLead.mutateAsync>[0]);
+      if (donosMultiplos && next) {
+        // Org com N donos: trocar o principal é TRANSFERÊNCIA (RPC), que mantém
+        // o anterior como co-dono. Esvaziar o slot continua sendo UPDATE.
+        await transfer.mutateAsync({
+          toMemberId: next,
+          role: field === "sale_responsible_id" ? "venda" : "pre_venda",
+          keepPrevious: keepPrevious && !!currentMember,
+        });
+      } else {
+        await updateLead.mutateAsync({
+          id: leadId,
+          [field]: next,
+          ...(expectedUpdatedAt ? { expectedUpdatedAt } : {}),
+        } as Parameters<typeof updateLead.mutateAsync>[0]);
+        if (donosMultiplos && !next && currentMember) await ajustarCoDonoDeQuemSaiu(currentMember.id);
+      }
     } catch (err) {
       const handled = handleConflict(err, { leadId });
       if (handled) {
         setOpen(false);
+        return;
+      }
+      if (donosMultiplos) {
+        // Org com N donos: o erro é notificado e relatado aqui; não relança,
+        // porque o `onClick` não tem quem capture e viraria rejeição solta.
+        notifyError(err, {
+          fallback: "Falha ao atualizar responsável.",
+          message: recusaDeDonos(err as { code?: string; message?: string }),
+        });
         return;
       }
       toast.error("Falha ao atualizar responsável");
@@ -141,6 +196,17 @@ export const ResponsibleSlot = memo(function ResponsibleSlot({
                 className="h-8 pl-7 text-xs"
               />
             </div>
+            {donosMultiplos && hasMember && (
+              <label className="flex cursor-pointer items-center gap-2 px-1 text-[11px] text-muted-foreground">
+                <input
+                  type="checkbox"
+                  checked={keepPrevious}
+                  onChange={(e) => setKeepPrevious(e.target.checked)}
+                  className="h-3.5 w-3.5 accent-primary"
+                />
+                <span className="truncate">Manter {currentMember.name} como co-dono</span>
+              </label>
+            )}
             <div className="max-h-60 overflow-y-auto space-y-0.5">
               {hasMember && (
                 <button
