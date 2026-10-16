@@ -23,6 +23,7 @@ import { SupportAccess } from "../support/SupportAccess";
 import { SupportRealtimeAnnouncement } from "@/modules/platform/components/support/announcement/SupportRealtimeAnnouncement";
 import { SessionDeadBanner } from "@/modules/communication/components/whatsapp/SessionDeadBanner";
 import { QuickBlastProgressPanel } from "@/modules/leads/components/bulk-actions/QuickBlastProgressPanel";
+import { FeatureSuggestionPrompt } from "@/modules/platform/components/feedback/FeatureSuggestionPrompt";
 
 /**
  * Checklist flutuante de onboarding (canto sup. direito). DESLIGADO (2026-10-14,
@@ -201,6 +202,8 @@ function MainLayoutInner({ children }: MainLayoutProps) {
       {featureFlags.chatBubble && <ChatBubble />}
 
       <QuickBlastProgressPanel />
+      {/* Sugestões de funcionalidade: uma vez por usuário, estado no servidor. Fora de SupportAccess. */}
+      <FeatureSuggestionPrompt />
 
       <MobileBottomNav />
     </div>

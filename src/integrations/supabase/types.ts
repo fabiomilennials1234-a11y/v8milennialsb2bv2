@@ -7713,6 +7713,44 @@ export type Database = {
         }
         Relationships: []
       }
+      feature_suggestions: {
+        Row: {
+          body: string
+          created_at: string
+          id: string
+          kind: string
+          organization_id: string
+          source: string
+          user_id: string
+        }
+        Insert: {
+          body: string
+          created_at?: string
+          id?: string
+          kind: string
+          organization_id: string
+          source?: string
+          user_id?: string
+        }
+        Update: {
+          body?: string
+          created_at?: string
+          id?: string
+          kind?: string
+          organization_id?: string
+          source?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "feature_suggestions_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       field_changes: {
         Row: {
           changed_at: string
@@ -17858,6 +17896,27 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      user_prompt_impressions: {
+        Row: {
+          outcome: string | null
+          prompt_key: string
+          seen_at: string
+          user_id: string
+        }
+        Insert: {
+          outcome?: string | null
+          prompt_key: string
+          seen_at?: string
+          user_id?: string
+        }
+        Update: {
+          outcome?: string | null
+          prompt_key?: string
+          seen_at?: string
+          user_id?: string
+        }
+        Relationships: []
       }
       user_roles: {
         Row: {
