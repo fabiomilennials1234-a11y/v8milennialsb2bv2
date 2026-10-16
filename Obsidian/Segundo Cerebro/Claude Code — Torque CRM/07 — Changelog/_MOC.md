@@ -16,7 +16,6 @@ owner: claude-agent
 
 ## Notas nesta pasta
 
-- [[2026-10-16-master-orgs-inativas|Organizações inativas na Área Master]]
 - [[2026-04-27-pdf-chunking-rag|2026-04-27 — PDF chunking + hard limit 8MB pra RAG funcional]]
 - [[2026-04-27-products-rls-strict|2026-04-27 — RLS strict products: drop master permissive policies]]
 - [[2026-04-27-refactor-copilot-modules|Changelog — 2026-04-27 (sessão tarde) — Refactor Copilot + Wizard Removal + Tabs Playground]]
@@ -181,3 +180,4 @@ owner: claude-agent
 - [[2026-10-14-whatsapp-menu-sem-flag|WhatsApp Menu (pergunta com botões) padrão para todas as orgs]] 🔵 wip
 - [[2026-10-15-whatsapp-menu-variaveis|WhatsApp Menu — variáveis {{x}} no texto da pergunta]] 🔵 wip
 - [[2026-10-16-carteira-rota-propria|Carteira em rota própria /carteira]] 🔵 wip
+- [[2026-10-16-master-orgs-inativas|Organizações inativas na Área Master]]
