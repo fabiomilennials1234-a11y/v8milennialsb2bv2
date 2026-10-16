@@ -12,7 +12,7 @@ function fakeClient(rows: LeadRow[], failAtCall?: number) {
       assertEquals(table, "leads");
       return {
         select(columns: string) {
-          assertEquals(columns, "id, name, company, phone");
+          assertEquals(columns, "id, name, company, phone, segment");
           return {
             eq(column: string, organizationId: string) {
               assertEquals(column, "organization_id");

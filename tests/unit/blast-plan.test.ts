@@ -272,6 +272,23 @@ describe("createBlastPlan — freeze + slice + lot 1 today", () => {
     expect(input.lotIndex).toBe(0);
   });
 
+  it("freezes segmento and resolves {{key}} templates from the snapshot (new wizard)", async () => {
+    const { store, state } = planStore();
+    const usage = usageStub(0);
+    const dispatch = okDispatch();
+    const audience = [{ id: "1", name: "Ana Souza", company: "Petshop Amigo", phone: "11999000001", segment: "Petshop" }];
+
+    const out = await createBlastPlan(
+      { store, usageSource: usage.source, dispatch },
+      baseCreateParams({ leads: audience, message: "Olá {{primeiro_nome}}, {{empresa}} ({{segmento}})" }),
+    );
+
+    expect(out.ok).toBe(true);
+    expect(state.recipients[0].variable_snapshot).toMatchObject({ primeiro_nome: "Ana", segmento: "Petshop" });
+    const sent = dispatch.mock.calls[0][1].recipients[0];
+    expect(sent.text).toBe("Olá Ana, Petshop Amigo (Petshop)");
+  });
+
   it("rejects an empty audience without creating a plan", async () => {
     const { store, state } = planStore();
     const out = await createBlastPlan(
