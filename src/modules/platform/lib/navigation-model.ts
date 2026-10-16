@@ -28,6 +28,7 @@ import {
   Trash2,
   Trophy,
   Tv,
+  Wallet,
   Workflow,
   Wrench,
   Zap,
@@ -72,10 +73,11 @@ export interface NavNode {
 
 /**
  * SCRUM-637 (flip): o `PIPE_PATH_MAP` morreu — TODO funil navega pela rota
- * única `/funil/:slug`. Só a Carteira mantém rota própria (não é funil de
- * negócio — D6/ADR-0034).
+ * única `/funil/:slug`. O kanban legado da carteira (`/upsell`) mantém rota
+ * própria (não é funil de negócio — D6/ADR-0034), mas não tem porta na
+ * navegação. A Carteira que a lateral oferece é outra tela: `/carteira`.
  */
-export const CARTEIRA_PATH = "/upsell";
+export const CARTEIRA_LEGADA_PATH = "/upsell";
 
 /** Filhos de Turbo. Os de Funis são dinâmicos (vêm de `usePipelineDisplayConfig`). */
 export const TURBO_CHILDREN: NavNode[] = [
@@ -90,10 +92,15 @@ export const TURBO_CHILDREN: NavNode[] = [
  * + 4 no rodapé). Ranking desceu para o Pitstop porque é consulta semanal de
  * gestor, não tela de turno. Disparos fica — é porta canônica (#904).
  *
- * Duas decisões que esta branch NÃO reabre, porque já eram da navegação daqui:
  * Leads é a fonte de verdade do lead e ocupa lugar próprio (o antigo rótulo
- * "Combustível" morreu junto); Carteira deixou de ser módulo e virou dado do
- * lead, então não volta ao primeiro nível.
+ * "Combustível" morreu junto).
+ *
+ * Carteira VOLTA ao primeiro nível — decisão CTO 2026-10-16, revertendo a
+ * anterior ("Carteira deixou de ser módulo e virou dado do lead, então não
+ * volta ao primeiro nível"). Os clientes do produto preferem a carteira como
+ * tela própria em vez de aba de /leads. A porta é `/carteira` (a antiga aba
+ * Clientes, mesma permissão `leads.view` e feature `leads`), logo após Leads.
+ * O kanban legado `/upsell` continua SEM porta.
  */
 export const SIDEBAR_PRIMARY: NavNode[] = [
   { label: "Comando", icon: Gauge, path: "/dashboard" },
@@ -114,6 +121,7 @@ export const SIDEBAR_PRIMARY: NavNode[] = [
   { label: "Disparos", icon: Send, path: "/disparos" },
   { label: "Funis", icon: GitBranch, path: "/funis", children: [] },
   { label: "Leads", icon: Fuel, path: "/leads" },
+  { label: "Carteira", icon: Wallet, path: "/carteira" },
   { label: "Turbo", icon: Zap, path: "/turbo", children: TURBO_CHILDREN, expandOnly: true },
 ];
 
@@ -266,6 +274,8 @@ export const NAV_VIEW_PERMISSIONS: Record<string, string> = {
   "/agenda": "agenda.view",
   "/follow-ups": "followups.view",
   "/leads": "leads.view",
+  // Ex-aba Clientes de /leads (CTO 2026-10-16): mesma permissão da tela-mãe.
+  "/carteira": "leads.view",
   "/checklists": "checklists.view",
   "/templates": "message_templates.view",
   "/duplicatas": "leads.view",

@@ -45,6 +45,7 @@ const Performance = lazy(() => lazyRetry(() => import("@/modules/analytics/pages
 const Equipe = lazy(() => lazyRetry(() => import("@/modules/identity/org-team/pages/Equipe")));
 const Comissoes = lazy(() => lazyRetry(() => import("@/modules/engagement/pages/Comissoes")));
 const Leads = lazy(() => lazyRetry(() => import("@/modules/leads/pages/Leads")));
+const Carteira = lazy(() => lazyRetry(() => import("@/modules/leads/pages/Carteira")));
 
 const TrashPage = lazy(() => lazyRetry(() => import("@/modules/leads/pages/Trash")));
 const Duplicates = lazy(() => lazyRetry(() => import("@/modules/leads/pages/Duplicates")));
@@ -472,6 +473,23 @@ function AppRoutes() {
             <LayoutWrapper>
               <PermissionProtectedRoute featureKey="leads.view">
                 <FeatureRoute feature="leads"><Leads /></FeatureRoute>
+              </PermissionProtectedRoute>
+            </LayoutWrapper>
+          </ProtectedRoute>
+        }
+      />
+      {/* Carteira em rota própria (CTO 2026-10-16) — era a aba Clientes de
+          /leads, então herda EXATAMENTE as guardas de /leads: permissão
+          `leads.view` + feature `leads`. NÃO `feature="carteira"`: essa chave
+          tranca o /upsell legado e tiraria a carteira de quem via a aba. A
+          rota estática não colide com `/carteira/:clientId` (Cliente 360). */}
+      <Route
+        path="/carteira"
+        element={
+          <ProtectedRoute>
+            <LayoutWrapper>
+              <PermissionProtectedRoute featureKey="leads.view">
+                <FeatureRoute feature="leads"><Carteira /></FeatureRoute>
               </PermissionProtectedRoute>
             </LayoutWrapper>
           </ProtectedRoute>

@@ -69,6 +69,10 @@ for (const f of FEATURES) {
 // resolvem a chave pelo prefixo (ver featureKeyFor em useNavigationModel).
 SIDEBAR_FEATURE_MAP["/funil"] = "funnels";
 SIDEBAR_FEATURE_MAP["/upsell"] = "carteira";
+// Carteira em rota própria (CTO 2026-10-16): é a antiga aba Clientes de
+// /leads, então trava pela MESMA feature de Leads — não pela `carteira`, que
+// é a do /upsell legado.
+SIDEBAR_FEATURE_MAP["/carteira"] = "leads";
 SIDEBAR_FEATURE_MAP["/templates"] = "message_templates";
 // Rota legada do chat — mesma feature key da rota atual
 SIDEBAR_FEATURE_MAP["/chat-whatsapp"] = "chat";
@@ -101,6 +105,8 @@ export const ROUTE_FEATURE_MAP: Record<string, FeatureKey> = {
   "/leads": "leads",
   "/lixeira": "leads",
   "/duplicatas": "leads",
+  // Carteira (CTO 2026-10-16) — ex-aba Clientes de /leads; mesma feature.
+  "/carteira": "leads",
   // revisão / follow-ups
   "/follow-ups": "review",
   // performance / comissões / tv

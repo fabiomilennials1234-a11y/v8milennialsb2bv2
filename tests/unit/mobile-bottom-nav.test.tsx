@@ -78,6 +78,15 @@ describe("MobileBottomNav", () => {
     expect(screen.getByTestId("tab-leads")).toHaveAttribute("data-active", "true");
   });
 
+  // Carteira (CTO 2026-10-16) não ganha slot — os 5 estão ocupados; ela mora na
+  // gaveta do "Mais" (que lê `SIDEBAR_PRIMARY`). Em /carteira e no Cliente 360,
+  // quem acende é o "Mais", nunca Leads.
+  it.each(["/carteira", "/carteira/abc"])("em %s acende Mais, não Leads", (path) => {
+    renderNav(path);
+    expect(screen.getByTestId("tab-mais")).toHaveAttribute("data-active", "true");
+    expect(screen.getByTestId("tab-leads")).toHaveAttribute("data-active", "false");
+  });
+
   it("highlights Agenda tab when on /agenda", () => {
     renderNav("/agenda");
     expect(screen.getByTestId("tab-agenda")).toHaveAttribute("data-active", "true");

@@ -103,12 +103,9 @@ import { useBulkSelection } from "@/shared/hooks/useBulkSelection";
 import { BulkActionBar } from "@/modules/leads/components/bulk-actions/BulkActionBar";
 import { SavedViewsDropdown } from "@/modules/platform/components/saved-views/SavedViewsDropdown";
 import { FilterChip } from "@/shared/components/FilterChip";
-import { ClientPortfolioSection } from "../components/client-portfolio/ClientPortfolioSection";
-import { LeadCardNewDeal } from "../components/lead-card/LeadCardNewDeal";
-import { useDealSheet } from "../components/deal-detail/deal-sheet-context";
 import {
   CLASSIFICACAO_TODAS,
-  leadClassificacaoOptions,
+  leadsPageTabOptions,
   LEAD_CLASSIFICACOES,
   LEAD_CLASSIFICACAO_CONFIG,
   type LeadClassificacao,
@@ -127,17 +124,8 @@ import { cn } from "@/lib/utils";
 import { useOrganization } from "@/modules/identity";
 import { trackModuleVisit } from "@/lib/analytics";
 import { notifyError } from "@/shared/errors";
-
-const originLabels: Record<string, string> = {
-  whatsapp: "WhatsApp",
-  meta_ads: "Meta Ads",
-  outro: "Outros",
-  site: "Site",
-  remarketing: "Remarketing",
-  google_ads: "Google Ads",
-  cal: "Cal.com",
-  indicacao: "Indicação",
-};
+import { LEAD_LIST_ORIGIN_LABELS } from "../lib/lead-list-origins";
+import { useRedirecionaAbaClientes } from "../hooks/useRedirecionaAbaClientes";
 
 /**
  * Tinta de cada origem — só tokens (V5). A paleta crua de antes (`green-600`,
@@ -200,7 +188,12 @@ type LeadsFilterState = {
   filterQualification: string;
   /** Dono da conta: id de `team_member`, `"all"` ou `"none"` (sem dono). */
   filterResponsible: string;
-  /** Gaveta: `"lead" | "cliente" | "perdido" | "indefinido"` ou `"all"`. */
+  /**
+   * Gaveta: `"lead" | "perdido" | "indefinido"` ou `"all"`. `"cliente"` ainda
+   * chega de estado persistido e de visão salva antigos — a carteira saiu para
+   * `/carteira` (CTO 2026-10-16) e esse valor vira redirect, ver
+   * `useRedirecionaAbaClientes`.
+   */
   filterClassificacao?: string;
 };
 
@@ -242,8 +235,6 @@ function formatDayInTz(value: string | Date, timeZone?: string | null): string {
 
 function LeadsInner() {
   const { openLead } = useLeadSheet();
-  const { openDeal } = useDealSheet();
-  const [newDealLeadId, setNewDealLeadId] = useState<string | null>(null);
   const [filterState, setFilterState] = usePersistedState(
     "leads",
     DEFAULT_LEADS_FILTERS
@@ -259,7 +250,9 @@ function LeadsInner() {
   const usaCadastroErpCafeJurere = useClassificacaoCafeJurere();
   const abaSalva = filterState.filterClassificacao ?? CLASSIFICACAO_TODAS;
   const filterClassificacao = usaCadastroErpCafeJurere ? normalizarAbaCafeJurere(abaSalva) : abaSalva;
-  const portfolioActive = filterClassificacao === "cliente";
+  // A aba Clientes saiu de `/leads` (CTO 2026-10-16): `"cliente"` vindo de
+  // estado persistido ou visão salva vira redirect para `/carteira`.
+  const redirecionarParaCarteira = useRedirecionaAbaClientes(filterClassificacao, filterState, setFilterState);
   const setFilterClassificacao = (v: string) =>
     setFilterState((f) => ({ ...f, filterClassificacao: v }));
   // De onde vem a verdade sobre "é cliente?" nesta org: cadastro no ERP, para
@@ -300,7 +293,6 @@ function LeadsInner() {
   const [editingLead, setEditingLead] = useState<Lead | null>(null);
   const [formData, setFormData] = useState<LeadFormData>(initialFormData);
   const { organizationId, timezone: orgTimezone } = useOrganization();
-  useEffect(() => { setNewDealLeadId(null); }, [organizationId]);
   useEffect(() => { trackModuleVisit("leads", organizationId); }, []);
 
   // #313 — deep link via mention notification:
@@ -309,8 +301,8 @@ function LeadsInner() {
   // Only fires once per lead-id transition to avoid reopening on hot-reload.
   const deepLinkLeadId = searchParams.get("lead");
   useEffect(() => {
-    if (deepLinkLeadId) openLead(deepLinkLeadId);
-  }, [deepLinkLeadId, openLead]);
+    if (deepLinkLeadId && !redirecionarParaCarteira) openLead(deepLinkLeadId);
+  }, [deepLinkLeadId, openLead, redirecionarParaCarteira]);
 
   const [page, setPage] = useState(0);
   // Filtro por estado (?uf=) — deep-link vindo da aba Mapa do Comando
@@ -364,17 +356,18 @@ function LeadsInner() {
   }, [setSearchParams]);
 
   const filterParams = { page, searchQuery, filterOrigin, filterQualification, filterClassificacao, usaLeiDoErp, usaCadastroErpCafeJurere, filterUf: ufFilter, createdFrom, createdTo, filterAssignment, filterResponsible, sort };
-  const leadsQuery = useLeads(filterParams, { enabled: !portfolioActive });
+  const leadsQuery = useLeads(filterParams, { enabled: !redirecionarParaCarteira });
   const { data: loadedLeads = [], isLoading } = leadsQuery;
-  const leads = useMemo(() => portfolioActive ? [] : loadedLeads, [portfolioActive, loadedLeads]);
+  const leads = useMemo(() => redirecionarParaCarteira ? [] : loadedLeads, [redirecionarParaCarteira, loadedLeads]);
   const { data: totalLeads } = useLeadsCount({ searchQuery, filterOrigin, filterQualification, filterClassificacao, usaLeiDoErp, usaCadastroErpCafeJurere, filterUf: ufFilter, createdFrom, createdTo, filterAssignment, filterResponsible });
   const tabFilters = { searchQuery, filterOrigin, filterQualification, usaLeiDoErp, usaCadastroErpCafeJurere, filterUf: ufFilter, createdFrom, createdTo, filterAssignment, filterResponsible };
   const { data: allTabCount } = useLeadsCount({ ...tabFilters, filterClassificacao: "all" });
   const { data: leadTabCount } = useLeadsCount({ ...tabFilters, filterClassificacao: "lead" });
-  const { data: clientTabCount } = useLeadsCount({ ...tabFilters, filterClassificacao: "cliente" });
   const finalTab = usaLeiDoErp && !usaCadastroErpCafeJurere ? "indefinido" : "perdido";
   const { data: finalTabCount } = useLeadsCount({ ...tabFilters, filterClassificacao: finalTab });
-  const tabCounts = { all: allTabCount, lead: leadTabCount, cliente: clientTabCount, [finalTab]: finalTabCount };
+  const tabCounts = { all: allTabCount, lead: leadTabCount, [finalTab]: finalTabCount };
+  // Sem `cliente`: esse recorte é a Carteira, em rota própria.
+  const tabOptions = leadsPageTabOptions(usaLeiDoErp, usaCadastroErpCafeJurere);
   // Paginação sobre contagem COM TETO — ver `cappedPagination`.
   const { lastPage, hasNext: hasNextPage } = cappedPagination(totalLeads, page, LEADS_PAGE_SIZE, leads.length);
   const { data: currentTeamMember, isLoading: isLoadingTeamMember, isFetching: isFetchingTeamMember } = useCurrentTeamMember();
@@ -512,10 +505,10 @@ function LeadsInner() {
   // é estado útil: volta uma.
   const leadsLoaded = leadsQuery.isSuccess && !leadsQuery.isFetching;
   useEffect(() => {
-    if (!portfolioActive && page > 0 && leadsLoaded && loadedLeads.length === 0) {
+    if (!redirecionarParaCarteira && page > 0 && leadsLoaded && loadedLeads.length === 0) {
       setPage((p) => Math.max(0, p - 1));
     }
-  }, [portfolioActive, page, leadsLoaded, loadedLeads.length]);
+  }, [redirecionarParaCarteira, page, leadsLoaded, loadedLeads.length]);
 
   /**
    * ADR-0024 decisão 2 — os quatro cards contam a ORGANIZAÇÃO.
@@ -733,18 +726,21 @@ function LeadsInner() {
     </DropdownMenu>
   );
 
+  // O redirect sai em `useRedirecionaAbaClientes`; até lá a página não pinta
+  // uma aba que não existe mais.
+  if (redirecionarParaCarteira) return null;
+
   return (
     <div className="space-y-5">
       <PageHeader
         title="Leads"
         subtitle="Da primeira conversa à próxima compra."
-        // Ações da lista de leads; a carteira (aba Clientes) tem as suas.
-        secondaryActions={portfolioActive ? undefined : [
+        secondaryActions={[
           { label: "Importações", icon: History, onSelect: () => setIsImportHistoryOpen(true) },
           { label: "Importar", icon: FileUp, onSelect: () => setIsImportModalOpen(true), disabled: !canImport },
         ]}
         secondaryActionsLabel="Mais ações de leads"
-        actions={!portfolioActive && <>
+        actions={<>
           {/* Exportar é ícone (mockup): a ação é rara e o rótulo vai no title. */}
           <Button
             variant="outline"
@@ -762,13 +758,13 @@ function LeadsInner() {
           </Button>
         </>}
         tabs={
-          /* A gaveta troca a vista inteira (Clientes vira a carteira) — é
-             navegação de página, por isso a pílula escura. Mesmos valores. */
+          /* A gaveta recorta a lista — pílula escura, mesmos valores. Clientes
+             saiu daqui: a carteira é a página `/carteira` (CTO 2026-10-16). */
           <Tabs value={filterClassificacao} onValueChange={setFilterClassificacao}>
             <TabsList variant="pill" aria-label="Classificação dos leads">
-              {leadClassificacaoOptions(usaLeiDoErp, usaCadastroErpCafeJurere).map(option => (
+              {tabOptions.map(option => (
                 <TabsTrigger key={option.value} value={option.value}>
-                  {{ lead: "Leads", cliente: "Clientes", perdido: "Inativos" }[option.value] ?? option.label}
+                  {{ lead: "Leads", perdido: "Inativos" }[option.value] ?? option.label}
                   <span className="text-[11px] font-bold tabular-nums opacity-70">
                     {formatCappedCount(tabCounts[option.value])}
                   </span>
@@ -778,7 +774,6 @@ function LeadsInner() {
           </Tabs>
         }
       />
-      {!portfolioActive && <>
       {/* Stats */}
       {isV2 ? (
         <LeadsStatsV2
@@ -862,14 +857,14 @@ function LeadsInner() {
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <FilterChip caret active={filterOrigin !== "all"}>
-                {filterOrigin !== "all" ? `Origem: ${originLabels[filterOrigin] ?? filterOrigin}` : "Origem"}
+                {filterOrigin !== "all" ? `Origem: ${LEAD_LIST_ORIGIN_LABELS[filterOrigin] ?? filterOrigin}` : "Origem"}
               </FilterChip>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start" className="w-52">
               <DropdownMenuRadioGroup value={filterOrigin} onValueChange={setFilterOrigin}>
                 <DropdownMenuRadioItem value="all">Todas as origens</DropdownMenuRadioItem>
                 <DropdownMenuSeparator />
-                {Object.entries(originLabels).map(([key, label]) => (
+                {Object.entries(LEAD_LIST_ORIGIN_LABELS).map(([key, label]) => (
                   <DropdownMenuRadioItem key={key} value={key}>{label}</DropdownMenuRadioItem>
                 ))}
               </DropdownMenuRadioGroup>
@@ -952,7 +947,6 @@ function LeadsInner() {
 
       {/* Chip da janela de criação — sem isso o deep-link do Comando filtra a
           lista silenciosamente e o usuário lê "sumiram leads". */}
-      </>}
 
       {hasCreatedRange && (
         <div className="flex items-center gap-2">
@@ -996,29 +990,6 @@ function LeadsInner() {
         </div>
       )}
 
-      {portfolioActive ? <ClientPortfolioSection
-        key={organizationId}
-        filters={filterParams} onSearch={setSearchQuery}
-        canCreate={canCreateLead} onNewDeal={setNewDealLeadId} onOpenLead={openLead}
-        onOpenDeal={deal => openDeal(deal.id, deal.leadId)}
-        filterControls={clearPortfolio => <div className="flex flex-wrap gap-2">
-          <Select value={filterOrigin} onValueChange={setFilterOrigin}>
-            <SelectTrigger className="w-40" aria-label="Origem dos clientes"><SelectValue /></SelectTrigger>
-            <SelectContent><SelectItem value="all">Todas as origens</SelectItem>{Object.entries(originLabels).map(([key, label]) => <SelectItem key={key} value={key}>{label}</SelectItem>)}</SelectContent>
-          </Select>
-          <Select value={filterQualification} onValueChange={setFilterQualification}>
-            <SelectTrigger className="w-[13.5rem]" aria-label="Qualificação dos clientes"><SelectValue /></SelectTrigger>
-            <SelectContent><SelectItem value="all">Todas as qualificações</SelectItem><SelectItem value="none">Sem qualificação</SelectItem>{QUALIFICATION_TIERS.map(tier => <SelectItem key={tier} value={tier}>{QUALIFICATION_TIER_CONFIG[tier].label}</SelectItem>)}</SelectContent>
-          </Select>
-          <Select value={filterResponsible} onValueChange={setFilterResponsible}>
-            <SelectTrigger className="w-48" aria-label="Dono da conta"><SelectValue /></SelectTrigger>
-            <SelectContent><SelectItem value="all">Todos os donos</SelectItem><SelectItem value="none">Sem dono</SelectItem>
-              {responsibleMembers.map(m => <SelectItem key={m.id} value={m.id}>{m.name}</SelectItem>)}
-            </SelectContent>
-          </Select>
-          <Button variant="outline" onClick={() => { clearPortfolio(); setFilterState(f => ({ ...DEFAULT_LEADS_FILTERS, filterClassificacao: f.filterClassificacao })); }}>Limpar filtros</Button>
-        </div>}
-      /> : <>
       {/* Table (desktop) / Card list (mobile) */}
       <div className={cn(!isMobile && "overflow-hidden rounded-card border border-card-border bg-card shadow-relevo")}>
         {isMobile ? (
@@ -1052,7 +1023,7 @@ function LeadsInner() {
                   ciclo={reorderCycles?.[lead.id]}
                   selecionado={bulk.isSelected(lead.id)}
                   onOpen={() => openLead(lead.id)}
-                  originLabel={originLabels[lead.origin ?? "outro"] || lead.origin || "outro"}
+                  originLabel={LEAD_LIST_ORIGIN_LABELS[lead.origin ?? "outro"] || lead.origin || "outro"}
                   originClassName={originColors[lead.origin ?? "outro"] || originColors.outro}
                   createdLabel={formatDayInTz(lead.created_at, orgTimezone)}
                 />
@@ -1129,7 +1100,7 @@ function LeadsInner() {
                     onToggleSelect={() => bulk.toggle(lead.id)}
                     onOpen={() => openLead(lead.id)}
                     createdLabel={formatDayInTz(lead.created_at, orgTimezone)}
-                    originLabel={originLabels[lead.origin ?? "outro"] || lead.origin || "Outros"}
+                    originLabel={LEAD_LIST_ORIGIN_LABELS[lead.origin ?? "outro"] || lead.origin || "Outros"}
                     originClassName={originColors[lead.origin ?? "outro"] || originColors.outro}
                     actions={leadActionsMenu(lead)}
                   />
@@ -1148,7 +1119,7 @@ function LeadsInner() {
                     onToggleSelect={() => bulk.toggle(lead.id)}
                     onOpen={() => openLead(lead.id)}
                     createdLabel={formatDayInTz(lead.created_at, orgTimezone)}
-                    originLabel={originLabels[lead.origin ?? "outro"] || lead.origin || "Outros"}
+                    originLabel={LEAD_LIST_ORIGIN_LABELS[lead.origin ?? "outro"] || lead.origin || "Outros"}
                     originClassName={originColors[lead.origin ?? "outro"] || originColors.outro}
                     actions={leadActionsMenu(lead)}
                   />
@@ -1171,8 +1142,6 @@ function LeadsInner() {
         )}
       </div>
 
-      </>}
-      {newDealLeadId && <LeadCardNewDeal leadId={newDealLeadId} open onOpenChange={open => { if (!open) setNewDealLeadId(null); }} />}
 
       <ImportLeadsModal open={isImportModalOpen} onOpenChange={setIsImportModalOpen} />
 
@@ -1253,7 +1222,7 @@ function LeadsInner() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {Object.entries(originLabels).map(([key, label]) => (
+                  {Object.entries(LEAD_LIST_ORIGIN_LABELS).map(([key, label]) => (
                     <SelectItem key={key} value={key}>{label}</SelectItem>
                   ))}
                 </SelectContent>
@@ -1407,7 +1376,7 @@ function LeadsInner() {
       </Dialog>
 
       {/* Bulk Action Bar */}
-      {!portfolioActive && <BulkActionBar selectedIds={bulk.selectedIds} onClear={bulk.clearSelection} leadIds={allLeadIds} />}
+      <BulkActionBar selectedIds={bulk.selectedIds} onClear={bulk.clearSelection} leadIds={allLeadIds} />
 
       {/* Delete Confirmation Dialog */}
       <AlertDialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
