@@ -1,5 +1,6 @@
 import { useState, useMemo, useCallback, useEffect } from "react";
 import { usePersistedState } from "@/shared/hooks/usePersistedState";
+import { useDebounce } from "@/shared/hooks/useDebounce";
 import { useViewport } from "@/shared/hooks/use-viewport";
 import { motion } from "framer-motion";
 import {
@@ -205,6 +206,9 @@ const DEFAULT_LEADS_FILTERS: LeadsFilterState = {
   filterClassificacao: CLASSIFICACAO_TODAS,
 };
 
+/** Espera do termo de busca antes de ir ao banco (perf onda 1, F2). */
+const SEARCH_DEBOUNCE_MS = 300;
+
 /**
  * Normaliza um instante vindo da query string (`?from=`/`?to=`). Devolve
  * `undefined` se ausente ou não-parseável — URL adulterada não pode virar um
@@ -240,7 +244,11 @@ function LeadsInner() {
     DEFAULT_LEADS_FILTERS
   );
 
-  const { searchQuery, filterOrigin } = filterState;
+  const { searchQuery: searchInput, filterOrigin } = filterState;
+  // O input responde na hora (`searchInput`); o que vai às queries é o termo
+  // assentado. Sem isso, cada tecla disparava a lista, quatro contagens e as
+  // estatísticas — e cada uma, a pré-consulta de telefone secundário.
+  const searchQuery = useDebounce(searchInput, SEARCH_DEBOUNCE_MS);
   const filterQualification = filterState.filterQualification ?? "all";
   // Visão salva gravada antes deste filtro existir não traz a chave — o `??`
   // é o que impede o Select de virar não-controlado no meio do uso.
@@ -844,7 +852,7 @@ function LeadsInner() {
           <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <Input
             placeholder="Buscar por nome, empresa, e-mail ou telefone…"
-            value={searchQuery}
+            value={searchInput}
             onChange={(e) => setSearchQuery(e.target.value)}
             onFocus={() => setSearchFocused(true)}
             onBlur={() => setSearchFocused(false)}
