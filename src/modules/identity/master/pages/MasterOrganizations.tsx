@@ -47,6 +47,8 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { isOrganizationInactive } from "../../org-team/lib/organization-status";
 import { Card, CardContent } from "@/components/ui/card";
 import {
   Table,
@@ -129,6 +131,17 @@ export default function MasterOrganizations() {
   const [recorte, setRecorte] = useState<Recorte>("todas");
   const [params, setParams] = useSearchParams();
   const fichaId = params.get("org");
+  const aba = params.get("status") === "inativas" ? "inativas" : "ativas";
+  const setAba = (value: string) => {
+    setRecorte("todas");
+    setSearch("");
+    setParams((p) => {
+      if (value === "inativas") p.set("status", value);
+      else p.delete("status");
+      p.delete("uso");
+      return p;
+    }, { replace: true });
+  };
   const usoParam = params.get("uso") as Uso | null;
   const uso: Uso = usoParam && USOS.includes(usoParam) ? usoParam : "todas";
   const setUso = (v: Uso) =>
@@ -173,7 +186,9 @@ export default function MasterOrganizations() {
     : organizations;
 
   // Org encerrada não entra na conta de risco: não há o que salvar.
-  const vivas = (baseOrgs ?? []).filter((o) => !["cancelled", "expired"].includes(o.subscription_status));
+  const vivas = (baseOrgs ?? []).filter((o) => !isOrganizationInactive(o.subscription_status));
+  const inativas = (baseOrgs ?? []).filter((o) => isOrganizationInactive(o.subscription_status));
+  const orgsDaAba = aba === "inativas" ? inativas : vivas;
   const emRisco = vivas.filter((o) => saude.get(o.id)?.atRisk);
   const pertoDoLimite = vivas.filter((o) => saude.get(o.id)?.quotaWarning);
   const semLogin = vivas.filter((o) => {
@@ -184,15 +199,15 @@ export default function MasterOrganizations() {
     ? Math.round(vivas.reduce((acc, o) => acc + (saude.get(o.id)?.score ?? 0), 0) / vivas.length)
     : 0;
 
-  // Ativa/inativa olha TODAS as orgs, encerradas inclusive: a pergunta é
-  // "quantos clientes usam o Torque hoje", não "quantos pagam".
+  // Uso recente é um sinal de adoção, independente do status administrativo.
   const emUso = useMemo(() => {
     const now = new Date();
     return new Set((baseOrgs ?? []).filter((o) => isOrgInUse(signals?.get(o.id), now)).map((o) => o.id));
   }, [baseOrgs, signals]);
   const totalOrgs = (baseOrgs ?? []).length;
+  const emUsoNaAba = orgsDaAba.filter((o) => emUso.has(o.id)).length;
 
-  const recortadas = (recorte === "risco" ? emRisco : recorte === "limite" ? pertoDoLimite : baseOrgs)?.filter(
+  const recortadas = (aba === "inativas" ? inativas : recorte === "risco" ? emRisco : recorte === "limite" ? pertoDoLimite : vivas).filter(
     (o) => uso === "todas" || emUso.has(o.id) === (uso === "ativas"),
   );
 
@@ -259,7 +274,7 @@ export default function MasterOrganizations() {
   // escondia o caso que mais importa: org "suspensa" com override ligado, que
   // continua com acesso liberado. Agora aparecem lado a lado.
   const getStatusBadge = (status: string, hasOverride: boolean) => {
-    const bloqueada = ["suspended", "cancelled", "expired"].includes(status) && !hasOverride;
+    const bloqueada = isOrganizationInactive(status) && !hasOverride;
 
     const statusBadge = (() => {
       switch (status) {
@@ -268,7 +283,7 @@ export default function MasterOrganizations() {
         case "trial":
           return <Badge variant="info">Trial</Badge>;
         case "suspended":
-          return <Badge variant="warning">Suspenso</Badge>;
+          return <Badge variant="warning">Inativa</Badge>;
         case "cancelled":
         case "expired":
           return <Badge variant="destructive" className="bg-destructive/10 text-destructive hover:bg-destructive/15">Cancelado</Badge>;
@@ -321,7 +336,7 @@ export default function MasterOrganizations() {
 
       <KpiRow cols={4}>
         <KpiTile
-          label="Orgs ativas"
+          label="Orgs com uso recente"
           value={emUso.size}
           icon={Building2}
           tone="info"
@@ -398,20 +413,33 @@ export default function MasterOrganizations() {
         </KpiRow>
       )}
 
+      <Tabs value={aba} onValueChange={setAba} className="space-y-5">
+        <TabsList variant="pill" aria-label="Status das organizações">
+          <TabsTrigger value="ativas">Orgs ativas · {vivas.length}</TabsTrigger>
+          <TabsTrigger value="inativas">Orgs inativas · {inativas.length}</TabsTrigger>
+        </TabsList>
+        <TabsContent value={aba} className="space-y-5">
+      {aba === "inativas" && (
+        <p className="text-sm text-muted-foreground">
+          Organizações inativadas, canceladas ou expiradas. Elas não aparecem no seletor dos masters.
+          Para voltar à lista de ativas, use Reativar no menu de ações.
+        </p>
+      )}
+
       <div className="flex flex-wrap items-center gap-3">
         <Segmented
           label="Uso"
           value={uso}
           onChange={setUso}
-          title={`Ativa = alguém do cliente entrou nos últimos ${IN_USE_LOGIN_DAYS} dias (master não conta)`}
+          title={`Uso recente = alguém do cliente entrou nos últimos ${IN_USE_LOGIN_DAYS} dias (master não conta)`}
           options={[
-            ["todas", sinaisCarregando ? "Todas" : `Todas · ${totalOrgs}`],
-            ["ativas", sinaisCarregando ? "Ativas" : `Ativas · ${emUso.size}`],
-            ["inativas", sinaisCarregando ? "Inativas" : `Inativas · ${totalOrgs - emUso.size}`],
+            ["todas", sinaisCarregando ? "Todas" : `Todas · ${orgsDaAba.length}`],
+            ["ativas", sinaisCarregando ? "Com uso recente" : `Com uso recente · ${emUsoNaAba}`],
+            ["inativas", sinaisCarregando ? "Sem uso recente" : `Sem uso recente · ${orgsDaAba.length - emUsoNaAba}`],
           ]}
         />
 
-        <Segmented
+        {aba === "ativas" && <Segmented
           label="Recorte"
           value={recorte}
           onChange={setRecorte}
@@ -420,7 +448,7 @@ export default function MasterOrganizations() {
             ["risco", `Em risco · ${emRisco.length}`],
             ["limite", `Perto do limite · ${pertoDoLimite.length}`],
           ]}
-        />
+        />}
 
       {/* Search */}
       <div className="relative w-full max-w-md sm:w-auto sm:flex-1">
@@ -545,20 +573,20 @@ export default function MasterOrganizations() {
                               <DropdownMenuItem
                                 onClick={() => {
                                   setSuspensionMode(
-                                    org.subscription_status === "active" ? "suspend" : "reactivate"
+                                    isOrganizationInactive(org.subscription_status) ? "reactivate" : "suspend"
                                   );
                                   setSuspensionOrg(org);
                                 }}
                               >
-                                {org.subscription_status === "active" ? (
+                                {!isOrganizationInactive(org.subscription_status) ? (
                                   <>
                                     <PowerOff className="w-4 h-4 mr-2" />
-                                    Suspender
+                                    Inativar
                                   </>
                                 ) : (
                                   <>
                                     <Power className="w-4 h-4 mr-2" />
-                                    Ativar
+                                    Reativar
                                   </>
                                 )}
                               </DropdownMenuItem>
@@ -586,6 +614,8 @@ export default function MasterOrganizations() {
           )}
         </CardContent>
       </Card>
+        </TabsContent>
+      </Tabs>
 
       {/* Create Dialog */}
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
