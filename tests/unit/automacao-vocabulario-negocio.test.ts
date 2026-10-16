@@ -5,16 +5,16 @@
  * ação (`create_deal`), e nenhum dos 130 workflows ativos usava nenhum dos
  * dois. "Quando ganhar o negócio, faça X" não era desenhável.
  *
- * ── GANHAR E PERDER NÃO SÃO CAMPOS ────────────────────────────────────────
- * ADR-0023 §4/§5: a posição mora no card e encerrar é chegar na etapa terminal.
- * Por isso `deal_won`/`deal_lost` são DERIVADOS de `stage_changed` pelo papel da
- * etapa de destino, e não gatilhos em `deals.won` — medido em prod
- * (2026-08-25): 34.662 dos 34.980 negócios têm `won = false` porque o backfill
- * carimbou assim tudo que não estava ganho. A coluna responde "não foi ganho",
- * não "foi perdido".
+ * ── GANHAR E PERDER SÃO FATOS DO NEGÓCIO ─────────────────────────────────
+ * ADR-0023 Emenda 1: o desfecho mora em `deals.outcome`. `deal_won`/`deal_lost`
+ * nascem no BANCO, na transição de `outcome` (trigger `trg_workflow_deal_outcome`,
+ * migration 20271115000000) — qualquer escritor (botão, ação de workflow, API,
+ * etapa `won`). A derivação antiga por `stage_changed` + papel da etapa nunca
+ * disparou em prod (0 etapas won/lost em funil de sistema; funil custom nem
+ * passava pelo TS) e, se passasse a disparar, dobraria o aviso ao cliente.
  */
 import { describe, it, expect } from "vitest";
-import { fireTrigger } from "../../supabase/functions/_shared/workflow-trigger";
+import { fireTrigger, matchesTriggerConfig } from "../../supabase/functions/_shared/workflow-trigger";
 import {
   winDeal,
   loseDeal,
@@ -56,9 +56,13 @@ function funilCompleto() {
   return mock;
 }
 
-// ─── Gatilhos derivados ─────────────────────────────────────────────────────
+// ─── Gatilhos do desfecho ───────────────────────────────────────────────────
 
-describe("deal_won / deal_lost — derivados do papel da etapa", () => {
+describe("deal_won / deal_lost — NÃO são derivados de stage_changed", () => {
+  // Inverte o bloco anterior ("derivados do papel da etapa"). O evento agora
+  // nasce em `deals.outcome` (SQL). Se o TS continuasse derivando, o card
+  // arrastado para a etapa `won` geraria DOIS "Negócio ganho": o da transição
+  // de `outcome` e o derivado da etapa — mensagem dobrada ao cliente final.
   function comWorkflow(triggerType: string) {
     const mock = funilCompleto();
     mock.mockTable("workflows", [
@@ -77,61 +81,71 @@ describe("deal_won / deal_lost — derivados do papel da etapa", () => {
     deal_id: DEAL,
   });
 
-  it("chegar na etapa de ganho dispara o workflow de Negócio Ganho", async () => {
-    const mock = comWorkflow("deal_won");
-
-    await fireTrigger({
-      supabase: mock.sb,
-      organizationId: "org-1",
-      triggerType: "stage_changed",
-      leadId: "lead-1",
-      context: ctx("vendido"),
-    });
-
-    const execs = mock.getInserted("workflow_executions");
-    expect(execs).toHaveLength(1);
-    expect(execs[0].workflow_id).toBe("wf-1");
-    // O sujeito viaja: as ações do fluxo agem sobre ESTE negócio.
-    expect(execs[0].pipeline_entry_id).toBe(ENTRY);
-    expect(execs[0].deal_id).toBe(DEAL);
-  });
-
-  it("etapa de perda dispara Negócio Perdido, não Ganho", async () => {
-    const ganho = comWorkflow("deal_won");
-    await fireTrigger({
-      supabase: ganho.sb, organizationId: "org-1", triggerType: "stage_changed",
-      leadId: "lead-1", context: ctx("perdido"),
-    });
-    expect(ganho.getInserted("workflow_executions")).toHaveLength(0);
-
-    const perda = comWorkflow("deal_lost");
-    await fireTrigger({
-      supabase: perda.sb, organizationId: "org-1", triggerType: "stage_changed",
-      leadId: "lead-1", context: ctx("perdido"),
-    });
-    expect(perda.getInserted("workflow_executions")).toHaveLength(1);
-  });
-
-  it("etapa comum não deriva nada", async () => {
-    const mock = comWorkflow("deal_won");
-    await fireTrigger({
-      supabase: mock.sb, organizationId: "org-1", triggerType: "stage_changed",
-      leadId: "lead-1", context: ctx("enviada"),
-    });
-    expect(mock.getInserted("workflow_executions")).toHaveLength(0);
-  });
-
-  it("dispara mesmo sem NENHUM workflow de stage_changed — é a razão de derivar antes do corpo", async () => {
-    // Só existe workflow de `deal_won`. O corpo do `fireTrigger` sai cedo
-    // ("nenhum workflow casou") e, se a derivação morasse no fim, o negócio
-    // ganho não avisaria ninguém.
+  it("chegar na etapa de ganho NÃO cria execução de Negócio Ganho pelo TS", async () => {
     const mock = comWorkflow("deal_won");
     await fireTrigger({
       supabase: mock.sb, organizationId: "org-1", triggerType: "stage_changed",
       leadId: "lead-1", context: ctx("vendido"),
     });
-    expect(mock.getInserted("workflow_executions")).toHaveLength(1);
+    expect(mock.getInserted("workflow_executions")).toHaveLength(0);
   });
+
+  it("chegar na etapa de perda NÃO cria execução de Negócio Perdido pelo TS", async () => {
+    const mock = comWorkflow("deal_lost");
+    await fireTrigger({
+      supabase: mock.sb, organizationId: "org-1", triggerType: "stage_changed",
+      leadId: "lead-1", context: ctx("perdido"),
+    });
+    expect(mock.getInserted("workflow_executions")).toHaveLength(0);
+  });
+
+  it("stage_changed continua disparando o próprio workflow de etapa", async () => {
+    const mock = comWorkflow("stage_changed");
+    await fireTrigger({
+      supabase: mock.sb, organizationId: "org-1", triggerType: "stage_changed",
+      leadId: "lead-1", context: ctx("vendido"),
+    });
+    const execs = mock.getInserted("workflow_executions");
+    expect(execs).toHaveLength(1);
+    expect(execs[0].context).toMatchObject({ trigger_type: "stage_changed" });
+  });
+});
+
+describe("matchesTriggerConfig — deal_won / deal_lost espelham o SQL", () => {
+  const OUTRO = "bbbbbbbb-0000-4000-8000-000000000002";
+  const ETAPA = "cccccccc-0000-4000-8000-000000000001";
+
+  for (const tipo of ["deal_won", "deal_lost"] as const) {
+    describe(tipo, () => {
+      it("config vazia = qualquer funil, inclusive negócio sem entrada", () => {
+        expect(matchesTriggerConfig(tipo, {}, { pipeline_id: PIPE })).toBe(true);
+        expect(matchesTriggerConfig(tipo, {}, { pipeline_id: null })).toBe(true);
+        expect(matchesTriggerConfig(tipo, { pipeline_ids: [] }, {})).toBe(true);
+      });
+
+      it("pipeline_ids filtra pelo funil do negócio", () => {
+        expect(matchesTriggerConfig(tipo, { pipeline_ids: [PIPE] }, { pipeline_id: PIPE })).toBe(true);
+        expect(matchesTriggerConfig(tipo, { pipeline_ids: [PIPE] }, { pipeline_id: OUTRO })).toBe(false);
+      });
+
+      it("pipeline_ids com negócio sem entrada falha fechado", () => {
+        expect(matchesTriggerConfig(tipo, { pipeline_ids: [PIPE] }, { pipeline_id: null })).toBe(false);
+        expect(matchesTriggerConfig(tipo, { pipeline_ids: [PIPE] }, {})).toBe(false);
+      });
+
+      it("forma inválida falha fechado", () => {
+        expect(matchesTriggerConfig(tipo, { pipeline_ids: PIPE }, { pipeline_id: PIPE })).toBe(false);
+        expect(matchesTriggerConfig(tipo, { pipeline_ids: [PIPE, ""] }, { pipeline_id: PIPE })).toBe(false);
+        expect(matchesTriggerConfig(tipo, { pipeline_ids: [1] }, { pipeline_id: PIPE })).toBe(false);
+      });
+
+      it("stage_ids exige funil marcado e casa a etapa", () => {
+        expect(matchesTriggerConfig(tipo, { stage_ids: [ETAPA] }, { pipeline_id: PIPE, stage_id: ETAPA })).toBe(false);
+        expect(matchesTriggerConfig(tipo, { pipeline_ids: [PIPE], stage_ids: [ETAPA] }, { pipeline_id: PIPE, stage_id: ETAPA })).toBe(true);
+        expect(matchesTriggerConfig(tipo, { pipeline_ids: [PIPE], stage_ids: [ETAPA] }, { pipeline_id: PIPE, stage_id: OUTRO })).toBe(false);
+      });
+    });
+  }
 });
 
 // ─── Ações ──────────────────────────────────────────────────────────────────
@@ -157,6 +171,32 @@ describe("win_deal / lose_deal — desfecho é do negócio, não da etapa", () =
     expect(mock.getUpdated("deals")[0]).toMatchObject({
       outcome: "won", outcome_source: "workflow",
     });
+  });
+
+  it("ganhar pelo workflow carimba a execução no negócio, preservando o metadata", async () => {
+    // O gatilho SQL de `deal_won` lê `metadata.outcome_execution_id` para
+    // encadear `chain_depth` — sem isso, win_deal → deal_won → lose_deal →
+    // deal_lost → win_deal… não teria teto.
+    const mock = funilCompleto();
+    mock.mockTable("deals", [{
+      id: DEAL, organization_id: "org-1", value: 1000, won: null, outcome: "open",
+      metadata: { created_by: "workflow", workflow_execution_id: "exec-0" },
+    }]);
+    const r = await winDeal(entrada(mock, { params: { _executionId: "exec-9" } }));
+
+    expect(r.success).toBe(true);
+    expect(mock.getUpdated("deals")[0]).toMatchObject({
+      outcome: "won",
+      metadata: { created_by: "workflow", workflow_execution_id: "exec-0", outcome_execution_id: "exec-9" },
+    });
+  });
+
+  it("sem execução conhecida, não inventa carimbo", async () => {
+    const mock = funilCompleto();
+    await loseDeal(entrada(mock));
+    const patch = mock.getUpdated("deals")[0] as Record<string, unknown>;
+    expect(patch.outcome).toBe("lost");
+    expect(patch).not.toHaveProperty("metadata");
   });
 
   it("perder marca o desfecho e grava o motivo", async () => {
