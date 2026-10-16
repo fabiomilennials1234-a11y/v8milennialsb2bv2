@@ -10,10 +10,11 @@ import {
   type WorkflowSelection,
 } from "@/modules/workflows/lib/clipboard";
 import { upgradeWorkflowNodes } from "@/modules/workflows/lib/upgradeLegacyMessageNode";
+import { convertLegacyMenuNode } from "@/modules/workflows/lib/convertLegacyMenuNode";
 import { HTTPS_CODE_EXAMPLE, validateCodeNodes } from "@/modules/workflows/lib/codeNodes";
 import { findNodeConfigIssues } from "@/contracts/workflows/node-requirements";
 import { GUIDED_CONDITION_LIMITS } from "@/contracts/workflows/guided-limits";
-import { QUESTION_BUTTONS_FLAG, UNIFIED_MESSAGE_NODE_FLAG } from "@/types/workflow";
+import { UNIFIED_MESSAGE_NODE_FLAG } from "@/types/workflow";
 import { useFeatureFlag } from "@/modules/platform";
 import { useOrganization, useAuth } from "@/modules/identity";
 
@@ -232,8 +233,6 @@ function AutomacoesEditorContent() {
   const { enabled: unifiedEnabled, isLoading: unifiedLoading } =
     useFeatureFlag(UNIFIED_MESSAGE_NODE_FLAG);
 
-  const { enabled: questionButtonsEnabled } = useFeatureFlag(QUESTION_BUTTONS_FLAG);
-
   // In-memory clipboard for copy/paste of node subgraphs (same editor only).
   const clipboardRef = useRef<WorkflowSelection | null>(null);
 
@@ -357,7 +356,6 @@ function AutomacoesEditorContent() {
 
   const handleAddNode = useCallback(
     (type: WorkflowNodeType) => {
-      if (type === "question_buttons" && !questionButtonsEnabled) return;
       takeSnapshot();
       const newId = genNodeId(type);
       // Place below the last node
@@ -371,7 +369,7 @@ function AutomacoesEditorContent() {
       setNodes((nds) => [...nds, newNode]);
       setSelectedNodeId(newId);
     },
-    [nodes, setNodes, genNodeId, takeSnapshot, questionButtonsEnabled]
+    [nodes, setNodes, genNodeId, takeSnapshot]
   );
 
   const handleNodeClick = useCallback((nodeId: string) => {
@@ -423,6 +421,32 @@ function AutomacoesEditorContent() {
       }
     },
     [nodes, setNodes, setEdges, takeSnapshot]
+  );
+
+  // Ação → pergunta com botões (escolher "WhatsApp Menu" no seletor ou o
+  // cartão do nó legado). Troca nó E arestas numa só entrada do histórico.
+  const handleConvertToQuestionButtons = useCallback(
+    (nodeId: string) => {
+      const node = nodesRef.current.find((item) => item.id === nodeId);
+      if (!node || node.data.type !== "action") return;
+      const wasLegacyMenu = (node.data as ActionNodeData).actionType === "send_whatsapp_menu";
+      const result = convertLegacyMenuNode(node, edgesRef.current);
+      takeSnapshot();
+      setNodes((nds) => nds.map((item) => (item.id === nodeId ? result.node : item)));
+      setEdges(result.edges);
+      setSelectedNodeId(nodeId);
+
+      const notes: string[] = [];
+      const lost = result.droppedEdgeIds.length;
+      if (lost > 0) notes.push(lost === 1 ? "A conexão de saída antiga foi removida: religue as saídas de cada resposta." : `${lost} conexões de saída antigas foram removidas: religue as saídas de cada resposta.`);
+      if (result.droppedChoices.length > 0) notes.push(`Ficaram de fora (máx. 3 botões): ${result.droppedChoices.join(", ")}.`);
+      if (!wasLegacyMenu && notes.length === 0) return;
+      const message = "Convertido em pergunta com botões.";
+      const options = { description: notes.join(" ") || undefined, action: { label: "Desfazer", onClick: undo } };
+      if (notes.length > 0) toast.warning(message, options);
+      else toast.success(message, options);
+    },
+    [setNodes, setEdges, takeSnapshot, undo]
   );
 
   const handleDeleteNode = useCallback(
@@ -658,10 +682,6 @@ function AutomacoesEditorContent() {
   }, [name, isActive, nodes, edges, setNodes, isNew, id, createWorkflow, updateWorkflow, navigate, enrollment, reenrollment, guidedDraft.data, guidedDraft.save, guidedDraft.create, draftRevision, newGuidedId, workflow?.is_active]);
 
   const handleToggleActive = useCallback(async () => {
-    if (!isActive && !questionButtonsEnabled && nodes.some(node => node.type === "question_buttons")) {
-      toast.error("Pergunta com botões ainda não está liberada nesta organização.");
-      return;
-    }
     if (!isActive) {
       const issue = findNodeConfigIssues(nodes, edges).find(item => item.actionType === "question_buttons");
       if (issue) {
@@ -681,7 +701,7 @@ function AutomacoesEditorContent() {
       return;
     }
     setIsActive(!isActive);
-  }, [isNew, guidedDraft.data, guidedDraft.publication.data, guidedDraft.setActive, isActive, questionButtonsEnabled, nodes, edges]);
+  }, [isNew, guidedDraft.data, guidedDraft.publication.data, guidedDraft.setActive, isActive, nodes, edges]);
 
   const handlePublish = useCallback(async () => {
     setPublicationIssues([]);
@@ -773,7 +793,6 @@ function AutomacoesEditorContent() {
       />
       <WorkflowToolbar
         name={name}
-        questionButtonsEnabled={questionButtonsEnabled}
         onNameChange={setName}
         isActive={isActive}
         onToggleActive={handleToggleActive}
@@ -831,7 +850,6 @@ function AutomacoesEditorContent() {
       <div className="flex min-h-0 flex-1 gap-3">
         <WorkflowPalette
           onAddNode={handleAddNode}
-          questionButtonsEnabled={questionButtonsEnabled}
           // O executor deliberadamente não roda JavaScript sem sandbox.
           hiddenNodeTypes={["code_javascript"]}
           className="hidden w-[212px] shrink-0 xl:flex"
@@ -879,6 +897,7 @@ function AutomacoesEditorContent() {
             onUpdateNode={handleUpdateNode}
             onDeleteNode={handleDeleteNode}
             onDuplicateNode={handleDuplicateNode}
+            onConvertToQuestionButtons={handleConvertToQuestionButtons}
             allNodes={nodes as any}
           />
         ) : (

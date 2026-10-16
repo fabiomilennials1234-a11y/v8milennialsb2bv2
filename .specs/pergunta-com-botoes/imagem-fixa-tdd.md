@@ -11,7 +11,7 @@
 
 ## Acesso e retenção
 
-Servidor consulta workflow pelo JWT do caller e RLS, deriva organização, exige `requireAuth` na organização explícita e `can_administer_guided_workflow`, além de opt-in estrito `organizations.feature_flags.workflow_question_buttons === true`. Preview rejeita caminho de outra organização.
+Servidor consulta workflow pelo JWT do caller e RLS, deriva organização, exige `requireAuth` na organização explícita e `can_administer_guided_workflow` (o opt-in por feature flag da org saiu em 2026-10-14; pergunta com botões é padrão). Preview rejeita caminho de outra organização.
 
 Migration `20271020000061_workflow_question_images.sql` cria bucket privado. Policy RESTRICTIVE bloqueia acesso direto anon/authenticated, inclusive diante de policies legadas amplas. Escrita passa apenas pela API validada com service_role e `upsert:false`. Remover/substituir no editor muda apenas referência; não envia DELETE. Runtime deve assinar o ativo do snapshot imediatamente antes do envio (implementado separadamente pelo coordenador).
 

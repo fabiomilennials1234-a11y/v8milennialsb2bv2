@@ -14,7 +14,7 @@ function fixture(asset = image) {
     edges: [{ id: "start-edge", source: "start", target: "ask" },
       ...["button:a", "other_response", "timeout", "send_failure"].map(sourceHandle => ({ id: sourceHandle, source: "ask", target: "end", sourceHandle }))],
   };
-  db.mockTable("organizations", [{ id: org, feature_flags: { workflow_question_buttons: true } }]);
+  db.mockTable("organizations", [{ id: org, feature_flags: {} }]);
   db.mockTable("whatsapp_instances", [{ id: "instance", organization_id: org, provider: "uazapi", status: "connected" }]);
   db.mockTable("leads", [{ id: "lead", organization_id: org, phone: "5511999999999" }]);
   db.mockRpc("freeze_workflow_button_definition", definition);

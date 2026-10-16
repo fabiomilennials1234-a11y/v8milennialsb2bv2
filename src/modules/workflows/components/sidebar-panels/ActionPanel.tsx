@@ -30,6 +30,7 @@ import {
 import { modoDeMensagemDoNo } from "@/contracts/workflows/modo-de-mensagem";
 import { InstanceRoutingSelector } from "./InstanceRoutingSelector";
 import { SendToGroupConfig } from "./SendToGroupConfig";
+import { LegacyMenuCard } from "./LegacyMenuCard";
 import { isInstanceRoutedAction } from "@/modules/workflows/lib/instance-routing";
 import { useOrganization } from "@/modules/identity";
 import { useCampaignTemplatesByType } from "@/modules/campaigns/hooks/useCampaignTemplates";
@@ -550,6 +551,8 @@ function MarkChecklistItemConfig({
 interface ActionPanelProps {
   data: ActionNodeData;
   onUpdate: (updates: Partial<ActionNodeData>) => void;
+  /** Nó legado `send_whatsapp_menu`: converte em pergunta com botões. */
+  onConvertLegacyMenu?: () => void;
 }
 
 function FunnelLegacyActionFields({
@@ -629,7 +632,7 @@ function FunnelLegacyActionFields({
   );
 }
 
-export function ActionPanel({ data, onUpdate }: ActionPanelProps) {
+export function ActionPanel({ data, onUpdate, onConvertLegacyMenu }: ActionPanelProps) {
   const at = data.actionType;
 
   return (
@@ -700,6 +703,11 @@ export function ActionPanel({ data, onUpdate }: ActionPanelProps) {
       {/* Send WhatsApp (Documento) */}
       {at === "send_whatsapp_document" && (
         <WhatsAppDocumentPanel data={data} onUpdate={onUpdate} />
+      )}
+
+      {/* WhatsApp Menu legado — leitura + conversão explícita em pergunta com botões */}
+      {at === "send_whatsapp_menu" && (
+        <LegacyMenuCard data={data} onConvert={onConvertLegacyMenu} />
       )}
 
       {/* Send WhatsApp Template — canal oficial (#1688) */}

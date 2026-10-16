@@ -1,0 +1,312 @@
+/*
+ * Prompt de sugestões — "versão viva" (mockup v3 aprovado pelo CTO em 2026-10-15).
+ *
+ * Por que um arquivo .css e não um <style> no componente: o Portal do Radix
+ * embrulha CADA filho num Presence próprio. Um <style> ali desmonta quando o
+ * diálogo fecha, os keyframes de saída somem no meio da animação, e o Presence
+ * do overlay trava em "unmountSuspended" — overlay montado e body com
+ * pointer-events:none. Importado no topo do módulo, o Vite injeta este CSS no
+ * <head> uma vez e ele vive além do diálogo.
+ *
+ * O widget é TINTA nos dois temas (--ink*) com OURO SÓLIDO (--primary). Sem tom
+ * pastel. Tudo prefixado `fsp-`.
+ */
+
+@property --fsp-spin {
+  syntax: "<angle>";
+  inherits: false;
+  initial-value: 0deg;
+}
+
+.fsp-overlay {
+  --fsp-spring: cubic-bezier(.16, 1, .3, 1);
+  --fsp-snap: cubic-bezier(.34, 1.56, .64, 1);
+  --fsp-ink: hsl(var(--ink));
+  --fsp-ink-2: hsl(var(--ink-2));
+  --fsp-ink-line: hsl(var(--ink-line));
+  --fsp-ink-fg: hsl(var(--ink-foreground));
+  --fsp-ink-muted: hsl(var(--ink-muted));
+  --fsp-gold: hsl(var(--primary));
+  --fsp-gold-ink: hsl(var(--primary-foreground));
+  position: fixed;
+  inset: 0;
+  z-index: 50; /* LAYER.modalOverlay */
+  display: grid;
+  place-items: center;
+  overflow-y: auto;
+  padding: 24px 16px;
+  background: hsl(36 20% 6% / .62);
+  animation: fsp-fade-in 320ms ease-out both;
+}
+.dark .fsp-overlay { background: hsl(0 0% 0% / .8); }
+.fsp-overlay[data-state="closed"] { animation: fsp-fade-out 220ms ease-in both; }
+@keyframes fsp-fade-in { from { opacity: 0; } }
+@keyframes fsp-fade-out { to { opacity: 0; } }
+
+/* ── Casca: aro de ouro girando na borda ── */
+.fsp-shell {
+  position: relative;
+  width: min(540px, 100%);
+  border-radius: var(--radius-panel);
+  padding: 1.5px;
+  isolation: isolate;
+  outline: none;
+  animation: fsp-lift 900ms var(--fsp-spring) 60ms both;
+}
+.fsp-shell[data-state="closed"] { animation: fsp-shell-out 200ms ease-in both; }
+@keyframes fsp-lift { from { opacity: 0; transform: translateY(40px) scale(.94) rotateX(8deg); } }
+@keyframes fsp-shell-out { to { opacity: 0; transform: translateY(16px) scale(.97); } }
+.fsp-shell::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  background: conic-gradient(from var(--fsp-spin), transparent 0 62%, hsl(47 100% 50% / 0) 64%, var(--fsp-gold) 80%, hsl(47 100% 50% / 0) 92%, transparent);
+  animation: fsp-spin 4.5s linear infinite;
+}
+.fsp-shell::after {
+  content: "";
+  position: absolute;
+  inset: 1.5px;
+  z-index: -2;
+  border-radius: calc(var(--radius-panel) - 1.5px);
+  background: var(--fsp-ink-line);
+}
+@keyframes fsp-spin { to { --fsp-spin: 360deg; } }
+
+.fsp-card {
+  position: relative;
+  display: grid;
+  overflow: hidden;
+  border-radius: calc(var(--radius-panel) - 1.5px);
+  background: var(--fsp-ink);
+  color: var(--fsp-ink-fg);
+  box-shadow: var(--relevo-tinta);
+}
+
+/* grade da bancada, viva no fundo do topo */
+.fsp-grid {
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 220px;
+  pointer-events: none;
+  opacity: .5;
+  background-image:
+    linear-gradient(hsl(0 0% 100% / .045) 1px, transparent 1px),
+    linear-gradient(90deg, hsl(0 0% 100% / .045) 1px, transparent 1px);
+  background-size: 22px 22px;
+  -webkit-mask-image: radial-gradient(120% 90% at 85% 0%, #000 20%, transparent 70%);
+  mask-image: radial-gradient(120% 90% at 85% 0%, #000 20%, transparent 70%);
+  animation: fsp-drift 14s linear infinite;
+}
+@keyframes fsp-drift { to { background-position: 22px 22px, 22px 22px; } }
+
+/* ── Linha superior ── */
+.fsp-top { position: relative; display: flex; align-items: center; justify-content: space-between; padding: 22px 24px 0; }
+.fsp-eyebrow {
+  display: inline-flex; align-items: center; gap: 8px;
+  font-size: 11px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase;
+  color: var(--fsp-gold);
+  animation: fsp-rise 600ms var(--fsp-spring) 260ms both;
+}
+.fsp-live { position: relative; width: 8px; height: 8px; border-radius: 50%; background: var(--fsp-gold); }
+.fsp-live::after {
+  content: ""; position: absolute; inset: 0; border-radius: 50%; background: var(--fsp-gold);
+  animation: fsp-ping 1.8s cubic-bezier(0, 0, .2, 1) 900ms infinite;
+}
+@keyframes fsp-ping { 75%, 100% { transform: scale(2.6); opacity: 0; } }
+.fsp-close {
+  display: grid; place-items: center; width: 34px; height: 34px; border-radius: 999px; border: 0; cursor: pointer;
+  background: hsl(0 0% 100% / .08); color: var(--fsp-ink-fg);
+  transition: background-color .2s, transform .3s var(--fsp-snap);
+}
+.fsp-close:hover:not(:disabled) { background: hsl(0 0% 100% / .16); transform: rotate(90deg); }
+.fsp-close svg { width: 15px; height: 15px; }
+.fsp-close:disabled { opacity: .4; cursor: not-allowed; }
+
+/* ── Hero ── */
+.fsp-hero { position: relative; display: flex; align-items: center; gap: 20px; padding: 14px 24px 22px; }
+.fsp-hero-text { display: grid; flex: 1; gap: 10px; min-width: 0; }
+.fsp-headline {
+  margin: 0; font-size: clamp(26px, 4.6vw, 32px); line-height: 1.06; font-weight: 800; letter-spacing: -.04em;
+  text-wrap: balance;
+}
+.fsp-w { display: inline-block; overflow: hidden; vertical-align: bottom; padding-bottom: .08em; margin-bottom: -.08em; }
+.fsp-w > span { display: inline-block; animation: fsp-word-up 800ms var(--fsp-spring) both; }
+@keyframes fsp-word-up { from { transform: translateY(110%) rotate(4deg); } }
+.fsp-hl { position: relative; color: var(--fsp-gold); }
+.fsp-hl::after {
+  content: ""; position: absolute; left: 0; right: 0; bottom: .02em; height: .1em; border-radius: 2px;
+  background: var(--fsp-gold); transform: scaleX(0); transform-origin: left;
+  animation: fsp-underline 600ms var(--fsp-spring) 1150ms forwards;
+}
+@keyframes fsp-underline { to { transform: scaleX(1); } }
+.fsp-sub {
+  margin: 0; max-width: 38ch; font-size: 15px; line-height: 1.5; color: var(--fsp-ink-muted);
+  animation: fsp-rise 700ms var(--fsp-spring) 1050ms both;
+}
+.fsp-sub strong { color: var(--fsp-ink-fg); font-weight: 700; }
+@keyframes fsp-rise { from { opacity: 0; transform: translateY(10px); } }
+
+/* ── Medidor de torque ── */
+.fsp-gauge { position: relative; flex: none; width: 104px; height: 104px; animation: fsp-pop-in 700ms var(--fsp-snap) 300ms both; }
+@keyframes fsp-pop-in { from { opacity: 0; transform: scale(.6) rotate(-40deg); } }
+.fsp-gauge svg { width: 100%; height: 100%; overflow: visible; }
+.fsp-g-track { stroke: hsl(0 0% 100% / .1); }
+.fsp-g-arc {
+  stroke: var(--fsp-gold);
+  filter: drop-shadow(0 0 6px hsl(47 100% 50% / .55));
+  transition: stroke-dashoffset var(--fsp-gt, 500ms) var(--fsp-spring), stroke-dasharray .6s var(--fsp-spring);
+}
+.fsp-g-tick { stroke: hsl(0 0% 100% / .18); stroke-width: 2; stroke-linecap: round; transition: stroke .25s; }
+.fsp-g-tick[data-on="true"] { stroke: var(--fsp-gold); }
+.fsp-g-needle { transform-origin: 50px 50px; transition: transform var(--fsp-gt, 500ms) var(--fsp-snap); }
+.fsp-g-hub { fill: var(--fsp-ink); stroke: var(--fsp-gold); stroke-width: 2.5; }
+.fsp-g-read {
+  position: absolute; left: 0; right: 0; bottom: -2px; text-align: center;
+  font-size: 10px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase;
+  color: var(--fsp-ink-muted); font-variant-numeric: tabular-nums;
+}
+.fsp-g-read b { color: var(--fsp-ink-fg); font-size: 12px; letter-spacing: 0; }
+.fsp-g-check { stroke-dasharray: 40; stroke-dashoffset: 40; opacity: 0; }
+.fsp-gauge[data-done="true"] { animation: fsp-thump 600ms var(--fsp-snap); }
+.fsp-gauge[data-done="true"] .fsp-g-needle,
+.fsp-gauge[data-done="true"] .fsp-g-ticks,
+.fsp-gauge[data-done="true"] .fsp-g-read { opacity: 0; transition: opacity .2s; }
+.fsp-gauge[data-done="true"] .fsp-g-check { opacity: 1; animation: fsp-draw .55s var(--fsp-spring) .3s forwards; }
+@keyframes fsp-thump { 40% { transform: scale(1.12); } }
+@keyframes fsp-draw { to { stroke-dashoffset: 0; } }
+.fsp-sparks { position: absolute; inset: -60px; width: calc(100% + 120px); height: calc(100% + 120px); pointer-events: none; }
+
+/* ── Utilitários próprios: o widget não depende do scan de classes do Tailwind ── */
+.fsp-sr {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden;
+  clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0;
+}
+.fsp-form { display: grid; gap: 16px; }
+.fsp-spacer { margin-right: auto; }
+
+/* ── Corpo ── */
+.fsp-body {
+  position: relative; display: grid; gap: 16px; padding: 20px 24px 22px;
+  border-top: 1px solid var(--fsp-ink-line);
+  background: linear-gradient(var(--fsp-ink-2), var(--fsp-ink) 70%);
+}
+.fsp-stagger { animation: fsp-rise 600ms var(--fsp-spring) both; }
+.fsp-lbl { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; font-size: 13px; font-weight: 700; color: var(--fsp-ink-fg); }
+.fsp-lbl-hint { font-size: 12px; font-weight: 600; color: var(--fsp-ink-muted); }
+.fsp-field { display: grid; gap: 10px; }
+.fsp-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.fsp-chip {
+  position: relative; display: inline-flex; align-items: center; gap: 6px; cursor: pointer;
+  padding: 9px 14px; border-radius: 999px; border: 1px solid hsl(0 0% 100% / .12);
+  background: hsl(0 0% 100% / .04); color: hsl(0 0% 100% / .82);
+  font-size: 13px; font-weight: 700; line-height: 1;
+  transition: background-color .2s, color .2s, border-color .2s, transform .35s var(--fsp-snap), box-shadow .2s;
+  animation: fsp-chip-in 520ms var(--fsp-snap) both;
+}
+@keyframes fsp-chip-in { from { opacity: 0; transform: translateY(8px) scale(.85); } }
+.fsp-chip-icon { display: contents; }
+.fsp-chip svg { width: 14px; height: 14px; }
+.fsp-chip:hover { border-color: hsl(0 0% 100% / .3); color: #fff; transform: translateY(-1px); }
+.fsp-chip[aria-checked="true"] {
+  background: var(--fsp-gold); color: var(--fsp-gold-ink); border-color: var(--fsp-gold); box-shadow: var(--brilho-ouro);
+}
+/* Pulinho ao selecionar: dois nomes alternados reiniciam a animação sem remontar. */
+.fsp-chip[data-bump="a"] { animation: fsp-bump-a 420ms var(--fsp-snap); }
+.fsp-chip[data-bump="b"] { animation: fsp-bump-b 420ms var(--fsp-snap); }
+@keyframes fsp-bump-a { 35% { transform: scale(1.1); } }
+@keyframes fsp-bump-b { 35% { transform: scale(1.1); } }
+
+.fsp-ta-wrap { position: relative; }
+.fsp-ta {
+  display: block; width: 100%; min-height: 112px; resize: vertical; padding: 12px 14px 30px;
+  font-family: inherit; font-size: 15px; font-weight: 400; line-height: 1.5; color: var(--fsp-ink-fg); background: hsl(0 0% 0% / .35);
+  border: 1px solid var(--fsp-ink-line); border-radius: 16px; outline: none;
+  transition: border-color .2s, box-shadow .25s;
+}
+.fsp-ta::placeholder { color: hsl(0 0% 100% / .38); }
+.fsp-ta:focus { border-color: var(--fsp-gold); box-shadow: 0 0 0 4px hsl(47 100% 50% / .18); }
+.fsp-ta:disabled { opacity: .7; }
+.fsp-meter { position: absolute; left: 14px; right: 70px; bottom: 12px; height: 3px; overflow: hidden; border-radius: 3px; background: hsl(0 0% 100% / .08); pointer-events: none; }
+.fsp-meter > i { display: block; height: 100%; border-radius: inherit; background: var(--fsp-gold); transition: width .35s var(--fsp-spring); }
+.fsp-count {
+  position: absolute; right: 14px; bottom: 7px; pointer-events: none;
+  font-size: 11px; font-weight: 700; color: var(--fsp-ink-muted); font-variant-numeric: tabular-nums;
+}
+.fsp-error { margin: -6px 0 0; font-size: 13px; font-weight: 600; color: hsl(0 85% 72%); }
+
+.fsp-footer { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.fsp-hint { display: inline-flex; align-items: center; gap: 4px; margin-right: auto; font-size: 12px; color: var(--fsp-ink-muted); }
+.fsp-hint kbd { padding: 3px 7px; border-radius: 6px; background: hsl(0 0% 100% / .08); color: var(--fsp-ink-fg); font-family: inherit; font-size: 11px; font-weight: 700; }
+.fsp-btn {
+  position: relative; display: inline-flex; align-items: center; justify-content: center; gap: 8px; overflow: hidden;
+  height: 44px; padding: 0 20px; border: 0; border-radius: 999px; cursor: pointer; white-space: nowrap;
+  font-size: 14px; font-weight: 700;
+  transition: background-color .2s, color .2s, box-shadow .2s, transform .35s var(--fsp-snap), opacity .2s;
+}
+.fsp-btn:active:not(:disabled) { transform: scale(.97); }
+.fsp-btn svg { width: 16px; height: 16px; transition: transform .35s var(--fsp-snap); }
+.fsp-btn-ghost { background: transparent; color: var(--fsp-ink-muted); }
+.fsp-btn-ghost:hover:not(:disabled) { background: hsl(0 0% 100% / .08); color: var(--fsp-ink-fg); }
+.fsp-btn-ghost:disabled { opacity: .4; cursor: not-allowed; }
+.fsp-btn-gold { background: var(--fsp-gold); color: var(--fsp-gold-ink); box-shadow: var(--brilho-ouro); }
+.fsp-btn-gold:hover:not(:disabled) { transform: translateY(-2px); }
+.fsp-btn-gold:hover:not(:disabled) svg { transform: translateX(4px); }
+.fsp-btn-gold::after {
+  content: ""; position: absolute; inset: 0; transform: translateX(-120%);
+  background: linear-gradient(105deg, transparent 35%, hsl(0 0% 100% / .55) 50%, transparent 65%);
+}
+.fsp-btn-gold[data-shine="a"]::after { animation: fsp-shine-a 1.1s ease-out; }
+.fsp-btn-gold[data-shine="b"]::after { animation: fsp-shine-b 1.1s ease-out; }
+@keyframes fsp-shine-a { to { transform: translateX(120%); } }
+@keyframes fsp-shine-b { to { transform: translateX(120%); } }
+.fsp-btn-gold:disabled { background: hsl(0 0% 100% / .1); color: hsl(0 0% 100% / .4); box-shadow: none; cursor: not-allowed; }
+.fsp-note { display: flex; align-items: center; gap: 8px; margin: 0; font-size: 12px; color: var(--fsp-ink-muted); }
+.fsp-note svg { flex: none; width: 14px; height: 14px; color: var(--fsp-gold); }
+
+/* ── Sucesso ── */
+.fsp-ok { display: grid; gap: 14px; animation: fsp-rise 600ms var(--fsp-spring) 200ms both; }
+.fsp-ok h3 { margin: 0; font-size: 22px; font-weight: 800; letter-spacing: -.03em; }
+.fsp-ok p { margin: 0; max-width: 44ch; font-size: 14.5px; line-height: 1.5; color: var(--fsp-ink-muted); }
+.fsp-quote {
+  display: grid; justify-items: start; gap: 10px; padding: 14px 16px;
+  border: 1px solid var(--fsp-ink-line); border-left: 3px solid var(--fsp-gold); border-radius: 14px;
+  background: hsl(0 0% 0% / .35); font-size: 14px; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere;
+}
+.fsp-tag {
+  display: inline-flex; padding: 4px 10px; border-radius: 999px;
+  background: var(--fsp-gold); color: var(--fsp-gold-ink);
+  font-size: 11px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase;
+}
+
+.fsp-card :focus-visible { outline: 2px solid var(--fsp-gold); outline-offset: 2px; }
+
+/* ── Mobile: bottom-sheet ── */
+@media (max-width: 639px) {
+  .fsp-overlay { align-items: end; padding: 0; }
+  .fsp-shell { width: 100%; border-radius: 1.25rem 1.25rem 0 0; animation: fsp-sheet-in 700ms var(--fsp-spring) both; }
+  .fsp-shell[data-state="closed"] { animation: fsp-sheet-out 220ms ease-in both; }
+  .fsp-shell::after, .fsp-card { border-radius: calc(1.25rem - 1.5px) calc(1.25rem - 1.5px) 0 0; }
+  .fsp-card { padding-bottom: env(safe-area-inset-bottom, 0px); }
+  .fsp-gauge { width: 78px; height: 78px; }
+  .fsp-hero { gap: 14px; }
+  .fsp-hint { display: none; }
+  .fsp-footer .fsp-btn { flex: 1; }
+  .fsp-top, .fsp-hero, .fsp-body { padding-inline: 18px; }
+}
+@keyframes fsp-sheet-in { from { transform: translateY(100%); } }
+@keyframes fsp-sheet-out { to { transform: translateY(100%); } }
+
+/* ── Movimento reduzido: tudo no estado final. 1ms (e não `none`) mantém os
+      eventos de fim de animação que o Presence do Radix espera ao fechar. ── */
+@media (prefers-reduced-motion: reduce) {
+  .fsp-overlay, .fsp-overlay *, .fsp-overlay *::before, .fsp-overlay *::after {
+    animation-duration: 1ms !important;
+    animation-delay: 0ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 1ms !important;
+  }
+  .fsp-shell::before, .fsp-grid, .fsp-live::after { animation: none !important; }
+}

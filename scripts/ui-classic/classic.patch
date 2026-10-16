@@ -8554,6 +8554,577 @@ index 000000000..8f41158f9
 +    isSaving: mutation.isPending,
 +  };
 +}
+diff --git a/classic/src/modules/workflows/components/TemplateTextarea.tsx b/classic/src/modules/workflows/components/TemplateTextarea.tsx
+index 8247c949f..964d9d47e 100644
+--- a/classic/src/modules/workflows/components/TemplateTextarea.tsx
++++ b/classic/src/modules/workflows/components/TemplateTextarea.tsx
+@@ -32,6 +32,8 @@ export interface TemplateTextareaHandle {
+ }
+ 
+ interface TemplateTextareaProps {
++  /** Liga o `<Label htmlFor>` do painel ao campo. */
++  id?: string;
+   value: string;
+   onChange: (value: string) => void;
+   placeholder?: string;
+@@ -39,7 +41,7 @@ interface TemplateTextareaProps {
+ }
+ 
+ export const TemplateTextarea = forwardRef<TemplateTextareaHandle, TemplateTextareaProps>(
+-  ({ value, onChange, placeholder, rows = 4 }, ref) => {
++  ({ id, value, onChange, placeholder, rows = 4 }, ref) => {
+     const textareaRef = useRef<HTMLTextAreaElement>(null);
+ 
+     useImperativeHandle(ref, () => ({
+@@ -102,6 +104,7 @@ export const TemplateTextarea = forwardRef<TemplateTextareaHandle, TemplateTexta
+     return (
+       <div className="space-y-2">
+         <Textarea
++          id={id}
+           ref={textareaRef}
+           value={value}
+           onChange={(e) => onChange(e.target.value)}
+diff --git a/classic/src/modules/workflows/components/WorkflowSidebar.tsx b/classic/src/modules/workflows/components/WorkflowSidebar.tsx
+index 0b444abbc..f74abfe76 100644
+--- a/classic/src/modules/workflows/components/WorkflowSidebar.tsx
++++ b/classic/src/modules/workflows/components/WorkflowSidebar.tsx
+@@ -1,7 +1,6 @@
+ import { Input } from "@/components/ui/input";
+ import { Label } from "@/components/ui/label";
+-import { useFeatureFlag } from "@/modules/platform";
+-import { QUESTION_BUTTONS_FLAG, type ActionNodeData } from "@/types/workflow";
++import type { ActionNodeData } from "@/types/workflow";
+ import { ActionTypeSelector } from "./sidebar-panels/ActionTypeSelector";
+ import { getGuidedConditionFields } from '../lib/guided-condition-summary';
+ import { useState } from 'react';
+@@ -79,6 +78,12 @@ interface WorkflowSidebarProps {
+   onUpdateNode: (nodeId: string, data: Partial<WorkflowNodeData>) => void;
+   onDeleteNode?: (nodeId: string) => void;
+   onDuplicateNode?: (nodeId: string) => void;
++  /**
++   * Converte a ação em pergunta com botões (`convertLegacyMenuNode`): troca o
++   * nó E as arestas, por isso não passa por `onUpdateNode`. Chamado ao escolher
++   * "WhatsApp Menu" no seletor e pelo cartão do nó legado.
++   */
++  onConvertToQuestionButtons?: (nodeId: string) => void;
+   allNodes?: WorkflowNode[];
+ }
+ 
+@@ -92,9 +97,9 @@ export function WorkflowSidebar({
+   onUpdateNode,
+   onDeleteNode,
+   onDuplicateNode,
++  onConvertToQuestionButtons,
+   allNodes = [],
+ }: WorkflowSidebarProps) {
+-  const { enabled: buttonsEnabled } = useFeatureFlag(QUESTION_BUTTONS_FLAG);
+   const [expanded, setExpanded] = useState(false);
+   if (!selectedNode) return null;
+ 
+@@ -110,11 +115,8 @@ export function WorkflowSidebar({
+   };
+ 
+   const handleActionUpdate = (updates: Partial<ActionNodeData>) => {
+-    if (updates.actionType === "send_whatsapp_menu" && buttonsEnabled && nodeType !== "question_buttons") {
+-      const action = nodeData as ActionNodeData;
+-      handleUpdate({ type: "question_buttons", label: action.label, text: action.messageTemplate ?? "",
+-        instanceId: action.whatsappInstanceId || undefined,
+-        buttons: [{ id: crypto.randomUUID(), label: "Opção 1" }], timeoutHours: 24 });
++    if (updates.actionType === "send_whatsapp_menu" && nodeType === "action" && onConvertToQuestionButtons) {
++      onConvertToQuestionButtons(selectedNode.id);
+     } else if (nodeType === "question_buttons" && updates.actionType && updates.actionType !== "send_whatsapp_menu") {
+       handleUpdate({ type: "action", label: nodeData.label, ...updates });
+     } else {
+@@ -127,7 +129,8 @@ export function WorkflowSidebar({
+       case "trigger":
+         return <TriggerPanel data={nodeData as any} onUpdate={handleUpdate} />;
+       case "action":
+-        return <ActionPanel data={nodeData as ActionNodeData} onUpdate={handleActionUpdate} />;
++        return <ActionPanel data={nodeData as ActionNodeData} onUpdate={handleActionUpdate}
++          onConvertLegacyMenu={onConvertToQuestionButtons ? () => onConvertToQuestionButtons(selectedNode.id) : undefined} />;
+       case "condition":
+         if ((nodeData as ConditionNodeData).guidedCondition) {
+           const legacyReview = getLegacyConditionReview(nodeData as ConditionNodeData);
+diff --git a/classic/src/modules/workflows/components/WorkflowToolbar.tsx b/classic/src/modules/workflows/components/WorkflowToolbar.tsx
+index 33f89be85..63e10a07d 100644
+--- a/classic/src/modules/workflows/components/WorkflowToolbar.tsx
++++ b/classic/src/modules/workflows/components/WorkflowToolbar.tsx
+@@ -52,9 +52,8 @@ interface WorkflowToolbarProps {
+   workflowId?: string;
+   onExport?: () => void;
+   onOpenSettings?: () => void;
+-  /** Tipos que não devem aparecer no menu (ex.: nó gateado por feature flag). */
++  /** Tipos que não devem aparecer no menu (ex.: JavaScript sem sandbox). */
+   hiddenNodeTypes?: WorkflowNodeType[];
+-  questionButtonsEnabled?: boolean;
+ }
+ 
+ interface NodeOption {
+@@ -128,7 +127,6 @@ export function WorkflowToolbar({
+   onExport,
+   onOpenSettings,
+   hiddenNodeTypes = [],
+-  questionButtonsEnabled = false,
+ }: WorkflowToolbarProps) {
+   const navigate = useNavigate();
+ 
+@@ -137,7 +135,7 @@ export function WorkflowToolbar({
+   const visibleGroups = ADD_NODE_GROUPS
+     .map((group) => ({
+       ...group,
+-      options: group.options.filter((opt) => !hiddenNodeTypes.includes(opt.type) && (opt.type !== "question_buttons" || questionButtonsEnabled)),
++      options: group.options.filter((opt) => !hiddenNodeTypes.includes(opt.type)),
+     }))
+     .filter((group) => group.options.length > 0);
+ 
+diff --git a/classic/src/modules/workflows/components/sidebar-panels/ActionPanel.tsx b/classic/src/modules/workflows/components/sidebar-panels/ActionPanel.tsx
+index 6b0066824..e73a0529e 100644
+--- a/classic/src/modules/workflows/components/sidebar-panels/ActionPanel.tsx
++++ b/classic/src/modules/workflows/components/sidebar-panels/ActionPanel.tsx
+@@ -31,6 +31,7 @@ import {
+ import { modoDeMensagemDoNo } from "@/contracts/workflows/modo-de-mensagem";
+ import { InstanceRoutingSelector } from "./InstanceRoutingSelector";
+ import { SendToGroupConfig } from "./SendToGroupConfig";
++import { LegacyMenuCard } from "./LegacyMenuCard";
+ import { isInstanceRoutedAction } from "@/modules/workflows/lib/instance-routing";
+ import { useOrganization } from "@/modules/identity";
+ import { useCampaignTemplatesByType } from "@/modules/campaigns/hooks/useCampaignTemplates";
+@@ -551,6 +552,8 @@ function MarkChecklistItemConfig({
+ interface ActionPanelProps {
+   data: ActionNodeData;
+   onUpdate: (updates: Partial<ActionNodeData>) => void;
++  /** Nó legado `send_whatsapp_menu`: converte em pergunta com botões. */
++  onConvertLegacyMenu?: () => void;
+ }
+ 
+ function FunnelLegacyActionFields({
+@@ -630,7 +633,7 @@ function FunnelLegacyActionFields({
+   );
+ }
+ 
+-export function ActionPanel({ data, onUpdate }: ActionPanelProps) {
++export function ActionPanel({ data, onUpdate, onConvertLegacyMenu }: ActionPanelProps) {
+   const at = data.actionType;
+ 
+   return (
+@@ -703,6 +706,11 @@ export function ActionPanel({ data, onUpdate }: ActionPanelProps) {
+         <WhatsAppDocumentPanel data={data} onUpdate={onUpdate} />
+       )}
+ 
++      {/* WhatsApp Menu legado — leitura + conversão explícita em pergunta com botões */}
++      {at === "send_whatsapp_menu" && (
++        <LegacyMenuCard data={data} onConvert={onConvertLegacyMenu} />
++      )}
++
+       {/* Send WhatsApp Template — canal oficial (#1688) */}
+       {at === "send_whatsapp_template" && (
+         <TemplateNodeConfig data={data} onUpdate={onUpdate} />
+diff --git a/classic/src/modules/workflows/components/sidebar-panels/ActionTypeSelector.tsx b/classic/src/modules/workflows/components/sidebar-panels/ActionTypeSelector.tsx
+index fb2bef1d9..a84a43077 100644
+--- a/classic/src/modules/workflows/components/sidebar-panels/ActionTypeSelector.tsx
++++ b/classic/src/modules/workflows/components/sidebar-panels/ActionTypeSelector.tsx
+@@ -1,16 +1,17 @@
+ import { Label } from "@/components/ui/label";
+ import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from "@/components/ui/select";
+-import { getActionCategories, ACTION_LABELS, UNIFIED_MESSAGE_NODE_FLAG, QUESTION_BUTTONS_FLAG, type WorkflowActionType } from "@/types/workflow";
++import { getActionCategories, ACTION_LABELS, UNIFIED_MESSAGE_NODE_FLAG, type WorkflowActionType } from "@/types/workflow";
+ import { useFeatureFlag } from "@/modules/platform";
+ import { useOrgFeatures } from "@/contexts/OrgFeaturesContext";
+ 
+ export function ActionTypeSelector({ value, onChange }: { value: WorkflowActionType; onChange: (value: WorkflowActionType) => void }) {
+   const { enabled: unifiedEnabled } = useFeatureFlag(UNIFIED_MESSAGE_NODE_FLAG);
+-  const { enabled: buttonsEnabled } = useFeatureFlag(QUESTION_BUTTONS_FLAG);
+   const { hasFeature } = useOrgFeatures();
+   const categories = getActionCategories(unifiedEnabled)
+     .filter(category => category.label !== "Negócios" || hasFeature("deals"))
+-    .map(category => category.label === "Comunicação" && (buttonsEnabled || value === "send_whatsapp_menu") && !category.actions.includes("send_whatsapp_menu")
++    // "WhatsApp Menu" (pergunta com botões) é padrão para toda org — inclusive
++    // com o nó unificado, cujo picker colapsa os envios legados.
++    .map(category => category.label === "Comunicação" && !category.actions.includes("send_whatsapp_menu")
+       ? { ...category, actions: [...category.actions, "send_whatsapp_menu" as const] } : category);
+   return <div className="space-y-2">
+     <Label htmlFor="workflow-action-type">Tipo de Ação</Label>
+diff --git a/classic/src/modules/workflows/components/sidebar-panels/LegacyMenuCard.tsx b/classic/src/modules/workflows/components/sidebar-panels/LegacyMenuCard.tsx
+new file mode 100644
+index 000000000..cf9d74354
+--- /dev/null
++++ b/classic/src/modules/workflows/components/sidebar-panels/LegacyMenuCard.tsx
+@@ -0,0 +1,77 @@
++/**
++ * Cartão do nó legado `action` + `send_whatsapp_menu`.
++ *
++ * O nó continua executando pelo handler antigo enquanto ninguém converte; aqui
++ * o conteúdo aparece só em leitura e a única ação é a conversão explícita para
++ * pergunta com botões (`convertLegacyMenuNode`). Sem upgrade silencioso: a
++ * conversão remove a saída antiga, então quem decide é o usuário.
++ */
++import { MessageSquareText, ArrowRightLeft } from "lucide-react";
++import { Button } from "@/components/ui/button";
++import type { ActionNodeData } from "@/types/workflow";
++import { MAX_QUESTION_BUTTONS, normalizeMenuChoiceLabels } from "@/modules/workflows/lib/convertLegacyMenuNode";
++
++export function LegacyMenuCard({ data, onConvert }: { data: ActionNodeData; onConvert?: () => void }) {
++  const text = data.menuText?.trim() ? data.menuText : data.messageTemplate ?? "";
++  // Mesma regra da conversão: o que aparece riscado é exatamente o que ela descarta.
++  const { labels: choices, dropped } = normalizeMenuChoiceLabels(data.menuChoices);
++  const overLimit = dropped.length > 0;
++
++  return (
++    <section
++      aria-labelledby="legacy-menu-title"
++      className="space-y-3 rounded-xl border border-border bg-muted/30 p-3.5"
++    >
++      <div className="flex items-start gap-2.5">
++        <MessageSquareText className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
++        <div className="space-y-1">
++          <h3 id="legacy-menu-title" className="text-sm font-semibold tracking-[-0.01em]">Menu no formato antigo</h3>
++          <p className="text-xs leading-relaxed text-muted-foreground">
++            Continua enviando como antes. Converta para editar a mensagem, os botões e as saídas de cada resposta.
++          </p>
++        </div>
++      </div>
++
++      <div className="space-y-2 rounded-lg border border-border bg-card p-3">
++        <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Mensagem</p>
++        <p className="whitespace-pre-wrap break-words text-sm text-foreground/90">
++          {text || <span className="italic text-muted-foreground">Sem texto</span>}
++        </p>
++        <p className="pt-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Opções</p>
++        {choices.length > 0 ? (
++          <ul className="flex flex-wrap gap-1.5" aria-label="Opções do menu">
++            {choices.map((label, index) => (
++              <li
++                key={`${index}-${label}`}
++                className={
++                  index < MAX_QUESTION_BUTTONS
++                    ? "rounded-full border border-border bg-background px-2.5 py-0.5 text-xs"
++                    : "rounded-full border border-dashed border-border px-2.5 py-0.5 text-xs text-muted-foreground line-through"
++                }
++              >
++                {label}
++              </li>
++            ))}
++          </ul>
++        ) : (
++          <p className="text-sm italic text-muted-foreground">Sem opções</p>
++        )}
++      </div>
++
++      {overLimit && (
++        <p className="text-xs text-warning-strong">
++          O WhatsApp aceita até {MAX_QUESTION_BUTTONS} botões: só as {MAX_QUESTION_BUTTONS} primeiras opções serão mantidas.
++        </p>
++      )}
++      <p className="text-xs leading-relaxed text-muted-foreground">
++        Ao converter, a conexão de saída atual é removida — você religa cada resposta. Dá para desfazer.
++      </p>
++      {onConvert && (
++        <Button type="button" className="w-full" onClick={onConvert}>
++          <ArrowRightLeft className="mr-2 h-4 w-4" aria-hidden />
++          Converter em pergunta com botões
++        </Button>
++      )}
++    </section>
++  );
++}
+diff --git a/classic/src/modules/workflows/components/sidebar-panels/QuestionButtonsPanel.tsx b/classic/src/modules/workflows/components/sidebar-panels/QuestionButtonsPanel.tsx
+index a078b8a0f..ab9669ef6 100644
+--- a/classic/src/modules/workflows/components/sidebar-panels/QuestionButtonsPanel.tsx
++++ b/classic/src/modules/workflows/components/sidebar-panels/QuestionButtonsPanel.tsx
+@@ -1,13 +1,15 @@
++import { useRef } from "react";
+ import { Input } from "@/components/ui/input";
+-import { Textarea } from "@/components/ui/textarea";
+ import { Label } from "@/components/ui/label";
+ import { Button } from "@/components/ui/button";
+-import { ArrowUp, ArrowDown, Trash2, Plus } from "lucide-react";
++import { ArrowUp, ArrowDown, Trash2, Plus, Info } from "lucide-react";
+ import type { QuestionButtonsNodeData } from "@/types/workflow";
+ import { findNodeConfigIssues } from "@/contracts/workflows/node-requirements";
+-import { useWhatsAppInstancesForUser } from "@/modules/communication";
++import { useWhatsAppInstances, useWhatsAppInstancesForUser } from "@/modules/communication";
+ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+ import { QuestionButtonsImage } from "./QuestionButtonsImage";
++import { VariableInserter } from "@/modules/workflows/components/VariableInserter";
++import { TemplateTextarea, type TemplateTextareaHandle } from "@/modules/workflows/components/TemplateTextarea";
+ 
+ interface Props {
+   data: QuestionButtonsNodeData;
+@@ -16,8 +18,13 @@ interface Props {
+ }
+ 
+ export function QuestionButtonsPanel({ data, onUpdate, workflowId }: Props) {
++  const textRef = useRef<TemplateTextareaHandle>(null);
+   const instancesQuery = useWhatsAppInstancesForUser();
+   const instances = (instancesQuery.data ?? []).filter(instance => instance.provider === "uazapi");
++  // O aviso olha a ORG, não o acesso do usuário: em "instância da conversa" o
++  // envio pode sair por uma Uazapi que este membro não enxerga no seletor.
++  const orgInstancesQuery = useWhatsAppInstances();
++  const orgHasUazapi = (orgInstancesQuery.data ?? []).some(instance => instance.provider === "uazapi");
+   const issues = findNodeConfigIssues([{ id: "question", type: "question_buttons", data }], [])
+     .filter(issue => !issue.missing.startsWith("destino da saída"));
+   const move = (index: number, direction: number) => {
+@@ -26,6 +33,10 @@ export function QuestionButtonsPanel({ data, onUpdate, workflowId }: Props) {
+     onUpdate({ buttons });
+   };
+   return <div className="space-y-6">
++    {orgInstancesQuery.isSuccess && !orgHasUazapi && <div role="note" className="flex items-start gap-2 rounded-xl border border-warning/30 bg-warning/[.08] p-3 text-xs leading-relaxed">
++      <Info className="mt-0.5 h-4 w-4 shrink-0 text-warning-strong" aria-hidden />
++      <p>Botões só são enviados por instância Uazapi; sem ela o fluxo segue pela saída Falha no envio.</p>
++    </div>}
+     <div className="space-y-2">
+       <Label htmlFor="question-instance">Instância WhatsApp</Label>
+       <Select value={data.instanceId === null ? "" : data.instanceId ?? "conversation"} onValueChange={value => onUpdate({ instanceId: value === "conversation" ? undefined : value })} disabled={instancesQuery.isLoading}>
+@@ -45,8 +56,9 @@ export function QuestionButtonsPanel({ data, onUpdate, workflowId }: Props) {
+     </div>}
+     <div className="space-y-2">
+       <Label htmlFor="question-message">Mensagem</Label>
+-      <Textarea id="question-message" value={data.text} rows={4}
+-        onChange={(event) => onUpdate({ text: event.target.value })} />
++      <VariableInserter onInsert={variable => textRef.current?.insertAtCursor(variable)} />
++      <TemplateTextarea ref={textRef} id="question-message" value={data.text} rows={4}
++        onChange={text => onUpdate({ text })} />
+     </div>
+     <div className="space-y-3">
+       <QuestionButtonsImage workflowId={workflowId} image={data.image} onChange={image => onUpdate({ image })} />
+diff --git a/classic/src/modules/workflows/lib/convertLegacyMenuNode.ts b/classic/src/modules/workflows/lib/convertLegacyMenuNode.ts
+new file mode 100644
+index 000000000..e18077f69
+--- /dev/null
++++ b/classic/src/modules/workflows/lib/convertLegacyMenuNode.ts
+@@ -0,0 +1,120 @@
++/**
++ * convertLegacyMenuNode — conversão EXPLÍCITA do nó legado `action` +
++ * `send_whatsapp_menu` em `question_buttons` (pergunta com botões).
++ *
++ * Por que explícita e não migração de dados: o menu legado tem UMA saída sem
++ * handle; a pergunta com botões tem uma saída por botão + "Outra resposta",
++ * "Sem resposta" e "Falha no envio". Não existe mapeamento honesto da aresta
++ * antiga para essas saídas — então ela é removida e o usuário religa, vendo o
++ * que mudou. O nó legado que ninguém converter continua executando pelo
++ * handler antigo (`sendWhatsAppMenu`).
++ *
++ * Também é o caminho de quem escolhe "WhatsApp Menu" no seletor de tipo de
++ * qualquer ação: a mesma regra de texto, instância e arestas.
++ *
++ * Pura: não muta entradas. Quem chama tira o snapshot (desfazer) e avisa.
++ */
++import type {
++  ActionNodeData,
++  QuestionButtonsNodeData,
++  WorkflowEdge,
++  WorkflowNode,
++} from "@/types/workflow";
++
++/** Limite de botões do WhatsApp (e do contrato `question_buttons`). */
++export const MAX_QUESTION_BUTTONS = 3;
++
++const DEFAULT_TIMEOUT_HOURS = 24;
++
++/** Saídas fixas da pergunta com botões, além de `button:<id>`. */
++const FIXED_OUTPUT_HANDLES = new Set(["other_response", "timeout", "send_failure"]);
++
++export interface ConvertLegacyMenuResult {
++  node: WorkflowNode;
++  edges: WorkflowEdge[];
++  /** Arestas de saída removidas: o usuário precisa religar estas saídas. */
++  droppedEdgeIds: string[];
++  /** Opções além do limite de botões, que ficaram de fora. */
++  droppedChoices: string[];
++}
++
++/** "Rótulo|id" ou "Rótulo|https://…" → "Rótulo". Quebras de linha viram espaço. */
++function choiceLabel(choice: unknown): string {
++  if (typeof choice !== "string") return "";
++  return choice.split("|")[0].replace(/[\r\n]+/g, " ").trim();
++}
++
++export interface MenuChoiceLabels {
++  /** Rótulos únicos (sem diferenciar maiúsculas), na ordem original. */
++  labels: string[];
++  /** Os que viram botão: os primeiros `MAX_QUESTION_BUTTONS`. */
++  kept: string[];
++  /** Os que ficam de fora por passar do limite. */
++  dropped: string[];
++}
++
++/**
++ * Regra única de rótulos do menu legado: tira o sufixo "|id", descarta vazios
++ * e repetidos (sem diferenciar maiúsculas) e corta no limite de botões. O
++ * cartão do nó legado usa a mesma função — o aviso de corte tem que bater com
++ * o que a conversão realmente faz.
++ */
++export function normalizeMenuChoiceLabels(choices: unknown): MenuChoiceLabels {
++  const labels: string[] = [];
++  const seen = new Set<string>();
++  for (const choice of Array.isArray(choices) ? choices : []) {
++    const label = choiceLabel(choice);
++    const key = label.toLocaleLowerCase();
++    if (!label || seen.has(key)) continue;
++    seen.add(key);
++    labels.push(label);
++  }
++  return {
++    labels,
++    kept: labels.slice(0, MAX_QUESTION_BUTTONS),
++    dropped: labels.slice(MAX_QUESTION_BUTTONS),
++  };
++}
++
++function newButtonId(): string {
++  return crypto.randomUUID();
++}
++
++export function convertLegacyMenuNode(node: WorkflowNode, edges: WorkflowEdge[]): ConvertLegacyMenuResult {
++  if (node.data.type !== "action") {
++    throw new Error(`convertLegacyMenuNode: nó ${node.id} não é uma ação (${node.data.type})`);
++  }
++  const action = node.data as ActionNodeData;
++
++  const { kept, dropped: droppedChoices } = normalizeMenuChoiceLabels(action.menuChoices);
++  const buttons = (kept.length ? kept : ["Opção 1"]).map(label => ({ id: newButtonId(), label }));
++
++  const text = (action.menuText?.trim() ? action.menuText : action.messageTemplate) ?? "";
++
++  const data: QuestionButtonsNodeData = {
++    type: "question_buttons",
++    label: action.label,
++    text,
++    buttons,
++    timeoutHours: DEFAULT_TIMEOUT_HOURS,
++  };
++  // null = instância pendente após importação (o editor cobra); "" = conversa.
++  if (action.whatsappInstanceId === null) data.instanceId = null;
++  else if (action.whatsappInstanceId) data.instanceId = action.whatsappInstanceId;
++
++  const validHandles = new Set([...FIXED_OUTPUT_HANDLES, ...buttons.map(button => `button:${button.id}`)]);
++  const droppedEdgeIds: string[] = [];
++  const nextEdges = edges.filter(edge => {
++    if (edge.source !== node.id) return true;
++    if (edge.sourceHandle && validHandles.has(edge.sourceHandle)) return true;
++    droppedEdgeIds.push(edge.id);
++    return false;
++  });
++
++  return {
++    node: { ...node, type: "question_buttons", data },
++    edges: nextEdges,
++    droppedEdgeIds,
++    droppedChoices,
++  };
++}
+diff --git a/classic/src/modules/workflows/pages/AutomacoesEditor.tsx b/classic/src/modules/workflows/pages/AutomacoesEditor.tsx
+index 5d9e09138..599f54355 100644
+--- a/classic/src/modules/workflows/pages/AutomacoesEditor.tsx
++++ b/classic/src/modules/workflows/pages/AutomacoesEditor.tsx
+@@ -10,10 +10,11 @@ import {
+   type WorkflowSelection,
+ } from "@/modules/workflows/lib/clipboard";
+ import { upgradeWorkflowNodes } from "@/modules/workflows/lib/upgradeLegacyMessageNode";
++import { convertLegacyMenuNode } from "@/modules/workflows/lib/convertLegacyMenuNode";
+ import { HTTPS_CODE_EXAMPLE, validateCodeNodes } from "@/modules/workflows/lib/codeNodes";
+ import { findNodeConfigIssues } from "@/contracts/workflows/node-requirements";
+ import { GUIDED_CONDITION_LIMITS } from "@/contracts/workflows/guided-limits";
+-import { QUESTION_BUTTONS_FLAG, UNIFIED_MESSAGE_NODE_FLAG } from "@/types/workflow";
++import { UNIFIED_MESSAGE_NODE_FLAG } from "@/types/workflow";
+ import { useFeatureFlag } from "@/modules/platform";
+ import { useOrganization, useAuth } from "@/modules/identity";
+ 
+@@ -227,8 +228,6 @@ function AutomacoesEditorContent() {
+   const { enabled: unifiedEnabled, isLoading: unifiedLoading } =
+     useFeatureFlag(UNIFIED_MESSAGE_NODE_FLAG);
+ 
+-  const { enabled: questionButtonsEnabled } = useFeatureFlag(QUESTION_BUTTONS_FLAG);
+-
+   // In-memory clipboard for copy/paste of node subgraphs (same editor only).
+   const clipboardRef = useRef<WorkflowSelection | null>(null);
+ 
+@@ -352,7 +351,6 @@ function AutomacoesEditorContent() {
+ 
+   const handleAddNode = useCallback(
+     (type: WorkflowNodeType) => {
+-      if (type === "question_buttons" && !questionButtonsEnabled) return;
+       takeSnapshot();
+       const newId = genNodeId(type);
+       // Place below the last node
+@@ -366,7 +364,7 @@ function AutomacoesEditorContent() {
+       setNodes((nds) => [...nds, newNode]);
+       setSelectedNodeId(newId);
+     },
+-    [nodes, setNodes, genNodeId, takeSnapshot, questionButtonsEnabled]
++    [nodes, setNodes, genNodeId, takeSnapshot]
+   );
+ 
+   const handleNodeClick = useCallback((nodeId: string) => {
+@@ -420,6 +418,32 @@ function AutomacoesEditorContent() {
+     [nodes, setNodes, setEdges, takeSnapshot]
+   );
+ 
++  // Ação → pergunta com botões (escolher "WhatsApp Menu" no seletor ou o
++  // cartão do nó legado). Troca nó E arestas numa só entrada do histórico.
++  const handleConvertToQuestionButtons = useCallback(
++    (nodeId: string) => {
++      const node = nodesRef.current.find((item) => item.id === nodeId);
++      if (!node || node.data.type !== "action") return;
++      const wasLegacyMenu = (node.data as ActionNodeData).actionType === "send_whatsapp_menu";
++      const result = convertLegacyMenuNode(node, edgesRef.current);
++      takeSnapshot();
++      setNodes((nds) => nds.map((item) => (item.id === nodeId ? result.node : item)));
++      setEdges(result.edges);
++      setSelectedNodeId(nodeId);
++
++      const notes: string[] = [];
++      const lost = result.droppedEdgeIds.length;
++      if (lost > 0) notes.push(lost === 1 ? "A conexão de saída antiga foi removida: religue as saídas de cada resposta." : `${lost} conexões de saída antigas foram removidas: religue as saídas de cada resposta.`);
++      if (result.droppedChoices.length > 0) notes.push(`Ficaram de fora (máx. 3 botões): ${result.droppedChoices.join(", ")}.`);
++      if (!wasLegacyMenu && notes.length === 0) return;
++      const message = "Convertido em pergunta com botões.";
++      const options = { description: notes.join(" ") || undefined, action: { label: "Desfazer", onClick: undo } };
++      if (notes.length > 0) toast.warning(message, options);
++      else toast.success(message, options);
++    },
++    [setNodes, setEdges, takeSnapshot, undo]
++  );
++
+   const handleDeleteNode = useCallback(
+     (nodeId: string) => {
+       takeSnapshot();
+@@ -653,10 +677,6 @@ function AutomacoesEditorContent() {
+   }, [name, isActive, nodes, edges, setNodes, isNew, id, createWorkflow, updateWorkflow, navigate, enrollment, reenrollment, guidedDraft.data, guidedDraft.save, guidedDraft.create, draftRevision, newGuidedId, workflow?.is_active]);
+ 
+   const handleToggleActive = useCallback(async () => {
+-    if (!isActive && !questionButtonsEnabled && nodes.some(node => node.type === "question_buttons")) {
+-      toast.error("Pergunta com botões ainda não está liberada nesta organização.");
+-      return;
+-    }
+     if (!isActive) {
+       const issue = findNodeConfigIssues(nodes, edges).find(item => item.actionType === "question_buttons");
+       if (issue) {
+@@ -676,7 +696,7 @@ function AutomacoesEditorContent() {
+       return;
+     }
+     setIsActive(!isActive);
+-  }, [isNew, guidedDraft.data, guidedDraft.publication.data, guidedDraft.setActive, isActive, questionButtonsEnabled, nodes, edges]);
++  }, [isNew, guidedDraft.data, guidedDraft.publication.data, guidedDraft.setActive, isActive, nodes, edges]);
+ 
+   const handlePublish = useCallback(async () => {
+     setPublicationIssues([]);
+@@ -761,7 +781,6 @@ function AutomacoesEditorContent() {
+     <div className="flex flex-col h-full">
+       <WorkflowToolbar
+         name={name}
+-        questionButtonsEnabled={questionButtonsEnabled}
+         onNameChange={setName}
+         isActive={isActive}
+         onToggleActive={handleToggleActive}
+@@ -836,6 +855,7 @@ function AutomacoesEditorContent() {
+           onUpdateNode={handleUpdateNode}
+           onDeleteNode={handleDeleteNode}
+           onDuplicateNode={handleDuplicateNode}
++          onConvertToQuestionButtons={handleConvertToQuestionButtons}
+           allNodes={nodes as any}
+         />
+       </div>
 diff --git a/classic/src/shared/realtime/invalidation-scheduler.ts b/classic/src/shared/realtime/invalidation-scheduler.ts
 new file mode 100644
 index 000000000..08849e788
@@ -10150,6 +10721,19 @@ index 36b59b87c..7b9de99d3 100644
 +    enabled,
    });
  }
+diff --git a/classic/src/types/workflow.ts b/classic/src/types/workflow.ts
+index 5625d17c3..6fe44cfc9 100644
+--- a/classic/src/types/workflow.ts
++++ b/classic/src/types/workflow.ts
+@@ -1009,8 +1009,6 @@ export interface QuestionButtonsNodeData {
+   [key: string]: unknown;
+ }
+ 
+-export const QUESTION_BUTTONS_FLAG = "workflow_question_buttons";
+-
+ export type WorkflowNodeData =
+   | QuestionButtonsNodeData
+   | TriggerNodeData
 diff --git a/classic/tailwind.config.ts b/classic/tailwind.config.ts
 index 32f47352a..db24ce28b 100644
 --- a/classic/tailwind.config.ts

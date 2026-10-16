@@ -76,15 +76,14 @@ export const ADD_NODE_GROUPS: NodeOptionGroup[] = [
 ];
 
 /**
- * Grupos visíveis: tira o que está oculto (ex.: JavaScript sem sandbox) e o que
- * depende de flag. Um grupo que perdeu todas as opções some inteiro — sobraria
- * um cabeçalho solto.
+ * Grupos visíveis: tira o que está oculto (ex.: JavaScript sem sandbox). Um
+ * grupo que perdeu todas as opções some inteiro — sobraria um cabeçalho solto.
  */
-export function visibleNodeGroups(hiddenNodeTypes: WorkflowNodeType[] = [], questionButtonsEnabled = false): NodeOptionGroup[] {
+export function visibleNodeGroups(hiddenNodeTypes: WorkflowNodeType[] = []): NodeOptionGroup[] {
   return ADD_NODE_GROUPS
     .map((group) => ({
       ...group,
-      options: group.options.filter((opt) => !hiddenNodeTypes.includes(opt.type) && (opt.type !== "question_buttons" || questionButtonsEnabled)),
+      options: group.options.filter((opt) => !hiddenNodeTypes.includes(opt.type)),
     }))
     .filter((group) => group.options.length > 0);
 }

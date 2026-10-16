@@ -32,7 +32,7 @@ BEGIN
     RAISE EXCEPTION 'FAIL guard grants';
   END IF;
   INSERT INTO public.organizations(id,name,slug,is_sandbox,feature_flags)
-    VALUES(org,'Workflow button rollback test','button-rollback-'||org,true,'{"workflow_question_buttons":true}'),
+    VALUES(org,'Workflow button rollback test','button-rollback-'||org,true,'{}'),
           (other_org,'Workflow button isolation test','button-rollback-'||other_org,true,'{}');
   INSERT INTO public.leads(id,organization_id,name,phone) VALUES(lead,org,'Synthetic button recipient','5548999990000');
   INSERT INTO public.org_quotas(organization_id,resource_key,plan_base)
@@ -106,18 +106,16 @@ BEGIN
   IF public.accept_workflow_button_question(q,org,'late-wa-id',clock_timestamp())
     OR (SELECT state FROM public.workflow_button_questions WHERE id=q) IS DISTINCT FROM 'cancelled' THEN RAISE EXCEPTION 'FAIL acceptance resurrected cancellation'; END IF;
   UPDATE public.organizations SET feature_flags='{}' WHERE id=org;
-  IF public.freeze_workflow_button_definition(execution,org) IS DISTINCT FROM definition THEN RAISE EXCEPTION 'FAIL in-flight snapshot lost when flag disabled'; END IF;
+  IF public.freeze_workflow_button_definition(execution,org) IS DISTINCT FROM definition THEN RAISE EXCEPTION 'FAIL in-flight snapshot lost without feature flags'; END IF;
   INSERT INTO public.workflows(id,organization_id,name,trigger_type,definition,is_active)
     VALUES(disabled_workflow,org,'Synthetic disabled workflow','manual',definition,false);
   INSERT INTO public.workflow_executions(id,workflow_id,organization_id,lead_id,current_node_id,status)
     VALUES(disabled_execution,disabled_workflow,org,lead,'ask','running');
-  blocked:=false;
-  BEGIN
-    PERFORM public.freeze_workflow_button_definition(disabled_execution,org);
-  EXCEPTION WHEN OTHERS THEN
-    IF SQLERRM='question_feature_disabled' THEN blocked:=true; ELSE RAISE; END IF;
-  END;
-  IF NOT blocked THEN RAISE EXCEPTION 'FAIL SQL gate default off'; END IF;
+  -- Sem feature flag: o freeze congela normalmente (pergunta com botões é padrão).
+  IF public.freeze_workflow_button_definition(disabled_execution,org) IS DISTINCT FROM definition
+    OR (SELECT question_buttons_definition FROM public.workflow_executions WHERE id=disabled_execution) IS DISTINCT FROM definition THEN
+    RAISE EXCEPTION 'FAIL freeze without feature flag';
+  END IF;
 END
 $test$;
-SELECT 'PASS: grants, snapshot, tenant isolation, reservation, early reply, persisted order, duplicate, deadline, cancellation, flag-off, duplicate edge' AS result;
+SELECT 'PASS: grants, snapshot, tenant isolation, reservation, early reply, persisted order, duplicate, deadline, cancellation, no feature flag, duplicate edge' AS result;

@@ -15,7 +15,7 @@ BEGIN
     RAISE EXCEPTION 'FAIL ingress privileges';
   END IF;
   INSERT INTO public.organizations(id,name,slug,is_sandbox,feature_flags)
-    VALUES(org,'Workflow button inbox rollback test','button-rollback-'||org,true,'{"workflow_question_buttons":true}'),
+    VALUES(org,'Workflow button inbox rollback test','button-rollback-'||org,true,'{}'),
           (other_org,'Workflow button inbox isolation test','button-rollback-'||other_org,true,'{}');
   INSERT INTO public.leads(id,organization_id,name,phone) VALUES(lead,org,'Synthetic inbox recipient','5548999990000');
   INSERT INTO public.org_quotas(organization_id,resource_key,plan_base) VALUES(org,'max_whatsapp_instances',1)

@@ -15,7 +15,8 @@ const questionDefinition = {
 
 function questionFixture(org: string) {
   const database = createMockSupabase();
-  database.mockTable("organizations", [{ id: org, feature_flags: { workflow_question_buttons: true } }]);
+  // Sem chave de feature flag: pergunta com botões é padrão para toda org.
+  database.mockTable("organizations", [{ id: org, feature_flags: {} }]);
   database.mockTable("whatsapp_instances", [{ id: "instance", organization_id: org, provider: "uazapi", status: "connected" }]);
   database.mockTable("leads", [{ id: "lead", organization_id: org, phone: "5511999999999" }]);
   database.mockRpc("freeze_workflow_button_definition", questionDefinition);
@@ -27,20 +28,35 @@ function questionFixture(org: string) {
 
 describe("Pergunta com botões via executor", () => {
   afterEach(() => { vi.unstubAllGlobals(); clearDenoEnv(); });
-  it("recusa executar pergunta quando organização não habilitou a feature", async () => {
-    const { sb } = createMockSupabase();
-    const result = await executeWorkflow({
-      supabase: sb, executionId: "execution", workflowId: "workflow",
-      organizationId: "org", leadId: "lead", context: {}, loopLimit: 10,
-      definition: {
-        nodes: [
-          { id: "start", type: "trigger", data: {} },
-          { id: "question", type: "question_buttons", data: { text: "Escolha", buttons: [{ id: "a", label: "A" }] } },
-        ],
-        edges: [{ id: "edge", source: "start", target: "question" }],
-      },
-    });
-    expect(result).toMatchObject({ success: false, status: "failed", error: "Pergunta com botões não habilitada para organização" });
+  it("executa pergunta em org sem a chave de feature flag", async () => {
+    setDenoEnv("UAZAPI_BASE_URL", "https://uazapi.test");
+    setDenoEnv("UAZAPI_ADMIN_TOKEN", "test-admin");
+    const request = vi.fn().mockResolvedValue(new Response(JSON.stringify({ id: "internal", messageid: "wa-original", status: "Pending", messageTimestamp: 1700000000 }), { status: 200 }));
+    vi.stubGlobal("fetch", request);
+    const { params, getRpcCalls, mockTable } = questionFixture("no-key-org");
+    mockTable("organizations", [{ id: "no-key-org", feature_flags: null }]);
+    const result = await executeWorkflow(params);
+    expect(result).toMatchObject({ success: true, status: "paused" });
+    expect(getRpcCalls().map(call => call.name)).toEqual(expect.arrayContaining(["freeze_workflow_button_definition", "accept_workflow_button_question"]));
+    expect(request).toHaveBeenCalledTimes(1);
+  });
+  it("ainda recusa definição inválida congelada (freeze/validação ficam)", async () => {
+    const request = vi.fn(); vi.stubGlobal("fetch", request);
+    const { params, mockRpc } = questionFixture("invalid-org");
+    mockRpc("freeze_workflow_button_definition", { ...questionDefinition, edges: questionDefinition.edges.filter(edge => edge.sourceHandle !== "timeout") });
+    expect(await executeWorkflow(params)).toMatchObject({ success: false, status: "failed", error: "question_buttons_invalid_configuration" });
+    expect(request).not.toHaveBeenCalled();
+  });
+  it.each(["evolution", "notificame"])("instância %s: nada sai e a pergunta cai em Falha no envio", async provider => {
+    setDenoEnv("UAZAPI_BASE_URL", "https://uazapi.test"); setDenoEnv("UAZAPI_ADMIN_TOKEN", "test-admin");
+    const request = vi.fn(); vi.stubGlobal("fetch", request);
+    const { params, mockTable, mockRpc, getRpcCalls } = questionFixture(`${provider}-org`);
+    mockTable("whatsapp_instances", [{ id: "instance", organization_id: `${provider}-org`, provider, status: "connected" }]);
+    mockRpc("fail_workflow_button_question", true);
+    expect(await executeWorkflow(params)).toMatchObject({ success: true, status: "paused" });
+    expect(request).not.toHaveBeenCalled();
+    expect(getRpcCalls()).toEqual(expect.arrayContaining([expect.objectContaining({ name: "fail_workflow_button_question", params: expect.objectContaining({ p_reason: "send_preflight_failed" }) })]));
+    expect(getRpcCalls().some(call => call.name === "accept_workflow_button_question")).toBe(false);
   });
   it("envia opção com identidade da ocorrência e aguarda antes de seguir qualquer saída", async () => {
     setDenoEnv("UAZAPI_BASE_URL", "https://uazapi.test");
@@ -83,7 +99,7 @@ describe("Pergunta com botões via executor", () => {
   it("override para provider incompatível não envia nem aceita pergunta", async () => {
     const request = vi.fn(); vi.stubGlobal("fetch", request);
     const { params, mockTable, mockRpc } = questionFixture("override-org");
-    mockTable("organizations", [{id:"override-org",feature_flags:{workflow_question_buttons:true},whatsapp_provider_override:"evolution"}]);
+    mockTable("organizations", [{id:"override-org",feature_flags:{},whatsapp_provider_override:"evolution"}]);
     mockRpc("fail_workflow_button_question", true);
     const calls = vi.spyOn(params.supabase, "rpc");
     await executeWorkflow(params);
@@ -111,7 +127,6 @@ describe("Pergunta com botões via executor", () => {
   });
   it("retomada usa definição congelada mesmo após edição e desativação da admissão", async () => {
     const { params, mockTable } = questionFixture("old-org");
-    mockTable("organizations", [{ id: "old-org", feature_flags: { workflow_question_buttons: false } }]);
     const result = await executeWorkflow({ ...params, currentNodeId: "finish", questionButtonsDefinition: questionDefinition,
       definition: { nodes: [{ id: "draft", type: "condition", data: { guidedCondition: {} } }], edges: [] } });
     expect(result).toMatchObject({ success: true, status: "completed" });

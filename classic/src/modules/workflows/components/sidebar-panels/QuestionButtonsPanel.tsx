@@ -1,13 +1,15 @@
+import { useRef } from "react";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
-import { ArrowUp, ArrowDown, Trash2, Plus } from "lucide-react";
+import { ArrowUp, ArrowDown, Trash2, Plus, Info } from "lucide-react";
 import type { QuestionButtonsNodeData } from "@/types/workflow";
 import { findNodeConfigIssues } from "@/contracts/workflows/node-requirements";
-import { useWhatsAppInstancesForUser } from "@/modules/communication";
+import { useWhatsAppInstances, useWhatsAppInstancesForUser } from "@/modules/communication";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { QuestionButtonsImage } from "./QuestionButtonsImage";
+import { VariableInserter } from "@/modules/workflows/components/VariableInserter";
+import { TemplateTextarea, type TemplateTextareaHandle } from "@/modules/workflows/components/TemplateTextarea";
 
 interface Props {
   data: QuestionButtonsNodeData;
@@ -16,8 +18,13 @@ interface Props {
 }
 
 export function QuestionButtonsPanel({ data, onUpdate, workflowId }: Props) {
+  const textRef = useRef<TemplateTextareaHandle>(null);
   const instancesQuery = useWhatsAppInstancesForUser();
   const instances = (instancesQuery.data ?? []).filter(instance => instance.provider === "uazapi");
+  // O aviso olha a ORG, não o acesso do usuário: em "instância da conversa" o
+  // envio pode sair por uma Uazapi que este membro não enxerga no seletor.
+  const orgInstancesQuery = useWhatsAppInstances();
+  const orgHasUazapi = (orgInstancesQuery.data ?? []).some(instance => instance.provider === "uazapi");
   const issues = findNodeConfigIssues([{ id: "question", type: "question_buttons", data }], [])
     .filter(issue => !issue.missing.startsWith("destino da saída"));
   const move = (index: number, direction: number) => {
@@ -26,6 +33,10 @@ export function QuestionButtonsPanel({ data, onUpdate, workflowId }: Props) {
     onUpdate({ buttons });
   };
   return <div className="space-y-6">
+    {orgInstancesQuery.isSuccess && !orgHasUazapi && <div role="note" className="flex items-start gap-2 rounded-xl border border-warning/30 bg-warning/[.08] p-3 text-xs leading-relaxed">
+      <Info className="mt-0.5 h-4 w-4 shrink-0 text-warning-strong" aria-hidden />
+      <p>Botões só são enviados por instância Uazapi; sem ela o fluxo segue pela saída Falha no envio.</p>
+    </div>}
     <div className="space-y-2">
       <Label htmlFor="question-instance">Instância WhatsApp</Label>
       <Select value={data.instanceId === null ? "" : data.instanceId ?? "conversation"} onValueChange={value => onUpdate({ instanceId: value === "conversation" ? undefined : value })} disabled={instancesQuery.isLoading}>
@@ -45,8 +56,9 @@ export function QuestionButtonsPanel({ data, onUpdate, workflowId }: Props) {
     </div>}
     <div className="space-y-2">
       <Label htmlFor="question-message">Mensagem</Label>
-      <Textarea id="question-message" value={data.text} rows={4}
-        onChange={(event) => onUpdate({ text: event.target.value })} />
+      <VariableInserter onInsert={variable => textRef.current?.insertAtCursor(variable)} />
+      <TemplateTextarea ref={textRef} id="question-message" value={data.text} rows={4}
+        onChange={text => onUpdate({ text })} />
     </div>
     <div className="space-y-3">
       <QuestionButtonsImage workflowId={workflowId} image={data.image} onChange={image => onUpdate({ image })} />
