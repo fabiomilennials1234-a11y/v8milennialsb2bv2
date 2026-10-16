@@ -181,3 +181,4 @@ owner: claude-agent
 - [[2026-10-15-whatsapp-menu-variaveis|WhatsApp Menu — variáveis {{x}} no texto da pergunta]] 🔵 wip
 - [[2026-10-16-carteira-rota-propria|Carteira em rota própria /carteira]] 🔵 wip
 - [[2026-10-16-master-orgs-inativas|Organizações inativas na Área Master]]
+- [[2026-10-16-perf-onda1-busca-telefone-avisos|Perf onda 1 — busca de telefone em Leads e polling do sino]] 🔵 wip
