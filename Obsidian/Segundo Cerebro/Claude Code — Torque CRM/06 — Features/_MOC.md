@@ -67,7 +67,7 @@ owner: claude-agent
 - [[janela-comercial-wait-business-window|janela-comercial-wait-business-window]]
 - [[marcar-item-checklist|marcar-item-checklist]]
 - [[negocio-criado|Automações — Trigger Negócio Criado + Node Criar Negócio]]
-- [[pergunta-com-botoes|pergunta-com-botoes]]
+- [[pergunta-com-botoes|Pergunta com botões (WhatsApp Menu)]]
 - [[rpc-consolidation|Automações — RPC Consolidation + Health Check]]
 - [[trigger-lead-respondeu|Automações — Trigger "Lead Respondeu" (funil, etapa e número)]]
 
