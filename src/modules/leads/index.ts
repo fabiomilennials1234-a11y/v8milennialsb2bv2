@@ -299,6 +299,7 @@ export { LeadCardPanel } from "./components/lead-card/LeadCardPanel";
 export { LeadCardNewDeal as LeadNewDealDialog } from "./components/lead-card/LeadCardNewDeal";
 // Slots de responsável/qualificação — reusados fora do modal (ex.: painel do chat).
 export { ResponsibleSlot } from "./components/lead-detail/modal/header/ResponsibleSlot";
+export { CoOwnersSlot } from "./components/lead-detail/modal/header/CoOwnersSlot";
 export { QualificationSlot } from "./components/lead-detail/modal/header/QualificationSlot";
 // Gates de ação do lead — reusados fora do modal (ex.: card de funis no chat).
 export { useLeadActionGates } from "./components/lead-detail/hooks/useLeadActionGates";

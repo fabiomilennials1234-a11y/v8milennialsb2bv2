@@ -1,6 +1,8 @@
 import { memo } from "react";
 import { ResponsibleSlot } from "./ResponsibleSlot";
+import { CoOwnersSlot } from "./CoOwnersSlot";
 import { QualificationSlot } from "./QualificationSlot";
+import { useLeadOwnersEnabled } from "../../../../hooks/useLeadOwners";
 import type { QualificationTier } from "../types";
 
 interface LeadActionsBlockProps {
@@ -23,6 +25,9 @@ export const LeadActionsBlock = memo(function LeadActionsBlock({
   preQualificationTier,
   qualificationTier,
 }: LeadActionsBlockProps) {
+  // Co-donos (Chamado 793f4b05): só em org com a flag `lead_owners_n_donos`.
+  const donosMultiplos = useLeadOwnersEnabled();
+
   return (
     <div className="flex flex-col items-stretch gap-2 shrink-0 min-w-[180px]">
       <div className="flex items-center justify-between gap-3">
@@ -44,6 +49,15 @@ export const LeadActionsBlock = memo(function LeadActionsBlock({
           />
         </div>
       </div>
+
+      {donosMultiplos && (
+        <div className="flex items-center justify-between gap-3">
+          <span className="text-[10px] uppercase tracking-widest text-muted-foreground/60 font-semibold whitespace-nowrap">
+            Co-donos
+          </span>
+          <CoOwnersSlot leadId={leadId} />
+        </div>
+      )}
 
       <div className="h-px bg-border/40" aria-hidden />
 
