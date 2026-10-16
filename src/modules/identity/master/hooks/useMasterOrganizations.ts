@@ -440,6 +440,8 @@ export function useMasterCreateOrganization() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["master-organizations"] });
+      queryClient.invalidateQueries({ queryKey: ["org-switcher"] });
+      queryClient.invalidateQueries({ queryKey: ["team_members", "current"] });
       queryClient.invalidateQueries({ queryKey: ["master-organization-stats"] });
       toast.success("Organização criada com sucesso!");
     },
@@ -473,6 +475,8 @@ export function useMasterUpdateOrganization() {
     },
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ["master-organizations"] });
+      queryClient.invalidateQueries({ queryKey: ["org-switcher"] });
+      queryClient.invalidateQueries({ queryKey: ["team_members", "current"] });
       queryClient.invalidateQueries({ queryKey: ["master-organization", variables.id] });
       toast.success("Organização atualizada!");
     },
@@ -523,6 +527,8 @@ export function useMasterSetOrgSuspension() {
     },
     onSuccess: (result, variables) => {
       queryClient.invalidateQueries({ queryKey: ["master-organizations"] });
+      queryClient.invalidateQueries({ queryKey: ["org-switcher"] });
+      queryClient.invalidateQueries({ queryKey: ["team_members", "current"] });
       queryClient.invalidateQueries({ queryKey: ["master-organization", variables.orgId] });
       queryClient.invalidateQueries({ queryKey: ["master-organization-stats"] });
 
@@ -532,12 +538,12 @@ export function useMasterSetOrgSuspension() {
       }
       toast.success(
         result.override_revogado
-          ? "Organização suspensa. Liberação de plano revogada — o acesso foi cortado."
-          : "Organização suspensa. Acesso cortado."
+          ? "Organização inativa. Liberação de plano revogada — o acesso foi cortado."
+          : "Organização inativa. Acesso cortado."
       );
     },
     onError: (error: any) => {
-      notifyError(error, { fallback: "Não foi possível alterar a suspensão da organização." });
+      notifyError(error, { fallback: "Não foi possível alterar o status da organização." });
     },
   });
 }
@@ -559,6 +565,8 @@ export function useMasterDeleteOrganization() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["master-organizations"] });
+      queryClient.invalidateQueries({ queryKey: ["org-switcher"] });
+      queryClient.invalidateQueries({ queryKey: ["team_members", "current"] });
       queryClient.invalidateQueries({ queryKey: ["master-organization-stats"] });
       toast.success("Organização excluída!");
     },
@@ -597,6 +605,8 @@ export function useMasterBillingOverride() {
     },
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ["master-organizations"] });
+      queryClient.invalidateQueries({ queryKey: ["org-switcher"] });
+      queryClient.invalidateQueries({ queryKey: ["team_members", "current"] });
       queryClient.invalidateQueries({ queryKey: ["master-organization", variables.orgId] });
       queryClient.invalidateQueries({ queryKey: ["master-organization-stats"] });
       toast.success("Plano liberado com sucesso!");

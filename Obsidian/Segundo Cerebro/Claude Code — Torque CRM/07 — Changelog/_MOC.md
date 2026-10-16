@@ -16,6 +16,7 @@ owner: claude-agent
 
 ## Notas nesta pasta
 
+- [[2026-10-16-master-orgs-inativas|Organizações inativas na Área Master]]
 - [[2026-04-27-pdf-chunking-rag|2026-04-27 — PDF chunking + hard limit 8MB pra RAG funcional]]
 - [[2026-04-27-products-rls-strict|2026-04-27 — RLS strict products: drop master permissive policies]]
 - [[2026-04-27-refactor-copilot-modules|Changelog — 2026-04-27 (sessão tarde) — Refactor Copilot + Wizard Removal + Tabs Playground]]

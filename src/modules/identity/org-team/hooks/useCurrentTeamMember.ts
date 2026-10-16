@@ -10,6 +10,7 @@ import { useAuth } from "../../auth/contexts/AuthContext";
 import { useMasterAuth } from "../../master/hooks/useMasterAuth";
 import { useGestor } from "../../gestor/hooks/useGestor";
 import type { Tables, TablesInsert, TablesUpdate } from "@/integrations/supabase/types";
+import { INACTIVE_ORG_STATUS_FILTER } from "../lib/organization-status";
 
 export type TeamMember = Tables<"team_members">;
 export type TeamMemberInsert = TablesInsert<"team_members">;
@@ -91,6 +92,33 @@ export function useCurrentTeamMember() {
       const storedOrgId = getSelectedOrgId();
       console.log("🔍 useCurrentTeamMember: storedOrgId:", storedOrgId);
 
+      // Validar o status ANTES de restaurar a seleção, inclusive quando o
+      // master tem vínculo real. Uma org inativada não volta pelo localStorage.
+      if (isMaster) {
+        const [orgsResult, membersResult] = await Promise.all([
+          supabase.from("organizations").select("id")
+            .not("subscription_status", "in", INACTIVE_ORG_STATUS_FILTER).order("name"),
+          supabase.from("team_members").select("*")
+            .eq("user_id", user.id).eq("is_active", true),
+        ]);
+        if (orgsResult.error) throw orgsResult.error;
+        if (membersResult.error) throw membersResult.error;
+        const available = orgsResult.data ?? [];
+        const members = membersResult.data ?? [];
+        const availableIds = new Set(available.map((org) => org.id));
+        const targetId = storedOrgId && availableIds.has(storedOrgId)
+          ? storedOrgId
+          : members.find((member) => member.organization_id && availableIds.has(member.organization_id))?.organization_id
+            ?? available[0]?.id;
+        if (!targetId) {
+          try { localStorage.removeItem(SELECTED_ORG_KEY); } catch { /* storage indisponível */ }
+          return null;
+        }
+        setSelectedOrgId(targetId);
+        return members.find((member) => member.organization_id === targetId)
+          ?? buildVirtualTeamMember(user.id, targetId);
+      }
+
       // Se tem org selecionada, buscar team_member dessa org
       if (storedOrgId) {
         const { data, error: storedOrgError } = await supabase
@@ -114,23 +142,7 @@ export function useCurrentTeamMember() {
 
         console.log("⚠️ useCurrentTeamMember: Nenhum team_member encontrado para org selecionada:", storedOrgId);
 
-        // Master sem team_member nessa org: criar virtual member
-        if (isMaster) {
-          // Verificar se a org ainda existe
-          const { data: orgExists } = await supabase
-            .from("organizations")
-            .select("id")
-            .eq("id", storedOrgId)
-            .maybeSingle();
-
-          if (orgExists) {
-            console.log("✅ useCurrentTeamMember: Master virtual (org selecionada):", { organizationId: storedOrgId });
-            return buildVirtualTeamMember(user.id, storedOrgId);
-          }
-          // Org não existe mais, limpar e buscar outra
-          console.log("⚠️ useCurrentTeamMember: Org não existe mais, limpando localStorage");
-          localStorage.removeItem(SELECTED_ORG_KEY);
-        } else if (isGestor) {
+        if (isGestor) {
           // Gestor de Portfólio: virtual member SÓ se a org selecionada estiver
           // entre os vínculos (whitelist). A RLS já escopa gestor_organizations ao
           // próprio gestor, então uma linha para storedOrgId prova o vínculo.
@@ -182,22 +194,6 @@ export function useCurrentTeamMember() {
           organizationId: data.organization_id,
         });
         return data as TeamMember;
-      }
-
-      // Master sem nenhum team_member: buscar primeira org disponível
-      if (isMaster) {
-        const { data: firstOrg } = await supabase
-          .from("organizations")
-          .select("id")
-          .order("name")
-          .limit(1)
-          .maybeSingle();
-
-        if (firstOrg) {
-          setSelectedOrgId(firstOrg.id);
-          console.log("✅ useCurrentTeamMember: Master virtual (primeira org):", { organizationId: firstOrg.id });
-          return buildVirtualTeamMember(user.id, firstOrg.id);
-        }
       }
 
       console.log("✅ useCurrentTeamMember: Resultado:", {

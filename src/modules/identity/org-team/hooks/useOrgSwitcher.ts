@@ -2,7 +2,7 @@
  * Hook para troca rápida de organização
  *
  * Busca todas as orgs onde o usuário tem team_member ativo.
- * Master users veem TODAS as organizações (shadow user).
+ * Master users veem as organizações que não estão inativas (shadow user).
  * Permite trocar de org invalidando o cache do React Query.
  */
 
@@ -13,6 +13,7 @@ import { useAuth } from "../../auth/contexts/AuthContext";
 import { useMasterAuth } from "../../master/hooks/useMasterAuth";
 import { useGestor } from "../../gestor/hooks/useGestor";
 import { setSelectedOrgId } from "./useCurrentTeamMember";
+import { INACTIVE_ORG_STATUS_FILTER } from "../lib/organization-status";
 
 export interface SwitcherOrg {
   id: string;
@@ -34,11 +35,12 @@ export function useOrgSwitcher() {
     queryFn: async (): Promise<SwitcherOrg[]> => {
       if (!user?.id) return [];
 
-      // Master vê TODAS as organizações (shadow user)
+      // A gestão de inativas continua na Área Master, fora do seletor.
       if (isMaster) {
         const { data, error } = await supabase
           .from("organizations")
           .select("id, name, slug, org_type")
+          .not("subscription_status", "in", INACTIVE_ORG_STATUS_FILTER)
           .order("name");
 
         if (error) throw error;
@@ -103,7 +105,7 @@ export function useOrgSwitcher() {
   });
 
   const switchOrg = async (targetOrgId: string) => {
-    if (isSwitching) return;
+    if (isSwitching || !orgs.some((org) => org.id === targetOrgId)) return;
     setIsSwitching(true);
 
     try {

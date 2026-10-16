@@ -33,6 +33,7 @@ interface OrgSuspensionDialogProps {
 }
 
 const CONSEQUENCIAS = [
+  "A org vai para a aba Orgs inativas e sai do seletor de organizações dos masters.",
   "Todo mundo da org perde acesso aos dados — leads, funis, conversas. A tela vira o aviso de assinatura bloqueada.",
   "Chaves de API da org param de responder.",
   "O motor para: automações, disparo de WhatsApp e respostas do Copilot deixam de sair.",
@@ -67,7 +68,7 @@ export function OrgSuspensionDialog({
             ) : (
               <Power className="w-5 h-5 text-success-strong" />
             )}
-            {suspend ? "Suspender" : "Reativar"} {org.name}
+            {suspend ? "Inativar" : "Reativar"} {org.name}
           </AlertDialogTitle>
           <AlertDialogDescription asChild>
             <div className="space-y-4 text-sm">
@@ -87,7 +88,7 @@ export function OrgSuspensionDialog({
                       <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5 text-warning" />
                       <p>
                         Esta org tem <strong>plano liberado</strong> (billing override).
-                        Suspender revoga a liberação — sem isso a suspensão não bloqueia
+                        Inativar revoga a liberação — sem isso a inativação não bloqueia
                         nada. Reativar depois <strong>não</strong> devolve a liberação:
                         use “Liberar Plano” de novo.
                       </p>
@@ -137,7 +138,7 @@ export function OrgSuspensionDialog({
                 : undefined
             }
           >
-            {pending ? "Aplicando…" : suspend ? "Suspender e cortar acesso" : "Reativar"}
+            {pending ? "Aplicando…" : suspend ? "Inativar e cortar acesso" : "Reativar"}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
