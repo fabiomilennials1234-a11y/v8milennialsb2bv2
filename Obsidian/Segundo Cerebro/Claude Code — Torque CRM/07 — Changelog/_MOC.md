@@ -180,3 +180,4 @@ owner: claude-agent
 - [[2026-10-14-whatsapp-menu-sem-flag|WhatsApp Menu (pergunta com botões) padrão para todas as orgs]] 🔵 wip
 - [[2026-10-15-whatsapp-menu-variaveis|WhatsApp Menu — variáveis {{x}} no texto da pergunta]] 🔵 wip
 - [[2026-10-16-carteira-rota-propria|Carteira em rota própria /carteira]] 🔵 wip
+- [[2026-10-16-master-orgs-inativas|Organizações inativas na Área Master]]
