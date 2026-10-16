@@ -1,17 +1,21 @@
 /**
  * resolveBlastMessage — per-recipient message resolution (Module A).
  *
- * - Variable substitution: `{key}` → data[key]; unknown/null/undefined → "" so
- *   a placeholder never leaks to a lead. Values are coerced to string.
+ * - Variable substitution: `{key}` or `{{key}}` → data[key]; unknown/null/
+ *   undefined → "" so a placeholder never leaks to a lead. Values are coerced to
+ *   string. Both spellings are accepted because the new wizard (/disparos/novo)
+ *   inserts `{{key}}` while the legacy wizard inserts `{key}`.
  * - Spintax `{a|b|c}` is NOT a variable (it contains `|`) and passes through
  *   here untouched — it is resolved in Slice 3, extending this same interface.
  *
  * `rng` is injectable for deterministic spintax in tests (unused until Slice 3).
  */
 
-// A variable token is {word}: letters/digits/underscore only. The `|` in
-// spintax excludes it from this pattern.
-const VARIABLE_TOKEN = /\{(\w+)\}/g;
+// A variable token is {{word}} (optional inner spaces) or {word}: letters/
+// digits/underscore only. The double form is tried first so "{{nome}}" is
+// consumed whole instead of leaving "{Ana}". The `|` in spintax excludes it from
+// both alternatives.
+const VARIABLE_TOKEN = /\{\{\s*(\w+)\s*\}\}|\{(\w+)\}/g;
 // A spintax group is {a|b|c}: braces containing at least one `|` and no nested
 // braces. Disjoint from variable tokens (which never contain `|`).
 const SPINTAX_GROUP = /\{([^{}]*\|[^{}]*)\}/g;
@@ -30,8 +34,8 @@ function expandSpintax(text: string, rng: () => number): string {
 }
 
 function substituteVariables(text: string, data: Record<string, string | number | null | undefined>): string {
-  return text.replace(VARIABLE_TOKEN, (_match, key: string) => {
-    const value = data[key];
+  return text.replace(VARIABLE_TOKEN, (_match, doubleKey?: string, singleKey?: string) => {
+    const value = data[(doubleKey ?? singleKey) as string];
     if (value === null || value === undefined) return "";
     return String(value);
   });

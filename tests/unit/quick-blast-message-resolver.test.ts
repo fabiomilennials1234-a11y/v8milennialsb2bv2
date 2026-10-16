@@ -80,3 +80,47 @@ describe("resolveBlastMessage — spintax", () => {
     expect(out).toBe("Olá Pedro, da SacoEcoMulti!");
   });
 });
+
+// The new wizard (/disparos/novo) inserts {{key}}; the legacy wizard inserts
+// {key}. Before the fix the resolver only knew {key}, so "{{primeiro_nome}}"
+// left the server as "{Ana}". Each case pins a literal the lead would receive.
+describe("resolveBlastMessage — double-brace variables ({{key}})", () => {
+  const first = () => 0;
+  const last = () => 0.999;
+
+  it("resolves {{primeiro_nome}} to the bare value (no leftover braces)", () => {
+    expect(resolveBlastMessage("Olá {{primeiro_nome}}", { primeiro_nome: "Ana" })).toBe("Olá Ana");
+  });
+
+  it("still resolves single-brace {primeiro_nome} (legacy wizard)", () => {
+    expect(resolveBlastMessage("Olá {primeiro_nome}", { primeiro_nome: "Ana" })).toBe("Olá Ana");
+  });
+
+  it("accepts inner spaces like the wizard preview does: {{ nome }}", () => {
+    expect(resolveBlastMessage("[{{ nome }}]", { nome: "Ana Souza" })).toBe("[Ana Souza]");
+  });
+
+  it("mixes both spellings in one template", () => {
+    const out = resolveBlastMessage("{{primeiro_nome}} da {empresa} ({{segmento}})", {
+      primeiro_nome: "Ana",
+      empresa: "Petshop Amigo",
+      segmento: "Petshop",
+    });
+    expect(out).toBe("Ana da Petshop Amigo (Petshop)");
+  });
+
+  it("blanks an unknown {{key}} instead of leaking '{}' or the literal", () => {
+    expect(resolveBlastMessage("Oi {{inexistente}}!", {})).toBe("Oi !");
+  });
+
+  it("keeps spintax working next to a {{key}}", () => {
+    const tpl = "{Oi|Olá} {{primeiro_nome}}, {tudo bem|beleza}?";
+    expect(resolveBlastMessage(tpl, { primeiro_nome: "Ana" }, first)).toBe("Oi Ana, tudo bem?");
+    expect(resolveBlastMessage(tpl, { primeiro_nome: "Ana" }, last)).toBe("Olá Ana, beleza?");
+  });
+
+  it("resolves a {{key}} nested inside a spintax option", () => {
+    const out = resolveBlastMessage("{oi {{primeiro_nome}}|e aí}", { primeiro_nome: "Pedro" }, first);
+    expect(out).toBe("oi Pedro");
+  });
+});

@@ -886,6 +886,7 @@ function snapshotVars(lead: BlastLead): Record<string, unknown> {
     nome: safeName,
     primeiro_nome: personalizationFirstName(lead.name),
     empresa: lead.company ?? "",
+    segmento: (lead.segment as string | null | undefined) ?? "",
   };
 }
 

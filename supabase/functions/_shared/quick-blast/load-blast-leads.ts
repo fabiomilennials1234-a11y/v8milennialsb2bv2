@@ -25,7 +25,7 @@ export async function loadBlastLeadsByIds(
     const chunk = orderedIds.slice(offset, offset + BLAST_LEAD_QUERY_CHUNK_SIZE);
     const { data, error } = await supabase
       .from("leads")
-      .select("id, name, company, phone")
+      .select("id, name, company, phone, segment")
       .eq("organization_id", organizationId)
       .in("id", chunk);
 
