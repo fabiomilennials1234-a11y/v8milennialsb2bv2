@@ -9,7 +9,7 @@ vi.mock("../hooks/useMasterOrganizations", () => ({
   useMasterOrganizations: () => ({ data: [
     { id: "ativa", name: "Ativa", slug: "ativa", subscription_status: "active", org_type: "crm" },
     { id: "trial", name: "Cliente Trial", slug: "trial", subscription_status: "trial", org_type: "crm" },
-    { id: "inativa", name: "Inativa", slug: "inativa", subscription_status: "suspended", org_type: "crm" },
+    { id: "inativa", name: "Cliente Pausado", slug: "inativa", subscription_status: "suspended", org_type: "crm" },
     { id: "bv", name: "Cliente Outbound", slug: "bv", subscription_status: "suspended", org_type: "outbound" },
     { id: "cancelada", name: "Cancelada", slug: "cancelada", subscription_status: "cancelled", org_type: "crm" },
   ], isLoading: false }),
@@ -35,7 +35,7 @@ describe("abas de status das organizações", () => {
     renderPage();
     expect(table().getByText("Ativa")).toBeInTheDocument();
     expect(table().getByText("Cliente Trial")).toBeInTheDocument();
-    expect(table().queryByText("Inativa")).not.toBeInTheDocument();
+    expect(table().queryByText("Cliente Pausado")).not.toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "Orgs inativas · 3" })).toBeInTheDocument();
   });
 
@@ -44,15 +44,15 @@ describe("abas de status das organizações", () => {
     renderPage("/master/organizations?uso=ativas");
     await user.type(screen.getByPlaceholderText("Buscar por nome ou slug..."), "Ativa");
     await user.click(screen.getByRole("tab", { name: /Orgs inativas/ }));
-    expect(table().getByText("Inativa")).toBeInTheDocument();
+    expect(table().getByText("Cliente Pausado")).toBeInTheDocument();
     expect(table().getByText("Cliente Outbound")).toBeInTheDocument();
     expect(table().getByText("Cancelada")).toBeInTheDocument();
     expect(table().queryByText("Ativa")).not.toBeInTheDocument();
-    await user.type(screen.getByPlaceholderText("Buscar por nome ou slug..."), "Inativa");
+    await user.type(screen.getByPlaceholderText("Buscar por nome ou slug..."), "Cliente Pausado");
     expect(table().queryByText("Cliente Outbound")).not.toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Ações de Inativa" }));
+    await user.click(screen.getByRole("button", { name: "Ações de Cliente Pausado" }));
     await user.click(screen.getByRole("menuitem", { name: "Reativar" }));
-    expect(screen.getByRole("alertdialog")).toHaveTextContent("Reativar Inativa");
+    expect(screen.getByRole("alertdialog")).toHaveTextContent("Reativar Cliente Pausado");
   });
 
   it("permite inativar trial e mostra o destino da org na confirmação", async () => {
@@ -69,7 +69,7 @@ describe("abas de status das organizações", () => {
     state.outbounder = true;
     renderPage("/master/organizations?status=inativas");
     await waitFor(() => expect(table().getByText("Cliente Outbound")).toBeInTheDocument());
-    expect(table().queryByText("Inativa")).not.toBeInTheDocument();
+    expect(table().queryByText("Cliente Pausado")).not.toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "Orgs inativas · 1" })).toHaveAttribute("aria-selected", "true");
   });
 });
