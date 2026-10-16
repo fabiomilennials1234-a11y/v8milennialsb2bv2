@@ -78,6 +78,10 @@ module.exports = {
           "\\.config\\.(js|cjs|mjs|ts)$",
           "^src/main\\.tsx$",
           "^src/vite-env\\.d\\.ts$",
+          // Núcleo da guarda da build clássica: só classic/ o importa, pelo
+          // alias `@torque/ui-version` (fora do cruise de src/). A V5 deixou
+          // de importá-lo em 2026-10-14 (interface única).
+          "^src/shared/ui-version/core\\.ts$",
         ],
       },
       to: {},

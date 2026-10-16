@@ -6,9 +6,12 @@
  *     --b http://localhost:8787 --assets cloudflare/.assets [--all-assets] \
  *     [--concurrency 6] [--verbose]
  *
- * A = referência (nginx de produção). B = candidato (Worker). Cada caso sai como
+ * A = referência (o nginx da imagem do Dockerfile — desde o corte para a
+ * Cloudflare, a VPS de rollback). B = candidato (Worker). Desde 2026-10-14 os
+ * dois servem só a V5: qualquer cookie dá o index.html/sw.js, e o caminho
+ * direto da clássica (index.classic.html, sw.classic.js) é 404. Cada caso sai como
  *   PASS           — igual em tudo o que é comparado;
- *   EXPECTED-DIFF  — difere só onde uma divergência declarada (Div1–Div13) permite;
+ *   EXPECTED-DIFF  — difere só onde uma divergência declarada (Div1–Div13, sem a Div12) permite;
  *   FAIL           — qualquer outra diferença, ou uma invariante de B quebrada.
  * Sai com código 1 se houver FAIL, 2 se a verificação inicial abortar.
  *
@@ -49,7 +52,7 @@ const HEADERS_CONFIG = loadHeadersConfig();
 /** Os headers de segurança do app, da fonte única (cloudflare/headers.json). */
 export const SECURITY_HEADERS = Object.keys(HEADERS_CONFIG.profiles.app).map((name) => name.toLowerCase());
 
-/** Variantes do cookie torque_ui medidas em prod (fonte única com routing.test.ts). */
+/** Variantes do header Cookie: com qualquer uma, a V5 (fonte única com worker.test.ts e o smoke). */
 export const COOKIE_CASES = JSON.parse(fs.readFileSync(new URL("./cookie-cases.json", import.meta.url), "utf8")).cases;
 
 export const DIVS = {
@@ -64,7 +67,7 @@ export const DIVS = {
   Div9: "API: headers de segurança só se faltarem (prod sai com eles duplicados: upstream + nginx)",
   Div10: "erro gerado pelo proxy da API (413/502/504) em JSON no envelope da API, em vez de HTML do nginx",
   Div11: "/assets/* sem arquivo é 404 do servidor de assets (com o _headers), para qualquer extensão; prod devolve o index do SPA quando a extensão não está na regex do nginx",
-  Div12: "cookie: `,` também separa pares (o workerd junta headers Cookie repetidos com `, `; o nginx lê cada um); `a=1,torque_ui=v5` num header só dá V5 (prod: clássica)",
+  // Div12 (vírgula como separador de cookie) saiu em 2026-10-14: o cookie não escolhe mais interface.
   Div13: "/50x.html é página da imagem do nginx, não da build: no artefato do CI ela não existe e o caminho cai no SPA",
 };
 
@@ -298,32 +301,31 @@ export function buildMatrix({ assetsDir, allAssets, headersConfig = HEADERS_CONF
   const add = (testCase) => cases.push({ method: "GET", headers: {}, ...testCase });
   const withCookie = (cookie) => (cookie ? { cookie } : {});
 
-  // 1. `/` com as variantes de cookie medidas (D-6 + fronteiras do parser), de cookie-cases.json.
-  const localIndex = { v5: fs.readFileSync(path.join(assetsDir, "index.html")), classic: fs.readFileSync(path.join(assetsDir, "index.classic.html")) };
-  const servesUi = (ui) => (b) => (b.body.equals(localIndex[ui]) ? null : `não serviu a interface ${ui}`);
-  for (const { cookie, worker, div } of COOKIE_CASES) {
-    add({
-      path: "/",
-      headers: withCookie(cookie),
-      label: `cookie: ${cookie ?? "(nenhum)"}`,
-      allow: div ? { body: div } : undefined,
-      checks: [servesUi(worker)],
-    });
+  // 1. `/` com cada variante de cookie (cookie-cases.json): sempre a V5.
+  const localIndex = fs.readFileSync(path.join(assetsDir, "index.html"));
+  const servesV5 = (b) => (b.body.equals(localIndex) ? null : "não serviu o index da V5");
+  for (const cookie of COOKIE_CASES) {
+    add({ path: "/", headers: withCookie(cookie), label: `cookie: ${cookie ?? "(nenhum)"}`, checks: [servesV5] });
   }
   // Cookie em pedaços: dois headers Cookie, nas duas ordens (HTTP/2 manda assim).
-  for (const parts of [["a=1", "torque_ui=v5"], ["torque_ui=v5", "a=1"]]) {
+  for (const parts of [["a=1", "torque_ui=classic"], ["torque_ui=classic", "a=1"]]) {
     add({
       path: "/",
       raw: true,
       rawHeaders: parts.flatMap((part) => ["cookie", part]),
       label: `raw: Cookie: ${parts[0]} + Cookie: ${parts[1]}`,
-      checks: [servesUi("v5")],
+      checks: [servesV5],
     });
   }
 
-  // 2–3. index/sw diretos e deep links, sem cookie e com V5.
-  for (const p of ["/index.html", "/sw.js", "/index.classic.html", "/sw.classic.js", "/leads", "/leads/", "/configuracoes/usuarios?x=1"]) {
-    for (const cookie of [null, "torque_ui=v5"]) add({ path: p, headers: withCookie(cookie), label: cookie ? "cookie: v5" : "" });
+  // 2–3. index/sw diretos e deep links, sem cookie e com o cookie da clássica.
+  for (const p of ["/index.html", "/sw.js", "/leads", "/leads/", "/configuracoes/usuarios?x=1"]) {
+    for (const cookie of [null, "torque_ui=classic"]) add({ path: p, headers: withCookie(cookie), label: cookie ? "cookie: classic" : "" });
+  }
+  // A clássica vai no artefato (rollback inerte), mas não é servida: 404 nos dois.
+  const notFound = (b) => (b.status === 404 ? null : `status ${b.status} (clássica servida)`);
+  for (const p of ["/index.classic.html", "/sw.classic.js"]) {
+    add({ path: p, headers: withCookie("torque_ui=classic"), allow: { "cache-control": "Div5" }, checks: [notFound] });
   }
 
   // 4. Páginas institucionais.
@@ -370,7 +372,9 @@ export function buildMatrix({ assetsDir, allAssets, headersConfig = HEADERS_CONF
   add({ path: "/assets/", allow: { status: "Div11", "cache-control": "Div11" } });
 
   // 10. Source maps.
-  for (const p of [`${chunk}.map`, "/sw.js.map", "/sw.classic.js.map"]) add({ path: p, checks: [noSourceMap] });
+  for (const p of [`${chunk}.map`, "/sw.js.map"]) add({ path: p, checks: [noSourceMap] });
+  // O map do sw da clássica é 404 explícito nos dois (o Worker e o nginx o bloqueiam pelo nome).
+  add({ path: "/sw.classic.js.map", allow: { "cache-control": "Div5" }, checks: [noSourceMap, notFound] });
 
   // 11. Dotfiles e configuração do servidor de assets.
   const generatedHeaders = fs.readFileSync(path.join(assetsDir, "_headers"));
@@ -465,8 +469,8 @@ export function buildMatrix({ assetsDir, allAssets, headersConfig = HEADERS_CONF
 /** R1: se o prod redeployou, o artefato local não é mais o dele — tudo daria FAIL. */
 async function preflight(base, assetsDir, who) {
   const checks = [
-    { path: "/index.html", headers: { cookie: "torque_ui=v5" }, local: "index.html" },
-    { path: "/index.classic.html", headers: {}, local: "index.classic.html" },
+    { path: "/index.html", headers: {}, local: "index.html" },
+    { path: "/sw.js", headers: {}, local: "sw.js" },
   ];
   const problems = [];
   for (const check of checks) {
@@ -507,7 +511,7 @@ async function main() {
     console.error(`ABORTADO: B não serve ${args.assets} (${notServing.join(", ")}). Rode cf:prepare e reinicie o cf:dev, ou refaça o cf:deploy.`);
     process.exit(2);
   }
-  console.log("verificação inicial: A e B servem o artefato local (index.html e index.classic.html)\n");
+  console.log("verificação inicial: A e B servem o artefato local (index.html e sw.js)\n");
 
   const cases = buildMatrix({ assetsDir, allAssets: args.allAssets });
   const results = await pool(cases, args.concurrency, async (testCase) => {

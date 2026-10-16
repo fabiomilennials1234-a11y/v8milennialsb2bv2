@@ -41,8 +41,9 @@ ARG SENTRY_URL=https://de.sentry.io
 # Feature flags
 ARG VITE_CHAT_ONDA_2B=true
 ARG VITE_CHAT_BUBBLE=true
-# Interface nova (V5) ou clássica, por organização: a guarda das duas builds só
-# troca quando este é "true" (docs/ui-v5/interface-por-organizacao.md).
+# Lido só pela guarda da build clássica (rollback inerte desde 2026-10-14,
+# quando a V5 virou a interface única). Fica para a clássica compilar igual
+# (docs/ui-v5/interface-por-organizacao.md).
 ARG VITE_UI_SWITCH=true
 
 ENV VITE_SUPABASE_URL=${VITE_SUPABASE_URL} \
@@ -61,7 +62,8 @@ ENV VITE_SUPABASE_URL=${VITE_SUPABASE_URL} \
     VITE_UI_SWITCH=${VITE_UI_SWITCH}
 
 # Duas builds no mesmo dist/: V5 (src/) e clássica (classic/), mescladas por
-# scripts/ui-classic/merge-dist.mjs. O nginx abaixo escolhe pelo cookie.
+# scripts/ui-classic/merge-dist.mjs. Desde 2026-10-14 o nginx abaixo serve só a
+# V5; a clássica fica na imagem, inerte (rollback = reverter o commit).
 RUN npm run build:dual
 
 # ---- Stage 2: Serve com Nginx ----
@@ -102,18 +104,9 @@ printf '%s\n' \
   "add_header Content-Security-Policy \"default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdn.tailwindcss.com https://app.cal.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: https:; media-src 'self' blob: https:; connect-src 'self' https://n8nwebhook.v3l8jq.easypanel.host https://app.cal.com https://cal.com; frame-src https://app.cal.com https://cal.com; frame-ancestors 'none'; base-uri 'self'; form-action 'self';\" always;" \
   > /etc/nginx/lp-headers.conf && \
 printf '%s\n' \
-  '# Interface por organização: o cookie `torque_ui` (gravado pela guarda do app' \
-  '# a partir de organizations.ui_v5_enabled) escolhe o index.html e o sw.js.' \
-  '# Sem cookie = clássica, que é o que todo mundo usava antes. Os assets são a' \
-  '# união das duas builds (nomes com hash), então não dependem do cookie.' \
-  'map $cookie_torque_ui $ui_index {' \
-  '  default /index.classic.html;' \
-  '  v5      /index.html;' \
-  '}' \
-  'map $cookie_torque_ui $ui_sw {' \
-  '  default /sw.classic.js;' \
-  '  v5      /sw.js;' \
-  '}' \
+  '# Interface única (V5) desde 2026-10-14: o cookie `torque_ui` é ignorado,' \
+  '# como no Worker (cloudflare/src/routing.ts). A clássica fica na imagem, mas' \
+  '# o caminho direto dela é 404 (ninguém cai nela por URL).' \
   'server {' \
   '  listen 8080;' \
   '  server_tokens off;' \
@@ -121,6 +114,9 @@ printf '%s\n' \
   '  index index.html;' \
   '  include /etc/nginx/security-headers.conf;' \
   '  location ~ /\. { return 404; }' \
+  '  location = /index.classic.html { return 404; }' \
+  '  location = /sw.classic.js { return 404; }' \
+  '  location = /sw.classic.js.map { return 404; }' \
   '  # API REST pública v1 — proxy transparente p/ a edge function `api` do Supabase.' \
   '  # URL limpa: torquecrm.com.br/api/v1/* -> .../functions/v1/api/v1/* (Supabase corta' \
   '  # o prefixo /functions/v1, entao a function ve /api/v1/* e casa o router). Auth e' \
@@ -159,24 +155,24 @@ printf '%s\n' \
   '  location = / {' \
   '    include /etc/nginx/security-headers.conf;' \
   '    add_header Cache-Control "no-store, must-revalidate" always;' \
-  '    try_files $ui_index =404;' \
+  '    try_files /index.html =404;' \
   '  }' \
   '  location = /index.html {' \
   '    include /etc/nginx/security-headers.conf;' \
   '    add_header Cache-Control "no-store, must-revalidate" always;' \
-  '    try_files $ui_index =404;' \
+  '    try_files /index.html =404;' \
   '  }' \
   '  # O service worker precisa ser o da build servida: ele precacheia o index' \
   '  # e os assets dela. Mesmo caminho (/sw.js) para o escopo continuar sendo /.' \
   '  location = /sw.js {' \
   '    include /etc/nginx/security-headers.conf;' \
   '    add_header Cache-Control "no-store, must-revalidate" always;' \
-  '    try_files $ui_sw =404;' \
+  '    try_files /sw.js =404;' \
   '  }' \
   '  location / {' \
   '    include /etc/nginx/security-headers.conf;' \
   '    add_header Cache-Control "no-store, must-revalidate" always;' \
-  '    try_files $uri $uri/ $ui_index;' \
+  '    try_files $uri $uri/ /index.html;' \
   '  }' \
   '}' > /etc/nginx/conf.d/default.conf
 

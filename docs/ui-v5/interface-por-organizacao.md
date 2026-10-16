@@ -1,5 +1,12 @@
 # Interface nova ou clássica, por organização
 
+> **Aposentado em 2026-10-14.** Decisão do CTO: todas as organizações na V5, interface única. O switch saiu de
+> Configurações › Geral e a guarda (`UiVersionGuard`) saiu da V5. O Worker (`cloudflare/src/routing.ts`) e o nginx de
+> rollback (`Dockerfile`) ignoram o cookie `torque_ui` e servem sempre `index.html`/`sw.js`; `/index.classic.html`
+> e `/sw.classic.js` respondem 404. A clássica (`classic/`) continua compilando no `build:dual` como rollback
+> inerte (rollback = reverter o commit do Worker). A coluna `organizations.ui_v5_enabled` fica no banco intocada;
+> a V5 não a lê mais (só a guarda da clássica, que não é servida). O texto abaixo é o desenho histórico.
+
 Decisão do CTO (03/10): um switch em **Configurações › Geral** escolhe a interface da organização inteira.
 **Ligado = V5. Desligado = clássica.** Começam ligadas só **Milennials** (`6030520a-2ca7-477d-be89-55758e2cd808`) e
 **TorqueCRM** (`b2ad1ffb-e136-4356-846b-9f210f902573`). As outras ~28 seguem na clássica.

@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } fr
 import worker from "../../../cloudflare/src/worker";
 import { PROFILES } from "../../../cloudflare/src/headers";
 import { decodePath } from "../../../cloudflare/src/routing";
+import cookieCases from "../../../scripts/cloudflare/cookie-cases.json";
 
 /**
  * Servidor de assets falso, com o comportamento do real em `html_handling:
@@ -17,6 +18,7 @@ const FILES: Record<string, { body: string; type: string }> = {
   "/index.classic.html": { body: "<html>CLASSIC</html>", type: "text/html; charset=utf-8" },
   "/sw.js": { body: "/* sw v5 */", type: "text/javascript; charset=utf-8" },
   "/sw.classic.js": { body: "/* sw classic */", type: "text/javascript; charset=utf-8" },
+  "/sw.classic.js.map": { body: '{"version":3}', type: "application/json" },
   "/sobre.html": { body: "<html>sobre</html>", type: "text/html; charset=utf-8" },
   "/privacidade.html": { body: "<html>privacidade</html>", type: "text/html; charset=utf-8" },
   "/robots.txt": { body: "User-agent: *", type: "text/plain; charset=utf-8" },
@@ -80,15 +82,10 @@ function expectProfile(response: Response, profile: "app" | "lp") {
 }
 
 describe("index, service worker e páginas", () => {
-  it("/ sem cookie → clássica; com torque_ui=v5 → V5", async () => {
-    expect(await (await call("/")).text()).toBe("<html>CLASSIC</html>");
-    expect(await (await call("/", { headers: { cookie: "torque_ui=v5" } })).text()).toBe("<html>V5</html>");
-    expect(await (await call("/index.html")).text()).toBe("<html>CLASSIC</html>");
-  });
-
-  it("/sw.js segue o cookie", async () => {
-    expect(await (await call("/sw.js")).text()).toBe("/* sw classic */");
-    expect(await (await call("/sw.js", { headers: { cookie: "torque_ui=v5" } })).text()).toBe("/* sw v5 */");
+  it("/, /index.html e /sw.js → V5, sem cookie", async () => {
+    expect(await (await call("/")).text()).toBe("<html>V5</html>");
+    expect(await (await call("/index.html")).text()).toBe("<html>V5</html>");
+    expect(await (await call("/sw.js")).text()).toBe("/* sw v5 */");
   });
 
   it("headers do app e no-store substituindo o padrão do servidor de assets", async () => {
@@ -108,27 +105,53 @@ describe("index, service worker e páginas", () => {
   });
 });
 
-describe("cookie em pedaços", () => {
-  it("dois headers Cookie (a=1 e torque_ui=v5), nas duas ordens → V5", async () => {
-    for (const parts of [["a=1", "torque_ui=v5"], ["torque_ui=v5", "a=1"]]) {
+describe("interface única (V5, desde 2026-10-14): o cookie torque_ui é ignorado", () => {
+  it("a lista de cookie-cases.json cobre nenhum, torque_ui=classic, torque_ui=v5 e lixo", () => {
+    expect(cookieCases.cases).toEqual(expect.arrayContaining([null, "torque_ui=classic", "torque_ui=v5", "torque_ui="]));
+  });
+
+  it.each(cookieCases.cases.map((cookie) => [cookie] as const))("cookie %j → /index.html, /sw.js e o SPA da V5", async (cookie) => {
+    const headers: Record<string, string> = cookie === null ? {} : { cookie };
+    expect(await (await call("/", { headers })).text()).toBe("<html>V5</html>");
+    expect(await (await call("/index.html", { headers })).text()).toBe("<html>V5</html>");
+    expect(await (await call("/sw.js", { headers })).text()).toBe("/* sw v5 */");
+    expect(await (await call("/leads", { headers })).text()).toBe("<html>V5</html>");
+  });
+
+  it("dois headers Cookie (torque_ui=classic em pedaços), nas duas ordens → V5", async () => {
+    for (const parts of [["a=1", "torque_ui=classic"], ["torque_ui=classic", "a=1"]]) {
       const headers = new Headers();
       for (const part of parts) headers.append("cookie", part);
       expect(await (await call("/", { headers })).text(), parts.join(" + ")).toBe("<html>V5</html>");
     }
   });
+
+  it("caminho direto da clássica → 404 no-store, sem nem perguntar ao servidor de assets", async () => {
+    for (const path of ["/index.classic.html", "/sw.classic.js", "/sw.classic.js.map", "/INDEX.CLASSIC.HTML", "/index%2Eclassic.html"]) {
+      for (const method of ["GET", "HEAD"]) {
+        assetCalls = [];
+        const response = await call(path, { method, headers: { cookie: "torque_ui=classic" } });
+        expect(response.status, `${method} ${path}`).toBe(404);
+        expect(response.headers.get("cache-control"), path).toBe("no-store, must-revalidate");
+        expectProfile(response, "app");
+        expect(assetCalls, path).toEqual([]);
+        if (method === "GET") expect(await response.text(), path).toBe("Not Found");
+      }
+    }
+  });
 });
 
 describe("SPA", () => {
-  it("arquivo exato quando existe, index pelo cookie quando não", async () => {
+  it("arquivo exato quando existe, index da V5 quando não", async () => {
     expect(await (await call("/robots.txt")).text()).toBe("User-agent: *");
     expect(await (await call("/landing/Paleta%20de%20Cor_Milennials.png")).text()).toBe("PNG");
-    expect(await (await call("/leads")).text()).toBe("<html>CLASSIC</html>");
-    expect(await (await call("/configuracoes/usuarios?x=1", { headers: { cookie: "torque_ui=v5" } })).text()).toBe("<html>V5</html>");
+    expect(await (await call("/leads")).text()).toBe("<html>V5</html>");
+    expect(await (await call("/configuracoes/usuarios?x=1")).text()).toBe("<html>V5</html>");
   });
 
   it("caminho com barra no fim vai direto ao index", async () => {
     await call("/leads/");
-    expect(assetCalls).toEqual([{ path: "/index.classic.html", method: "GET" }]);
+    expect(assetCalls).toEqual([{ path: "/index.html", method: "GET" }]);
   });
 });
 
@@ -246,7 +269,8 @@ describe("X-Torque-Version (prova de versão do smoke do deploy)", () => {
     vi.stubGlobal("fetch", vi.fn(async () => new Response('{"error":{"code":"unauthorized","message":"x"}}', { status: 401, headers: { "content-type": "application/json" } })));
     const cases: [string, RequestInit?][] = [
       ["/"],
-      ["/index.html", { headers: { cookie: "torque_ui=v5" } }],
+      ["/index.html", { headers: { cookie: "torque_ui=classic" } }],
+      ["/index.classic.html"],
       ["/sw.js"],
       ["/sobre"],
       ["/leads"],

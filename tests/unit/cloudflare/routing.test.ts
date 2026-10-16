@@ -8,49 +8,44 @@ import {
   encodePath,
   hasDotSegment,
   logPath,
-  readCookie,
   redactPath,
   resolveRoute,
-  uiFromCookie,
   type Route,
 } from "../../../cloudflare/src/routing";
-import cookieCases from "../../../scripts/cloudflare/cookie-cases.json";
 
 // Concatenado, não `new URL(path, base)`: "//sobre" viraria host, e na linha de
 // requisição HTTP ele é caminho.
-const route = (path: string, method = "GET", cookie: string | null = null): Route =>
-  resolveRoute(new URL(`https://torque-front.example.workers.dev${path}`), method, cookie);
+const route = (path: string, method = "GET"): Route =>
+  resolveRoute(new URL(`https://torque-front.example.workers.dev${path}`), method);
 
-describe("cookie torque_ui — o que o Worker escolhe, frente ao que o nginx escolhe (medido em 2026-10-06)", () => {
-  // Fonte única com a paridade: scripts/cloudflare/cookie-cases.json. `prod` foi
-  // medido com curl contra o index.html (V5) e o index.classic.html de produção.
-  it.each(cookieCases.cases.map((c) => [c.cookie, c.worker, c.prod, c.div ?? ""] as const))(
-    "%s → Worker %s (prod %s) %s",
-    (cookie, worker, prod, div) => {
-      expect(uiFromCookie(cookie)).toBe(worker);
-      // Só diverge do nginx onde há divergência declarada.
-      if (worker !== prod) expect(div).toMatch(/^Div\d+$/);
-    },
-  );
-
-  it("headers Cookie repetidos, que o workerd junta com `, `, nas duas ordens → V5 (Div12)", () => {
-    // O workerd junta headers repetidos com ", " (medido pelo QA no wrangler dev);
-    // o undici do Node junta Cookie com "; ". As duas formas têm de dar V5.
-    for (const sep of [", ", "; "]) {
-      expect(uiFromCookie(["a=1", "torque_ui=v5"].join(sep))).toBe("v5");
-      expect(uiFromCookie(["torque_ui=v5", "a=1"].join(sep))).toBe("v5");
-      expect(uiFromCookie(["sb-a=1; sb-b=2", "torque_ui=v5; x=1"].join(sep))).toBe("v5");
-      expect(uiFromCookie(["torque_ui=classic", "torque_ui=v5"].join(sep))).toBe("classic");
-    }
+describe("interface única (V5, desde 2026-10-14) — o cookie não escolhe mais nada", () => {
+  it("resolveRoute não recebe o header Cookie: a rota só depende de URL e método (com cookie: worker.test.ts)", () => {
+    expect(resolveRoute.length).toBe(2);
   });
 
-  it("lê o valor até `;` ou `,`, sem aparar o fim", () => {
-    expect(readCookie("torque_ui=v5 ; x=1", "torque_ui")).toBe("v5 ");
-    expect(readCookie("x=1;  torque_ui=  v5", "torque_ui")).toBe("v5");
-    expect(readCookie("torque_ui=v5, x=1", "torque_ui")).toBe("v5");
-    expect(readCookie("", "torque_ui")).toBeNull();
-    expect(readCookie("torque_ui", "torque_ui")).toBeNull();
-    expect(readCookie("torque_uiv5", "torque_ui")).toBeNull();
+  it("caminho direto da clássica → 404 (não-servida), com qualquer caixa e codificação", () => {
+    for (const path of ["/index.classic.html", "/sw.classic.js", "/sw.classic.js.map", "/INDEX.CLASSIC.HTML", "/Sw.Classic.Js", "/index%2Eclassic.html", "//sw.classic.js"]) {
+      expect(route(path), path).toEqual({ kind: "not-found" });
+      expect(route(path, "HEAD"), path).toEqual({ kind: "not-found" });
+    }
+  });
+});
+
+describe("nginx de rollback (Dockerfile) com o mesmo contrato da interface única", () => {
+  const dockerfile = fs.readFileSync(path.resolve(__dirname, "../../../Dockerfile"), "utf8");
+
+  it("não lê o cookie torque_ui e serve sempre index.html/sw.js", () => {
+    expect(dockerfile).not.toMatch(/\$cookie_torque_ui|\$ui_index|\$ui_sw/);
+    expect(dockerfile).toContain("try_files /index.html =404;");
+    expect(dockerfile).toContain("try_files /sw.js =404;");
+    expect(dockerfile).toContain("try_files $uri $uri/ /index.html;");
+  });
+
+  it("os caminhos que o Worker dá 404 da clássica também são 404 no nginx", () => {
+    for (const p of ["/index.classic.html", "/sw.classic.js", "/sw.classic.js.map"]) {
+      expect(route(p)).toEqual({ kind: "not-found" });
+      expect(dockerfile).toContain(`location = ${p} { return 404; }`);
+    }
   });
 });
 
@@ -166,22 +161,20 @@ describe("caminho: decodificação como a do servidor de assets", () => {
 });
 
 describe("contrato de roteamento — uma linha por linha da tabela do macro", () => {
-  it("1. / e /index.html → index pelo cookie", () => {
-    expect(route("/")).toEqual({ kind: "index", asset: "/index.classic.html" });
-    expect(route("/", "GET", "torque_ui=v5")).toEqual({ kind: "index", asset: "/index.html" });
-    expect(route("/index.html")).toEqual({ kind: "index", asset: "/index.classic.html" });
-    expect(route("/index.html", "HEAD", "torque_ui=v5")).toEqual({ kind: "index", asset: "/index.html" });
+  it("1. / e /index.html → index da V5", () => {
+    expect(route("/")).toEqual({ kind: "index", asset: "/index.html" });
+    expect(route("/index.html")).toEqual({ kind: "index", asset: "/index.html" });
+    expect(route("/index.html", "HEAD")).toEqual({ kind: "index", asset: "/index.html" });
   });
 
-  it("2. /sw.js → service worker da mesma build", () => {
-    expect(route("/sw.js")).toEqual({ kind: "service-worker", asset: "/sw.classic.js" });
-    expect(route("/sw.js", "GET", "torque_ui=v5")).toEqual({ kind: "service-worker", asset: "/sw.js" });
+  it("2. /sw.js → service worker da V5", () => {
+    expect(route("/sw.js")).toEqual({ kind: "service-worker", asset: "/sw.js" });
   });
 
   it("3. /sobre e /privacidade (exatos)", () => {
     expect(route("/sobre")).toEqual({ kind: "page", asset: "/sobre.html" });
     expect(route("/privacidade")).toEqual({ kind: "page", asset: "/privacidade.html" });
-    expect(route("/sobre/")).toEqual({ kind: "spa", path: "/sobre/", fallback: "/index.classic.html" });
+    expect(route("/sobre/")).toEqual({ kind: "spa", path: "/sobre/" });
   });
 
   it("4. /api/v1 sem barra → 301 relativo, com a query (Div4)", () => {
@@ -221,20 +214,15 @@ describe("contrato de roteamento — uma linha por linha da tabela do macro", ()
     expect(route("/ASSETS/x.js")).toEqual({ kind: "not-found" });
     expect(route("/assets/x.MAP")).toEqual({ kind: "not-found" });
     // Extensão fora da regex: o nginx cai no SPA; aqui também (se chegasse ao Worker).
-    expect(route("/Assets/x.json")).toEqual({ kind: "spa", path: "/Assets/x.json", fallback: "/index.classic.html" });
+    expect(route("/Assets/x.json")).toEqual({ kind: "spa", path: "/Assets/x.json" });
   });
 
-  it("10. resto → arquivo exato ou index pelo cookie", () => {
-    expect(route("/leads")).toEqual({ kind: "spa", path: "/leads", fallback: "/index.classic.html" });
-    expect(route("/configuracoes/usuarios?x=1", "GET", "torque_ui=v5")).toEqual({
-      kind: "spa",
-      path: "/configuracoes/usuarios",
-      fallback: "/index.html",
-    });
+  it("10. resto → arquivo exato ou index da V5", () => {
+    expect(route("/leads")).toEqual({ kind: "spa", path: "/leads" });
+    expect(route("/configuracoes/usuarios?x=1")).toEqual({ kind: "spa", path: "/configuracoes/usuarios" });
     expect(route("/landing/Paleta%20de%20Cor_Milennials.png")).toEqual({
       kind: "spa",
       path: "/landing/Paleta de Cor_Milennials.png",
-      fallback: "/index.classic.html",
     });
   });
 

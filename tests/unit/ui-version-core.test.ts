@@ -1,6 +1,7 @@
 /**
- * Interface nova ou clássica por organização — a decisão que as duas builds
- * compartilham (`src/shared/ui-version/core.ts`).
+ * Interface nova ou clássica por organização — o núcleo da guarda da build
+ * clássica (`src/shared/ui-version/core.ts`, alias `@torque/ui-version`). Desde
+ * 2026-10-14 só a clássica (rollback inerte) o consome; a V5 é interface única.
  *
  * O que não pode quebrar:
  * - sem resposta clara da org, fica a clássica (o que está em produção hoje);

@@ -9,14 +9,25 @@
  * não cobre.
  */
 
-export type IndexAsset = "/index.html" | "/index.classic.html";
-export type ServiceWorkerAsset = "/sw.js" | "/sw.classic.js";
+/**
+ * Interface única (V5) desde 2026-10-14. O cookie `torque_ui` não escolhe mais
+ * nada: `/`, `/index.html`, o SPA e `/sw.js` são sempre da V5.
+ */
+export const INDEX_ASSET = "/index.html";
+export const SERVICE_WORKER_ASSET = "/sw.js";
+
+/**
+ * A build clássica continua no artefato (rollback = reverter o commit do
+ * Worker), mas não é servida: o caminho direto dos arquivos dela é 404, para
+ * ninguém cair na clássica por URL. Comparado sem diferenciar maiúscula.
+ */
+const CLASSIC_ENTRY_FILES: ReadonlySet<string> = new Set(["/index.classic.html", "/sw.classic.js", "/sw.classic.js.map"]);
 
 export type Route =
-  /** `/` e `/index.html`: o index da interface escolhida pelo cookie. */
-  | { kind: "index"; asset: IndexAsset }
-  /** `/sw.js`: o service worker da mesma build do index. */
-  | { kind: "service-worker"; asset: ServiceWorkerAsset }
+  /** `/` e `/index.html`: o index da V5. */
+  | { kind: "index"; asset: typeof INDEX_ASSET }
+  /** `/sw.js`: o service worker da V5. */
+  | { kind: "service-worker"; asset: typeof SERVICE_WORKER_ASSET }
   /** Páginas estáticas com caminho limpo, e a exceção de dotfile (Div1). */
   | { kind: "page"; asset: "/sobre.html" | "/privacidade.html" | "/.well-known/security.txt" }
   /** `/api/v1` sem barra: 301 relativo, como o nginx faria sem o bug do :8080 (Div4). */
@@ -27,69 +38,13 @@ export type Route =
   | { kind: "not-found" }
   /** `/lp/*`: landing pages estáticas, com headers próprios. */
   | { kind: "landing"; path: string }
-  /** Resto: o arquivo exato, se existir; senão o index do SPA. */
-  | { kind: "spa"; path: string; fallback: IndexAsset };
+  /** Resto: o arquivo exato, se existir; senão o index da V5. */
+  | { kind: "spa"; path: string };
 
-export type UiVariant = "v5" | "classic";
-
-export const UI_COOKIE = "torque_ui";
-
-/** Dockerfile:136 — `location ~* ^/assets/.*\.(…)$`. */
+/** Dockerfile — `location ~* ^/assets/.*\.(…)$`. */
 const ASSET_FILE = /^\/assets\/.*\.(js|css|woff2?|ttf|eot|svg|png|jpg|jpeg|gif|webp|ico|map)$/i;
 
 const SECURITY_TXT = "/.well-known/security.txt";
-
-/** `;` separa pares no header Cookie; `,` também — ver `readCookie`. */
-const isCookieSeparator = (ch: string | undefined): boolean => ch === ";" || ch === ",";
-
-/**
- * Valor do cookie como o nginx lê (`$cookie_<nome>`, algoritmo de
- * `ngx_http_parse_cookie_lines` em src/http/ngx_http_parse.c): primeira
- * ocorrência, nome sem diferenciar maiúscula, espaços opcionais em volta do
- * `=`, espaço no fim do valor conta.
- *
- * Diferença de propósito (Div12): aqui `,` também separa pares. O nginx recebe
- * cada header `Cookie` numa linha própria e percorre uma por uma; o workerd
- * junta os headers repetidos num só, com `, ` — e o HTTP/2 manda o cookie em
- * pedaços, um por header. Só com `;` a V5 de quem manda `a=1` e `torque_ui=v5`
- * em headers separados cairia na clássica. O app nunca grava vírgula no
- * cookie, e o RFC 6265 proíbe o servidor de gravar: a vírgula como separador
- * não troca a interface de ninguém que use o app.
- */
-export function readCookie(header: string | null, name: string): string | null {
-  if (!header) return null;
-  const wanted = name.toLowerCase();
-  const end = header.length;
-  let i = 0;
-
-  while (i < end) {
-    if (header.slice(i, i + wanted.length).toLowerCase() === wanted) {
-      let j = i + wanted.length;
-      while (j < end && header[j] === " ") j++;
-      if (j < end && header[j] === "=") {
-        j++;
-        while (j < end && header[j] === " ") j++;
-        let k = j;
-        while (k < end && !isCookieSeparator(header[k])) k++;
-        return header.slice(j, k);
-      }
-    }
-    while (i < end) {
-      if (isCookieSeparator(header[i++])) break;
-    }
-    while (i < end && header[i] === " ") i++;
-  }
-
-  return null;
-}
-
-/**
- * `map $cookie_torque_ui` do nginx: só `v5` (sem diferenciar maiúscula) liga a
- * V5. Ausente, com aspas ou qualquer outro valor = clássica.
- */
-export function uiFromCookie(header: string | null): UiVariant {
-  return readCookie(header, UI_COOKIE)?.toLowerCase() === "v5" ? "v5" : "classic";
-}
 
 /**
  * Caminho decodificado do jeito do servidor de assets: cada segmento passa por
@@ -201,12 +156,10 @@ export function logPath(route: Route["kind"] | "error", pathname: string): strin
   return `/${shown}${segments.length > 1 ? "/*" : ""}`;
 }
 
-export function resolveRoute(url: URL, method: string, cookieHeader: string | null): Route {
+export function resolveRoute(url: URL, method: string): Route {
   const path = decodePath(url.pathname);
-  const ui = uiFromCookie(cookieHeader);
-  const index: IndexAsset = ui === "v5" ? "/index.html" : "/index.classic.html";
 
-  // Dockerfile:128 — `location ^~ /api/v1/`: vence as regex e vale para
+  // Dockerfile — `location ^~ /api/v1/`: vence as regex e vale para
   // qualquer método. Sem a barra, o nginx responde 301 para a pasta.
   if (path === "/api/v1") return { kind: "redirect", location: `/api/v1/${url.search}` };
   if (path.startsWith("/api/v1/")) return { kind: "api" };
@@ -214,11 +167,10 @@ export function resolveRoute(url: URL, method: string, cookieHeader: string | nu
   // O nginx só serve arquivo estático para GET/HEAD; o resto é 405.
   if (method !== "GET" && method !== "HEAD") return { kind: "method-not-allowed" };
 
-  // Dockerfile:149-175 — os `location =`.
-  if (path === "/" || path === "/index.html") return { kind: "index", asset: index };
-  if (path === "/sw.js") {
-    return { kind: "service-worker", asset: ui === "v5" ? "/sw.js" : "/sw.classic.js" };
-  }
+  // Dockerfile — os `location =`.
+  if (path === "/" || path === INDEX_ASSET) return { kind: "index", asset: INDEX_ASSET };
+  if (path === SERVICE_WORKER_ASSET) return { kind: "service-worker", asset: SERVICE_WORKER_ASSET };
+  if (CLASSIC_ENTRY_FILES.has(path.toLowerCase())) return { kind: "not-found" };
   if (path === "/sobre") return { kind: "page", asset: "/sobre.html" };
   if (path === "/privacidade") return { kind: "page", asset: "/privacidade.html" };
 
@@ -230,5 +182,5 @@ export function resolveRoute(url: URL, method: string, cookieHeader: string | nu
 
   if (ASSET_FILE.test(path)) return { kind: "not-found" };
 
-  return { kind: "spa", path, fallback: index };
+  return { kind: "spa", path };
 }

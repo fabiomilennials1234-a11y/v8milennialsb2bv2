@@ -64,7 +64,7 @@ jobs:
           npm ci --ignore-scripts --no-audit --no-fund
           npm ci --ignore-scripts --no-audit --no-fund --prefix cloudflare
 
-      - name: Build dual (V5 + clássica)
+      - name: Build dual (V5 + clássica inerte)
         run: npm run build:dual
 
       - name: cf:prepare (tira source map, recusa segredo, gera _headers)

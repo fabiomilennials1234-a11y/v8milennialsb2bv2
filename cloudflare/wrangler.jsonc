@@ -1,4 +1,4 @@
-// Front do Torque (SPA dual V5 + clássica) em Cloudflare Workers + Static Assets.
+// Front do Torque (SPA V5; a clássica vai no artefato, inerte) em Cloudflare Workers + Static Assets.
 // Operação: docs/DEPLOY_CLOUDFLARE.md. Roteamento e headers: src/worker.ts.
 //
 // Sem account_id, sem routes e sem segredo neste arquivo: a conta vem do

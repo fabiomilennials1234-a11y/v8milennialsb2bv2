@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 /**
  * Prepara o diretório que o wrangler publica (`cloudflare/.assets/`) a partir
- * de uma build dual já pronta (`npm run build:dual` → dist/, ou o conteúdo de
- * /usr/share/nginx/html da imagem de produção).
+ * de uma build já pronta (`npm run build:dual` → dist/, ou o conteúdo de
+ * /usr/share/nginx/html da imagem do nginx).
  *
  *   node scripts/cloudflare/prepare-assets.mjs --from <dir>
  *
@@ -10,7 +10,11 @@
  * que não publicar nada.
  *
  * O que faz, nesta ordem:
- *   1. Exige a build dual (index.html, index.classic.html, sw.js, sw.classic.js).
+ *   1. Exige a entrada da V5 (index.html, sw.js). Desde 2026-10-14 a V5 é a
+ *      interface única: o Worker não serve a clássica. O index.classic.html e
+ *      o sw.classic.js que o build:dual gera seguem no artefato como qualquer
+ *      outro arquivo (rollback inerte = reverter o commit do Worker), mas não
+ *      são exigidos — e o cf:extract, que baixa o que está no ar, não os acha.
  *   2. Varre a origem e FALHA em: arquivo de segredo pelo nome (.env*, *.pem,
  *      *.key, .git, .dev.vars*, .npmrc), dotfile fora de .well-known/ (o
  *      .DS_Store do Finder só é deixado para trás),
@@ -40,7 +44,7 @@ import { CLOUDFLARE_DIR, assertSafeOutDir, loadHeadersConfig, parseArgs, sha256 
 export { loadHeadersConfig };
 export const DEFAULT_OUT = path.join(CLOUDFLARE_DIR, ".assets");
 
-export const REQUIRED_FILES = ["index.html", "index.classic.html", "sw.js", "sw.classic.js"];
+export const REQUIRED_FILES = ["index.html", "sw.js"];
 
 /** Limite do Workers Static Assets por arquivo (o próprio wrangler recusa acima). */
 export const MAX_FILE_BYTES = 25 * 1024 * 1024;
@@ -280,7 +284,7 @@ function isInside(child, parent) {
  * varredura e a gravação.
  */
 export function prepareAssets({ from, out = DEFAULT_OUT, headersConfig = loadHeadersConfig(), allowedRoot, hooks = {} }) {
-  if (!from) throw new PrepareError(["--from é obrigatório (diretório da build dual)"]);
+  if (!from) throw new PrepareError(["--from é obrigatório (diretório da build)"]);
   const source = path.resolve(from);
   let target;
   try {
@@ -298,7 +302,7 @@ export function prepareAssets({ from, out = DEFAULT_OUT, headersConfig = loadHea
 
   const missing = REQUIRED_FILES.filter((name) => !fs.existsSync(path.join(source, name)));
   if (missing.length > 0) {
-    throw new PrepareError(missing.map((name) => `${name} ausente: não é a build dual (npm run build:dual)`));
+    throw new PrepareError(missing.map((name) => `${name} ausente: não é a build do front (npm run build:dual)`));
   }
 
   const { entries, problems } = scanSource(source);
@@ -325,7 +329,7 @@ export function prepareAssets({ from, out = DEFAULT_OUT, headersConfig = loadHea
   fs.writeFileSync(path.join(target, "_headers"), headersFile);
   fs.writeFileSync(path.join(target, ".assetsignore"), renderAssetsIgnore());
 
-  // Conferência da saída: nenhum source map, build dual intacta.
+  // Conferência da saída: nenhum source map, build intacta.
   const leftovers = [];
   let bytes = 0;
   let count = 0;

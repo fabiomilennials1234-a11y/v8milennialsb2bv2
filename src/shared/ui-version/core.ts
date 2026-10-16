@@ -1,11 +1,14 @@
 /**
- * Interface nova (V5) ou clássica, por organização — a parte que as DUAS builds
- * compartilham. A clássica (`classic/`) importa este arquivo pelo alias
- * `@torque/ui-version`; por isso ele não importa nada do projeto.
+ * Interface nova (V5) ou clássica, por organização — o núcleo da guarda da
+ * build CLÁSSICA. Só ela consome este arquivo, pelo alias `@torque/ui-version`
+ * (classic/vite.config.ts, vitest.classic.config.ts); por isso ele não importa
+ * nada do projeto. A V5 não o importa desde 2026-10-14.
  *
- * Quem escolhe a build é o nginx, pelo cookie `torque_ui` (ver
- * docs/ui-v5/interface-por-organizacao.md). Quem escreve o cookie é a guarda de
- * cada build, a partir de `organizations.ui_v5_enabled`.
+ * Desde 2026-10-14 a V5 é a interface única: o Worker (cloudflare/src/routing.ts)
+ * e o nginx de rollback (Dockerfile) ignoram o cookie `torque_ui` e servem
+ * sempre index.html/sw.js; a clássica segue no dist só como rollback inerte, e
+ * a guarda dela só roda se a clássica voltar a ser servida (reverter o commit
+ * do Worker). Histórico: docs/ui-v5/interface-por-organizacao.md.
  */
 
 export type UiVersion = "v5" | "classic";

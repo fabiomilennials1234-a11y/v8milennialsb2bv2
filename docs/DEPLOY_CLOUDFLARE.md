@@ -1,5 +1,7 @@
 # Deploy do front na Cloudflare (teste em `*.workers.dev`)
 
+> **2026-10-14 — interface única (V5).** O Worker (e o nginx de rollback do `Dockerfile`) ignora o cookie `torque_ui`: `/`, `/index.html`, o SPA e `/sw.js` são sempre da V5, e `/index.classic.html`, `/sw.classic.js` e `/sw.classic.js.map` dão 404. A clássica segue no `build:dual` e no artefato, inerte (rollback = reverter o commit do Worker). Trechos abaixo que falam em escolher a interface pelo cookie (fase de teste, paridade com o nginx dual, Div12) são histórico.
+
 Este guia serve o **mesmo front que está no ar** em `torquecrm.com.br` a partir da Cloudflare, numa URL de teste separada. O objetivo é provar que a Cloudflare entrega exatamente o que o nginx entrega hoje.
 
 A publicação de rotina é do CI: a cada push na `main`, o GitHub Actions builda e publica em degraus, com rollback automático (ver [Pipeline de deploy (CI)](#pipeline-de-deploy-ci)). Os comandos à mão de [Publicar](#publicar-quatro-comandos) continuam valendo para a fase de teste e para o ensaio local.
@@ -12,7 +14,7 @@ Este guia é o par do [`DEPLOY_EASYPANEL.md`](./DEPLOY_EASYPANEL.md), que contin
 
 ## Glossário (três linhas)
 
-- **Worker**: um programa pequeno que roda nos servidores da Cloudflare. Aqui ele faz o papel do nginx: escolhe a interface pelo cookie, aplica os headers de segurança e repassa `/api/v1/*` para o Supabase.
+- **Worker**: um programa pequeno que roda nos servidores da Cloudflare. Aqui ele faz o papel do nginx: serve a V5 (até 2026-10-14 escolhia a interface pelo cookie), aplica os headers de segurança e repassa `/api/v1/*` para o Supabase.
 - **workers.dev**: o endereço de teste gratuito que a Cloudflare dá a todo Worker, no formato `https://torque-front.<seu-subdominio>.workers.dev`.
 - **wrangler**: a ferramenta de linha de comando da Cloudflare. Ela já vem instalada neste repositório, em `cloudflare/`; não é preciso instalar nada global.
 
@@ -164,14 +166,14 @@ npm run cf:smoke -- --url https://torque-front.torquecrm.workers.dev --assets cl
 
 Opções: `--override <version-id>`, `--expect-version <version-id>`, `--allow-missing-version` e `--retry-for <segundos>`.
 
-- **Com `--assets`**, o host tem de servir exatamente aqueles arquivos. Este é o modo do deploy.
-- **Sem `--assets`** (autoconsistente), a referência é o próprio host: o `/` sem cookie tem de ser o `/index.classic.html` que ele serve, e assim por diante. Este é o modo do rollback, quando não há artefato local da versão.
+- **Com `--assets`**, o host tem de servir exatamente aqueles arquivos e cumprir a interface única: `/` e `/sw.js` com cada variante de cookie de `cookie-cases.json` = os da V5, e `/index.classic.html` e `/sw.classic.js` = 404 do Worker. Este é o modo do deploy.
+- **Sem `--assets`** (autoconsistente), a referência é o próprio host: o `/`, o `/leads` e o `/sw.js` sem cookie têm de ser coerentes com o `/index.html` que ele serve. Este é o modo do rollback, quando não há artefato local da versão. Ele não cobra o contrato da interface única de propósito: o rollback pode voltar para uma versão de antes de 2026-10-14 (clássica sem cookie).
 
 O que ele confere:
 
-- o `/` com cada variante de cookie de `cookie-cases.json`;
-- `sw.js` e `sw.classic.js`;
-- os chunks de entrada dos dois index: 200, mesmo sha256 do artefato, `Cache-Control` imutável e headers do app;
+- o `/index.html`, o `/` e o `/sw.js` (com `--assets`, com cada variante de cookie);
+- com `--assets`, `/index.classic.html` e `/sw.classic.js` = 404;
+- os chunks de entrada do index: 200, mesmo sha256 do artefato, `Cache-Control` imutável e headers do app;
 - `<chunk>.map` dá 404;
 - `/api/v1/leads` sem `Accept-Encoding`: 401, sem gzip, envelope `{"error":{…}}`;
 - uma CSP só, e os headers de `cloudflare/headers.json`;
@@ -535,7 +537,7 @@ O comando de paridade conhece estas diferenças e as marca como `EXPECTED-DIFF`.
 | Div9 | Respostas de `/api/v1/*` com cada header de segurança uma vez só | Hoje saem duplicados (Supabase + nginx), com duas CSPs. A política efetiva é a mesma. |
 | Div10 | Erros do proxy da API (413 corpo grande, 502, 504) em JSON | Seguem o formato de erro da API, `{"error":{"code","message"}}`, em vez da página HTML do nginx. |
 | Div11 | `/assets/<algo que não existe>` dá 404 para qualquer extensão | Hoje `/assets/x.json` devolve a tela do app (200), um acidente da regra do nginx. Na Cloudflare, `/assets/*` é servido direto pelo servidor de arquivos e nunca passa pelo Worker. |
-| Div12 | No cookie, `,` também separa pares: `a=1,torque_ui=v5` num header só abre a V5 (em produção, a clássica) | A Cloudflare junta headers `Cookie` repetidos num só, separados por `, `, e o HTTP/2 manda o cookie em pedaços. Só com `;` como separador, quem tem a V5 cairia na clássica. O app nunca grava vírgula no cookie, e o RFC 6265 proíbe o servidor de gravar. |
+| Div12 | **Aposentada em 2026-10-14** (o cookie não escolhe mais interface). Era: no cookie, `,` também separa pares: `a=1,torque_ui=v5` num header só abre a V5 (em produção, a clássica) | A Cloudflare junta headers `Cookie` repetidos num só, separados por `, `, e o HTTP/2 manda o cookie em pedaços. Só com `;` como separador, quem tem a V5 cairia na clássica. O app nunca grava vírgula no cookie, e o RFC 6265 proíbe o servidor de gravar. |
 | Div13 | `/50x.html` abre o app (200, o index do SPA) quando o artefato é do CI | A página é da **imagem do nginx**, não da build: o `cf:extract` a traz, o `build:dual` não. Na Cloudflare ninguém a usa (o Worker gera os próprios erros). Com o artefato do `cf:extract`, o arquivo existe e a comparação é a normal. |
 
 ---
@@ -640,7 +642,7 @@ O emulador local pode diferir da Cloudflare de verdade; estes itens só se prova
 | `scripts/cloudflare/extract-prod.mjs` | `cf:extract`: baixa o front no ar. |
 | `scripts/cloudflare/prepare-assets.mjs` | `cf:prepare`: copia, limpa, varre segredos e gera `_headers` e `.assetsignore`. |
 | `scripts/cloudflare/parity.mjs` | `cf:parity`: comparação A × B. |
-| `scripts/cloudflare/cookie-cases.json` | Variantes do cookie `torque_ui` medidas em produção (usadas pela paridade e pelos testes). |
+| `scripts/cloudflare/cookie-cases.json` | Variantes do header Cookie (nenhum, `torque_ui=classic`, `torque_ui=v5`, lixo); com qualquer uma, a V5 (usadas pelo smoke, pela paridade e pelos testes). |
 | `scripts/cloudflare/lib.mjs` | Utilidades comuns aos scripts, inclusive a trava do destino. |
 | `scripts/cloudflare/smoke.mjs` | `cf:smoke`: o contrato do deploy num host só (com `--assets` ou autoconsistente, com ou sem override). |
 | `scripts/cloudflare/ci-deploy.mjs` | `cf:ci:deploy`: deploy em degraus com rollback automático, e o rollback manual (`--rollback-to`). |

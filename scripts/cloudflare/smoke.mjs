@@ -8,10 +8,19 @@
  *
  * Dois modos:
  *   - com `--assets`: o host tem de servir EXATAMENTE aqueles arquivos (index,
- *     service workers e os chunks de entrada, por sha256). É o smoke do deploy.
- *   - autoconsistente (sem `--assets`): a referência é o próprio host — o `/`
- *     sem cookie tem de ser o `/index.classic.html` que ele serve, e assim por
- *     diante. É o smoke do rollback, quando não há artefato local da versão.
+ *     service worker e os chunks de entrada, por sha256) e cumprir o contrato
+ *     da interface única (abaixo). É o smoke do deploy.
+ *   - autoconsistente (sem `--assets`): a referência é o próprio host — o `/`,
+ *     o `/leads` e o `/sw.js` sem cookie têm de ser coerentes com o
+ *     `/index.html` que ele serve. É o smoke do rollback, quando não há
+ *     artefato local da versão.
+ *
+ * Interface única (V5) desde 2026-10-14: o Worker ignora o cookie `torque_ui`
+ * e não serve a clássica (`/index.classic.html` e `/sw.classic.js` = 404). Esse
+ * contrato só é cobrado com `--assets` (o deploy da versão deste código): o
+ * autoconsistente roda no rollback, e o rollback pode voltar para uma versão
+ * de antes de 2026-10-14 (clássica sem cookie) — cobrar dela o contrato novo
+ * daria FAIL num rollback que funcionou.
  *
  * `--override <id>` manda `Cloudflare-Workers-Version-Overrides` em TODA
  * requisição: a versão nova é exercitada a 0 % do tráfego, antes de promover.
@@ -31,10 +40,10 @@
  * nenhuma rodada começa depois de R: o pior caso é R + 60 s.
  *
  * O que se confere (lista fechada):
- *   - `/` sem cookie = clássica; com cada variante de cookie medida
- *     (cookie-cases.json), a interface que o Worker escolhe;
- *   - `sw.js` e `sw.classic.js` = os arquivos (e `/sw.js` sem cookie = clássica);
- *   - os chunks de entrada (`/assets/*` citados pelos dois index): 200, corpo
+ *   - `/index.html`, `/` e `/sw.js` = os arquivos; com `--assets`, `/` e
+ *     `/sw.js` com cada variante de cookie (cookie-cases.json) = os da V5, e
+ *     `/index.classic.html` e `/sw.classic.js` = 404 servido pelo Worker;
+ *   - os chunks de entrada (`/assets/*` citados pelo index): 200, corpo
  *     igual ao arquivo, Cache-Control imutável, headers do app;
  *   - `<chunk>.map` dá 404 e não devolve source map;
  *   - `/api/v1/leads` sem Accept-Encoding: 401, sem compressão, envelope JSON
@@ -69,7 +78,8 @@ export const LIMITS = Object.freeze({ requestMs: 10_000, attemptMs: 60_000 });
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]"]);
-const V5_COOKIE = { cookie: "torque_ui=v5" };
+/** Os arquivos da clássica que vão no artefato (rollback inerte) e nunca são servidos. */
+export const CLASSIC_PATHS = Object.freeze(["/index.classic.html", "/sw.classic.js"]);
 const CONCURRENCY = 6;
 
 /**
@@ -234,100 +244,77 @@ export async function runSmoke({
     }
   };
 
-  // 1. Referências: os dois index (do disco ou do próprio host) e os service workers.
-  const local = assetsDir
-    ? Object.fromEntries(
-        ["index.html", "index.classic.html", "sw.js", "sw.classic.js"].map((name) => [name, fs.readFileSync(path.join(assetsDir, name))]),
-      )
-    : null;
-  const htmlRoute = (response) => [
-    ...expectStatus(response, 200),
-    ...(mediaType(response.headers.get("content-type")) === "text/html" ? [] : [`Content-Type ${response.headers.get("content-type")}`]),
+  // 1. Referência: o index (do disco ou do próprio host).
+  const local = assetsDir ? Object.fromEntries(["index.html", "sw.js"].map((name) => [name, fs.readFileSync(path.join(assetsDir, name))])) : null;
+  const workerResponse = (response) => [
     ...expectHeader(response, "cache-control", cache.noStore),
     ...singleCsp(response),
     ...appProfile(response, profile),
     ...robots(response, context, { servedByWorker: true }),
     ...versionProblems(response, version),
   ];
-  const classicRef = await probe({
-    name: "GET /index.classic.html",
-    testCase: { path: "/index.classic.html" },
-    verify: (r) => [...htmlRoute(r), ...(local ? expectBody(r, local["index.classic.html"], "index.classic.html") : [])],
-  });
-  const v5Ref = await probe({
-    name: "GET /index.html [cookie: torque_ui=v5]",
-    testCase: { path: "/index.html", headers: V5_COOKIE },
+  const htmlRoute = (response) => [
+    ...expectStatus(response, 200),
+    ...(mediaType(response.headers.get("content-type")) === "text/html" ? [] : [`Content-Type ${response.headers.get("content-type")}`]),
+    ...workerResponse(response),
+  ];
+  const indexRef = await probe({
+    name: "GET /index.html",
+    testCase: { path: "/index.html" },
     verify: (r) => [...htmlRoute(r), ...(local ? expectBody(r, local["index.html"], "index.html") : [])],
   });
-  checks.push(classicRef, v5Ref);
+  checks.push(indexRef);
 
-  const reference = {
-    classic: local?.["index.classic.html"] ?? classicRef.response?.body,
-    v5: local?.["index.html"] ?? v5Ref.response?.body,
-  };
-  if (!reference.classic || !reference.v5 || classicRef.problems.length > 0 || v5Ref.problems.length > 0) {
-    // Sem os dois index (ou com eles vindos de outra versão) não há contra o
-    // que comparar o resto; a próxima rodada tenta de novo.
+  const reference = local?.["index.html"] ?? indexRef.response?.body;
+  if (!reference || indexRef.problems.length > 0) {
+    // Sem o index (ou com ele vindo de outra versão) não há contra o que
+    // comparar o resto; a próxima rodada tenta de novo.
     return finish(checks, blockedBy);
-  }
-  if (reference.classic.equals(reference.v5)) {
-    checks.push({ name: "V5 ≠ clássica", problems: ["index.html e index.classic.html são iguais: o cookie não troca de interface"] });
   }
 
   // 2. O resto, em paralelo.
   const probes = [];
-  const uiBody = { v5: reference.v5, classic: reference.classic };
 
-  for (const { cookie, worker } of COOKIE_CASES) {
+  // Com --assets: o cookie não escolhe nada. Sem: só o `/` sem cookie.
+  for (const cookie of local ? COOKIE_CASES : [null]) {
     probes.push({
-      name: `GET / [cookie: ${cookie ?? "(nenhum)"}] → ${worker}`,
+      name: `GET / [cookie: ${cookie ?? "(nenhum)"}] → V5`,
       testCase: { path: "/", headers: cookie ? { cookie } : {} },
-      verify: (r) => [...htmlRoute(r), ...expectBody(r, uiBody[worker], `index da ${worker}`)],
+      verify: (r) => [...htmlRoute(r), ...expectBody(r, reference, "index.html")],
     });
   }
 
   probes.push({
-    name: "GET /leads (rota do SPA) → clássica",
+    name: "GET /leads (rota do SPA) → index",
     testCase: { path: "/leads" },
-    verify: (r) => [...htmlRoute(r), ...expectBody(r, reference.classic, "index da clássica")],
+    verify: (r) => [...htmlRoute(r), ...expectBody(r, reference, "index.html")],
   });
 
   const jsRoute = (r) => [
     ...expectStatus(r, 200),
     ...(mediaType(r.headers.get("content-type")) === "text/javascript" ? [] : [`Content-Type ${r.headers.get("content-type")}`]),
-    ...expectHeader(r, "cache-control", cache.noStore),
-    ...singleCsp(r),
-    ...appProfile(r, profile),
-    ...robots(r, context, { servedByWorker: true }),
-    ...versionProblems(r, version),
+    ...workerResponse(r),
   ];
-  const swClassic = await probe({
-    name: "GET /sw.classic.js",
-    testCase: { path: "/sw.classic.js" },
-    verify: (r) => [...jsRoute(r), ...(local ? expectBody(r, local["sw.classic.js"], "sw.classic.js") : [])],
-  });
-  checks.push(swClassic);
-  const swClassicBody = local?.["sw.classic.js"] ?? (swClassic.problems.length === 0 ? swClassic.response.body : null);
-  probes.push({
-    name: "GET /sw.js (sem cookie) → sw da clássica",
-    testCase: { path: "/sw.js" },
-    verify: (r) => [...jsRoute(r), ...(swClassicBody ? expectBody(r, swClassicBody, "sw.classic.js") : ["sem referência do sw.classic.js"])],
-  });
-  probes.push({
-    name: "GET /sw.js [cookie: torque_ui=v5] → sw da V5",
-    testCase: { path: "/sw.js", headers: V5_COOKIE },
-    verify: (r) => [
-      ...jsRoute(r),
-      ...(local
-        ? expectBody(r, local["sw.js"], "sw.js")
-        : swClassicBody && r.body.equals(swClassicBody)
-          ? ["serviu o sw da clássica com o cookie da V5"]
-          : []),
-    ],
-  });
+  for (const cookie of local ? [null, "torque_ui=classic"] : [null]) {
+    probes.push({
+      name: `GET /sw.js [cookie: ${cookie ?? "(nenhum)"}] → sw da V5`,
+      testCase: { path: "/sw.js", headers: cookie ? { cookie } : {} },
+      verify: (r) => [...jsRoute(r), ...(local ? expectBody(r, local["sw.js"], "sw.js") : [])],
+    });
+  }
 
-  const entries = [...new Set([...assetEntries(reference.v5.toString("utf8")), ...assetEntries(reference.classic.toString("utf8"))])].sort();
-  if (entries.length === 0) checks.push({ name: "chunks de entrada", problems: ["nenhum /assets/* citado pelos index"] });
+  if (local) {
+    for (const classicPath of CLASSIC_PATHS) {
+      probes.push({
+        name: `GET ${classicPath} → 404 (clássica não é servida)`,
+        testCase: { path: classicPath, headers: { cookie: "torque_ui=classic" } },
+        verify: (r) => [...expectStatus(r, 404), ...workerResponse(r)],
+      });
+    }
+  }
+
+  const entries = assetEntries(reference.toString("utf8"));
+  if (entries.length === 0) checks.push({ name: "chunks de entrada", problems: ["nenhum /assets/* citado pelo index"] });
   for (const entry of entries) {
     const file = assetsDir ? path.join(assetsDir, ...entry.slice(1).split("/")) : null;
     const expected = file && fs.existsSync(file) ? fs.readFileSync(file) : null;
@@ -346,7 +333,7 @@ export async function runSmoke({
       ],
     });
   }
-  // O map do script de entrada de cada interface (o maior e o mais óbvio de pedir).
+  // O map do script de entrada (o maior e o mais óbvio de pedir).
   const scripts = entries.filter((e) => e.endsWith(".js"));
   const entryScripts = scripts.filter((e) => e.startsWith("/assets/index-"));
   for (const entry of entryScripts.length > 0 ? entryScripts : scripts.slice(0, 2)) {
