@@ -30,17 +30,13 @@ import { conversaAberta } from "../lib/conversa-aberta";
 import { decidirEntrega, type Entrega } from "../lib/decisao-de-entrega";
 import { motorDeSom } from "../lib/motor-de-som";
 import { mostrarCartao, reiniciarCartoes } from "../lib/cartoes-store";
+import { intervaloDaRedeDeSeguranca } from "../lib/rede-de-seguranca-de-avisos";
 import { usePreferenciasDeAviso } from "./usePreferenciasDeAviso";
 import { usePresenca } from "./usePresenca";
 
 /** Teto do que o sino carrega. Varrer o histórico é trabalho do Inbox (#1889). */
 const TETO = 50;
 
-/**
- * A consulta periódica deixa de ser o mecanismo e vira rede de segurança: se o
- * canal cair sem avisar, a consulta recupera a entrega em até 30 segundos.
- */
-const REDE_DE_SEGURANCA_MS = 30_000;
 const LISTA_VAZIA: Aviso[] = [];
 
 export interface UseAvisosResult {
@@ -119,47 +115,66 @@ export function useAvisos({ entregar = false } = {}): UseAvisosResult {
     if (decisao.cartao) mostrarCartao(aviso, agora, abaVisivel);
   }, [entregar, habilitado, recebidos]);
 
-  const { data: avisos = LISTA_VAZIA, isLoading, isSuccess } = useQuery({
-    queryKey,
-    queryFn: async (): Promise<Aviso[]> => {
-      if (!organizationId || !user?.id) return [];
+  /**
+   * O canal precisa de uma releitura quando chegar a `joined`? Sim sempre que
+   * ele esteve fora de pé — inclusive na ENTRADA: consulta e canal sobem juntos
+   * na montagem, e o que foi gravado entre a fotografia da consulta e o
+   * primeiro `joined` não vem pelo canal. Sem esta releitura, uma aba sempre em
+   * foco (TV, desktop) só recuperaria esse aviso na sonda de 5 min. Idem para
+   * o buraco entre a última consulta de 30 s e o religar depois de uma queda.
+   *
+   * Só não relê quando a instância ENTRA num canal já `joined` (aberto por
+   * outra instância): não houve janela sem canal.
+   */
+  const precisaReler = useRef(true);
 
-      const { data, error } = await supabase
-        .from("notifications")
-        .select(
-          "id, organization_id, user_id, type, title, description, link, lead_id, entity_id, group_key, event_count, last_event_at, created_at, read_at",
-        )
-        .eq("user_id", user.id)
-        // A organização é filtro de entrada: quem participa de duas não pode ver,
-        // na org aberta, Aviso nascido na outra.
-        .eq("organization_id", organizationId)
-        .order("last_event_at", { ascending: false, nullsFirst: false })
-        .limit(TETO);
+  /**
+   * A releitura tem que ser de uma fotografia tirada DEPOIS do join. Não basta
+   * `invalidateQueries`: com a 1ª consulta ainda em voo e o cache vazio, o
+   * TanStack (v5.83, `Query.fetch`) reaproveita a promessa em voo em vez de
+   * cancelá-la — e a fotografia dela é anterior ao aviso gravado na janela.
+   * Cancelar também não serve: a consulta cancelada sem dado volta a pending e
+   * a releitura vira a PRIMEIRA fotografia, que é tratada como histórico (sem
+   * som). Então: cada consulta recebe um número de ordem ao começar, o join
+   * recebe o seu, e a releitura só se dá por feita quando chega uma fotografia
+   * de número maior. Se há consulta em voo, espera ela terminar (vira o
+   * histórico) e só então relê. Relógio lógico, não `Date.now()`: consulta e
+   * join no mesmo milissegundo continuam ordenados.
+   */
+  const ordem = useRef(0);
+  const ordemDaFotografia = useRef(0);
+  const releituraDesde = useRef<number | null>(null);
 
-      if (error) throw error;
-      // types.ts é gerado a partir de PROD e ainda não conhece group_key,
-      // event_count e last_event_at — as colunas nascem na migration desta
-      // entrega. Regenerar depois do deploy remove esta conversão.
-      return (data ?? []) as unknown as Aviso[];
-    },
-    enabled: habilitado,
-    refetchInterval: entregar ? REDE_DE_SEGURANCA_MS : false,
-    refetchIntervalInBackground: entregar,
-  });
+  const conferirReleitura = useCallback(() => {
+    const desde = releituraDesde.current;
+    if (desde === null) return;
+    if (ordemDaFotografia.current > desde) {
+      releituraDesde.current = null;
+      return;
+    }
+    // Consulta em voo: o sucesso dela chama de novo (efeito de `dataUpdatedAt`).
+    if (queryClient.getQueryState(queryKey)?.fetchStatus === "fetching") return;
+    void queryClient.invalidateQueries({ queryKey, exact: true });
+  }, [queryClient, queryKey]);
 
-  useEffect(() => {
-    if (!entregar || !isSuccess) return;
-    // A primeira fotografia é histórico. Depois disso, polling e realtime
-    // passam pela mesma deduplicação: recuperar conexão não pode deixar mudo.
-    for (const aviso of avisos) receber(aviso, recebidos.inicializado);
-    recebidos.inicializado = true;
-  }, [avisos, entregar, isSuccess, receber, recebidos]);
-
-  useRealtimeChannel({
+  // O canal vem ANTES da consulta: é o estado dele que decide se a consulta
+  // periódica precisa existir (`intervaloDaRedeDeSeguranca`).
+  const { state: estadoDoCanal } = useRealtimeChannel({
     table: "notifications",
     filter: user?.id ? `user_id=eq.${user.id}` : undefined,
     enabled: habilitado && entregar,
     statusKey: "avisos",
+    onStateChange: ({ state, initial }) => {
+      if (state !== "joined") {
+        precisaReler.current = true;
+        return;
+      }
+      const reler = precisaReler.current && !initial;
+      precisaReler.current = false;
+      if (!reler) return;
+      releituraDesde.current = ++ordem.current;
+      conferirReleitura();
+    },
     onEvent: (payload) => {
       if (!organizationId) return;
 
@@ -174,6 +189,56 @@ export function useAvisos({ entregar = false } = {}): UseAvisosResult {
       if (evento.tipo !== "DELETE") receber(evento.aviso, true);
     },
   });
+
+  const { data: avisos = LISTA_VAZIA, isLoading, isSuccess, dataUpdatedAt } = useQuery({
+    queryKey,
+    queryFn: async (): Promise<Aviso[]> => {
+      if (!organizationId || !user?.id) return [];
+      const ordemDestaConsulta = ++ordem.current;
+
+      const { data, error } = await supabase
+        .from("notifications")
+        .select(
+          "id, organization_id, user_id, type, title, description, link, lead_id, entity_id, group_key, event_count, last_event_at, created_at, read_at",
+        )
+        .eq("user_id", user.id)
+        // A organização é filtro de entrada: quem participa de duas não pode ver,
+        // na org aberta, Aviso nascido na outra.
+        .eq("organization_id", organizationId)
+        .order("last_event_at", { ascending: false, nullsFirst: false })
+        .limit(TETO);
+
+      if (error) throw error;
+      ordemDaFotografia.current = Math.max(ordemDaFotografia.current, ordemDestaConsulta);
+      // types.ts é gerado a partir de PROD e ainda não conhece group_key,
+      // event_count e last_event_at — as colunas nascem na migration desta
+      // entrega. Regenerar depois do deploy remove esta conversão.
+      return (data ?? []) as unknown as Aviso[];
+    },
+    enabled: habilitado,
+    // Canal saudável → sonda de 5 min; degradado → 30 s. Aba escondida nunca
+    // consulta. Ao voltar à aba, o receptor relê sempre (ignora o staleTime
+    // global de 5 min): é por ali que volta o que o canal perdeu enquanto a
+    // aba dormia, e a mesma deduplicação de `receber` impede som repetido.
+    refetchInterval: intervaloDaRedeDeSeguranca(entregar, estadoDoCanal),
+    refetchIntervalInBackground: false,
+    refetchOnWindowFocus: entregar ? "always" : false,
+  });
+
+  useEffect(() => {
+    if (!entregar || !isSuccess) return;
+    // A primeira fotografia é histórico. Depois disso, polling e realtime
+    // passam pela mesma deduplicação: recuperar conexão não pode deixar mudo.
+    for (const aviso of avisos) receber(aviso, recebidos.inicializado);
+    recebidos.inicializado = true;
+  }, [avisos, entregar, isSuccess, receber, recebidos]);
+
+  // Cada fotografia nova pode encerrar (ou destravar) uma releitura pendente.
+  // Só sucesso conta: erro não muda `dataUpdatedAt`, então falha persistente
+  // não vira laço de releitura — a sonda/foco seguintes resolvem.
+  useEffect(() => {
+    if (dataUpdatedAt) conferirReleitura();
+  }, [dataUpdatedAt, conferirReleitura]);
 
   const marcarComoLido = useCallback(
     async (id: string) => {

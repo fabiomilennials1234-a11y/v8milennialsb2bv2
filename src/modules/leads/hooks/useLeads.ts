@@ -83,6 +83,7 @@ function applyLeadsFilters(
 export function useLeads(params: LeadsFilterParams = {}, options: { enabled?: boolean } = {}) {
   const { page = 0, searchQuery, filterOrigin, filterQualification, filterClassificacao, usaLeiDoErp, usaCadastroErpCafeJurere, filterUf, createdFrom, createdTo, filterAssignment, filterResponsible, sort = DEFAULT_LEAD_SORT } = params;
   const { organizationId, isReady } = useOrganization();
+  const queryClient = useQueryClient();
   const enabled = isReady && options.enabled !== false;
   const filters = { searchQuery, filterOrigin, filterQualification, filterClassificacao, usaLeiDoErp, usaCadastroErpCafeJurere, filterUf, createdFrom, createdTo, filterAssignment, filterResponsible };
   const queryKey = leadsKeys.list(organizationId, page, filters, sort);
@@ -127,7 +128,7 @@ export function useLeads(params: LeadsFilterParams = {}, options: { enabled?: bo
         `);
 
       // Telefone secundário (lead_phones) — Chamado 82c50502.
-      const secundarios = await buscarLeadIdsPorTelefoneSecundario(organizationId, searchQuery);
+      const secundarios = await buscarLeadIdsPorTelefoneSecundario(queryClient, organizationId, searchQuery);
       query = applyLeadsFilters(query, organizationId, filters, secundarios);
 
       // Sempre com desempate por `id` — ver `lib/lead-list-sort`. Sem ele a
@@ -178,13 +179,14 @@ export function useLeads(params: LeadsFilterParams = {}, options: { enabled?: bo
 export function useLeadsCount(filters: Omit<LeadsFilterParams, "page"> = {}) {
   const { searchQuery, filterOrigin, filterQualification, filterClassificacao, usaLeiDoErp, usaCadastroErpCafeJurere, filterUf, createdFrom, createdTo, filterAssignment, filterResponsible } = filters;
   const { organizationId, isReady } = useOrganization();
+  const queryClient = useQueryClient();
   const recorte = { searchQuery, filterOrigin, filterQualification, filterClassificacao, usaLeiDoErp, usaCadastroErpCafeJurere, filterUf, createdFrom, createdTo, filterAssignment, filterResponsible };
 
   return useQuery<CappedCount>({
     queryKey: leadsKeys.count(organizationId, recorte),
     queryFn: async () => {
       if (!organizationId) return EMPTY_COUNT;
-      const secundarios = await buscarLeadIdsPorTelefoneSecundario(organizationId, searchQuery);
+      const secundarios = await buscarLeadIdsPorTelefoneSecundario(queryClient, organizationId, searchQuery);
       const query = applyLeadsFilters(supabase.from("leads").select("id"), organizationId, recorte, secundarios);
       return runCappedCount(query);
     },

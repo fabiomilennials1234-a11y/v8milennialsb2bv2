@@ -26,7 +26,7 @@ import {
 import { Loader2, Search, Building2, Phone, UserCheck, Plus } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useDebounce } from "@/shared/hooks/useDebounce";
 import { LeadModal, buscarLeadIdsPorTelefoneSecundario } from "@/modules/leads";
 import { notifyError } from "@/shared/errors";
@@ -81,6 +81,7 @@ export function AddLeadToPipeModal({
   const selecionadaEhPerda = isEtapaDePerda(stages.find((s) => s.id === selectedStageId));
   const [isLeadModalOpen, setIsLeadModalOpen] = useState(false);
   const debouncedSearch = useDebounce(searchQuery, 300);
+  const queryClient = useQueryClient();
 
   const { data: teamMember } = useCurrentTeamMember();
   const addLead = useAddLeadToCustomPipe();
@@ -94,6 +95,7 @@ export function AddLeadToPipeModal({
       const query = `%${debouncedSearch.trim()}%`;
       // Telefone secundário do lead (lead_phones) também acha — Chamado 82c50502.
       const secundarios = await buscarLeadIdsPorTelefoneSecundario(
+        queryClient,
         teamMember.organization_id,
         debouncedSearch,
       );
