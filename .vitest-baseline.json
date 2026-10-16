@@ -64,7 +64,7 @@
     "tests/unit/lead-origins-ui.test.tsx::Drawer V2 — origem editável persiste a nova origem via useUpdateLead e invalida o cache do lead",
     "tests/unit/lead-webhook.test.ts::lead-webhook — Meta dummy/test lead skips dedup dummy placeholder value forces create (string 'true' too)",
     "tests/unit/lead-webhook.test.ts::lead-webhook — Meta dummy/test lead skips dedup email test@meta.com forces create even with update_existing_if_match=true",
-    "tests/unit/nav-leads-topbar.test.ts::Carteira saiu da navegação os TRÊS consumidores usam a regra única — ninguém refaz o filtro na mão",
+    "tests/unit/nav-leads-topbar.test.ts::o kanban legado /upsell segue sem porta os TRÊS consumidores usam a regra única — ninguém refaz o filtro na mão",
     "tests/unit/notificame-inbound-pickers.test.ts::buildInboundChannelMessageRow — a linha de channel_messages monta a linha inteira, sem inventar campo",
     "tests/unit/pipeline-identity-invalidacao.test.tsx::useUpdatePipelineIdentity — o rename chega em todas as telas funil de sistema: escreve no registro além do canônico — é de lá que o nome é lido",
     "tests/unit/pix-charge-flow.test.tsx::<arquivo não coletou>",

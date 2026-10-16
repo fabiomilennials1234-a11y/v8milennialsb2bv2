@@ -36,6 +36,9 @@ export function useGlobalShortcuts({ onShowHelp }: { onShowHelp: () => void }) {
   const shortcuts: ShortcutDef[] = [
     { key: "g d", label: "Dashboard", group: "Navegacao", action: () => navigate("/"), seq: true },
     { key: "g l", label: "Leads", group: "Navegacao", action: () => navigate("/leads"), seq: true },
+    // Carteira (CTO 2026-10-16). `g c` NÃO: segue vivo como Chat no atalho do
+    // MainLayout (`useKeyboardShortcuts`). `g r` = recompra, o que a tela mede.
+    { key: "g r", label: "Carteira", group: "Navegacao", action: () => navigate("/carteira"), seq: true },
     { key: "g w", label: "Funil padrão", group: "Navegacao", action: () => navigate(defaultFunnelPath), seq: true },
     // SCRUM-641: `g c`/`g p` (rotas fixas /funil/confirmacao|propostas do trio
     // legado) morreram — funil é funil, nenhum atalho aponta slug fixo. O hub

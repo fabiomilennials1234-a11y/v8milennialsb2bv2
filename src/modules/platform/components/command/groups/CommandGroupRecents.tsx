@@ -15,6 +15,7 @@ import {
   UserPlus,
   HistoryIcon,
   User,
+  Wallet,
 } from "lucide-react";
 import { CommandGroup, CommandItem } from "cmdk";
 import { useTheme } from "next-themes";
@@ -39,6 +40,7 @@ type RecoverableItem = {
 const ITEM_MAP: Record<string, RecoverableItem> = {
   "nav-dashboard":      { label: "Dashboard",       Icon: LayoutDashboard, type: "navigate", payload: "/dashboard" },
   "nav-leads":          { label: "Leads",            Icon: Users,           type: "navigate", payload: "/leads" },
+  "nav-carteira":       { label: "Carteira",         Icon: Wallet,          type: "navigate", payload: "/carteira" },
   "nav-chat":           { label: "Chat WhatsApp",    Icon: MessageSquare,   type: "navigate", payload: "/chat-whatsapp" },
   "nav-copilot":        { label: "Copilot IA",       Icon: Bot,             type: "navigate", payload: "/copilot" },
   "nav-agenda":         { label: "Agenda",           Icon: CalendarDays,    type: "navigate", payload: "/agenda" },

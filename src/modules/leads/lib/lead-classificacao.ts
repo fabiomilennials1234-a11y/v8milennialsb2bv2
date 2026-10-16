@@ -75,6 +75,18 @@ export function leadClassificacaoOptions(usaLeiDoErp: boolean, usaCadastroErpCaf
   ];
 }
 
+/**
+ * As abas da página `/leads`: as mesmas opções das duas leis, menos `cliente`.
+ * O recorte de clientes é a Carteira, em rota própria (`/carteira`, CTO
+ * 2026-10-16). O seletor de classificação do lead (gravável) continua com as
+ * quatro — sair da aba não muda o vocabulário do dado.
+ */
+export function leadsPageTabOptions(usaLeiDoErp: boolean, usaCadastroErpCafeJurere = false) {
+  return leadClassificacaoOptions(usaLeiDoErp, usaCadastroErpCafeJurere).filter(
+    (option) => option.value !== "cliente",
+  );
+}
+
 export function isLeadClassificacao(v: unknown): v is LeadClassificacao {
   return typeof v === "string" && (LEAD_CLASSIFICACOES as readonly string[]).includes(v);
 }

@@ -95,10 +95,30 @@ describe('"Combustível" não é mais um item de menu', () => {
   });
 });
 
-describe("Carteira saiu da navegação", () => {
-  it.each(todosOsMenus)("%s não tem item rotulado Carteira", (_nome, itens) => {
-    expect(itens.map((i) => i.label)).not.toContain("Carteira");
+/**
+ * HISTÓRICO: até 2026-10-16 este bloco afirmava que a Carteira NÃO tinha porta
+ * ("virou dado do lead"). O CTO reverteu: a carteira saiu da aba Clientes de
+ * /leads para a rota própria `/carteira`, com item logo após Leads. O que NÃO
+ * mudou: o kanban legado `/upsell` continua sem porta.
+ */
+describe("Carteira tem porta própria em /carteira (CTO 2026-10-16)", () => {
+  it("a lateral tem Carteira logo após Leads, apontando para /carteira", () => {
+    const leads = barraPrincipal.findIndex((i) => i.path === "/leads");
+    expect(barraPrincipal[leads + 1]).toEqual({ label: "Carteira", path: "/carteira" });
   });
+
+  it("Carteira não está também no Pitstop — uma rota, uma porta", () => {
+    expect(pitstop.filter((i) => i.path === "/carteira" || i.label === "Carteira")).toEqual([]);
+  });
+
+  it("a porta herda o gate da aba antiga: feature `leads`, não `carteira`", () => {
+    // `carteira` tranca o /upsell legado — usá-la tiraria a carteira de org
+    // que via a aba Clientes de /leads.
+    expect(ROUTE_FEATURE_MAP["/carteira"]).toBe("leads");
+  });
+});
+
+describe("o kanban legado /upsell segue sem porta", () => {
 
   it.each(todosOsMenus)("%s não tem nenhuma porta para /upsell", (_nome, itens) => {
     expect(itens.filter((i) => i.path === "/upsell")).toEqual([]);

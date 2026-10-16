@@ -19,6 +19,7 @@ import {
   ShoppingBag,
   Trophy,
   Lock,
+  Wallet,
 } from "lucide-react";
 import { CommandGroup, CommandItem } from "cmdk";
 import { cn } from "@/lib/utils";
@@ -35,6 +36,7 @@ const NAV_ITEMS = [
   { id: "nav-dashboard",   label: "Dashboard",      path: "/dashboard",      Icon: LayoutDashboard },
   { id: "nav-metricas",    label: "Métricas",        path: "/metricas",       Icon: ChartNoAxesCombined },
   { id: "nav-leads",       label: "Leads",           path: "/leads",          Icon: Users },
+  { id: "nav-carteira",    label: "Carteira",        path: "/carteira",       Icon: Wallet },
   { id: "nav-chat",        label: "Chat WhatsApp",   path: "/chat-whatsapp",   Icon: MessageSquare },
   { id: "nav-copilot",     label: "Copilot IA",      path: "/copilot",        Icon: Bot },
   { id: "nav-agenda",      label: "Agenda",          path: "/agenda",         Icon: CalendarDays },

@@ -62,3 +62,20 @@ Total comprado mantém precedência CRM/Carteira; ciclo une datas de compra sem
 duplicá-las. RLS permanece ativa, inclusive atribuição. Sem deploy remoto.
 Migration `20271021000013` deve preceder frontend.
 Contrato e validação: `.specs/clientes-360.md`.
+
+## Carteira em rota própria `/carteira` — 2026-10-16
+
+Decisão CTO: a carteira (lista de clientes + painel 360) sai da aba Clientes de
+`/leads` e vira página própria `/carteira` (`src/modules/leads/pages/Carteira.tsx`),
+com item "Carteira" logo após Leads na lateral V5, na gaveta "Mais" do mobile,
+na paleta de comandos e no atalho `g r`. Reverte a decisão anterior de
+`navigation-model.ts` ("Carteira virou dado do lead, não volta ao primeiro nível").
+
+- Guardas idênticas às da aba: `ProtectedRoute` + `LayoutWrapper` + `leads.view` +
+  `FeatureRoute feature="leads"`. A feature `carteira` segue só no `/upsell` legado.
+- `/leads` perde só a aba `cliente`; Todas/Leads/Inativos (ou Indefinido) iguais.
+- Estado persistido ou visão salva com `cliente` → redirect único (`replace`) para
+  `/carteira`, levando busca/origem/qualificação/dono e `?lead=`; estado de Leads
+  volta para "Todas" (sem loop). Regra em `src/modules/leads/hooks/useRedirecionaAbaClientes.ts`.
+- Filtros da Carteira têm estado próprio (`usePersistedState("carteira")`).
+- `/carteira/:clientId` (Cliente 360 legado) e `/upsell` intocados.

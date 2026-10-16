@@ -67,6 +67,8 @@ const WIDE_LAYOUT_PATTERNS = [
   // SCRUM-637 (flip): kanbans vivem na rota única `/funil/:slug`.
   /^\/funil(\/|$)/,
   /^\/leads(\/|$)/,
+  // Carteira: a lista + painel 360 vinham na largura de /leads (eram aba dela).
+  /^\/carteira\/?$/,
   /^\/custom-pipeline/,
   /^\/campanhas/,
   /^\/upsell/,

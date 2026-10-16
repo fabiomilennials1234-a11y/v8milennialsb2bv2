@@ -88,7 +88,10 @@ describe("inventário da navegação", () => {
     expect(SIDEBAR_PRIMARY.find((item) => item.path === "/leads")?.label).toBe("Leads");
   });
 
-  it("Carteira não voltou ao primeiro nível", () => {
+  // CTO 2026-10-16: a Carteira VOLTOU ao primeiro nível — como `/carteira`
+  // (ex-aba Clientes de /leads). O kanban legado `/upsell` segue sem porta.
+  it("Carteira é porta da lateral logo após Leads; /upsell legado não é", () => {
+    expect(caminhosLaterais.indexOf("/carteira")).toBe(caminhosLaterais.indexOf("/leads") + 1);
     expect(caminhosLaterais).not.toContain("/upsell");
   });
 
@@ -110,8 +113,8 @@ describe("inventário da navegação", () => {
     expect(itensPitstop.some((item) => item.path === "/metricas")).toBe(false);
   });
 
-  it("a lateral tem sete portas", () => {
-    expect(SIDEBAR_PRIMARY).toHaveLength(7);
+  it("a lateral tem oito portas (Carteira entrou em 2026-10-16)", () => {
+    expect(SIDEBAR_PRIMARY).toHaveLength(8);
   });
 
   // SCRUM-430. As duas travas de Métricas são independentes e ambas precisam
@@ -169,6 +172,34 @@ describe("makeCanViewRoute", () => {
     // negação some → liberado (chave ausente é liberada)
     const canSem = makeCanViewRoute({ isMaster: false, isAdmin: false, featurePerms: {} });
     expect(canSem("/funil/whatsapp")).toBe(true);
+  });
+});
+
+describe("Carteira na lateral (CTO 2026-10-16)", () => {
+  const carteira = SIDEBAR_PRIMARY.find((item) => item.path === "/carteira");
+  const membro = (perms: Record<string, boolean>) =>
+    makeCanViewRoute({ isMaster: false, isAdmin: false, featurePerms: perms });
+
+  it("o item existe e exige a MESMA permissão de /leads — não fica mais aberta que a aba era", () => {
+    expect(carteira?.label).toBe("Carteira");
+    expect(NAV_VIEW_PERMISSIONS["/carteira"]).toBe(NAV_VIEW_PERMISSIONS["/leads"]);
+    expect(NAV_VIEW_PERMISSIONS["/carteira"]).toBe("leads.view");
+  });
+
+  it("membro sem leads.view não vê Carteira; com leads.view vê", () => {
+    expect(filterByPermission([carteira!], membro({ "leads.view": false }))).toEqual([]);
+    expect(filterByPermission([carteira!], membro({ "leads.view": true }))).toEqual([carteira]);
+  });
+
+  it("membro de org outbound não vê Carteira — mesmo recorte de Leads", () => {
+    expect(filterByOutbound([carteira!], true)).toEqual([]);
+  });
+
+  it("acende em /carteira e no Cliente 360 (/carteira/:id), não em /leads", () => {
+    expect(isRouteActive("/carteira", "/carteira")).toBe(true);
+    expect(isRouteActive("/carteira/abc", "/carteira")).toBe(true);
+    expect(isRouteActive("/leads", "/carteira")).toBe(false);
+    expect(isRouteActive("/carteira", "/leads")).toBe(false);
   });
 });
 
