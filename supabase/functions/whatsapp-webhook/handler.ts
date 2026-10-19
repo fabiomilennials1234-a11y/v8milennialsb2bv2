@@ -50,6 +50,7 @@ import {
 } from "./poison-denylist.ts";
 import { extractQuotedText } from "./quoted-text.ts";
 import { echoStatus, statusesBeforeEcho } from "./echo-status.ts";
+import { uazapiIngestRpcEnabled } from "./ingest-rpc-flag.ts";
 import { extractInteractiveSelection } from "./interactive-reply.ts";
 import {
   buildMessageIdCandidates,
@@ -695,13 +696,10 @@ export async function triggerReactions(
 
   if (queueEnabled) {
     // FK da fila → whatsapp_messages.id (uuid). persisted.message_id é o id
-    // externo do WhatsApp (text); resolve o uuid da linha entrante.
-    const { data: waRow } = await supabase
-      .from("whatsapp_messages")
-      .select("id")
-      .eq("message_id", persisted.message_id)
-      .eq("instance_id", persisted.instance_id)
-      .maybeSingle();
+    // externo do WhatsApp (text); o uuid da linha já veio da persistência
+    // (persisted.row_id = mesma linha de UNIQUE(message_id, instance_id)).
+    // Antes era um SELECT extra ao PostgREST por mensagem (F5a).
+    const waRow = persisted.row_id ? { id: persisted.row_id } : null;
 
     if (waRow?.id) {
       // batch_key é coluna GERADA (phone || ':' || organization_id) — NÃO inserir.
@@ -1059,6 +1057,17 @@ export async function persistMessage(
     buttonReplyRecognized = received.data?.recognized === true;
   }
 
+  return await finalizePersistedMessage(supabase, instance, normalized, stored.id, buttonReplyRecognized);
+}
+
+/** Pós-persistência comum aos dois caminhos (PostgREST e RPC): mídia, log de grupo, retorno. */
+async function finalizePersistedMessage(
+  supabase: SupabaseClient,
+  instance: ResolvedInstance,
+  normalized: NormalizedMessage,
+  rowId: string,
+  buttonReplyRecognized: boolean,
+): Promise<PersistedMessage | null> {
   // Best-effort: download encrypted WhatsApp CDN media and persist to Storage.
   // Ver shouldPersistMedia — grupo não desce mídia.
   if (shouldPersistMedia(normalized)) {
@@ -1088,7 +1097,7 @@ export async function persistMessage(
   }
 
   return {
-    row_id: stored.id,
+    row_id: rowId,
     button_reply_recognized: buttonReplyRecognized,
     organization_id: normalized.organization_id,
     instance_id: normalized.instance_id,
@@ -1101,6 +1110,127 @@ export async function persistMessage(
     media_url: normalized.media_url,
     provider: instance.provider?.trim() || "uazapi",
   };
+}
+
+// ============================================================================
+// ingestMessageViaRpc — F5a: admissão + upsert + eco + select + receive em 1 RPC
+// ============================================================================
+
+type IngestRpcResult = {
+  status: "persisted" | "no_message_id" | "group_skipped" | "upsert_failed"
+    | "echo_status_failed" | "missing_row" | "button_reply_failed";
+  row_id?: string;
+  button_reply_recognized?: boolean;
+  echo_status_updated?: boolean;
+  error_message?: string;
+};
+
+/**
+ * Mesmo contrato de (register_workflow_button_ingress → persistMessage), com
+ * uma ida ao PostgREST em vez de 3–4. A SQL preserva a admissão do botão em
+ * qualquer falha posterior (sub-blocos com savepoint); aqui só se traduz o
+ * status de volta para os mesmos logs, DLQ e erros do caminho antigo.
+ * `undefined` = parar sem reações (sem message_id).
+ */
+async function ingestMessageViaRpc(
+  supabase: SupabaseClient,
+  instance: ResolvedInstance,
+  data: Record<string, unknown>,
+  receivedVia: "webhook" | "dlq_replay",
+): Promise<{ normalized: NormalizedMessage; persisted: PersistedMessage | null } | undefined> {
+  const call = (message: NormalizedMessage | null, echoPrior: string[]) =>
+    supabase.rpc("ingest_uazapi_message", {
+      p_instance_id: instance.id, p_payload: data, p_message: message,
+      p_source: receivedVia, p_echo_prior_statuses: echoPrior,
+    });
+
+  let normalized: NormalizedMessage;
+  try {
+    normalized = normalizeMessage(data, instance) as NormalizedMessage;
+    normalized.received_via = receivedVia;
+  } catch (e) {
+    // O caminho antigo admitia o botão ANTES de normalizar: mantém a admissão.
+    const admission = await call(null, []);
+    if (admission.error) throw new Error("question_buttons_ingress_unavailable");
+    throw e;
+  }
+
+  const hasMessageId = !!normalized.message_id;
+  // Qualquer erro da RPC = nada gravado (nem a admissão) → 503 + reentrega, igual
+  // à falha do register no caminho antigo.
+  const { data: rpcData, error } = await call(
+    hasMessageId ? normalized : null,
+    hasMessageId && normalized.direction === "outgoing" ? statusesBeforeEcho(normalized.status) : [],
+  );
+  if (error) throw new Error("question_buttons_ingress_unavailable");
+  const result = rpcData as IngestRpcResult | null;
+
+  switch (result?.status) {
+    case "no_message_id":
+      await logRuntime({
+        organizationId: instance.organization_id,
+        module: "webhook",
+        action: "uazapi_missing_message_id",
+        status: "error",
+        payloadSnapshot: { instance_id: instance.id, type: normalized.message_type },
+      });
+      return undefined;
+    case "group_skipped":
+      await logRuntime({
+        organizationId: instance.organization_id,
+        module: "webhook",
+        action: "uazapi_group_message_skipped",
+        status: "success",
+        payloadSnapshot: {
+          instance_id: instance.id,
+          remote_jid: normalized.remote_jid,
+          message_id: normalized.message_id,
+          reason: "capture_groups_off",
+        },
+      });
+      return { normalized, persisted: null };
+    case "upsert_failed": {
+      await logRuntime({
+        organizationId: instance.organization_id,
+        module: "webhook",
+        action: "uazapi_messages_upsert_error",
+        status: "error",
+        payloadSnapshot: { instance_id: instance.id, error: result.error_message ?? "upsert_failed" },
+      });
+      const parked = await enqueueDlq(supabase, {
+        source_ip: null,
+        url_path: "",
+        event: "messages",
+        reason: "upsert_failed",
+        payload: normalized as unknown as Record<string, unknown>,
+        resolved_instance_id: instance.id,
+      });
+      // Sem linha e sem DLQ: 5xx para o provedor reentregar (ver persistMessage).
+      if (!parked) throw new Error("message_lost: upsert e DLQ falharam para a mesma mensagem");
+      return { normalized, persisted: null };
+    }
+    case "echo_status_failed":
+      throw new Error("message_echo_status_update_failed");
+    case "missing_row":
+    case "button_reply_failed":
+    case "persisted":
+      break;
+    default:
+      throw new Error("uazapi_ingest_unexpected_result");
+  }
+
+  // Ordem do caminho antigo: eco → cotação → select → receive. Eco só existe em
+  // outgoing e receive só em incoming, então fechar a cotação aqui é equivalente.
+  if (result.echo_status_updated) {
+    await completeQuotePresentations(supabase, normalized.organization_id, normalized.instance_id, [normalized.message_id!]);
+  }
+  if (result.status === "missing_row" || !result.row_id) return { normalized, persisted: null };
+  if (result.status === "button_reply_failed") throw new Error("question_button_reply_persistence_failed");
+
+  const persisted = await finalizePersistedMessage(
+    supabase, instance, normalized, result.row_id, result.button_reply_recognized === true,
+  );
+  return { normalized, persisted };
 }
 
 // ============================================================================
@@ -1155,6 +1285,18 @@ async function handleMessagesEvent(
       if (changed?.length) return;
     }
     throw new Error("Reaction update contention");
+  }
+  // F5a: 1 RPC em vez de ingress + upsert + select + receive (rollout por org).
+  if (uazapiIngestRpcEnabled(instance.organization_id)) {
+    const ingested = await ingestMessageViaRpc(supabase, instance, data, receivedVia);
+    if (!ingested?.persisted || ingested.normalized.is_group) return;
+    await triggerReactions(supabase, ingested.persisted, {
+      shouldTriggerCopilot: computeShouldTriggerCopilot(ingested.normalized),
+      shouldResolveWaitResponse: ingested.normalized.direction === "incoming" && !!ingested.normalized.phone_number,
+      isGroup: ingested.normalized.is_group,
+      replaySource: receivedVia === "dlq_replay" ? "dlq_replay" : null,
+    });
+    return;
   }
   // Authoritative receipt is committed before normalization/persistence/media work.
   // SQL serializes admission with timeout using the same execution/question locks.
