@@ -9,7 +9,8 @@ import {
 } from "@/modules/communication/lib/agenda-do-lead";
 
 interface LeadAgendaStripProps {
-  leadId: string | null;
+  /** Obrigatório: `useMeetings` sem `leadId` traria as reuniões da org inteira. */
+  leadId: string;
 }
 
 const ROTULO: Record<SituacaoNaAgenda, string> = {
@@ -35,15 +36,12 @@ const COR_DO_ROTULO: Record<SituacaoNaAgenda, string> = {
  * banner de mensagens agendadas ao lado.
  */
 export function LeadAgendaStrip({ leadId }: LeadAgendaStripProps) {
-  const { data: reunioes = [] } = useMeetings(leadId ? { leadId } : undefined);
+  const { data: reunioes = [] } = useMeetings({ leadId });
   const [expanded, setExpanded] = useState(false);
 
-  const agenda = useMemo(
-    () => (leadId ? resumirAgendaDoLead(reunioes) : null),
-    [leadId, reunioes],
-  );
+  const agenda = useMemo(() => resumirAgendaDoLead(reunioes), [reunioes]);
 
-  if (!leadId || !agenda || agenda.itens.length === 0) return null;
+  if (agenda.itens.length === 0) return null;
 
   const { itens, atrasadas, proxima } = agenda;
   const resumo = [
