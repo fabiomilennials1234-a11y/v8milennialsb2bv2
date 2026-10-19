@@ -69,9 +69,23 @@ function pipePresence(res: { data: unknown[] | null; error: unknown }): boolean 
 
 export type Lead = Tables<"leads">;
 
+const LEAD_POR_TELEFONE_SELECT = `
+  *,
+  responsible:team_members!leads_responsible_id_fkey(id, name),
+  sdr:team_members!leads_sdr_id_fkey(id, name),
+  closer:team_members!leads_closer_id_fkey(id, name),
+  lead_tags(tag:tags(id, name, color))
+`;
+
 /**
  * Busca lead por número de telefone na organização atual.
  * SECURITY: Filtra por organization_id para isolamento entre organizações.
+ *
+ * O principal mora em `leads.normalized_phone`; os
+ * demais contatos do lead (Chamado 82c50502) só existem em `lead_phones`. Sem o
+ * segundo passo, abrir a conversa pelo segundo contato caía em "Criar ou
+ * vincular lead" como se o número fosse desconhecido (Chamado 2c4e502c).
+ * Lead apagado nunca é dono: o número dele já foi liberado para outro lead.
  */
 export function useLeadByPhone(phone: string | null) {
   const { data: teamMember } = useCurrentTeamMember();
@@ -86,15 +100,10 @@ export function useLeadByPhone(phone: string | null) {
 
       const { data, error } = await supabase
         .from("leads")
-        .select(`
-          *,
-          responsible:team_members!leads_responsible_id_fkey(id, name),
-          sdr:team_members!leads_sdr_id_fkey(id, name),
-          closer:team_members!leads_closer_id_fkey(id, name),
-          lead_tags(tag:tags(id, name, color))
-        `)
+        .select(LEAD_POR_TELEFONE_SELECT)
         .eq("organization_id", organizationId)
         .eq("normalized_phone", normalizedPhone)
+        .is("deleted_at", null)
         .limit(1)
         .maybeSingle();
 
@@ -102,8 +111,31 @@ export function useLeadByPhone(phone: string | null) {
         console.error("Erro ao buscar lead por telefone:", error);
         return null;
       }
+      if (data) return data;
 
-      return data;
+      const { data: contato, error: contatoError } = await supabase
+        .from("lead_phones")
+        .select("lead_id")
+        .eq("organization_id", organizationId)
+        .eq("normalized_phone", normalizedPhone)
+        .is("deleted_at", null)
+        .order("is_primary", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (contatoError || !contato?.lead_id) return null;
+
+      const { data: doContato, error: doContatoError } = await supabase
+        .from("leads")
+        .select(LEAD_POR_TELEFONE_SELECT)
+        .eq("id", contato.lead_id)
+        .eq("organization_id", organizationId)
+        .is("deleted_at", null)
+        .maybeSingle();
+      if (doContatoError) {
+        console.error("Erro ao buscar lead pelo contato:", doContatoError);
+        return null;
+      }
+      return doContato;
     },
     enabled: !!phone && !!organizationId,
   });
