@@ -8,10 +8,11 @@
  *      preferência do usuário logado, caixa vinculada a ele, caixa vinculada
  *      ao responsável do lead e, por fim, caixa conectada.
  *
- * O sinal do responsável NÃO entra: a decisão original mandava derivá-lo de
- * agregação sobre `whatsapp_messages`, e a tabela não guarda quem enviou
- * (issue #1610). Ficou adiado, não esquecido.
+ * O sinal do responsável vem do vínculo `whatsapp_instance_allowed_members`
+ * (`useCaixasDeQuemAtende`), não de agregação sobre `whatsapp_messages`: a
+ * tabela não guarda quem enviou (issue #1610).
  */
+import { prioridadeDaCaixa } from "./prioridadeDaCaixa";
 
 export interface ConversaDoLeadRow {
   instanceId: string;
@@ -54,18 +55,15 @@ export function agruparConversasDoLead({
     // cronológica correta e evita construir Date por linha.
     .sort((a, b) => (b.lastMessageAt ?? "").localeCompare(a.lastMessageAt ?? ""));
 
-  const minhas = new Set(minhasInstanceIds);
-  const doResponsavel = new Set(doResponsavelInstanceIds);
-  // 0 preferida · 1 minha · 2 do responsável do lead · 3 as demais.
-  const prioridade = (r: ConversaDoLeadRow) =>
-    r.instanceId === preferredInstanceId ? 0 : minhas.has(r.instanceId) ? 1 : doResponsavel.has(r.instanceId) ? 2 : 3;
+  // A mesma ordem que o chat usa ao abrir lead sem conversa — ver `prioridadeDaCaixa`.
+  const prioridade = prioridadeDaCaixa({ preferredInstanceId, minhasInstanceIds, doResponsavelInstanceIds });
 
   const semConversa = rows
     .filter((r) => r.lastMessageAt === null)
     .sort((a, b) => {
       // Preferência salva, depois a caixa do usuário, depois a do responsável.
-      const aPref = prioridade(a);
-      const bPref = prioridade(b);
+      const aPref = prioridade(a.instanceId);
+      const bPref = prioridade(b.instanceId);
       if (aPref !== bPref) return aPref - bPref;
 
       // Depois conectadas, porque começar conversa por caixa caída não é opção.
