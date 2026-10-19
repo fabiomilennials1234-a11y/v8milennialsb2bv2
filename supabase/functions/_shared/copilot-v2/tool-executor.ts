@@ -12,6 +12,7 @@
  * a silent no-op (the v1 NOOP-action bug class).
  */
 
+import { resolveLeadByPhone } from "../lead-by-phone.ts";
 import { TOOL_REGISTRY } from "./tool-registry.ts";
 import { mapSignalsToTier, type Rubric, type Signals } from "./rubric-engine.ts";
 import {
@@ -51,16 +52,28 @@ type Handler = (supabase: any, ctx: ToolContext, args: Record<string, unknown>) 
 
 // ── Read / introspect handlers (unblocked against existing schema) ──
 
+/**
+ * Lead da conversa: o `leadId` do contexto quando existe; senão o lead do
+ * NÚMERO pela regra única (negócio aberto, ou nenhum se ambíguo).
+ */
+async function resolveCtxLeadId(supabase: any, ctx: ToolContext, tool: string): Promise<string | null> {
+  if (ctx.leadId) return ctx.leadId;
+  if (!ctx.canonicalPhone) return null;
+  const { leadId, error } = await resolveLeadByPhone(supabase, ctx.organizationId, ctx.canonicalPhone);
+  if (error) throw new Error(`${tool}: ${error}`);
+  return leadId;
+}
+
 const getLead360: Handler = async (supabase, ctx) => {
-  let query = supabase
+  const leadId = await resolveCtxLeadId(supabase, ctx, "get_lead_360");
+  if (!leadId) return null;
+  const { data, error } = await supabase
     .from("leads")
     .select("id, name, company, email, phone, segment, faturamento, urgency, rating, origin, qualification_tier, qualification_score, responsible_id, sale_responsible_id, pre_sale_responsible_id")
     .eq("organization_id", ctx.organizationId)
-    .is("deleted_at", null);
-  query = ctx.leadId
-    ? query.eq("id", ctx.leadId)
-    : query.eq("normalized_phone", ctx.canonicalPhone ?? "__none__");
-  const { data, error } = await query.maybeSingle();
+    .is("deleted_at", null)
+    .eq("id", leadId)
+    .maybeSingle();
   if (error) throw new Error(`get_lead_360: ${error.message}`);
   return data;
 };
@@ -208,10 +221,10 @@ const setQualificationTier: Handler = async (supabase, ctx, args) => {
 const QUALIFIED_TIERS = ["diamante", "ouro", "prata", "bronze"];
 
 const getContactStatus: Handler = async (supabase, ctx) => {
-  let leadQ = supabase.from("leads").select("id, qualification_tier")
-    .eq("organization_id", ctx.organizationId).is("deleted_at", null);
-  leadQ = ctx.leadId ? leadQ.eq("id", ctx.leadId) : leadQ.eq("normalized_phone", ctx.canonicalPhone ?? "__none__");
-  const { data: lead, error } = await leadQ.maybeSingle();
+  const leadId = await resolveCtxLeadId(supabase, ctx, "get_contact_status");
+  if (!leadId) return { status: "NOVO", leadId: null };
+  const { data: lead, error } = await supabase.from("leads").select("id, qualification_tier")
+    .eq("organization_id", ctx.organizationId).is("deleted_at", null).eq("id", leadId).maybeSingle();
   if (error) throw new Error(`get_contact_status: ${error.message}`);
   if (!lead) return { status: "NOVO", leadId: null };
 

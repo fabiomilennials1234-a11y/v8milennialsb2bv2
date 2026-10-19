@@ -3,9 +3,9 @@
  */
 
 import { format } from "date-fns";
-import { Check, X } from "lucide-react";
+import { Check, Clock, X } from "lucide-react";
 import type { UnifiedEvent } from "./agenda-helpers";
-import { initialsOf, isFinishedEvent, outcomeOf } from "./agenda-helpers";
+import { initialsOf, isFinishedEvent, isOverdueEvent, outcomeOf } from "./agenda-helpers";
 import { agendaAttributionLabel } from "../../lib/agenda-attribution";
 
 interface MonthEventPillProps {
@@ -27,7 +27,10 @@ export function MonthEventPill({
   const color = event.color;
   const hora = event.allDay ? "dia todo" : format(event.start, "HH:mm");
   const owner = showOwner ? initialsOf(event.creatorName) : "";
-  const done = isFinishedEvent(event);
+  const atrasado = isOverdueEvent(event);
+  // Em atraso NÃO leva o risco de "feito": a reunião que não deu certo segue
+  // pendente de ação. O risco fica para o que de fato terminou.
+  const done = isFinishedEvent(event) && !atrasado;
   const resultado = outcomeOf(event);
 
   return (
@@ -53,6 +56,7 @@ export function MonthEventPill({
           : resultado === "nao_compareceu"
             ? "Não compareceu"
             : null,
+        atrasado ? "Em atraso" : null,
       ]
         .filter(Boolean)
         .join("\n")}
@@ -75,6 +79,16 @@ export function MonthEventPill({
           className="h-2.5 w-2.5 shrink-0 text-red-700 dark:text-red-300"
           strokeWidth={3}
           aria-label="Não compareceu"
+        />
+      )}
+
+      {/* Reunião passada sem resultado: relógio no lugar do ✓/✗. O ✗ de quem não
+          compareceu já marca o atraso; aqui só falta o sinal para "sem registro". */}
+      {atrasado && resultado === null && (
+        <Clock
+          className="h-2.5 w-2.5 shrink-0 text-red-700 dark:text-red-300"
+          strokeWidth={3}
+          aria-label="Em atraso"
         />
       )}
 

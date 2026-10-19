@@ -298,7 +298,8 @@ describe("getOrCreateLead — race condition retry", () => {
         { data: [], error: null }, // initial phone miss
         // Insert fails with 23505
         { data: null, error: { code: "23505", message: "duplicate key value" } },
-        // Retry phone search finds the racing row
+        // Retry phone search finds the racing row (ids) e depois a linha do lead
+        { data: [existing], error: null },
         { data: [existing], error: null },
       ],
     });

@@ -112,6 +112,12 @@ export function AgendaOutcomeToggle({
         })}
       </div>
 
+      {value === "nao_compareceu" && (
+        <p className="text-[11px] text-muted-foreground">
+          Segue em atraso até ser remarcada ou concluída.
+        </p>
+      )}
+
       {value === null && (
         <p className="text-[10px] text-muted-foreground">
           Sem registro — não entra na contagem.
