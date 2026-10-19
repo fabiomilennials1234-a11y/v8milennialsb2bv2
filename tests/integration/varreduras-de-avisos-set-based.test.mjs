@@ -494,7 +494,7 @@ test('2º laço lê só as candidatas pelo índice; follow-ups não chamam fn_do
     const candidatas = `EXPLAIN (COSTS OFF) SELECT pe.* FROM public.pipeline_entries pe
       WHERE pe.closed_at IS NULL AND NULLIF(pe.metadata ->> 'meeting_date', '') IS NOT NULL
         AND (private.fn_aviso_meeting_date_aprox(pe.metadata ->> 'meeting_date')
-              BETWEEN public.relogio() - interval '1 day' AND public.relogio() + interval '1 day'
+              BETWEEN public.relogio() - interval '1 hour' AND public.relogio() + interval '1 hour'
           OR private.fn_aviso_meeting_date_aprox(pe.metadata ->> 'meeting_date') IS NULL)`;
     const plano = (await nova.query(candidatas)).rows.map(r => r['QUERY PLAN']).join('\n');
     assert.match(plano, /pipeline_entries_meeting_reminder_at_idx/, plano);
@@ -505,19 +505,19 @@ test('2º laço lê só as candidatas pelo índice; follow-ups não chamam fn_do
       WHERE pe.closed_at IS NULL AND pg_input_is_valid(pe.metadata ->> 'meeting_date', 'timestamptz')
         AND (pe.metadata ->> 'meeting_date')::timestamptz BETWEEN public.relogio() - interval '5 minutes' AND public.relogio() + interval '15 minutes'
         AND NOT coalesce(private.fn_aviso_meeting_date_aprox(pe.metadata ->> 'meeting_date')
-              BETWEEN public.relogio() - interval '1 day' AND public.relogio() + interval '1 day', true)`)).rows[0].n;
+              BETWEEN public.relogio() - interval '1 hour' AND public.relogio() + interval '1 hour', true)`)).rows[0].n;
     assert.equal(fora, 0);
-    // Data ISO longe da janela (> 2 dias) não entra no laço — e existe muita.
+    // Data ISO com fuso longe da janela (> 2 dias) não entra no laço — e existe muita.
     const longe = (await nova.query(`SELECT
         count(*) FILTER (WHERE lida)::int AS lidas, count(*)::int AS total
       FROM (SELECT (private.fn_aviso_meeting_date_aprox(pe.metadata ->> 'meeting_date')
-              BETWEEN public.relogio() - interval '1 day' AND public.relogio() + interval '1 day'
+              BETWEEN public.relogio() - interval '1 hour' AND public.relogio() + interval '1 hour'
           OR private.fn_aviso_meeting_date_aprox(pe.metadata ->> 'meeting_date') IS NULL) AS lida
         FROM pipeline_entries pe
-        WHERE pe.closed_at IS NULL AND (pe.metadata ->> 'meeting_date') ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}'
+        WHERE pe.closed_at IS NULL AND (pe.metadata ->> 'meeting_date') ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}[T ].*(Z|[+-][0-9]{2}:?[0-9]{2})$'
           AND pg_input_is_valid(pe.metadata ->> 'meeting_date', 'timestamptz')
           AND abs(extract(epoch FROM (pe.metadata ->> 'meeting_date')::timestamptz - public.relogio())) > 2 * 86400) s`)).rows[0];
-    assert.ok(longe.total > 100, `controle: poucas datas longe (${longe.total})`);
+    assert.ok(longe.total > 50, `controle: poucas datas longe (${longe.total})`);
     assert.equal(longe.lidas, 0);
 
     // fn_donos_do_lead: o corpo antigo chama por linha; o novo, nunca.
@@ -530,6 +530,18 @@ test('2º laço lê só as candidatas pelo índice; follow-ups não chamam fn_do
     };
     assert.ok(await chamadas(antiga) > 20, 'controle: o corpo antigo chama fn_donos_do_lead por follow-up');
     assert.equal(await chamadas(nova), 0);
+
+    // A expressão do índice roda como quem escreve: authenticated, sem USAGE em private.
+    await nova.exec(`GRANT SELECT, INSERT, UPDATE ON pipeline_entries TO authenticated;
+      ALTER DEFAULT PRIVILEGES REVOKE EXECUTE ON FUNCTIONS FROM PUBLIC; SET ROLE authenticated;`);
+    for (const texto of ['2026-10-19T13:00:00+00:00', '2026-10-19 13:00 Foo/Bar', '2026-10-19T13:00:00+99', 'infinity', 'x'.repeat(5000)]) {
+      await nova.query(`INSERT INTO pipeline_entries(id, organization_id, metadata) VALUES (gen_random_uuid(), $1, jsonb_build_object('meeting_date', $2::text))`, [ORG_A, texto]);
+    }
+    await nova.exec(`UPDATE pipeline_entries SET metadata = metadata || '{"meeting_date":"2026-10-20T10:00:00Z"}' WHERE id = '${id(60001)}'; RESET ROLE;`);
+    await nova.exec(`REVOKE EXECUTE ON FUNCTION private.fn_aviso_meeting_date_aprox(text) FROM PUBLIC; SET ROLE authenticated;`);
+    await assert.rejects(nova.query(`INSERT INTO pipeline_entries(id, metadata) VALUES (gen_random_uuid(), '{"meeting_date":"2026-10-19"}')`),
+      /permission denied for function fn_aviso_meeting_date_aprox/, 'controle: sem o GRANT a escrita quebra');
+    await nova.exec('RESET ROLE');
   } finally {
     await antiga.close();
     await nova.close();

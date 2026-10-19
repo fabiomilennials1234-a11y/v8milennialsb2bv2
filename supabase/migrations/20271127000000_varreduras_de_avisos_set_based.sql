@@ -37,23 +37,25 @@
 --     e convertia cada data em plpgsql, num bloco BEGIN/EXCEPTION por linha
 --     (uma subtransação por linha, 1.339 por minuto). Só ~0–5 caem na janela.
 --     Corpo novo: o laço lê só as candidatas de um índice de expressão sobre
---     private.fn_aviso_meeting_date_aprox(meeting_date) (janela ±1 dia, mais
---     as que a função não sabe datar), e o resto do laço — conversão exata com
+--     private.fn_aviso_meeting_date_aprox(meeting_date) (janela ±1 h, mais
+--     as que a função não data), e o resto do laço — conversão exata com
 --     o fuso/DateStyle da sessão, janela de 20 min, espelho, desfecho, donos —
 --     segue IGUAL, linha a linha. O índice é só pré-filtro: superconjunto.
---     Em prod (19/10): 47 das 1.340 entram no laço (antes: todas).
+--     Em prod (19/10): 27 das 1.340 entram no laço (8 na janela de ±1 h + 19
+--     só-data, sempre rechecadas) — antes: todas.
 --     O 1º laço (meetings) já custava 22 blocos e não muda.
 --
 -- POR QUE O PRÉ-FILTRO NÃO PERDE NENHUMA LINHA
---   fn_aviso_meeting_date_aprox devolve a data lida com TimeZone=UTC e
---   DateStyle=ISO,MDY fixos (por isso pode ser IMMUTABLE) e só para texto que
---   começa com AAAA-MM-DD; o resto vira NULL e entra sempre no laço. Ano
---   primeiro não depende de DateStyle. Com fuso explícito no texto a leitura é
---   idêntica à da sessão; sem fuso, a da sessão difere da UTC no máximo pelo
---   deslocamento do fuso (< 1 dia). A janela real é [now-5min, now+15min]; o
---   índice pede [now-1 dia, now+1 dia]. Texto que a conversão da sessão
---   rejeita com outro erro (fuso inexistente etc.) também cai em NULL → entra
---   no laço → aborta a varredura como antes (comportamento preservado).
+--   fn_aviso_meeting_date_aprox só data texto ISO 8601 com deslocamento
+--   NUMÉRICO explícito ('AAAA-MM-DD[T ]HH:MI[:SS[.f]](Z|±HH[:MM])'). Esse texto
+--   é um instante absoluto: a leitura não depende de TimeZone, DateStyle nem
+--   timezone_abbreviations da sessão — por isso a função é IMMUTABLE de fato,
+--   sem SET. Todo o resto (sem fuso, só data, nome de fuso, abreviação,
+--   'infinity', lixo) vira NULL e entra SEMPRE no laço, onde a conversão da
+--   sessão decide como antes. A janela real é [now-5min, now+15min]; o índice
+--   pede [now-1 h, now+1 h]. Texto que a sessão rejeita com erro não tratado
+--   (fuso inexistente, '+99') também cai em NULL → entra no laço → aborta a
+--   varredura como antes (comportamento preservado).
 --   Em prod (19/10): 1.320 'AAAA-MM-DDTHH:MI:SS+00:00', 19 só 'AAAA-MM-DD',
 --   0 inválidas; sessão do cron em UTC / ISO, MDY.
 --
@@ -74,7 +76,8 @@
 -- MESMO predicado parcial (escrita igual: só linhas abertas com meeting_date).
 -- Sem CONCURRENTLY: o arquivo roda em transação explícita (lock_timeout);
 -- pipeline_entries tem 30 MB e o índice cobre ~1.339 linhas — o SHARE lock
--- dura o tempo de uma leitura da tabela (centenas de ms). ANALYZE no fim para
+-- dura o tempo de uma leitura da tabela (centenas de ms); o DROP do antigo vai
+-- no fim, para o ACCESS EXCLUSIVE durar só até o COMMIT. ANALYZE antes para
 -- o planejador ter estatística da expressão nova já na primeira execução.
 --
 -- Cada função recriada parte da definição VIGENTE de prod (md5(prosrc) de
@@ -94,29 +97,27 @@ RETURNS timestamptz
 LANGUAGE sql
 IMMUTABLE PARALLEL SAFE
 SET search_path = ''
-SET timezone = 'UTC'
-SET datestyle = 'ISO, MDY'
-SET timezone_abbreviations = 'Default'
 AS $fn$
   SELECT CASE
-    WHEN p_texto ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}'
+    WHEN p_texto ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}[T ][0-9]{2}:[0-9]{2}(:[0-9]{2}(\.[0-9]+)?)?(Z|[+-][0-9]{2}(:?[0-9]{2})?)$'
      AND pg_catalog.pg_input_is_valid(p_texto, 'timestamptz')
     THEN p_texto::timestamptz
   END
 $fn$;
 
--- Função pura e expressão de índice: quem escreve em pipeline_entries
--- (qualquer papel) precisa poder executá-la.
+-- Função pura e expressão de índice: o EXECUTE é checado em toda escrita em
+-- pipeline_entries que caia no predicado, como o papel que escreve
+-- (authenticated via PostgREST). Sem este GRANT a escrita quebra com
+-- "permission denied for function" — não revogar em massa no schema private.
 GRANT EXECUTE ON FUNCTION private.fn_aviso_meeting_date_aprox(text) TO PUBLIC;
 
 COMMENT ON FUNCTION private.fn_aviso_meeting_date_aprox(text) IS
-  'Pré-filtro do índice pipeline_entries_meeting_reminder_at_idx: meeting_date lida em UTC/ISO fixos; NULL quando não começa com AAAA-MM-DD ou é inválida. Não é a data exata — fn_varredura_avisos_reuniao_proxima reconverte na sessão.';
+  'Pré-filtro do índice pipeline_entries_meeting_reminder_at_idx: instante de meeting_date só quando é ISO 8601 com deslocamento numérico explícito; NULL no resto (fn_varredura_avisos_reuniao_proxima reconverte na sessão). Expressão de índice: EXECUTE precisa ficar com PUBLIC, senão toda escrita em pipeline_entries com meeting_date falha.';
 
 CREATE INDEX IF NOT EXISTS pipeline_entries_meeting_reminder_at_idx
   ON public.pipeline_entries (private.fn_aviso_meeting_date_aprox(metadata ->> 'meeting_date'))
   WHERE closed_at IS NULL AND NULLIF(metadata ->> 'meeting_date', '') IS NOT NULL;
 
-DROP INDEX IF EXISTS public.pipeline_entries_pending_meeting_reminder_idx;
 
 -- ─── 2. fn_varredura_avisos_followups ──────────────────────────────────────
 CREATE OR REPLACE FUNCTION public.fn_varredura_avisos_followups()
@@ -260,8 +261,8 @@ BEGIN
 
   -- Preserve appointments created in funnels, which need not have a meetings
   -- row. A malformed legacy date must not stop all organizations' reminders.
-  -- Pré-filtro por índice (20271127000000): janela de ±1 dia na leitura UTC,
-  -- mais toda data que a leitura UTC não sabe datar. A janela exata, na
+  -- Pré-filtro por índice (20271127000000): instante ISO com fuso explícito a
+  -- ±1 h, mais todo texto que a função não data (NULL). A janela exata, na
   -- conversão da sessão, continua logo abaixo.
   FOR r IN
     SELECT pe.*
@@ -269,7 +270,7 @@ BEGIN
     WHERE pe.closed_at IS NULL
       AND NULLIF(pe.metadata ->> 'meeting_date', '') IS NOT NULL
       AND (private.fn_aviso_meeting_date_aprox(pe.metadata ->> 'meeting_date')
-            BETWEEN now() - interval '1 day' AND now() + interval '1 day'
+            BETWEEN now() - interval '1 hour' AND now() + interval '1 hour'
         OR private.fn_aviso_meeting_date_aprox(pe.metadata ->> 'meeting_date') IS NULL)
   LOOP
     BEGIN
@@ -329,5 +330,9 @@ COMMENT ON FUNCTION public.fn_donos_do_lead(uuid) IS
   'Contas de usuário que recebem o aviso do lead: TODOS os donos (principais por papel + co-donos de lead_owners), principal primeiro, sem repetir usuário. Org sem a flag lead_owners_n_donos: só o principal (= fn_dono_do_lead). fn_dono_do_lead segue existindo para quem lê o principal. Chamado 793f4b05 · PR4b. RÉPLICA set-based em fn_varredura_avisos_followups (20271127000000): mudar a regra aqui exige mudar lá.';
 
 ANALYZE public.pipeline_entries;
+
+-- Por último: o DROP pega ACCESS EXCLUSIVE em pipeline_entries até o COMMIT
+-- (trava leitura do kanban); aqui ele segura o lock só pelo instante final.
+DROP INDEX IF EXISTS public.pipeline_entries_pending_meeting_reminder_idx;
 
 COMMIT;
