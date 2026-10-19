@@ -5,6 +5,7 @@
  */
 import { describe, it, expect } from "vitest";
 import "../../tests/helpers/deno-mock";
+import { fakeSupabaseTables } from "../helpers/fake-supabase-tables";
 import {
   getOrCreateLead,
   findLeadByPhoneOrEmail,
@@ -42,6 +43,7 @@ function fakeSupabase(opts: { secondaryRows: Array<{ lead_id: string }>; leadsBy
         select: () => chain,
         eq: (col: string, val: unknown) => {
           filters.push({ table, op: "eq", col, val });
+          if (table === "leads" && col === "id") byIds = true;
           return chain;
         },
         is: (col: string, val: unknown) => {
@@ -53,6 +55,7 @@ function fakeSupabase(opts: { secondaryRows: Array<{ lead_id: string }>; leadsBy
           byIds = true;
           return chain;
         },
+        not: () => chain,
         ilike: () => chain,
         order: () => chain,
         limit: () => chain,
@@ -103,5 +106,52 @@ describe("lead-service — telefone secundário (lead_phones)", () => {
     const lead = await findLeadByPhoneOrEmail(sb as never, ORG, "4832631404");
     expect(lead).toBeNull();
     expect(inserts).toHaveLength(0);
+  });
+});
+
+describe("lead-service — número em 2 leads vivos (Chamados 99067f13, 33c5fd52)", () => {
+  const P = "48932631404";
+  const row = (id: string, created_at: string, normalized_phone: string | null) => ({
+    id, name: id, phone: null, email: null, organization_id: ORG, normalized_phone,
+    ai_disabled: false, deleted_at: null, created_at,
+  });
+  const tables = (withOpenDeal: boolean) => ({
+    // L-VELHO: principal do número. L-NOVO: mesmo número como secundário, criado depois.
+    leads: [row("L-VELHO", "2026-01-01", P), row("L-NOVO", "2026-09-01", null)],
+    lead_phones: [{ organization_id: ORG, lead_id: "L-VELHO", normalized_phone: P, deleted_at: null },
+                  { organization_id: ORG, lead_id: "L-NOVO", normalized_phone: P, deleted_at: null }],
+    deals: withOpenDeal
+      ? [{ id: "D1", organization_id: ORG, source_lead_id: "L-VELHO", created_at: "2026-02-01", closed_at: null, deleted_at: null }]
+      : [],
+  });
+
+  it("devolve o lead com negócio aberto, mesmo sendo o mais antigo (antes: o mais novo)", async () => {
+    for (const flip of [false, true]) {
+      const t = tables(true);
+      if (flip) t.leads.reverse();
+      const { supabase } = fakeSupabaseTables(t);
+      expect((await findLeadByPhoneOrEmail(supabase, ORG, P))?.id).toBe("L-VELHO");
+    }
+  });
+
+  it("sem negócio aberto em nenhum: nenhum lead, independente da ordem", async () => {
+    for (const flip of [false, true]) {
+      const t = tables(false);
+      if (flip) t.leads.reverse();
+      const { supabase } = fakeSupabaseTables(t);
+      expect(await findLeadByPhoneOrEmail(supabase, ORG, P)).toBeNull();
+    }
+  });
+
+  it("getOrCreateLead: ambíguo sem negócio aberto devolve null e NÃO cria lead", async () => {
+    // O fake não tem `insert`: se tentasse criar, quebraria com TypeError.
+    const { supabase } = fakeSupabaseTables(tables(false));
+    expect(await getOrCreateLead(supabase, { organizationId: ORG, phone: P, name: "X" })).toBeNull();
+  });
+
+  it("getOrCreateLead: ambíguo COM negócio aberto devolve o lead do negócio, sem criar", async () => {
+    const { supabase } = fakeSupabaseTables(tables(true));
+    const r = await getOrCreateLead(supabase, { organizationId: ORG, phone: P, name: "X" });
+    expect(r).toMatchObject({ created: false, source: "phone", lead: { id: "L-VELHO" } });
   });
 });
