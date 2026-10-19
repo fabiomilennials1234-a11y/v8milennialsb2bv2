@@ -118,3 +118,37 @@ Ordem por ganho/risco. Cada onda tem medição antes e depois com a mesma régua
 - Endpoint de métricas: `https://<ref>.supabase.co/customer/v1/privileged/metrics` (Basic `service_role`).
 - `extensions.pg_stat_statements`: snapshots em 18:02:23 e 18:17:25 UTC, delta por `queryid` e role.
 - Diagnóstico de código: duas leituras independentes do repo (front e edge functions), com `arquivo:linha` acima.
+
+## Resultado da onda 1 e do pool 15 (19/10)
+
+Medição: segunda 19/10, janela de 15 min às 17:31:02–17:46:21 UTC (14h31 BRT), mesma régua da linha de base (delta de `pg_stat_statements` por `queryid`+role; métricas a cada 20 s nos 3 min antes e depois; `idx_scan` dos dois índices novos). Só leitura.
+
+**Confusor — ler antes da tabela.** O pool do PostgREST foi reduzido de 25 para 15 em 19/10 às 14:56 UTC (`PATCH /postgrest`, ok do CTO), e o PostgREST reiniciou por volta de 14:57. Por isso `pgrst_db_pool_timeouts_total` zerou nesse momento e os deltas contam a partir de 0. **RAM e pool desta medição refletem onda 1 + pool 15 juntos**: não dá para atribuir a queda de RAM a uma nem a outro. Já `pg_stat_statements` (chamadas/min e ms/chamada) continua comparável com a base de 16/10.
+
+| Métrica | Base 16/10 (pool 25) | 19/10 (onda 1 + pool 15) | Meta | Veredito |
+|---|---:|---:|---|---|
+| SQL na janela | 314 s (0,35 núcleo) | 444 s (0,48 núcleo) | — | contexto: carga maior em 19/10 |
+| % authenticated | 70,2% | 71,0% | — | — |
+| `notifications` (poll do sino) | 81,5/min a 22 ms (8,5%) | 13,2/min a 11 ms (+8,5/min de uma contagem a 3 ms; 0,6% somadas) | ≤ 10/min | **não atingiu** por pouco (−84%) |
+| `lead_phones` `ilike '%x%'` | 2,1/min a 1.041 ms (10,6%) | 0,2/min a 1.171 ms (0,8%) | < 50 ms/chamada | frequência **atingiu** (−90%, rajada sumiu); latência **não atingiu** |
+| `idx_scan` `lead_phones_normalized_phone_trgm_idx` | — | 0 → 0 (0 desde a criação) | > 0 | **não atingiu**: o planner não usa o índice |
+| `idx_scan` `notifications_recipient_org_recent_idx` | — | 18.658 → 18.868 (+210) | > 0 | atingiu |
+| RAM usada (pico amostrado) | 83% | 78,9% (subindo no fim da janela; 62–79% no ciclo) | ≤ 65% após a onda 3 | **não atingiu**; inconclusivo quanto à causa (confusor) |
+| AnonPages (pico) | 1,80 GB | 1,69 GB | — | −0,11 GB (confusor) |
+| `pgrst_db_pool_waiting` (máx.) | 7–10 | 2 (17:31), 1 até 17:34, 0 depois | 0 | quase: residual de 1–2, transitório |
+| `pgrst_db_pool_available` (mín.) | — | 8 de 15 | — | folga de ≥ 7 conexões nas amostras |
+| Δ `pgrst_db_pool_timeouts_total` na janela | +239 (15:04–17:50) | 0 (0 absoluto desde o restart de 14:57) | ≈ 0 | **atingiu** |
+
+### Achados
+
+1. **O índice trigram não é usado.** `lead_phones_normalized_phone_trgm_idx` (2,5 MB) tem `idx_scan` = 0 desde a criação, e o `ilike` continua a ~1,2 s. A onda 1 cortou a frequência (debounce + dedupe: 2,1 → 0,2/min), mas cada busca ainda varre a org. Hipóteses, não testadas: plano genérico do statement preparado do PostgREST (`ilike $2`, o planner não vê o padrão) preferindo o btree de `organization_id`; ou predicado do índice parcial diferente do da consulta. Próximo passo: `EXPLAIN` como `authenticated` com valor literal e com `PREPARE`/plano genérico. **Não corrigido.**
+2. **`notifications` caiu 84%, mas ficou acima da meta.** O poll principal ainda faz 13,2/min. Candidatos: refetch ao focar a aba e reconexões do canal. Pouco tempo de banco (0,6%); prioridade baixa.
+3. **`get_whatsapp_conversation_list_multi` piorou e é o maior custo do navegador:** 1,8/min a 1.646 ms (10,4%; era ~500 ms). Somada à variante com filtros, dá 13,2% do tempo. É a F3 da onda 2 e passa a ser o maior risco de rajada no pool.
+4. **`mcp_exec_readonly_sql` como `authenticated`: 8,3/min a 303 ms, 8,7% do tempo.** Não aparecia na base. Identificar o chamador (agente/MCP de algum usuário) antes de reduzir o pool.
+
+### Pool 15 aguenta? E 10–12?
+
+- **15 aguenta no expediente medido:** zero timeouts em ~2h50 depois do restart (cobrindo 14:57–17:50, incluindo o horário de pico), `available` mínimo de 8 e `waiting` de no máximo 2, transitório, sem gerar timeout (`db_pool_acquisition_timeout` 10 s). Falta o critério de 3 dias úteis seguidos.
+- **10–12 é viável só depois da onda 2, e 12 antes de 10.** O mínimo observado de 8 livres sugere pico de ~7 em uso, mas a amostra é de 20 s (o scrape repete o valor por ~60 s) e não vê rajadas curtas. As consultas que seguram conexão por mais tempo (lista multi do chat a 1,6 s, `mcp_exec_readonly_sql` a 0,3 s × 8/min, `ilike` de telefone a 1,2 s) precisam cair antes. Gate sugerido: com a onda 2 no ar e o índice trigram em uso, 3 dias úteis a 15 com `waiting` 0 e Δ timeouts 0 → 12; mais 3 dias limpos → avaliar 10. Pela fórmula de 60 MB por backend, 15 → 12 libera ~0,18 GB e 15 → 10 libera ~0,3 GB: ganho pequeno perto do risco. A meta de 50% continua dependendo do compute Large.
+
+Dados brutos: snapshots T0/T1, `idx0`/`idx1` e métricas A/B ficam nas notas da sessão (fora do repo), assim como a régua (`onda1-regua.sh`) e o script de delta.
