@@ -75,7 +75,7 @@ import { enriquecerContatos } from "./shared/enriquecerContatos";
 import { boxUsesChannelMessages } from "./inbox-box-source";
 import { useReconcileInterval } from "./useRealtimeFallback";
 import { toSocialContact, type SocialConversationRow } from "./social-conversation-row";
-import type { ChatContact, InboxBox, SocialContact } from "./types";
+import type { ChatContact, ChatContactTag, InboxBox, SocialContact } from "./types";
 
 /**
  * A porta para as RPCs que `types.ts` ainda não conhece.
@@ -144,6 +144,12 @@ interface LinhaDeChip {
   conversation_id: string | null;
   archived_at: string | null;
   unread_count: number | null;
+  /**
+   * Etiquetas da conversa (lead + conversa), resolvidas pela RPC desde a
+   * migration 20271128000000. AUSENTE em banco sem a migration e na queda para a
+   * RPC de uma caixa — e é a ausência, não o `[]`, que manda fazer o fan-out.
+   */
+  tags?: ChatContactTag[];
 }
 
 /** A linha do canal oficial no formato multi — a de sempre, mais a caixa de origem. */
@@ -265,6 +271,10 @@ export function useConversasUnificadas(
       if (error) throw error;
 
       const linhas = (data ?? []) as LinhaDeChip[];
+      // A coluna existe na resposta inteira ou em nenhuma linha: é o RETURNS
+      // TABLE da função. `every` também cobre a queda por caixa, que nunca a traz.
+      const etiquetasJaResolvidas =
+        linhas.length > 0 && linhas.every((r) => Array.isArray(r.tags));
       const contatos: ChatContact[] = linhas.map((r) => ({
         channel: "whatsapp",
         // A caixa sai da RESPOSTA, nunca do argumento — ver cabeçalho.
@@ -288,13 +298,13 @@ export function useConversasUnificadas(
         lead_name: null,
         conversation_id: r.conversation_id,
         archived_at: r.archived_at,
-        tags: [],
+        tags: etiquetasJaResolvidas ? (r.tags as ChatContactTag[]) : [],
         is_group: r.is_group === true,
         funnels: [],
         qualification_tier: null,
       }));
 
-      await enriquecerContatos(contatos, { tagsCriticas, organizationId });
+      await enriquecerContatos(contatos, { tagsCriticas, organizationId, etiquetasJaResolvidas });
 
       // `cheia` é medido, não presumido: é o que sustenta o piso de confiança do
       // motor. Uma org com menos conversas que o limite ficaria marcada como

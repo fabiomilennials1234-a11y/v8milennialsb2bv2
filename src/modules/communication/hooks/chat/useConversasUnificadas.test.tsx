@@ -374,3 +374,74 @@ describe("useConversasUnificadas — rede contra evento realtime perdido", () =>
     expect(chamadasDaLista()).toBeGreaterThanOrEqual(2);
   });
 });
+
+/**
+ * Etiquetas DENTRO da RPC multi (migration 20271128000000). Cada refetch fazia
+ * a RPC + 2 idas de fan-out só para etiquetas; com a coluna `tags` na linha, o
+ * enriquecimento é avisado de que elas já vieram e não vai buscá-las. Sem a
+ * coluna — banco ainda sem a migration, ou a queda para a RPC de uma caixa —,
+ * o fan-out de sempre.
+ */
+describe("useConversasUnificadas — etiquetas vindas da RPC", () => {
+  const VIP = { id: "t-vip", name: "VIP", color: "#f00" };
+  const QUENTE = { id: "t-quente", name: "Quente", color: null };
+
+  const opcoesDoEnriquecimento = () =>
+    (enriquecerMock.mock.calls.at(-1) as unknown as [unknown[], Record<string, unknown>])[1];
+
+  it("linha com `tags`: vira contato.tags e o enriquecimento pula o fan-out", async () => {
+    rpcMock.mockImplementation(async (nome: string) =>
+      nome === "get_whatsapp_conversation_list_multi"
+        ? {
+            data: [
+              { ...linhaDeChip("cx-a", "5548911110000", "2026-09-03T12:00:00Z"), tags: [QUENTE, VIP] },
+              { ...linhaDeChip("cx-a", "5548922220000", "2026-09-03T11:00:00Z"), tags: [] },
+            ],
+            error: null,
+          }
+        : { data: [], error: null },
+    );
+
+    const { result } = renderHook(() => useConversasUnificadas([CHIP_A]), { wrapper: wrap(newQc()) });
+    await waitFor(() => expect(result.current.linhas).toHaveLength(2));
+
+    expect(opcoesDoEnriquecimento()).toMatchObject({ etiquetasJaResolvidas: true });
+    expect(result.current.linhas.map((l) => (l.contato as { tags: unknown }).tags)).toEqual([
+      [QUENTE, VIP],
+      [],
+    ]);
+  });
+
+  it("linha sem `tags` (banco antigo): fan-out de sempre", async () => {
+    rpcMock.mockImplementation(async (nome: string) =>
+      nome === "get_whatsapp_conversation_list_multi"
+        ? { data: [linhaDeChip("cx-a", "5548911110000", "2026-09-03T12:00:00Z")], error: null }
+        : { data: [], error: null },
+    );
+
+    const { result } = renderHook(() => useConversasUnificadas([CHIP_A]), { wrapper: wrap(newQc()) });
+    await waitFor(() => expect(result.current.linhas).toHaveLength(1));
+
+    expect(opcoesDoEnriquecimento()).toMatchObject({ etiquetasJaResolvidas: false });
+    expect((result.current.linhas[0].contato as { tags: unknown }).tags).toEqual([]);
+  });
+
+  it("queda para a RPC de uma caixa (sem `tags`): fan-out de sempre", async () => {
+    rpcMock.mockImplementation(async (nome: string) => {
+      if (nome === "get_whatsapp_conversation_list_multi") {
+        return { data: null, error: { code: "PGRST202", message: "not found" } };
+      }
+      if (nome === "get_whatsapp_conversation_list") {
+        return { data: [linhaDeChip("ignorado", "5548911110000", "2026-09-03T12:00:00Z")], error: null };
+      }
+      return { data: [], error: null };
+    });
+    const aviso = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    const { result } = renderHook(() => useConversasUnificadas([CHIP_A]), { wrapper: wrap(newQc()) });
+    await waitFor(() => expect(result.current.linhas).toHaveLength(1));
+
+    expect(opcoesDoEnriquecimento()).toMatchObject({ etiquetasJaResolvidas: false });
+    aviso.mockRestore();
+  });
+});
