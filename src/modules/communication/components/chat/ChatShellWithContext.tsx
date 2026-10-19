@@ -56,6 +56,7 @@ import { MobileChatThreadHeader } from "@/modules/communication/components/chat/
 import { MessageList } from "@/modules/communication/components/chat/view/MessageList";
 import { ChatComposer } from "@/modules/communication/components/chat/composer/ChatComposer";
 import { ScheduledMessagesBanner } from "@/modules/communication/components/chat/ScheduledMessagesBanner";
+import { LeadAgendaStrip } from "@/modules/communication/components/chat/LeadAgendaStrip";
 import { MobileComposerContextual } from "@/modules/communication/components/chat/composer/MobileComposerContextual";
 import { ContextPanel } from "@/modules/communication/components/chat/context-panel/ContextPanel";
 import { LeadContactModal } from "@/modules/communication/components/chat/LeadContactModal";
@@ -455,6 +456,8 @@ function ChatView({
           a caminho, e mandava a mesma coisa de novo na mão.
 
           A consulta por telefone e instância inclui conversas ainda sem lead. */}
+      {effectiveLeadId && <LeadAgendaStrip leadId={effectiveLeadId} />}
+
       {(effectiveLeadId || (phoneNumber && instanceId)) && (
         <ScheduledMessagesBanner
           leadId={effectiveLeadId || null}
