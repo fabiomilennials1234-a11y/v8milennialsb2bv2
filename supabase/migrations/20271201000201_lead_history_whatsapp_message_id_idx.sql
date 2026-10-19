@@ -1,0 +1,31 @@
+-- 20271201000201_lead_history_whatsapp_message_id_idx.sql — F5b (RAM/pool PostgREST, onda 4)
+--
+-- ⚠ VERSÃO PROVISÓRIA. Renumerar contra o ledger de prod na hora de aplicar.
+--
+-- ── POR QUÊ (medido em prod, 2026-10-19) ───────────────────────────────────
+-- trg_whatsapp_message_to_history (AFTER INSERT em whatsapp_messages) checa
+-- idempotência antes de gravar o histórico:
+--     WHERE lead_id = $lead AND metadata->>'message_id' = $mid AND metadata->>'channel' = 'whatsapp'
+-- O único índice usável é (lead_id, created_at): lê TODO o histórico do lead e
+-- filtra jsonb linha a linha. Lead mais pesado (15.219 linhas): 618 ms e 4.703
+-- páginas lidas do DISCO por INSERT — páginas de heap que entram no shared
+-- buffers só pra serem descartadas (pressão de RAM, o problema desta trilha).
+-- Média ponderada pelo fluxo de 24 h: 171 linhas varridas por INSERT.
+--
+-- HASH e não btree: a consulta é só igualdade, message_id é quase único e a
+-- chave é texto (~30 B). Hash guarda 4 B de hash + TID por entrada (~563 mil
+-- linhas WhatsApp → ~10–15 MB, contra ~30–40 MB de btree). WAL-logged desde
+-- o PG 10. Parcial em channel = 'whatsapp' (o mesmo literal da trigger: o
+-- planner prova a implicação; provado no teste PGlite).
+-- Sem mudança de comportamento: a trigger NÃO é tocada; o índice só troca o
+-- caminho de acesso do EXISTS.
+--
+-- ── COMO APLICAR ───────────────────────────────────────────────────────────
+-- CREATE INDEX CONCURRENTLY não roda em transação. psql em autocommit no
+-- pooler modo session (5432):  SET lock_timeout = '3s';  \i este arquivo
+-- NÃO por apply_migration do MCP nem `supabase db push`. 406 MB de heap para
+-- varrer: rodar fora do pico. Se falhar no meio, sobra índice INVALID: rodar o
+-- rollback e repetir. Registrar a versão no ledger à mão.
+-- Rollback: rollback/<este arquivo>.
+
+CREATE INDEX CONCURRENTLY IF NOT EXISTS lead_history_whatsapp_message_id_idx ON public.lead_history USING hash ((metadata ->> 'message_id'::text)) WHERE ((metadata ->> 'channel'::text) = 'whatsapp'::text);
