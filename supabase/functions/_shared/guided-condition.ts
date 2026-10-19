@@ -1,5 +1,5 @@
 import { isGuidedCalendarDate, isGuidedDateOperator, type GuidedDateComparison } from '../../../src/contracts/workflows/guided-dates.ts';
-import { GUIDED_RESPONSIBLE_FIELDS, isGuidedResponsibleField, type GuidedResponsibleField, GUIDED_SCALAR_FIELDS, isGuidedScalarField, isGuidedNumberField, isGuidedNumberOperator, type GuidedNumberField, type GuidedNumberComparison, isGuidedTextField, isGuidedTextOperator, type GuidedTextComparison, type GuidedTextField } from '../../../src/contracts/workflows/guided-fields.ts';
+import { GUIDED_RESPONSIBLE_FIELDS, isGuidedResponsibleField, isGuidedOwnerField, type GuidedResponsibleField, GUIDED_SCALAR_FIELDS, isGuidedScalarField, isGuidedNumberField, isGuidedNumberOperator, type GuidedNumberField, type GuidedNumberComparison, isGuidedTextField, isGuidedTextOperator, type GuidedTextComparison, type GuidedTextField } from '../../../src/contracts/workflows/guided-fields.ts';
 import { GUIDED_CONDITION_LIMITS } from '../../../src/contracts/workflows/guided-limits.ts';
 import type { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
@@ -31,6 +31,9 @@ export type GuidedOriginRule = { version: 1; id: string; field: 'lead.origin' } 
 export type GuidedResponsibleRule = { [Field in GuidedResponsibleField]: { version: 1; id: string; field: Field } & (
   { operator: 'equals' | 'not_equals'; memberId: string } | { operator: 'is_empty' } | { operator: 'is_not_empty' }
 ) }[GuidedResponsibleField];
+
+/** Chamado 793f4b05 · PR4b: "está entre os donos" olha principais + co-donos. */
+export type GuidedOwnersRule = { version: 1; id: string; field: 'lead.owners'; operator: 'owner_includes'; memberId: string };
 
 export type GuidedCustomTextRule = { version: 1; id: string; field: 'lead.custom'; fieldId: string; fieldType: 'text' } & GuidedTextComparison;
 
@@ -83,7 +86,7 @@ export type GuidedProductRule = { version: 1; id: string; field: 'product.relati
   relation: 'trigger_business_item' | 'lead_association' | 'won_deal_history';
   productId: string; operator: 'has_product' | 'not_has_product' };
 
-export type GuidedRule = GuidedProductRule | GuidedFollowUpRule | GuidedMessageWaitingRule | GuidedMessageSearchRule | GuidedMessagePeriodRule | GuidedTriggerMessageTextRule | GuidedLastWonDateRule | GuidedTriggerBusinessStageElapsedRule | GuidedTriggerBusinessValueRule | GuidedTriggerBusinessStageRule | GuidedCustomSelectRule | GuidedCustomDateRule | GuidedCustomBooleanRule | GuidedCustomNumberRule | GuidedCustomTextRule | GuidedResponsibleRule | GuidedOriginRule | GuidedScalarRule | ({ version: 1; id: string; field: GuidedNumberField } & GuidedNumberComparison) | {
+export type GuidedRule = GuidedProductRule | GuidedFollowUpRule | GuidedMessageWaitingRule | GuidedMessageSearchRule | GuidedMessagePeriodRule | GuidedTriggerMessageTextRule | GuidedLastWonDateRule | GuidedTriggerBusinessStageElapsedRule | GuidedTriggerBusinessValueRule | GuidedTriggerBusinessStageRule | GuidedCustomSelectRule | GuidedCustomDateRule | GuidedCustomBooleanRule | GuidedCustomNumberRule | GuidedCustomTextRule | GuidedResponsibleRule | GuidedOwnersRule | GuidedOriginRule | GuidedScalarRule | ({ version: 1; id: string; field: GuidedNumberField } & GuidedNumberComparison) | {
   version: 1; id: string; field: 'lead.tags'; operator: 'has_tag' | 'not_has_tag'; tagId: string;
 };
 
@@ -206,6 +209,8 @@ export function isGuidedCondition(value: unknown): value is GuidedCondition {
         && typeof rule.value === 'number' && Number.isFinite(rule.value) && rule.value >= 0
         && (rule.unit === 'minutes' || rule.unit === 'hours' || rule.unit === 'days');
     }
+    if (isGuidedOwnerField(rule.field)) return rule.operator === 'owner_includes' && typeof rule.memberId === 'string'
+      && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(rule.memberId);
     if (isGuidedResponsibleField(rule.field)) return rule.operator === 'is_empty' || rule.operator === 'is_not_empty'
       || ((rule.operator === 'equals' || rule.operator === 'not_equals') && typeof rule.memberId === 'string'
         && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(rule.memberId));
@@ -288,6 +293,8 @@ async function evaluateGuidedConditionWithinDeadline(
   const requestedFields = guidedConditionFields(request.condition);
   if (requestedFields.length > 256) return { status: 'error' as const, code: 'invalid_configuration' as const };
   const responsibleFields = requestedFields.filter(isGuidedResponsibleField);
+  // `lead.owners` viaja no mesmo bloco `responsibles` do leitor (um round-trip só).
+  const responsibleScopes: string[] = [...responsibleFields, ...requestedFields.filter(isGuidedOwnerField)];
   const customIds = new Set<string>();
   const customExpectedTypes = new Map<string, Set<string>>();
   const customOptionReferences = new Map<string, Set<string>>();
@@ -324,6 +331,7 @@ async function evaluateGuidedConditionWithinDeadline(
         customOptionReferences.set(id, options);
       }
     }
+    else if (isGuidedOwnerField(current.field)) memberIds.add(current.memberId.toLowerCase());
     else if (isGuidedResponsibleField(current.field) && current.operator !== 'is_empty' && current.operator !== 'is_not_empty' && 'memberId' in current) memberIds.add(current.memberId.toLowerCase());
     else if (current.field === 'lead.origin' && current.operator !== 'is_empty' && current.operator !== 'is_not_empty') originIds.add(current.originId.toLowerCase());
     else if (current.field === 'lead.tags') tagIds.add(current.tagId.toLowerCase());
@@ -352,7 +360,7 @@ async function evaluateGuidedConditionWithinDeadline(
   const usesCustomReader = Boolean(request.authorization && customIds.size);
   const fields = leadRequestedFields.filter(isGuidedScalarField);
   const usesFieldReader = fields.some(field => field !== 'lead.name');
-  const usesResponsibleReader = Boolean(request.authorization && responsibleFields.length);
+  const usesResponsibleReader = Boolean(request.authorization && responsibleScopes.length);
   const usesOriginReader = Boolean(request.authorization && leadRequestedFields.includes('lead.origin'));
   const usesTagReader = Boolean(request.authorization && tagIds.size);
   const businessFields = requestedFields.filter(field => field === 'business.trigger.stage' || field === 'business.trigger.value' || field === 'business.trigger.stage_elapsed');
@@ -810,13 +818,13 @@ async function evaluateGuidedConditionWithinDeadline(
   }
   const members = new Map<string, { id: string; name: string }>();
   let assignments: Record<string, unknown> = {};
-  if (responsibleFields.length) {
+  if (responsibleScopes.length) {
     const response = (usesCustomReader || usesResponsibleReader) ? {
       data: [(data as unknown as { field_values?: Record<string, unknown> }).field_values?.responsibles],
       error: null, status: 200,
     } : await caller.rpc('test_guided_condition_responsibles', {
       p_organization_id: request.organizationId, p_lead_id: request.leadId,
-      p_fields: responsibleFields, p_member_ids: [...memberIds],
+      p_fields: responsibleScopes, p_member_ids: [...memberIds],
     });
     if (response.error) {
       return { status: 'error' as const, code: classifyGuidedSourceError(response.error, response.status) };
@@ -831,6 +839,14 @@ async function evaluateGuidedConditionWithinDeadline(
       const value = assignments[GUIDED_RESPONSIBLE_FIELDS[field].column];
       return value !== null && (typeof value !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value));
     })) return { status: 'error' as const, code: 'source_unavailable' as const };
+    if (responsibleScopes.some(isGuidedOwnerField)) {
+      const ids = assignments.owner_member_ids;
+      // Lista ausente ou malformada é falha de fonte: nunca vira "não é dono".
+      if (!Array.isArray(ids) || ids.some(id => typeof id !== 'string'
+        || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id))) {
+        return { status: 'error' as const, code: 'source_unavailable' as const };
+      }
+    }
     for (const member of rows[0].members) {
       if (!member || typeof member.id !== 'string' || typeof member.name !== 'string') return { status: 'error' as const, code: 'source_unavailable' as const };
       members.set(member.id.toLowerCase(), member);
@@ -917,6 +933,14 @@ async function evaluateGuidedConditionWithinDeadline(
           ? actual.toLowerCase() === member!.id.toLowerCase() : actual.toLowerCase() !== member!.id.toLowerCase());
       rules.push({ id: condition.id, status: 'evaluated', matched, actual,
         ...(member ? { reference: { id: member.id, name: member.name } } : {}) });
+      return matched;
+    }
+    if (condition.field === 'lead.owners') {
+      const actual = (assignments.owner_member_ids as string[]).map(id => id.toLowerCase());
+      const member = members.get(condition.memberId.toLowerCase())!;
+      const matched = actual.includes(member.id.toLowerCase());
+      rules.push({ id: condition.id, status: 'evaluated', matched, actual: assignments.owner_member_ids,
+        reference: { id: member.id, name: member.name } });
       return matched;
     }
     if (condition.field === 'lead.origin') {

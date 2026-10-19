@@ -76,3 +76,23 @@ export type GuidedResponsibleField = keyof typeof GUIDED_RESPONSIBLE_FIELDS;
 export function isGuidedResponsibleField(value: unknown): value is GuidedResponsibleField {
   return typeof value === 'string' && Object.prototype.hasOwnProperty.call(GUIDED_RESPONSIBLE_FIELDS, value);
 }
+
+/**
+ * "Está entre os donos" (Chamado 793f4b05, decisão 5 do CTO). O lead pode ter N
+ * donos (principais por papel + co-donos em `lead_owners`). `lead.owners` casa
+ * QUALQUER um deles; "responsável é X" (`GUIDED_RESPONSIBLE_FIELDS`) segue no
+ * principal do papel. Campo à parte, e não operador novo nos campos de
+ * responsável, para que o escopo de dados (grant) distinga quem lê só o
+ * principal de quem lê todos os donos.
+ */
+export const GUIDED_OWNER_FIELDS = {
+  'lead.owners': { label: 'Donos do lead' },
+} as const;
+export type GuidedOwnerField = keyof typeof GUIDED_OWNER_FIELDS;
+export function isGuidedOwnerField(value: unknown): value is GuidedOwnerField {
+  return typeof value === 'string' && Object.prototype.hasOwnProperty.call(GUIDED_OWNER_FIELDS, value);
+}
+export const GUIDED_OWNER_OPERATORS = {
+  owner_includes: 'está entre os donos',
+} as const;
+export type GuidedOwnerOperator = keyof typeof GUIDED_OWNER_OPERATORS;

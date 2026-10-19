@@ -2,6 +2,8 @@ import { describe, it, expect } from 'vitest';
 import {
   compare,
   compareAnyResponsible,
+  compareOwnerIncludes,
+  evaluateCondition,
 } from '../../supabase/functions/_shared/workflow-condition-evaluator';
 
 describe('workflow-condition-evaluator — compare()', () => {
@@ -264,5 +266,59 @@ describe('workflow-condition-evaluator — compareAnyResponsible()', () => {
   });
   it('is_not_empty: both empty → false', () => {
     expect(compareAnyResponsible(null, null, 'is_not_empty', '')).toBe(false);
+  });
+});
+
+// Chamado 793f4b05 · PR4b — operador "está entre os donos" (owner_includes).
+describe('workflow-condition-evaluator — owner_includes', () => {
+  const PRE_ID = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
+  const SALE_ID = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb';
+  const CO_ID = 'cccccccc-cccc-cccc-cccc-cccccccccccc';
+  const OTHER = 'dddddddd-dddd-dddd-dddd-dddddddddddd';
+
+  it('compareOwnerIncludes: co-dono é dono; estranho não; caixa não importa', () => {
+    expect(compareOwnerIncludes([SALE_ID, CO_ID], CO_ID.toUpperCase())).toBe(true);
+    expect(compareOwnerIncludes([SALE_ID, CO_ID], OTHER)).toBe(false);
+    expect(compareOwnerIncludes([], CO_ID)).toBe(false);
+    expect(compareOwnerIncludes([null, undefined, SALE_ID], '')).toBe(false);
+  });
+
+  // Supabase falso: leads (linha única) + lead_owners (linhas do lead).
+  function fakeSupabase(lead: Record<string, unknown>, ownerRows: Array<{ team_member_id: string }>) {
+    const builder = (table: string) => {
+      const q = {
+        select: () => q,
+        eq: () => q,
+        maybeSingle: async () => ({ data: table === 'leads' ? lead : null, error: null }),
+        then: (resolve: (v: unknown) => unknown) =>
+          resolve({ data: table === 'lead_owners' ? ownerRows : [], error: null }),
+      };
+      return q;
+    };
+    return { from: builder } as never;
+  }
+  const lead = { id: 'l1', organization_id: 'o1', pre_sale_responsible_id: PRE_ID, sale_responsible_id: SALE_ID };
+
+  it('evaluateCondition: owner_includes casa co-dono que só existe em lead_owners', async () => {
+    const db = fakeSupabase(lead, [{ team_member_id: SALE_ID }, { team_member_id: CO_ID }]);
+    expect(await evaluateCondition(db, 'l1', { field: 'any_responsible', operator: 'owner_includes', value: CO_ID })).toBe(true);
+  });
+
+  it('evaluateCondition: owner_includes casa os principais mesmo sem linha em lead_owners (org sem a flag)', async () => {
+    const db = fakeSupabase(lead, []);
+    expect(await evaluateCondition(db, 'l1', { field: 'any_responsible', operator: 'owner_includes', value: PRE_ID })).toBe(true);
+    expect(await evaluateCondition(db, 'l1', { field: 'any_responsible', operator: 'owner_includes', value: SALE_ID })).toBe(true);
+  });
+
+  it('evaluateCondition: não-dono é falso', async () => {
+    const db = fakeSupabase(lead, [{ team_member_id: CO_ID }]);
+    expect(await evaluateCondition(db, 'l1', { field: 'any_responsible', operator: 'owner_includes', value: OTHER })).toBe(false);
+  });
+
+  it('evaluateCondition: "responsável de vendas é X" continua no principal (co-dono não casa)', async () => {
+    const db = fakeSupabase(lead, [{ team_member_id: CO_ID }]);
+    expect(await evaluateCondition(db, 'l1', { field: 'sale_responsible_id', operator: 'equals', value: CO_ID })).toBe(false);
+    expect(await evaluateCondition(db, 'l1', { field: 'any_responsible', operator: 'equals', value: CO_ID })).toBe(false);
+    expect(await evaluateCondition(db, 'l1', { field: 'sale_responsible_id', operator: 'equals', value: SALE_ID })).toBe(true);
   });
 });
