@@ -199,6 +199,8 @@ export async function applyMessageUpdate(db: SupabaseClient, instance: Instance,
     // conversations already read, so without this a receipt that arrived but changed nothing is
     // indistinguishable from a receipt that never arrived. Counts only, no ids/phones.
     // rows_written = 0 → unknown ids or already read; absent log → the provider sent no receipt.
+    // Sampled at 5% into runtime_logs (logger SUCCESS_SAMPLE_RATE): absence there proves nothing.
+    // Every line still reaches function_logs (`rt:1` when sampled out) — search there, not in SQL.
     else await logRuntime({ organizationId: instance.organization_id, module: "webhook",
       action: "uazapi_external_read_applied", status: "success",
       payloadSnapshot: { instance_id: instance.id, message_count: rawIds.length, rows_written: rowsWritten } });
