@@ -13,7 +13,7 @@ carga: ~1.256 s de SQL por hora no pico (314 s em 15 min, 16/10).
 | `runtime_logs` índice | `idx_runtime_logs_org_created`: 147 MB, nenhuma query do app usa | Nenhum: a migration `20271107130003` já está no repo. O portão passou hoje. | −147 MB de índice mantido a cada INSERT |
 | Outras purgas | `wa-health-checks` e `audit-log` a cada 10 min | Migration: 1×/hora | ~−25 s/dia (teto: cada execução horária apaga 6× mais), −240 backends/dia |
 | Varreduras de avisos | 2 jobs por minuto, os mais caros do pg_cron | Migration separada: a cada 2 min (**decisão de produto**) | ~−11,5 s/h, −1.440 backends/dia |
-| Realtime → Broadcast (G0) | **O bloqueio provavelmente não existe mais.** Ver G0. | Nenhum (só levantamento) | 16,2% do banco em jogo |
+| Realtime → Broadcast (G0) | **Desbloqueado.** O ensaio em prod passou em 19/10. Ver G0. | Nenhum (só levantamento) | 16,2% do banco em jogo |
 
 Leitura honesta: fora o Realtime, esta alavanca é pequena. Somadas, as migrations e o logger tiram
 ~1–2% do tempo de SQL do pico. O pg_cron inteiro pesa ~2,4% do banco, e o `runtime_logs` ficou
@@ -182,20 +182,27 @@ não de cron.
 - Não achei número de ticket no repo nem nos specs. O MACRO lista o D1 como decisão, não como
   ticket aberto.
 
-### Conclusão
-O G0 se apoia num teste de julho que nunca foi refeito, e as evidências de hoje dizem que ele não
-bloqueia mais, se é que bloqueou. A dúvida fecha com um ensaio transacional. **Ele precisa do OK do CTO**,
-porque `CREATE POLICY` pega lock exclusivo e curto em `realtime.messages`, que o serviço Realtime usa:
+### Ensaio em prod: o G0 caiu
+Rodado em 19/10 com autorização do CTO, via MCP, como `postgres`. Foi um bloco `DO` que forçou
+`RAISE EXCEPTION`, então o rollback aconteceria mesmo que a ferramenta fizesse autocommit:
 
 ```sql
-BEGIN;
-SET LOCAL lock_timeout = '2s';
-CREATE POLICY g0_ensaio ON realtime.messages FOR SELECT TO authenticated USING (false);
-SELECT count(*) FROM pg_policies WHERE schemaname = 'realtime' AND tablename = 'messages';  -- 1
-ROLLBACK;
+DO $$
+DECLARE n int;
+BEGIN
+  PERFORM set_config('lock_timeout', '2s', true);
+  CREATE POLICY g0_ensaio ON realtime.messages FOR SELECT TO authenticated USING (false);
+  SELECT count(*) INTO n FROM pg_policies
+   WHERE schemaname = 'realtime' AND tablename = 'messages' AND policyname = 'g0_ensaio';
+  RAISE EXCEPTION 'G0_ENSAIO_OK user=% policies=% (rollback forçado)', current_user, n;
+END $$;
+-- → ERROR P0001: G0_ENSAIO_OK user=postgres policies=1 (rollback forçado)
 ```
 
-Se o ensaio passar, o G0 cai. A S1 do MACRO (fundação + piloto `pipeline_entries`) pode começar.
+- O `CREATE POLICY` passou sem 42501 e a policy chegou a existir dentro da transação (`policies=1`).
+- Na consulta seguinte, `realtime.messages` voltou a ter 0 policies: nada persistiu.
+- **Conclusão: não precisa de ticket.** A S1 do MACRO (fundação + piloto `pipeline_entries`) pode
+  começar.
 Em jogo: o poll do WAL do `postgres_changes` é **16,2% do tempo do banco** desde 05/10
 (44.660 s de 275.650 s, 22,6 ms × 1,98 mi chamadas), fora do pool do PostgREST e com 11 backends
 próprios de vida longa.
