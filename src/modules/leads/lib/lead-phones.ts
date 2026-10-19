@@ -112,8 +112,25 @@ export function recusaDeTelefone(
   if (RECUSAS[msg]) return RECUSAS[msg];
   // idx_leads_org_phone_unique: o número escolhido como principal já é o
   // principal de OUTRO lead da organização.
-  if (error?.code === "23505") return "Este número já é o principal de outro lead da organização";
+  if (error?.code === "23505") return PRINCIPAL_OCUPADO_GENERICO;
   return null;
+}
+
+const PRINCIPAL_OCUPADO_GENERICO = "Este número já é o principal de outro lead da organização";
+
+/**
+ * O número escolhido como principal já é o principal de OUTRO lead vivo da org
+ * (`idx_leads_org_phone_unique`) — típico de cliente duplicado no ERP. Diz qual
+ * lead segura o número; se o RLS não deixa o usuário ver esse lead (`null`),
+ * mantém a frase genérica, sem vazar nada.
+ */
+export function mensagemDePrincipalOcupado(
+  dono: { name: string | null; erp_code: string | null } | null | undefined,
+): string {
+  if (!dono) return PRINCIPAL_OCUPADO_GENERICO;
+  const nome = dono.name?.trim() || "sem nome";
+  const rotulo = dono.erp_code ? `${dono.erp_code} - ${nome}` : nome;
+  return `Este número já é o principal do lead ${rotulo}. Tire-o de lá ou escolha outro número.`;
 }
 
 export function mensagemDoErroDeTelefone(

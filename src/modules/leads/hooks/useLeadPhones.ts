@@ -3,10 +3,13 @@ import { supabase } from "@/integrations/supabase/client";
 import {
   erroDeTelefone,
   leadPhoneFromRow,
+  mensagemDePrincipalOcupado,
   ordenarTelefones,
   type LeadPhone,
   type LeadPhoneRow,
 } from "../lib/lead-phones";
+import { useOrganization } from "@/modules/identity";
+import { normalizePhone } from "@/lib/normalizePhone";
 import { extractSearchDigits } from "../lib/lead-list-filters";
 
 /**
@@ -121,6 +124,7 @@ function invalidarTelefones(qc: ReturnType<typeof useQueryClient>, leadId: strin
 
 export function useSalvarTelefonesDoLead(leadId: string | null) {
   const qc = useQueryClient();
+  const { organizationId } = useOrganization();
   return useMutation({
     mutationFn: async (telefones: TelefoneEditado[]): Promise<void> => {
       if (!leadId) throw new Error("Lead não encontrado. Atualize a ficha.");
@@ -134,7 +138,26 @@ export function useSalvarTelefonesDoLead(leadId: string | null) {
           is_primary: t.isPrimary,
         })),
       });
-      if (error) throw erroDeTelefone(error);
+      if (error) {
+        // 23505 = o principal escolhido já é o principal de outro lead: busca
+        // QUAL (RLS do usuário recorta; sem acesso, a frase fica genérica).
+        if (error.code === "23505" && organizationId) {
+          const principal = normalizePhone(telefones.find((t) => t.isPrimary)?.phone ?? null);
+          if (principal) {
+            const { data: dono } = await supabase
+              .from("leads")
+              .select("id, name, erp_code")
+              .eq("organization_id", organizationId)
+              .eq("normalized_phone", principal)
+              .is("deleted_at", null)
+              .neq("id", leadId)
+              .limit(1)
+              .maybeSingle();
+            throw new Error(mensagemDePrincipalOcupado(dono));
+          }
+        }
+        throw erroDeTelefone(error);
+      }
     },
     onSettled: () => invalidarTelefones(qc, leadId),
   });
