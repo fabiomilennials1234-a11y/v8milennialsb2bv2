@@ -120,10 +120,28 @@ function read(org: string): PlanEntry {
   return entries.get(org)!;
 }
 
+/** Plano é por usuário: logout descarta tudo (o próximo login rebusca). */
+let authWatch = false;
+function watchAuth() {
+  if (authWatch) return;
+  const auth = (supabase as unknown as { auth?: { onAuthStateChange?: (cb: (event: string) => void) => unknown } }).auth;
+  if (typeof auth?.onAuthStateChange !== "function") return;
+  authWatch = true;
+  auth.onAuthStateChange((event) => {
+    // Só SIGNED_OUT: o supabase-js reemite SIGNED_IN ao refocar a aba, e
+    // limpar ali derrubaria e reabriria todos os canais a cada foco.
+    if (event !== "SIGNED_OUT") return;
+    entries.clear();
+    fetchedAt.clear();
+    emit();
+  });
+}
+
 /** Prefetch + releitura periódica. Montado uma vez, no `RealtimeOrgProvider`. */
 export function useRealtimePlanRefresh(organizationId: string | null): void {
   useEffect(() => {
     if (!organizationId || disabledByEnv()) return;
+    watchAuth();
     const last = fetchedAt.get(organizationId);
     if (last === undefined || Date.now() - last >= PLAN_TTL_MS) load(organizationId, true);
     const refresh = () => load(organizationId, true);

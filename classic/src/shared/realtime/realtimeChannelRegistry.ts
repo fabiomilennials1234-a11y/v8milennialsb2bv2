@@ -128,7 +128,10 @@ const entries = new Map<string, Entry>();
 const leaving = new Map<string, Promise<void>>();
 
 export function realtimeChannelKey(spec: ChannelSpec): string {
-  if (spec.topic) return ["bc", spec.topic, spec.table, spec.threshold, spec.cooldownMs].join("|");
+  // Broadcast: UMA entrada por tópico (o cliente só aceita um canal por
+  // tópico). Configuração de circuito diferente no mesmo tópico usa a do
+  // primeiro a entrar — duas entradas se derrubariam no detachStale.
+  if (spec.topic) return ["bc", spec.topic, spec.table].join("|");
   return [spec.table, spec.filter ?? "*", spec.event ?? "*", spec.threshold, spec.cooldownMs].join("|");
 }
 

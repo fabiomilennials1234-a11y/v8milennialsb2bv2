@@ -10664,10 +10664,10 @@ index 4446e73e4..117aa9cd9 100644
        {children}
 diff --git a/classic/src/shared/realtime/realtimeChannelRegistry.ts b/classic/src/shared/realtime/realtimeChannelRegistry.ts
 new file mode 100644
-index 000000000..39074e18d
+index 000000000..c4920d58c
 --- /dev/null
 +++ b/classic/src/shared/realtime/realtimeChannelRegistry.ts
-@@ -0,0 +1,437 @@
+@@ -0,0 +1,440 @@
 +/**
 + * realtimeChannelRegistry — UMA assinatura `postgres_changes` por
 + * (tabela, filtro, evento) por aba, compartilhada por refcount.
@@ -10798,7 +10798,10 @@ index 000000000..39074e18d
 +const leaving = new Map<string, Promise<void>>();
 +
 +export function realtimeChannelKey(spec: ChannelSpec): string {
-+  if (spec.topic) return ["bc", spec.topic, spec.table, spec.threshold, spec.cooldownMs].join("|");
++  // Broadcast: UMA entrada por tópico (o cliente só aceita um canal por
++  // tópico). Configuração de circuito diferente no mesmo tópico usa a do
++  // primeiro a entrar — duas entradas se derrubariam no detachStale.
++  if (spec.topic) return ["bc", spec.topic, spec.table].join("|");
 +  return [spec.table, spec.filter ?? "*", spec.event ?? "*", spec.threshold, spec.cooldownMs].join("|");
 +}
 +
@@ -11107,10 +11110,10 @@ index 000000000..39074e18d
 +}
 diff --git a/classic/src/shared/realtime/realtimeTransportPlan.ts b/classic/src/shared/realtime/realtimeTransportPlan.ts
 new file mode 100644
-index 000000000..2afda5497
+index 000000000..27ccbc700
 --- /dev/null
 +++ b/classic/src/shared/realtime/realtimeTransportPlan.ts
-@@ -0,0 +1,173 @@
+@@ -0,0 +1,191 @@
 +/**
 + * realtimeTransportPlan — qual transporte cada tabela usa NESTA org, para
 + * ESTE usuário: `postgres_changes` (padrão) ou Broadcast privado.
@@ -11233,10 +11236,28 @@ index 000000000..2afda5497
 +  return entries.get(org)!;
 +}
 +
++/** Plano é por usuário: logout descarta tudo (o próximo login rebusca). */
++let authWatch = false;
++function watchAuth() {
++  if (authWatch) return;
++  const auth = (supabase as unknown as { auth?: { onAuthStateChange?: (cb: (event: string) => void) => unknown } }).auth;
++  if (typeof auth?.onAuthStateChange !== "function") return;
++  authWatch = true;
++  auth.onAuthStateChange((event) => {
++    // Só SIGNED_OUT: o supabase-js reemite SIGNED_IN ao refocar a aba, e
++    // limpar ali derrubaria e reabriria todos os canais a cada foco.
++    if (event !== "SIGNED_OUT") return;
++    entries.clear();
++    fetchedAt.clear();
++    emit();
++  });
++}
++
 +/** Prefetch + releitura periódica. Montado uma vez, no `RealtimeOrgProvider`. */
 +export function useRealtimePlanRefresh(organizationId: string | null): void {
 +  useEffect(() => {
 +    if (!organizationId || disabledByEnv()) return;
++    watchAuth();
 +    const last = fetchedAt.get(organizationId);
 +    if (last === undefined || Date.now() - last >= PLAN_TTL_MS) load(organizationId, true);
 +    const refresh = () => load(organizationId, true);

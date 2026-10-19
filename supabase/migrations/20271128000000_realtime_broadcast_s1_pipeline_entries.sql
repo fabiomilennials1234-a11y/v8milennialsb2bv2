@@ -104,6 +104,9 @@ CREATE POLICY rt_broadcast_select
   TO authenticated
   USING (
     realtime.messages.extension = 'broadcast'
+    -- A linha tem de ser do tópico autorizado: sem isto, quem controlasse
+    -- `realtime.topic` numa leitura direta da tabela veria todos os tópicos.
+    AND realtime.messages.topic = (SELECT realtime.topic())
     AND private.realtime_can_join((SELECT realtime.topic()))
   );
 

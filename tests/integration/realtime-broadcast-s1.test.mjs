@@ -181,6 +181,15 @@ test('realtime broadcast S1 — pipeline_entries', async (t) => {
       assert.equal(r.rows[0].n, 0, 'no realtime.topic → refused');
     });
 
+    await t.test('rows of another topic stay hidden even with an authorized realtime.topic', async () => {
+      await db.exec('BEGIN');
+      await db.query(`INSERT INTO realtime.messages(topic, extension, payload, private) VALUES ($1, 'broadcast', '{}', true), ($2, 'broadcast', '{}', true)`, [topic(ORG.A), topic(ORG.B)]);
+      await db.exec(`${claimsSql('memberA')}; SELECT set_config('realtime.topic', '${topic(ORG.A)}', true); SET LOCAL ROLE authenticated;`);
+      const r = await db.query('SELECT topic FROM realtime.messages ORDER BY topic');
+      await db.exec('ROLLBACK');
+      assert.deepEqual(r.rows.map((x) => x.topic), [topic(ORG.A)], 'only A (control) — never B');
+    });
+
     await t.test('presence extension is not authorized', async () => {
       assert.equal(await joins(db, 'memberA', topic(ORG.A), { extension: 'presence' }), false);
     });
