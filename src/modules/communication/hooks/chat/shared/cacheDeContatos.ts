@@ -35,6 +35,7 @@
  */
 import type { QueryClient } from "@tanstack/react-query";
 import type { ChatContact } from "../types";
+import { MULTI_KEY_PREFIX } from "./queryKeys";
 
 /** O envelope da lista por conjunto de caixas. Espelha `useConversasUnificadas`. */
 interface ListaUnificadaEmCache {
@@ -107,4 +108,20 @@ export function zerarNaoLidas(
       atuais.map((c) => (casa(c) ? { ...c, unread_count: 0 } : c)),
     );
   });
+}
+
+/**
+ * A entrada de cache `key` (sob a raiz `whatsapp_contacts`) mostra conversas da
+ * `caixa`? Lista de uma caixa: o terceiro segmento É a caixa. Lista por conjunto:
+ * `multi:<ids>` contém a caixa.
+ *
+ * É o recorte que impede um evento de uma caixa de mexer (ou refazer) listas que
+ * não a mostram — em org com mais de um número, sem ele cada mensagem refaria
+ * todas as listas da org.
+ */
+export function listaMostraCaixa(key: readonly unknown[], caixa: string): boolean {
+  const eixo = key[2];
+  if (typeof eixo !== "string") return false;
+  if (!eixo.startsWith(MULTI_KEY_PREFIX)) return eixo === caixa;
+  return eixo.slice(MULTI_KEY_PREFIX.length).split(",").includes(caixa);
 }

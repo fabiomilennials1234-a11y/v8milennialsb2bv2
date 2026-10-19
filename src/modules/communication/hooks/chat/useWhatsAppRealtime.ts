@@ -20,10 +20,11 @@ import { useRealtimeChannel } from "@/shared/realtime/useRealtimeChannel";
 import type { WhatsAppMessage } from "./types";
 import type { RealtimePostgresChangesPayload } from "@supabase/supabase-js";
 import { normalizePhone as canonicalNormalizePhone } from "@/lib/normalizePhone";
-import { chatQueryKeys, MULTI_KEY_PREFIX } from "./shared/queryKeys";
+import { chatQueryKeys } from "./shared/queryKeys";
 import {
   comContatos,
   contatosDoCache,
+  listaMostraCaixa,
   type CacheDeContatos,
 } from "./shared/cacheDeContatos";
 import { upsertRealtimeMessage } from "./shared/optimistic-messages";
@@ -142,18 +143,8 @@ export function useWhatsAppMessagesRealtime(
         const raiz = ["whatsapp_contacts", organizationId ?? null] as const;
         const normPhone = normalizePhone(messagePhone);
 
-        const contemACaixa = (key: readonly unknown[]): boolean => {
-          const eixo = key[2];
-          if (typeof eixo !== "string") return false;
-          if (!eixo.startsWith(MULTI_KEY_PREFIX)) return eixo === caixaDaMensagem;
-          return eixo
-            .slice(MULTI_KEY_PREFIX.length)
-            .split(",")
-            .includes(caixaDaMensagem);
-        };
-
         for (const query of queryClient.getQueryCache().findAll({ queryKey: raiz })) {
-          if (!contemACaixa(query.queryKey)) continue;
+          if (!listaMostraCaixa(query.queryKey, caixaDaMensagem)) continue;
 
           // A raiz guarda DUAS formas — o array da lista de uma caixa e o
           // envelope `{ contatos, cheia }` da lista por conjunto. Ler o `.data`

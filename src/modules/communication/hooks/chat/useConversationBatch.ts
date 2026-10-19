@@ -2,6 +2,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useCurrentTeamMember } from "@/modules/identity";
 import { notifyError } from "@/shared/errors";
+import { invalidarListaDeConversas } from "./chatReconcile";
 import { runConversationBatch, type BatchContact, type ConversationBatchAction } from "../../lib/conversationBatch";
 
 export function useConversationBatch(organizationId: string, isAdmin: boolean) {
@@ -48,7 +49,7 @@ export function useConversationBatch(organizationId: string, isAdmin: boolean) {
       }
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["whatsapp_conversations", organizationId] }),
-        queryClient.invalidateQueries({ queryKey: ["whatsapp_contacts", organizationId] }),
+        invalidarListaDeConversas(queryClient, organizationId),
       ]);
     },
   });
