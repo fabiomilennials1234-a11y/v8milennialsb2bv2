@@ -34,6 +34,7 @@ const {
   normalizeTemplate,
   readTemplateListEnvelope,
   listTemplates,
+  createTemplate,
 } = await import("../../supabase/functions/_shared/notificame-templates.ts");
 
 const BASE = "https://hub.notificame.example";
@@ -336,5 +337,34 @@ describe("listTemplates — rota, credencial e veredito pelo corpo", () => {
     const out = await listTemplates(CFG, CHANNEL, f.impl);
     expect(out).toHaveLength(1);
     expect(out[0].name).toBe("boa");
+  });
+});
+
+// ═════════════════════════════════════════════════════════════════════════════
+// CRIAÇÃO — a recusa carrega o motivo do fornecedor até o log
+// ═════════════════════════════════════════════════════════════════════════════
+
+describe("createTemplate — recusa", () => {
+  const input = {
+    name: "fwp",
+    language: "pt_BR",
+    category: "UTILITY" as const,
+    components: [{ type: "BODY", text: "Oi {{1}}, ficou alguma dúvida?" }],
+  };
+
+  // Incidente de 19/10: a recusa chegava, e o motivo morria aqui. O log de prod
+  // dizia só "NotificaMe recusou a criação do template" — duas tentativas, zero
+  // pista. O detalhe é server-only (vai para log, nunca para a resposta HTTP).
+  it("preserva código e mensagem do fornecedor no erro", async () => {
+    const f = makeFetch(JSON.stringify({
+      error: { code: "ERROR", message: "Invalid parameter: variables can't be at the start or end" },
+    }), 400);
+
+    const err = await createTemplate(CFG, CHANNEL, input, f.impl).catch((e: unknown) => e);
+
+    expect(err).toMatchObject({
+      code: "ERROR",
+      vendor: { code: "ERROR", message: "Invalid parameter: variables can't be at the start or end" },
+    });
   });
 });

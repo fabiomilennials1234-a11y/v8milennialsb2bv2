@@ -53,6 +53,7 @@ import {
   NotificameError,
   type NotificameOrgConfig,
   parseNotificameBody,
+  vendorDetailFromParse,
 } from "./notificame.ts";
 
 // ─── Caminho e identidade do canal (puro) ────────────────────────────────────
@@ -440,7 +441,14 @@ export async function createTemplate(
 
   const parsed = parseNotificameBody(raw);
   if (!parsed.ok) {
-    throw new NotificameError(parsed.code, "NotificaMe recusou a criação do template");
+    // O motivo do fornecedor (que costuma repassar o da Meta) segue no erro para
+    // o LOG. Sem ele, a linha de `runtime_logs` dizia só "recusou" e a pergunta
+    // "qual regra caiu?" ficava sem resposta — incidente de 19/10.
+    throw new NotificameError(
+      parsed.code,
+      "NotificaMe recusou a criação do template",
+      vendorDetailFromParse(parsed),
+    );
   }
 
   const value = parsed.value;
