@@ -1,4 +1,4 @@
--- Rollback de 20271128000000_etiquetas_na_lista_multi.sql
+-- Rollback de 20271129000000_etiquetas_na_lista_multi.sql
 --
 -- Devolve get_whatsapp_conversation_list_multi à definição de
 -- 20271125000000_co_donos_na_conversa.sql (sem a coluna `tags`). O front segue

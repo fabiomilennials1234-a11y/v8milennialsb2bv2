@@ -61,7 +61,7 @@
 -- no fan-out de sempre. Banco novo + front velho: a coluna a mais é ignorada.
 -- NOTIFY recarrega o schema cache do PostgREST.
 --
--- Rollback: supabase/migrations/rollback/20271128000000_etiquetas_na_lista_multi.sql
+-- Rollback: supabase/migrations/rollback/20271129000000_etiquetas_na_lista_multi.sql
 -- NÃO APLICADA em nenhum banco remoto por esta entrega.
 
 BEGIN;

@@ -23,7 +23,7 @@ lista multi do /chat fazia a RPC + 2 idas de fan-out só para etiquetas
 - **Front (só a V5, caminho multi)**: linha com `tags` → `contato.tags` direto, e `enriquecerContatos(..., { etiquetasJaResolvidas: true })` pula o fan-out. Linha sem a coluna (banco velho, queda por caixa) → fan-out de sempre. `useWhatsAppContacts` (caixa isolada) e a clássica não mudam.
 
 ## Arquivos tocados
-- `supabase/migrations/20271128000000_etiquetas_na_lista_multi.sql` (+ rollback)
+- `supabase/migrations/20271129000000_etiquetas_na_lista_multi.sql` (+ rollback)
 - `src/modules/communication/hooks/chat/shared/enriquecerContatos.ts`, `src/modules/communication/hooks/chat/useConversasUnificadas.ts`
 - `src/integrations/supabase/types.ts` (coluna `tags: Json`)
 - Testes: `tests/integration/conversation-list-multi-tags.test.mjs` (PGlite, no CI), `src/modules/communication/hooks/chat/shared/enriquecerContatos.test.ts`, `src/modules/communication/hooks/chat/useConversasUnificadas.test.tsx`

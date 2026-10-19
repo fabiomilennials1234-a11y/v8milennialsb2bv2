@@ -92,7 +92,7 @@ export interface OpcoesDeEnriquecimento {
   organizationId?: string;
   /**
    * As linhas JÁ trazem `tags` resolvidas pelo servidor — a RPC multi devolve a
-   * coluna desde a migration 20271128000000, com a visibilidade da RLS e o mesmo
+   * coluna desde a migration 20271129000000, com a visibilidade da RLS e o mesmo
    * merge (lead primeiro, dedupe por id). Quando `true`, o fan-out a
    * `lead_tags` e `whatsapp_conversation_tags` NÃO roda e `c.tags` fica como
    * veio: são duas idas ao PostgREST por refetch a menos. Opt-in explícito, e não
