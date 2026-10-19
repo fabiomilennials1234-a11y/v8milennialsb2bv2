@@ -120,9 +120,8 @@ describe("lead-service — número em 2 leads vivos (Chamados 99067f13, 33c5fd52
     leads: [row("L-VELHO", "2026-01-01", P), row("L-NOVO", "2026-09-01", null)],
     lead_phones: [{ organization_id: ORG, lead_id: "L-VELHO", normalized_phone: P, deleted_at: null },
                   { organization_id: ORG, lead_id: "L-NOVO", normalized_phone: P, deleted_at: null }],
-    pipeline_entries: withOpenDeal ? [{ organization_id: ORG, lead_id: "L-VELHO", deal_id: "D1" }] : [],
     deals: withOpenDeal
-      ? [{ id: "D1", organization_id: ORG, created_at: "2026-02-01", closed_at: null, deleted_at: null }]
+      ? [{ id: "D1", organization_id: ORG, source_lead_id: "L-VELHO", created_at: "2026-02-01", closed_at: null, deleted_at: null }]
       : [],
   });
 
@@ -142,5 +141,17 @@ describe("lead-service — número em 2 leads vivos (Chamados 99067f13, 33c5fd52
       const { supabase } = fakeSupabaseTables(t);
       expect(await findLeadByPhoneOrEmail(supabase, ORG, P)).toBeNull();
     }
+  });
+
+  it("getOrCreateLead: ambíguo sem negócio aberto devolve null e NÃO cria lead", async () => {
+    // O fake não tem `insert`: se tentasse criar, quebraria com TypeError.
+    const { supabase } = fakeSupabaseTables(tables(false));
+    expect(await getOrCreateLead(supabase, { organizationId: ORG, phone: P, name: "X" })).toBeNull();
+  });
+
+  it("getOrCreateLead: ambíguo COM negócio aberto devolve o lead do negócio, sem criar", async () => {
+    const { supabase } = fakeSupabaseTables(tables(true));
+    const r = await getOrCreateLead(supabase, { organizationId: ORG, phone: P, name: "X" });
+    expect(r).toMatchObject({ created: false, source: "phone", lead: { id: "L-VELHO" } });
   });
 });

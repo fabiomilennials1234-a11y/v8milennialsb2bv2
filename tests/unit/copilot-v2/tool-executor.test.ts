@@ -78,7 +78,6 @@ describe('get_lead_360', () => {
         { id: 'l2', organization_id: 'org-1', normalized_phone: null, deleted_at: null },
       ],
       lead_phones: [{ organization_id: 'org-1', lead_id: 'l2', normalized_phone: '11987654321', deleted_at: null }],
-      pipeline_entries: [],
       deals: [],
     });
     const exec = createToolExecutor(supabase, { organizationId: 'org-1', canonicalPhone: '11987654321' });
@@ -93,8 +92,7 @@ describe('get_lead_360', () => {
         { id: 'l2', organization_id: 'org-1', normalized_phone: null, deleted_at: null },
       ],
       lead_phones: [{ organization_id: 'org-1', lead_id: 'l2', normalized_phone: '11987654321', deleted_at: null }],
-      pipeline_entries: [{ organization_id: 'org-1', lead_id: 'l2', deal_id: 'd1' }],
-      deals: [{ id: 'd1', organization_id: 'org-1', created_at: '2026-05-01', closed_at: null, deleted_at: null }],
+      deals: [{ id: 'd1', organization_id: 'org-1', source_lead_id: 'l2', created_at: '2026-05-01', closed_at: null, deleted_at: null }],
       upsell_clients: [],
     });
     const exec = createToolExecutor(supabase, { organizationId: 'org-1', canonicalPhone: '11987654321' });

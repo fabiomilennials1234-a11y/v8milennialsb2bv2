@@ -95,36 +95,18 @@ export async function resolveLeadByPhone(
   if (preferred && candidateIds.includes(preferred)) return { leadId: preferred, candidateIds };
   if (candidateIds.length <= 1) return { leadId: candidateIds[0] ?? null, candidateIds };
 
-  // 2+ leads vivos: o negócio aberto decide. Lead→negócio = pipeline_entries.deal_id.
-  const entries = await supabase
-    .from("pipeline_entries")
-    .select("lead_id, deal_id")
-    .eq("organization_id", organizationId)
-    .in("lead_id", candidateIds)
-    .not("deal_id", "is", null);
-  if (entries.error) return { leadId: null, candidateIds, error: entries.error.message };
-
-  const dealToLeads = new Map<string, Set<string>>();
-  for (const e of (entries.data ?? []) as Array<{ lead_id: string; deal_id: string }>) {
-    if (!dealToLeads.has(e.deal_id)) dealToLeads.set(e.deal_id, new Set());
-    dealToLeads.get(e.deal_id)!.add(e.lead_id);
-  }
-  if (dealToLeads.size === 0) return { leadId: null, candidateIds };
-
+  // 2+ leads vivos: o negócio aberto decide. Lead→negócio = `deals.source_lead_id`
+  // (mesma ligação do SQL da PR2; `pipeline_entries` cobre só parte dos negócios).
   const deals = await supabase
     .from("deals")
-    .select("id, created_at")
+    .select("id, source_lead_id, created_at")
     .eq("organization_id", organizationId)
-    .in("id", [...dealToLeads.keys()])
+    .in("source_lead_id", candidateIds)
     .is("closed_at", null)
     .is("deleted_at", null);
   if (deals.error) return { leadId: null, candidateIds, error: deals.error.message };
 
-  const openDeals: OpenDealRow[] = [];
-  for (const d of (deals.data ?? []) as Array<{ id: string; created_at: string }>) {
-    for (const leadId of dealToLeads.get(d.id) ?? []) {
-      openDeals.push({ lead_id: leadId, deal_id: d.id, created_at: d.created_at });
-    }
-  }
+  const openDeals: OpenDealRow[] = ((deals.data ?? []) as Array<{ id: string; source_lead_id: string; created_at: string }>)
+    .map((d) => ({ lead_id: d.source_lead_id, deal_id: d.id, created_at: d.created_at }));
   return { leadId: pickLeadByOpenDeal(candidateIds, openDeals), candidateIds };
 }

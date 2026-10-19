@@ -113,16 +113,17 @@ async function findLeadByPhone(
   supabase: SupabaseClient,
   organizationId: string,
   normalizedPhone: string,
-): Promise<GetOrCreateLeadResult["lead"] | null> {
+): Promise<{ lead: GetOrCreateLeadResult["lead"] | null; ambiguous: boolean }> {
   const { leadId, candidateIds, error } = await resolveLeadByPhone(supabase, organizationId, normalizedPhone);
   if (error) console.error("[lead-service] Error searching by phone:", error);
   if (!leadId) {
-    if (candidateIds.length > 1) {
+    const ambiguous = candidateIds.length > 1;
+    if (ambiguous) {
       console.warn(
         `[lead-service] Phone shared by ${candidateIds.length} live leads with no open deal: not choosing one`,
       );
     }
-    return null;
+    return { lead: null, ambiguous };
   }
 
   const { data: rows } = await supabase
@@ -132,7 +133,7 @@ async function findLeadByPhone(
     .eq("id", leadId)
     .is("deleted_at", null)
     .limit(1);
-  return rows?.[0] ?? null;
+  return { lead: rows?.[0] ?? null, ambiguous: false };
 }
 
 /**
@@ -183,7 +184,10 @@ export async function getOrCreateLead(
 
   // 1. SEARCH BY PHONE (priority): principal ou secundário, regra do negócio aberto
   if (normalizedPhone) {
-    const leadByPhone = await findLeadByPhone(supabase, organizationId, normalizedPhone);
+    const { lead: leadByPhone, ambiguous } = await findLeadByPhone(supabase, organizationId, normalizedPhone);
+    // Número em 2+ leads vivos sem negócio aberto: a mensagem chega pelo número,
+    // sem lead. Não cria um terceiro e não cai no e-mail (Chamados 99067f13, 33c5fd52).
+    if (ambiguous) return null;
     if (leadByPhone) {
       console.log("[lead-service] Found lead by phone:", leadByPhone.id);
       return { lead: leadByPhone, created: false, source: "phone" };
@@ -314,7 +318,7 @@ export async function getOrCreateLead(
 
       // Retry search - the lead was created by another process
       if (normalizedPhone) {
-        const retryLead = await findLeadByPhone(supabase, organizationId, normalizedPhone);
+        const { lead: retryLead } = await findLeadByPhone(supabase, organizationId, normalizedPhone);
         if (retryLead) {
           console.log("[lead-service] Found lead after retry:", retryLead.id);
           return { lead: retryLead, created: false, source: "phone" };
@@ -396,7 +400,8 @@ export async function findLeadByPhoneOrEmail(
 
   // Search by phone first (principal ou secundário; ver findLeadByPhone)
   if (normalizedPhone) {
-    const leadByPhone = await findLeadByPhone(supabase, organizationId, normalizedPhone);
+    const { lead: leadByPhone, ambiguous } = await findLeadByPhone(supabase, organizationId, normalizedPhone);
+    if (ambiguous) return null;
     if (leadByPhone) return leadByPhone;
   }
 

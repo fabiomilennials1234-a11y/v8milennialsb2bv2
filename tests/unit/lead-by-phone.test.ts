@@ -25,13 +25,11 @@ const base = {
     { organization_id: ORG, lead_id: "L-B", normalized_phone: PHONE, deleted_at: null },
     { organization_id: ORG, lead_id: "L-DEL", normalized_phone: PHONE, deleted_at: null },
   ],
-  pipeline_entries: [] as Record<string, unknown>[],
   deals: [] as Record<string, unknown>[],
 };
 
-const entry = (lead_id: string, deal_id: string) => ({ organization_id: ORG, lead_id, deal_id });
-const deal = (id: string, created_at: string, over: Record<string, unknown> = {}) => ({
-  id, organization_id: ORG, created_at, closed_at: null, deleted_at: null, ...over,
+const deal = (id: string, lead: string, created_at: string, over: Record<string, unknown> = {}) => ({
+  id, organization_id: ORG, source_lead_id: lead, created_at, closed_at: null, deleted_at: null, ...over,
 });
 
 /** Roda o resolvedor com as linhas em ordem direta e invertida e exige UM resultado. */
@@ -40,11 +38,9 @@ async function resolveInAllOrders(tables: FakeTables, opts?: { preferredLeadId?:
   const rev = <T,>(xs: T[]) => [...xs].reverse();
   for (const leads of [tables.leads, rev(tables.leads)]) {
     for (const lead_phones of [tables.lead_phones, rev(tables.lead_phones)]) {
-      for (const pipeline_entries of [tables.pipeline_entries, rev(tables.pipeline_entries)]) {
-        for (const deals of [tables.deals, rev(tables.deals)]) {
-          const { supabase } = fakeSupabaseTables({ leads, lead_phones, pipeline_entries, deals });
-          results.add((await resolveLeadByPhone(supabase, ORG, PHONE, opts)).leadId);
-        }
+      for (const deals of [tables.deals, rev(tables.deals)]) {
+        const { supabase } = fakeSupabaseTables({ leads, lead_phones, deals });
+        results.add((await resolveLeadByPhone(supabase, ORG, PHONE, opts)).leadId);
       }
     }
   }
@@ -69,27 +65,25 @@ describe("resolveLeadByPhone", () => {
   it("2 leads vivos, negócio só fechado ou apagado: nenhum lead", async () => {
     const t = {
       ...base,
-      pipeline_entries: [entry("L-A", "D1"), entry("L-B", "D2")],
       deals: [
-        deal("D1", "2026-05-01", { closed_at: "2026-05-02" }),
-        deal("D2", "2026-05-01", { deleted_at: "2026-05-03" }),
+        deal("D1", "L-A", "2026-05-01", { closed_at: "2026-05-02" }),
+        deal("D2", "L-B", "2026-05-01", { deleted_at: "2026-05-03" }),
       ],
     };
     expect(await resolveInAllOrders(t)).toBeNull();
   });
 
-  it("2 leads vivos, um com negócio aberto: o do negócio aberto, seja o primário ou o secundário", async () => {
-    const a = { ...base, pipeline_entries: [entry("L-A", "D1")], deals: [deal("D1", "2026-05-01")] };
+  it("2 leads vivos, um com negócio aberto só em deals.source_lead_id (sem pipeline_entries): esse lead, primário ou secundário", async () => {
+    const a = { ...base, deals: [deal("D1", "L-A", "2026-05-01")] };
     expect(await resolveInAllOrders(a)).toBe("L-A");
-    const b = { ...base, pipeline_entries: [entry("L-B", "D1")], deals: [deal("D1", "2026-05-01")] };
+    const b = { ...base, deals: [deal("D1", "L-B", "2026-05-01")] };
     expect(await resolveInAllOrders(b)).toBe("L-B");
   });
 
   it("os dois com negócio aberto: o de negócio mais recente", async () => {
     const t = {
       ...base,
-      pipeline_entries: [entry("L-A", "D1"), entry("L-B", "D2")],
-      deals: [deal("D1", "2026-05-01"), deal("D2", "2026-06-01")],
+      deals: [deal("D1", "L-A", "2026-05-01"), deal("D2", "L-B", "2026-06-01")],
     };
     expect(await resolveInAllOrders(t)).toBe("L-B");
   });
@@ -97,8 +91,7 @@ describe("resolveLeadByPhone", () => {
   it("empate de created_at desempata pelo id do negócio (maior vence)", async () => {
     const t = {
       ...base,
-      pipeline_entries: [entry("L-A", "D1"), entry("L-B", "D2")],
-      deals: [deal("D1", "2026-05-01"), deal("D2", "2026-05-01")],
+      deals: [deal("D1", "L-A", "2026-05-01"), deal("D2", "L-B", "2026-05-01")],
     };
     expect(await resolveInAllOrders(t)).toBe("L-B");
   });

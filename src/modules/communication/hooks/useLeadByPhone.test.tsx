@@ -34,8 +34,7 @@ const phones = [
   { organization_id: ORG, lead_id: "L-B", normalized_phone: PHONE, deleted_at: null },
 ];
 const openDeal = (leadId: string) => ({
-  pipeline_entries: [{ organization_id: ORG, lead_id: leadId, deal_id: "D1" }],
-  deals: [{ id: "D1", organization_id: ORG, created_at: "2026-05-01", closed_at: null, deleted_at: null }],
+  deals: [{ id: "D1", organization_id: ORG, source_lead_id: leadId, created_at: "2026-05-01", closed_at: null, deleted_at: null }],
 });
 
 function run(opts?: { preferredLeadId?: string | null }) {
@@ -51,7 +50,7 @@ describe("useLeadByPhone", () => {
   });
 
   it("um lead vivo no número: abre esse lead (não regride)", async () => {
-    tables = { leads: [lead("L-A", PHONE)], lead_phones: [], pipeline_entries: [], deals: [] };
+    tables = { leads: [lead("L-A", PHONE)], lead_phones: [], deals: [] };
     const { result } = run();
     await waitFor(() => expect(result.current.data).toMatchObject({ id: "L-A" }));
   });
@@ -65,14 +64,14 @@ describe("useLeadByPhone", () => {
   });
 
   it("2 leads sem negócio aberto: nenhum lead", async () => {
-    tables = { leads: [lead("L-A", PHONE), lead("L-B", null)], lead_phones: phones, pipeline_entries: [], deals: [] };
+    tables = { leads: [lead("L-A", PHONE), lead("L-B", null)], lead_phones: phones, deals: [] };
     const { result } = run();
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(result.current.data).toBeNull();
   });
 
   it("leadId preferido do deep link vence nos 2 leads sem negócio aberto", async () => {
-    tables = { leads: [lead("L-A", PHONE), lead("L-B", null)], lead_phones: phones, pipeline_entries: [], deals: [] };
+    tables = { leads: [lead("L-A", PHONE), lead("L-B", null)], lead_phones: phones, deals: [] };
     const { result } = run({ preferredLeadId: "L-B" });
     await waitFor(() => expect(result.current.data).toMatchObject({ id: "L-B" }));
   });
