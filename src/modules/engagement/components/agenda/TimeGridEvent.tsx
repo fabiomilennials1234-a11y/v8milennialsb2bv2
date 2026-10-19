@@ -7,7 +7,7 @@
 
 import { format } from "date-fns";
 import type { UnifiedEvent } from "./agenda-helpers";
-import { getEventTop, getEventHeight, SOURCE_LABELS } from "./agenda-helpers";
+import { getEventTop, getEventHeight, isFinishedEvent, SOURCE_LABELS } from "./agenda-helpers";
 
 interface TimeGridEventProps {
   event: UnifiedEvent;
@@ -30,6 +30,9 @@ export function TimeGridEvent({
   const height = Math.max(getEventHeight(event), 22);
   const color = event.color;
   const MARGIN = 2;
+  // Finalizado ganha o risco (cor sozinha não é sinal). Não compareceu fica de
+  // fora: segue em atraso, pedindo ação, e não pode parecer "feito".
+  const riscado = isFinishedEvent(event) && (event.status ?? "").toLowerCase() !== "no_show";
 
   return (
     <div
@@ -50,7 +53,7 @@ export function TimeGridEvent({
       <div className="px-2 py-0.5 h-full flex flex-col justify-start overflow-hidden">
         {/* A cor da fonte fica na borda e no banho, nunca no texto — mesmo
             idioma de `MonthEventPill`: o ouro como texto dá ~1,7:1. */}
-        <p className="text-[11px] font-semibold leading-tight truncate text-foreground">
+        <p className={`text-[11px] font-semibold leading-tight truncate text-foreground ${riscado ? "line-through opacity-70" : ""}`}>
           {event.title}
         </p>
         {height > 38 && (

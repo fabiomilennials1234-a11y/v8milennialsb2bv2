@@ -38,6 +38,8 @@ const STATUS_ENCERRADO = new Set([
   "perdido",
   "completed",
   "concluido",
+  // scheduled_user_messages: a Agenda passou a listar a mensagem já enviada.
+  "sent",
 ]);
 
 function rotuloDoDia(inicio: Date): string {

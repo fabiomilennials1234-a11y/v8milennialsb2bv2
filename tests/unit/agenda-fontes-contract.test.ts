@@ -554,35 +554,31 @@ describe("get_agenda_events — a versão nova não pode colidir nem regredir", 
     expect(tocam[tocam.length - 1]).toBe(arquivo);
   });
 
-  it("existe rollback, e ele restaura as 5 fontes — não só o nome do arquivo", () => {
-    // MUTAÇÃO — o teste anterior só checava a presença do NOME na listagem.
-    // Rollback truncado para 0 bytes: verde. Rollback com a definição de 4
-    // FONTES — que é exatamente o que o cabeçalho dele diz que NÃO se deve
-    // fazer, porque apagaria a Source 5 do PROD: verde também. É o artefato que
-    // se usa sob pressão, em incidente; checar o nome não é checar nada.
+  it("existe rollback, e ele restaura a definição ANTERIOR inteira — não só o nome do arquivo", () => {
+    // MUTAÇÃO — o teste original só checava a presença do NOME na listagem.
+    // Rollback truncado para 0 bytes: verde. Rollback com uma definição
+    // diferente da que estava em produção (menos fontes, perda do escopo de org
+    // no join de `team_members`): verde também. É o artefato que se usa sob
+    // pressão, em incidente; checar o nome não é checar nada.
+    //
+    // O critério é igualdade com a versão anterior, e não uma contagem fixa de
+    // fontes: a contagem era a da migration canônica (5 fontes) e deixou de ser
+    // verdade quando ela mesma as removeu. Igualdade vale para qualquer
+    // migration futura sobre a função.
     const rollbackDir = resolve(MIG_DIR, "rollback");
     expect(readdirSync(rollbackDir)).toContain(arquivo);
 
+    const candidatos = migrations()
+      .filter((f) => DEFINE_A_FUNCAO.test(ler(f)))
+      .sort();
+    const anterior = candidatos[candidatos.length - 2];
+    expect(anterior, "sem definição anterior para restaurar").toBeTruthy();
+
     const texto = readFileSync(resolve(rollbackDir, arquivo), "utf8");
     const corpo = norm(corpoDaDefinicao(texto));
-    const iSource = colunasDoReturnsTable(assinaturaDaDefinicao(texto)).indexOf("source");
 
-    expect(corpo).toMatch(/FROM public\.meetings \w+/i);
-    expect(corpo).toMatch(/FROM public\.follow_ups \w+/i);
-    expect(corpo).toMatch(/FROM public\.scheduled_user_messages \w+/i);
-    expect(corpo).toMatch(/FROM public\.meeting_events \w+/i);
-    expect(corpo.match(/\bUNION ALL\b/g) ?? []).toHaveLength(4);
-
-    // A Source 4 do rollback passa pela MESMA porta da definição vigente: o
-    // rollback pode voltar para a view de compat (é o que ele faz hoje) ou
-    // parar numa versão que já lia a projeção — e nesse caso o filtro de funil
-    // continua obrigatório. Rollback é o artefato de incidente; ele não pode
-    // ser a porta dos fundos por onde o funil errado volta para a Agenda.
-    expect(iSource).toBeGreaterThanOrEqual(0);
-    const ramo4 = ramoQueEmite(corpo, "pipe_confirmacao", iSource);
-    expect(ramo4, "rollback sem ramo que emite 'pipe_confirmacao'").toBeTruthy();
-    expect(RELACOES_DA_CONFIRMACAO).toContain(entradaDoRamo(ramo4!)!.relacao);
-    expect(leiturasDaProjecaoSemFiltroDeFunil(corpo)).toEqual([]);
+    expect(corpo).toBe(norm(corpoDaDefinicao(ler(anterior))));
+    expect(joinsDeTeamMembersSemEscopo(corpo)).toEqual([]);
   });
 });
 
