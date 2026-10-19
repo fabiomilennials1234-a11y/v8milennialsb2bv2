@@ -17,7 +17,8 @@ const respostas: Record<string, (c: Call) => unknown> = {};
 function chain(table: string) {
   const call: Call = { table, filters: [] };
   calls.push(call);
-  const c: Record<string, any> = {};
+  type Chain = Record<string, ReturnType<typeof vi.fn>>;
+  const c: Chain = {};
   for (const m of ["select", "order", "limit"]) c[m] = vi.fn().mockReturnValue(c);
   for (const m of ["eq", "is"]) {
     c[m] = vi.fn((col: string, val: unknown) => {
