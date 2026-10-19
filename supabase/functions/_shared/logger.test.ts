@@ -293,7 +293,7 @@ Deno.test("lote — trilha do gestor (actorType) nunca espera a janela nem é am
 
 // ─── Amostragem e rebaixamento ───────────────────────────────────────────────
 
-Deno.test("amostragem — tabela cobre as 6 actions amostradas e nada abaixo de 1%", () => {
+Deno.test("amostragem — tabela cobre as 9 actions amostradas e nada abaixo de 1%", () => {
   assertEquals(SUCCESS_SAMPLE_RATE["webhook:uazapi_process"], 0.01);
   assertEquals(SUCCESS_SAMPLE_RATE["webhook:uazapi_resolved_by_token_fallback"], undefined);
   assertEquals(SUCCESS_SAMPLE_RATE["webhook:uazapi_group_message_skipped"], 0.01);
@@ -301,6 +301,13 @@ Deno.test("amostragem — tabela cobre as 6 actions amostradas e nada abaixo de 
   assertEquals(SUCCESS_SAMPLE_RATE["webhook:uazapi_receipt_unmatched"], 0.1);
   assertEquals(SUCCESS_SAMPLE_RATE["workflow:process_batch"], 0.1);
   assertEquals(SUCCESS_SAMPLE_RATE["whatsapp:run"], 0.1);
+  // Alavanca 6 (19/10): ruído de sucesso do webhook medido em prod (24 h).
+  assertEquals(SUCCESS_SAMPLE_RATE["webhook:uazapi_external_read_applied"], 0.05);
+  assertEquals(SUCCESS_SAMPLE_RATE["webhook:uazapi_group_reaction_skipped"], 0.01);
+  assertEquals(SUCCESS_SAMPLE_RATE["webhook:uazapi_group_message_captured"], 0.05);
+  // A falha do mesmo recibo nunca é amostrada: só a tabela de sucesso entra aqui.
+  assertEquals(SUCCESS_SAMPLE_RATE["webhook:uazapi_external_read_failed"], undefined);
+  assertEquals(Object.keys(SUCCESS_SAMPLE_RATE).length, 9);
   for (const r of Object.values(SUCCESS_SAMPLE_RATE)) assert(r > 0 && r <= 1);
 });
 
@@ -332,6 +339,31 @@ Deno.test("amostragem — sorteada FORA não vai ao banco: vira console.info rt:
   assertEquals(linha.action, "uazapi_receipt_unmatched");
   assertEquals(linha.status, "skipped");
   assertEquals(linha.payload_snapshot._sample_rate, 0.1);
+});
+
+Deno.test("amostragem — recibo externo rebaixado mantém no console as contagens do Chamado 6ebb4b73", async () => {
+  // A linha `uazapi_external_read_applied` existe para distinguir "recibo chegou e
+  // não mudou nada" de "recibo nunca chegou". Fora do banco, essa prova tem de
+  // sobreviver inteira em function_logs (instância, contagem, linhas escritas).
+  const h = await withHarness({ respond: () => postgrestCreated(), random: () => 0.5 }, async () => {
+    await logRuntime({
+      organizationId: "8d0f7c3e-6c1f-4c55-9a43-5f3b1f2a9e10",
+      module: "webhook",
+      action: "uazapi_external_read_applied",
+      status: "success",
+      payloadSnapshot: { instance_id: "inst-1", message_count: 3, rows_written: 0 },
+    });
+  });
+  assertEquals(h.posts.length, 0);
+  assertEquals(h.infoLines.length, 1);
+  const linha = JSON.parse(h.infoLines[0]);
+  assertEquals(linha.rt, 1);
+  assertEquals(linha.organization_id, "8d0f7c3e-6c1f-4c55-9a43-5f3b1f2a9e10");
+  assertEquals(linha.action, "uazapi_external_read_applied");
+  assertEquals(linha.payload_snapshot.instance_id, "inst-1");
+  assertEquals(linha.payload_snapshot.message_count, 3);
+  assertEquals(linha.payload_snapshot.rows_written, 0);
+  assertEquals(linha.payload_snapshot._sample_rate, 0.05);
 });
 
 Deno.test("amostragem — erro NUNCA é amostrado, nem na action de alto volume", async () => {
