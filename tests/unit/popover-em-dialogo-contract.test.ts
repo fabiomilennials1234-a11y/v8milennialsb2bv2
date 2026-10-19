@@ -75,6 +75,8 @@ const DENTRO_DE_DIALOGO: ReadonlyArray<{
   { arquivo: "src/modules/leads/components/leads/LeadChecklistSection.tsx", rota: "/chat-whatsapp", folha: false },
   { arquivo: "src/modules/leads/components/deal-card/DealCardChecklists.tsx", rota: "/leads", folha: true },
   { arquivo: "src/modules/leads/components/lead-detail/modal/header/ResponsibleSlot.tsx", rota: "/leads", folha: true },
+  // 2026-10-16 — co-donos do lead (Chamado 793f4b05), irmão do ResponsibleSlot.
+  { arquivo: "src/modules/leads/components/lead-detail/modal/header/CoOwnersSlot.tsx", rota: "/leads", folha: true },
   { arquivo: "src/modules/leads/components/lead-card/LeadCardEtiquetas.tsx", rota: "/leads", folha: true },
 
   // 2026-10-08 — corrigir "Vendido em" / "Perdido em" no cartão de ouro.

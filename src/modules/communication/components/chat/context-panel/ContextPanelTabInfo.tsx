@@ -45,6 +45,7 @@ import { useTags } from "@/modules/leads/hooks/useTags";
 import { LeadCustomFields } from "@/modules/leads";
 import { AddCustomFieldPopover } from "@/modules/leads";
 import {
+  CoOwnersSlot,
   ResponsibleSlot,
   QualificationSlot,
   type QualificationTier,
@@ -314,13 +315,14 @@ function ResponsaveisBlock({ lead }: { lead: LeadShape }) {
             expectedUpdatedAt={lead.updated_at ?? null}
           />
         </LinhaDeSlot>
-        {coDonos.length > 0 && (
-          <div className="rounded-xl bg-muted/50 px-3 py-2">
-            <p className="text-[10.5px] font-semibold text-muted-foreground">Co-responsáveis</p>
-            <p className="truncate text-[13px] font-bold text-foreground" title={coDonos.map((d) => d.name).join(", ")}>
-              {coDonos.map((d) => d.name).join(", ")}
-            </p>
-          </div>
+        {donosMultiplos && (
+          <LinhaDeSlot
+            rotulo="Co-donos"
+            valor={coDonos.length > 0 ? coDonos.map((d) => d.name).join(", ") : null}
+            vazio="Nenhum co-dono"
+          >
+            <CoOwnersSlot leadId={leadId} />
+          </LinhaDeSlot>
         )}
       </div>
     </Secao>
