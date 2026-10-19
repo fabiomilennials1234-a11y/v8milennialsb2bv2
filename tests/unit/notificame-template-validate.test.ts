@@ -112,6 +112,35 @@ describe("validateTemplateDraft — variáveis", () => {
       .toContain("positional_gap");
   });
 
+  /**
+   * A Meta recusa corpo que COMEÇA ou TERMINA com variável — e recusa sem dizer
+   * qual regra foi. Incidente de 19/10: "{{1}}, Ficou alguma duvida?" falhou duas
+   * vezes em prod e a tela só disse "não foi possível criar".
+   */
+  it("recusa corpo que começa com variável", () => {
+    expect(codes(draft({
+      components: [{ type: "BODY", text: "{{1}}, Ficou alguma duvida?", example: { body_text: [["Maria"]] } }],
+    }))).toContain("body_variable_at_edge");
+  });
+
+  it("recusa corpo que termina com variável", () => {
+    expect(codes(draft({
+      components: [{ type: "BODY", text: "Seu pedido é o {{1}}", example: { body_text: [["123"]] } }],
+    }))).toContain("body_variable_at_edge");
+  });
+
+  it("a borda é medida depois de aparar espaços e quebras de linha", () => {
+    expect(codes(draft({
+      components: [{ type: "BODY", text: "\n  {{ 1 }} chegou  \n", example: { body_text: [["Maria"]] } }],
+    }))).toContain("body_variable_at_edge");
+  });
+
+  it("aceita variável no meio do corpo", () => {
+    expect(codes(draft({
+      components: [{ type: "BODY", text: "Oi {{1}}, ficou alguma dúvida?", example: { body_text: [["Maria"]] } }],
+    }))).toEqual([]);
+  });
+
   it("aceita variáveis nomeadas", () => {
     expect(codes(draft({
       components: [{

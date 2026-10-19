@@ -81,7 +81,13 @@ import { createAdminClient } from "../_shared/supabase-admin.ts";
 import { canUserAccessFeature } from "../_shared/permission_engine.ts";
 import { logRuntime } from "../_shared/logger.ts";
 import { getTraceContext } from "../_shared/request-trace.ts";
-import { orgConfigFrom, readNotificameBaseUrl, readNotificameFlags } from "../_shared/notificame.ts";
+import {
+  NotificameError,
+  orgConfigFrom,
+  readNotificameBaseUrl,
+  readNotificameFlags,
+  vendorLogFields,
+} from "../_shared/notificame.ts";
 import { loadNotificameSubaccount } from "../_shared/notificame-credentials.ts";
 import {
   createTemplate,
@@ -354,7 +360,13 @@ Deno.serve(withErrorBoundary(FUNCTION_NAME, async (req) => {
         errorMessage: detail,
         entityType: "whatsapp_instance",
         triggeredBy: auth.userId,
-        payloadSnapshot: { instance_id: instanceId, template_name: draft.name },
+        // Detalhe do fornecedor só no log, por spread em campos escalares — nunca
+        // na resposta HTTP (ver `vendorLogFields`).
+        payloadSnapshot: {
+          instance_id: instanceId,
+          template_name: draft.name,
+          ...vendorLogFields(e instanceof NotificameError ? e.vendor : null),
+        },
         ...trace,
       });
       return new Response(

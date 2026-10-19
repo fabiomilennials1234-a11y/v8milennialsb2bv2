@@ -64,6 +64,8 @@ const NAME_RE = /^[a-z0-9_]+$/;
 const VARIABLE_RE = /\{\{\s*([A-Za-z0-9_]+)\s*\}\}/g;
 
 const BODY_MAX = 1024;
+const BODY_STARTS_WITH_VARIABLE = /^\{\{\s*[A-Za-z0-9_]+\s*\}\}/;
+const BODY_ENDS_WITH_VARIABLE = /\{\{\s*[A-Za-z0-9_]+\s*\}\}$/;
 const HEADER_TEXT_MAX = 60;
 const FOOTER_MAX = 60;
 
@@ -132,6 +134,16 @@ export function validateTemplateDraft(draft: TemplateDraft): TemplateProblem[] {
     if (!text) add("body_empty", "Escreva o texto do corpo", "body");
     else if (text.length > BODY_MAX) {
       add("body_too_long", `O corpo passa de ${BODY_MAX} caracteres`, "body");
+    }
+    // A Meta recusa corpo que começa ou termina com variável, e a recusa não diz
+    // qual regra caiu. Incidente de 19/10: "{{1}}, Ficou alguma duvida?" falhou
+    // duas vezes em prod com a tela dizendo só "não foi possível criar".
+    if (text && (BODY_STARTS_WITH_VARIABLE.test(text) || BODY_ENDS_WITH_VARIABLE.test(text))) {
+      add(
+        "body_variable_at_edge",
+        "A Meta não aceita mensagem que começa ou termina com variável. Escreva algo antes e depois — ex.: \"Oi, {{1}}, ficou alguma dúvida?\"",
+        "body",
+      );
     }
   }
 
