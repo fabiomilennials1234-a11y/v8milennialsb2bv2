@@ -219,6 +219,12 @@ export interface LeadCardData {
   dono: { nome: string; papel: string } | null;
 
   /**
+   * Todos os donos, principal primeiro — só quando há MAIS de um (org com N
+   * donos por lead, Chamado 793f4b05). Ausente: `dono` acima diz tudo.
+   */
+  donos?: { nome: string; papel: string }[];
+
+  /**
    * O que os CONTROLES precisam e o desenho não usa: ids e tiers crus.
    *
    * `dono` acima é um NOME só, colapsado por precedência (venda → pré-venda →
@@ -234,6 +240,8 @@ export interface LeadCardData {
   edicao?: {
     preVenda: { id: string; name: string } | null;
     venda: { id: string; name: string } | null;
+    /** Co-donos (`lead_owners.role = 'co'`), só leitura nesta fatia. Ausente = nenhum. */
+    coDonos?: { id: string; name: string }[];
     preQualificacao: string | null;
     qualificacao: string | null;
     atualizadoEm: string | null;

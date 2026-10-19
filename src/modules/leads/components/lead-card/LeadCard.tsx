@@ -414,8 +414,11 @@ export function LeadCard({
             {controles ?? (
               <div className={CARTAO}>
                 <span className={ROTULO}>Responsável</span>
-                <p className={cn("mt-1.5 truncate text-[13.5px]", lead.dono ? "font-bold" : "text-muted-foreground")}>
-                  {lead.dono ? lead.dono.nome : "Sem dono"}
+                <p
+                  className={cn("mt-1.5 truncate text-[13.5px]", lead.dono ? "font-bold" : "text-muted-foreground")}
+                  title={lead.donos ? lead.donos.map((d) => `${d.nome} (${d.papel})`).join(", ") : undefined}
+                >
+                  {lead.donos ? lead.donos.map((d) => d.nome).join(", ") : lead.dono ? lead.dono.nome : "Sem dono"}
                 </p>
               </div>
             )}

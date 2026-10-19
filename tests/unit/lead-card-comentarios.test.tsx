@@ -95,6 +95,11 @@ vi.mock("@/modules/leads/hooks/useLeadDocument", () => ({
 vi.mock("@/modules/leads/hooks/useCafeJurereCadastro", () => ({
   useCafeJurereCadastro: () => ({ data: undefined, isFetching: false, isError: false }),
 }));
+// N donos (Chamado 793f4b05): org sem a flag — o dono vem das colunas.
+vi.mock("@/modules/leads/hooks/useLeadOwners", () => ({
+  useLeadOwnersEnabled: () => false,
+  useLeadOwners: () => ({ data: undefined }),
+}));
 vi.mock("@/modules/leads/hooks/useLeadCustomFields", () => ({
   useLeadCustomFields: () => ({ data: [] }),
   useLeadCustomFieldValues: () => ({ data: [] }),

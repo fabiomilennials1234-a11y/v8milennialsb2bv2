@@ -80,6 +80,37 @@ function Cartao({
   );
 }
 
+/**
+ * Co-donos do lead (N donos, Chamado 793f4b05) — só leitura nesta fatia; a
+ * edição (adicionar, transferir) chega com o PR3. Sem co-dono, não desenha
+ * nada: a ficha das orgs sem a flag fica como sempre foi.
+ */
+function CoDonos({ coDonos, forma }: { coDonos: MembroDoLead[]; forma: "faixa" | "grade" }) {
+  const nomes = coDonos.map((m) => m.name).join(", ");
+  if (forma === "grade") {
+    return (
+      <div className="flex min-w-0 flex-col gap-2 rounded-[18px] border border-card-border bg-card px-3.5 py-3 shadow-relevo min-[420px]:col-span-2">
+        <span className="text-[10.5px] font-bold uppercase tracking-[.08em] text-muted-foreground">
+          Co-responsáveis
+        </span>
+        <span className="min-w-0 truncate text-[13.5px] font-bold text-foreground" title={nomes}>
+          {nomes}
+        </span>
+      </div>
+    );
+  }
+  return (
+    <div className="flex items-center justify-between gap-3">
+      <span className="text-[10.5px] font-bold uppercase tracking-[.06em] text-muted-foreground">
+        Co-responsáveis
+      </span>
+      <span className="min-w-0 truncate text-[12.5px] font-semibold text-foreground" title={nomes}>
+        {nomes}
+      </span>
+    </div>
+  );
+}
+
 export interface MembroDoLead {
   id: string;
   name: string;
@@ -95,10 +126,13 @@ export function LeadCardControles({
   atualizadoEm,
   className,
   forma = "faixa",
+  coDonos,
 }: {
   leadId: string;
   preVenda: MembroDoLead | null;
   venda: MembroDoLead | null;
+  /** Co-donos (`lead_owners.role = 'co'`), só em org com N donos. */
+  coDonos?: MembroDoLead[];
   preQualificacao: QualificationTier | null;
   qualificacao: QualificationTier | null;
   /**
@@ -139,6 +173,7 @@ export function LeadCardControles({
             expectedUpdatedAt={atualizadoEm}
           />
         </Cartao>
+        {coDonos && coDonos.length > 0 && <CoDonos coDonos={coDonos} forma="grade" />}
         <Cartao rotulo="Pré-qualificação" valor={tier(preQualificacao)} vazio="Não definida">
           <QualificationSlot
             leadId={leadId}
@@ -177,6 +212,7 @@ export function LeadCardControles({
           expectedUpdatedAt={atualizadoEm}
         />
       </Faixa>
+      {coDonos && coDonos.length > 0 && <CoDonos coDonos={coDonos} forma="faixa" />}
 
       <Faixa rotulo="Qualificação">
         <QualificationSlot

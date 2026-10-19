@@ -5,6 +5,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useOrganization } from "@/modules/identity";
 import { useCanDo } from "@/modules/identity";
 import { applyLeadListFilters } from "../lib/lead-list-filters";
+import { coDonosDoFiltro } from "./useLeadOwners";
 import { loadVentimaisExport } from "../lib/load-ventimais-export";
 import { buildVentimaisWorkbook } from "../lib/ventimais-export";
 import {
@@ -203,7 +204,9 @@ export function useExportLeads(): UseExportLeadsResult {
       // Espelha os filtros ativos da lista (busca, origem, qualificação,
       // UF) — mesma semântica da tela via helper compartilhado.
       if (options.listFilters) {
-        leadsQuery = applyLeadListFilters(leadsQuery, options.listFilters);
+        // N donos (Chamado 793f4b05): o recorte por dono inclui co-donos, como na tela.
+        const coOwnedLeadIds = await coDonosDoFiltro(organizationId, options.listFilters);
+        leadsQuery = applyLeadListFilters(leadsQuery, { ...options.listFilters, coOwnedLeadIds });
       }
 
       const { data: leads, error: leadsError } = await leadsQuery
