@@ -21,6 +21,7 @@ type MaybeSingleResult<T> = { data: T | null };
 
 function makeSupabase(opts: {
   existingLead?: { id: string } | null;
+  existingLeads?: Array<{ id: string }>;
   blockingAgent?: { id: string } | null;
 }) {
   const calls: Array<{ table: string; filters: Record<string, unknown> }> = [];
@@ -33,10 +34,19 @@ function makeSupabase(opts: {
         filters[col] = val;
         return chain;
       },
+      is: () => chain,
+      in: () => chain,
+      not: () => chain,
       limit: () => chain,
+      // Leitor de lead por número (lista de ids): leads e lead_phones.
+      then: (resolve: (r: unknown) => unknown) => {
+        calls.push({ table, filters });
+        const rows =
+          table === "leads" ? (opts.existingLeads ?? (opts.existingLead ? [opts.existingLead] : [])) : [];
+        return resolve({ data: rows, error: null });
+      },
       maybeSingle: async (): Promise<MaybeSingleResult<unknown>> => {
         calls.push({ table, filters });
-        if (table === "leads") return { data: opts.existingLead ?? null };
         if (table === "copilot_agents") return { data: opts.blockingAgent ?? null };
         return { data: null };
       },
@@ -86,6 +96,20 @@ describe("checkAudienceGate", () => {
 
     expect(result).toEqual({ blocked: false });
     // copilot_agents query nao deve rodar quando lead ja existe
+    expect(calls.find((c) => c.table === "copilot_agents")).toBeUndefined();
+  });
+
+  it("número em 2 leads vivos continua sendo contato conhecido (antes: erro virava 'sem lead')", async () => {
+    // Chamados 99067f13 / 33c5fd52: `.maybeSingle()` errava com 2 linhas e o gate
+    // podia bloquear quem é lead.
+    const { supabase, calls } = makeSupabase({
+      existingLeads: [{ id: "lead-1" }, { id: "lead-2" }],
+      blockingAgent: { id: "agent-1" },
+    });
+
+    const result = await checkAudienceGate(supabase, "org-1", "5511999999999");
+
+    expect(result).toEqual({ blocked: false });
     expect(calls.find((c) => c.table === "copilot_agents")).toBeUndefined();
   });
 });

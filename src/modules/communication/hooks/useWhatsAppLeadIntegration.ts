@@ -4,6 +4,7 @@ import { useCurrentTeamMember } from "@/modules/identity";
 import { responsavelParaGravar } from "@/modules/communication/lib/lead-responsible";
 import { FALLBACK_STAGES } from "@/contracts/pipe";
 import { normalizePhone } from "@/lib/normalizePhone";
+import { resolveLeadByPhone } from "@/modules/communication/lib/leadByPhone";
 import type { Tables, TablesInsert } from "@/integrations/supabase/types";
 import {
   createCustomPipelineEntry as criarCardCustom,
@@ -87,55 +88,44 @@ const LEAD_POR_TELEFONE_SELECT = `
  * vincular lead" como se o número fosse desconhecido (Chamado 2c4e502c).
  * Lead apagado nunca é dono: o número dele já foi liberado para outro lead.
  */
-export function useLeadByPhone(phone: string | null) {
+export function useLeadByPhone(phone: string | null, opts: { preferredLeadId?: string | null } = {}) {
   const { data: teamMember } = useCurrentTeamMember();
   const organizationId = teamMember?.organization_id ?? null;
+  const preferredLeadId = opts.preferredLeadId ?? null;
 
   return useQuery({
-    queryKey: ["lead_by_phone", phone, organizationId],
+    queryKey: ["lead_by_phone", phone, organizationId, preferredLeadId],
     queryFn: async () => {
       if (!phone || !organizationId) return null;
 
       const normalizedPhone = normalizePhone(phone) || phone.replace(/\D/g, "");
 
+      // Regra única de entrada (Chamados 99067f13, 33c5fd52): número com um lead
+      // vivo resolve para ele; com 2+, o lead de negócio aberto, ou nenhum.
+      const { leadId, error: resolveError } = await resolveLeadByPhone(
+        supabase,
+        organizationId,
+        normalizedPhone,
+        { preferredLeadId },
+      );
+      if (resolveError) {
+        console.error("Erro ao buscar lead por telefone:", resolveError);
+        return null;
+      }
+      if (!leadId) return null;
+
       const { data, error } = await supabase
         .from("leads")
         .select(LEAD_POR_TELEFONE_SELECT)
+        .eq("id", leadId)
         .eq("organization_id", organizationId)
-        .eq("normalized_phone", normalizedPhone)
         .is("deleted_at", null)
-        .limit(1)
         .maybeSingle();
-
       if (error) {
         console.error("Erro ao buscar lead por telefone:", error);
         return null;
       }
-      if (data) return data;
-
-      const { data: contato, error: contatoError } = await supabase
-        .from("lead_phones")
-        .select("lead_id")
-        .eq("organization_id", organizationId)
-        .eq("normalized_phone", normalizedPhone)
-        .is("deleted_at", null)
-        .order("is_primary", { ascending: false })
-        .limit(1)
-        .maybeSingle();
-      if (contatoError || !contato?.lead_id) return null;
-
-      const { data: doContato, error: doContatoError } = await supabase
-        .from("leads")
-        .select(LEAD_POR_TELEFONE_SELECT)
-        .eq("id", contato.lead_id)
-        .eq("organization_id", organizationId)
-        .is("deleted_at", null)
-        .maybeSingle();
-      if (doContatoError) {
-        console.error("Erro ao buscar lead pelo contato:", doContatoError);
-        return null;
-      }
-      return doContato;
+      return data;
     },
     enabled: !!phone && !!organizationId,
   });

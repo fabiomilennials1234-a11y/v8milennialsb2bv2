@@ -10,28 +10,14 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { renderHook, waitFor } from "@testing-library/react";
 import { createWrapper } from "../helpers/hook-test-utils";
 
-type Call = { table: string; filters: Array<[string, string, unknown]> };
-const calls: Call[] = [];
-const respostas: Record<string, (c: Call) => unknown> = {};
+import { fakeSupabaseTables, type FakeTables } from "../helpers/fake-supabase-tables";
 
-function chain(table: string) {
-  const call: Call = { table, filters: [] };
-  calls.push(call);
-  type Chain = Record<string, ReturnType<typeof vi.fn>>;
-  const c: Chain = {};
-  for (const m of ["select", "order", "limit"]) c[m] = vi.fn().mockReturnValue(c);
-  for (const m of ["eq", "is"]) {
-    c[m] = vi.fn((col: string, val: unknown) => {
-      call.filters.push([m, col, val]);
-      return c;
-    });
-  }
-  c.maybeSingle = vi.fn(async () => ({ data: respostas[table]?.(call) ?? null, error: null }));
-  return c;
-}
+let tables: FakeTables = {};
 
 vi.mock("@/integrations/supabase/client", () => ({
-  supabase: { from: (t: string) => chain(t) },
+  supabase: {
+    from: (t: string) => fakeSupabaseTables(tables).supabase.from(t),
+  },
 }));
 vi.mock("@/modules/identity/org-team/hooks/useTeamMembers", () => ({
   useCurrentTeamMember: () => ({ data: { id: "tm1", organization_id: "org-t", role: "admin" } }),
@@ -56,42 +42,41 @@ vi.mock("@/lib/normalizePhone", () => ({
 
 import { useLeadByPhone } from "@/modules/communication/hooks/useWhatsAppLeadIntegration";
 
+const ORG = "org-t";
+const lead = (id: string, name: string, normalized_phone: string | null) => ({
+  id, name, organization_id: ORG, normalized_phone, deleted_at: null,
+});
+
 beforeEach(() => {
-  calls.length = 0;
-  for (const k of Object.keys(respostas)) delete respostas[k];
+  tables = { leads: [], lead_phones: [], pipeline_entries: [], deals: [] };
 });
 
 describe("useLeadByPhone — contatos do lead", () => {
   it("acha o lead pelo SEGUNDO contato (só existe em lead_phones)", async () => {
-    respostas.leads = (c) =>
-      c.filters.some(([, col, v]) => col === "id" && v === "lead-1") ? { id: "lead-1", name: "Cliente" } : null;
-    respostas.lead_phones = () => ({ lead_id: "lead-1" });
+    tables.leads = [lead("lead-1", "Cliente", "19999990000")];
+    tables.lead_phones = [{ organization_id: ORG, lead_id: "lead-1", normalized_phone: "1938521276", deleted_at: null }];
 
     const { result } = renderHook(() => useLeadByPhone("(19) 3852-1276"), { wrapper: createWrapper() });
 
-    await waitFor(() => expect(result.current.data).toEqual({ id: "lead-1", name: "Cliente" }));
-    const fone = calls.find((c) => c.table === "lead_phones")!;
-    expect(fone.filters).toContainEqual(["eq", "organization_id", "org-t"]);
-    expect(fone.filters).toContainEqual(["eq", "normalized_phone", "1938521276"]);
-    expect(fone.filters).toContainEqual(["is", "deleted_at", null]);
+    await waitFor(() => expect(result.current.data).toMatchObject({ id: "lead-1", name: "Cliente" }));
   });
 
-  it("não consulta lead_phones quando o número é o principal de um lead", async () => {
-    respostas.leads = () => ({ id: "lead-9", name: "Principal" });
+  it("número principal de um lead resolve para ele", async () => {
+    tables.leads = [lead("lead-9", "Principal", "19991244569")];
 
     const { result } = renderHook(() => useLeadByPhone("19991244569"), { wrapper: createWrapper() });
 
-    await waitFor(() => expect(result.current.data).toEqual({ id: "lead-9", name: "Principal" }));
-    expect(calls.some((c) => c.table === "lead_phones")).toBe(false);
+    await waitFor(() => expect(result.current.data).toMatchObject({ id: "lead-9", name: "Principal" }));
   });
 
-  it("ignora lead apagado: a busca por telefone filtra deleted_at", async () => {
-    respostas.leads = () => null;
+  it("ignora lead apagado: nem principal nem contato contam", async () => {
+    tables.leads = [{ ...lead("lead-x", "Apagado", "19991244569"), deleted_at: "2026-01-01" }];
+    tables.lead_phones = [{ organization_id: ORG, lead_id: "lead-x", normalized_phone: "19991244569", deleted_at: null }];
+
     const { result } = renderHook(() => useLeadByPhone("19991244569"), { wrapper: createWrapper() });
 
     await waitFor(() => expect(result.current.isFetched).toBe(true));
-    const porFone = calls.find((c) => c.table === "leads")!;
-    expect(porFone.filters).toContainEqual(["is", "deleted_at", null]);
+    expect(result.current.data).toBeNull();
   });
 
   it("número desconhecido continua devolvendo null", async () => {

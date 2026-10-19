@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { ToolContext, ToolDef, ToolResult } from "../../_shared/mcp/types.ts";
+import { resolveLeadByPhone } from "../../_shared/lead-by-phone.ts";
 
 export interface ThreadSummary {
   total: number;
@@ -62,10 +63,12 @@ export const conversationGetTool: ToolDef = {
       .is("deleted_at", null).order("timestamp", { ascending: true });
     if (mErr) return { content: [{ type: "text", text: `Error: ${mErr.message}` }], isError: true };
 
-    const { data: lead } = await db.from("leads")
-      .select("id,name,company,email")
-      .eq("organization_id", org).eq("normalized_phone", normalized)
-      .is("deleted_at", null).limit(1).maybeSingle();
+    // Número em 2+ leads: o do negócio aberto, ou nenhum (Chamados 99067f13, 33c5fd52).
+    const { leadId } = await resolveLeadByPhone(db, org, normalized);
+    const { data: lead } = leadId
+      ? await db.from("leads").select("id,name,company,email")
+          .eq("organization_id", org).eq("id", leadId).is("deleted_at", null).maybeSingle()
+      : { data: null };
 
     const payload = {
       phone: normalized,
