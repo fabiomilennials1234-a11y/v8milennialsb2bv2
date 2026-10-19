@@ -65,6 +65,13 @@ vi.mock("@/integrations/supabase/client", () => ({
   },
 }));
 
+// Cenários do S0 = transporte postgres_changes. O Broadcast (S1) tem a suíte
+// dele (`realtime-broadcast-transporte.test.tsx`); aqui o plano não entra.
+vi.mock("@/shared/realtime/realtimeTransportPlan", () => ({
+  useRealtimeTransport: () => null,
+  useRealtimePlanRefresh: () => {},
+}));
+
 vi.mock("@/modules/identity", async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
   useCurrentTeamMember: () => teamMemberMock(),

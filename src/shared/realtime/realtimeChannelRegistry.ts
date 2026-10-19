@@ -27,6 +27,13 @@
  *     nada muda no store.
  *   - threshold/cooldown entram na chave: configurações diferentes não se
  *     misturam (todos os chamadores de prod usam o padrão).
+ *
+ * Broadcast privado (perf S1, 2026-10-19 — `broadcastTransport.ts`): com
+ * `spec.topic`, o canal é o tópico privado da org e a chave é o TÓPICO, não o
+ * filtro — o servidor só conhece o tópico e o supabase-js devolve o canal
+ * existente quando ele se repete. Cada assinante carrega o seu filtro `eq`,
+ * aplicado no cliente antes de entregar. Mesma máquina de estado; reabrir
+ * espera o canal anterior do mesmo tópico sair (leave assíncrono).
  */
 import type {
   RealtimeChannel,
@@ -34,6 +41,7 @@ import type {
   RealtimePostgresChangesPayload,
 } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
+import { envelopeToPayload, parseEqFilter, payloadMatches, type EqFilter } from "./broadcastTransport";
 import {
   incrementFailures,
   openCircuitBreaker,
@@ -52,6 +60,8 @@ export interface ChannelSpec {
   event?: PostgresChangeEvent;
   threshold: number;
   cooldownMs: number;
+  /** Tópico privado do Broadcast. Ausente = `postgres_changes`. */
+  topic?: string;
 }
 
 export interface ChannelTransition {
@@ -75,10 +85,21 @@ export interface ChannelHandle {
 }
 
 const MAX_BACKOFF_MS = 30_000;
+/** Teto da espera pelo leave de um tópico (o push de leave do realtime-js expira em 10 s). */
+const LEAVE_WAIT_MAX_MS = 10_000;
 const BASE_BACKOFF_MS = 1_000;
 const DEDUP_WINDOW_MS = 1_000;
 
 type TimerName = "backoffTimer" | "cooldownTimer" | "dedupTimer";
+
+/** Assinante dentro do canal: chave de status e recorte já resolvidos. */
+interface Member {
+  sub: ChannelSubscriber;
+  statusKey: string;
+  /** Broadcast: filtro `eq` e evento aplicados no cliente. */
+  match: EqFilter | null;
+  event: PostgresChangeEvent;
+}
 
 interface Entry {
   key: string;
@@ -87,8 +108,8 @@ interface Entry {
   event: PostgresChangeEvent;
   threshold: number;
   cooldownMs: number;
-  defaultStatusKey: string;
-  subscribers: Set<ChannelSubscriber>;
+  topic: string | null;
+  members: Set<Member>;
   channel: RealtimeChannel | null;
   channelName: string;
   generation: number;
@@ -103,13 +124,21 @@ interface Entry {
 
 const entries = new Map<string, Entry>();
 
+/** Broadcast: saída (leave) em voo por tópico. O próximo join do tópico espera. */
+const leaving = new Map<string, Promise<void>>();
+
 export function realtimeChannelKey(spec: ChannelSpec): string {
+  if (spec.topic) return ["bc", spec.topic, spec.table, spec.threshold, spec.cooldownMs].join("|");
   return [spec.table, spec.filter ?? "*", spec.event ?? "*", spec.threshold, spec.cooldownMs].join("|");
+}
+
+function defaultStatusKey(spec: Pick<ChannelSpec, "table" | "filter">): string {
+  return `rt_${spec.table}_${spec.filter ?? "all"}`;
 }
 
 function statusKeys(entry: Entry): Set<string> {
   const keys = new Set<string>();
-  for (const s of entry.subscribers) keys.add(s.statusKey ?? entry.defaultStatusKey);
+  for (const m of entry.members) keys.add(m.statusKey);
   return keys;
 }
 
@@ -125,16 +154,20 @@ function notify(entry: Entry, transition: Omit<ChannelTransition, "channelName" 
     channelName: entry.channelName,
     failureCount: entry.failureCount,
   };
-  for (const s of [...entry.subscribers]) s.onTransition(full);
+  for (const m of [...entry.members]) m.sub.onTransition(full);
 }
 
 function dispatch(entry: Entry, payload: RealtimePostgresChangesPayload<Row>) {
   // Um consumidor que lança não pode roubar o evento dos outros; o primeiro
   // erro é relançado depois para não sumir (mesma propagação de antes).
   let firstError: unknown = null;
-  for (const s of [...entry.subscribers]) {
+  for (const m of [...entry.members]) {
+    if (entry.topic) {
+      if (m.event !== "*" && m.event !== payload.eventType) continue;
+      if (!payloadMatches(payload, m.match)) continue;
+    }
     try {
-      s.onEvent(payload);
+      m.sub.onEvent(payload);
     } catch (e) {
       firstError ??= e;
     }
@@ -199,10 +232,16 @@ function open(entry: Entry) {
   const generation = entry.generation;
   // Nome único por geração: supabase-js devolve o canal EXISTENTE quando o
   // tópico se repete, e o canal recém-removido ainda pode estar saindo.
-  entry.channelName = `rt_${entry.table}_${entry.filter ?? "all"}_${crypto.randomUUID()}`;
+  // Broadcast não tem essa saída: o nome É o tópico autorizado no servidor.
+  entry.channelName = entry.topic ?? `rt_${entry.table}_${entry.filter ?? "all"}_${crypto.randomUUID()}`;
   entry.state = "joining";
   for (const k of statusKeys(entry)) setChannelState(k, "joining", undefined);
   notify(entry, { state: "joining", type: "transition" });
+
+  if (entry.topic) {
+    openBroadcast(entry, generation);
+    return;
+  }
 
   // O overload de `.on` amarra o literal do evento ao tipo do filtro; o
   // evento aqui é dado de runtime (chave do canal), daí a asserção.
@@ -228,10 +267,72 @@ function open(entry: Entry) {
     });
 }
 
+function openBroadcast(entry: Entry, generation: number) {
+  const topic = entry.topic!;
+  const live = () => entries.get(entry.key) === entry && entry.generation === generation;
+  const join = () => {
+    if (!live()) return;
+    detachStale(topic);
+    const channel = supabase.channel(topic, { config: { private: true } });
+    entry.channel = channel;
+    channel
+      .on("broadcast", { event: entry.table }, (message: { payload?: unknown }) => {
+        if (!live()) return;
+        const payload = envelopeToPayload(entry.table, message?.payload);
+        if (payload) dispatch(entry, payload);
+      })
+      .subscribe((status: string, err?: Error) => {
+        if (live()) handleStatus(entry, status, err);
+      });
+  };
+  const pending = leaving.get(topic);
+  if (pending) void pending.then(join);
+  else join();
+}
+
+/**
+ * Canal do mesmo tópico que ficou na lista do cliente (leave respondido com
+ * erro não o tira de lá): `supabase.channel(topic)` o devolveria e o
+ * `.subscribe` lançaria "subscribe multiple times". `_remove` é interno do
+ * realtime-js (2.89) — sem ele, segue (o join falha e o backoff tenta de novo).
+ */
+function detachStale(topic: string) {
+  const client = supabase as unknown as {
+    getChannels?: () => Array<{ topic: string }>;
+    realtime?: { _remove?: (ch: unknown) => void };
+  };
+  const stale = client.getChannels?.().find((c) => c.topic === `realtime:${topic}`);
+  if (stale) client.realtime?._remove?.(stale);
+}
+
 function close(entry: Entry) {
   const ch = entry.channel;
   entry.channel = null;
-  if (ch) supabase.removeChannel(ch);
+  if (!ch) return;
+  if (!entry.topic) {
+    supabase.removeChannel(ch);
+    return;
+  }
+  const topic = entry.topic;
+  let leave: Promise<unknown>;
+  try {
+    leave = Promise.resolve(supabase.removeChannel(ch));
+  } catch {
+    leave = Promise.resolve();
+  }
+  let cap: ReturnType<typeof setTimeout> | undefined;
+  const capped = Promise.race([
+    leave.catch(() => undefined),
+    new Promise<void>((r) => {
+      cap = setTimeout(r, LEAVE_WAIT_MAX_MS);
+    }),
+  ]);
+  const done: Promise<void> = capped
+    .then(() => clearTimeout(cap))
+    .then(() => {
+      if (leaving.get(topic) === done) leaving.delete(topic);
+    });
+  leaving.set(topic, done);
 }
 
 function reopen(entry: Entry) {
@@ -250,17 +351,28 @@ const isDown = (entry: Entry) => entry.state === "errored" || entry.state === "p
 export function acquireRealtimeChannel(spec: ChannelSpec, subscriber: ChannelSubscriber): ChannelHandle {
   const key = realtimeChannelKey(spec);
   let entry = entries.get(key);
+  const member: Member = {
+    sub: subscriber,
+    statusKey: subscriber.statusKey ?? defaultStatusKey(spec),
+    match: spec.topic && spec.filter ? parseEqFilter(spec.filter) : null,
+    event: spec.event ?? "*",
+  };
+  if (spec.topic && spec.filter && !member.match) {
+    // `useRealtimeTransport` só manda para o broadcast filtro `eq`; outro
+    // formato aqui entregaria a org inteira a quem pediu um recorte.
+    throw new Error(`realtime broadcast: filtro não suportado "${spec.filter}"`);
+  }
 
   if (!entry) {
     entry = {
       key,
       table: spec.table,
-      filter: spec.filter,
-      event: spec.event ?? "*",
+      filter: spec.topic ? undefined : spec.filter,
+      event: spec.topic ? "*" : spec.event ?? "*",
       threshold: spec.threshold,
       cooldownMs: spec.cooldownMs,
-      defaultStatusKey: `rt_${spec.table}_${spec.filter ?? "all"}`,
-      subscribers: new Set([subscriber]),
+      topic: spec.topic ?? null,
+      members: new Set([member]),
       channel: null,
       channelName: "",
       generation: 0,
@@ -274,9 +386,9 @@ export function acquireRealtimeChannel(spec: ChannelSpec, subscriber: ChannelSub
     entries.set(key, entry);
     open(entry);
   } else {
-    const sk = subscriber.statusKey ?? entry.defaultStatusKey;
+    const sk = member.statusKey;
     const keyIsNew = !statusKeys(entry).has(sk);
-    entry.subscribers.add(subscriber);
+    entry.members.add(member);
     const error = entry.state === "joined" ? undefined : entry.lastError;
     if (keyIsNew) setChannelState(sk, entry.state, error);
     subscriber.onTransition({
@@ -295,8 +407,8 @@ export function acquireRealtimeChannel(spec: ChannelSpec, subscriber: ChannelSub
     release() {
       if (released) return;
       released = true;
-      owned.subscribers.delete(subscriber);
-      if (owned.subscribers.size > 0 || entries.get(key) !== owned) return;
+      owned.members.delete(member);
+      if (owned.members.size > 0 || entries.get(key) !== owned) return;
       entries.delete(key);
       clearTimer(owned, "backoffTimer");
       clearTimer(owned, "cooldownTimer");
@@ -321,5 +433,5 @@ export function realtimeChannelRegistrySnapshot(): Array<{
   subscribers: number;
   state: SharedChannelState;
 }> {
-  return [...entries.values()].map((e) => ({ key: e.key, subscribers: e.subscribers.size, state: e.state }));
+  return [...entries.values()].map((e) => ({ key: e.key, subscribers: e.members.size, state: e.state }));
 }
