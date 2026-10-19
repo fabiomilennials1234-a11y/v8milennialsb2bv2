@@ -55,10 +55,13 @@
 -- ── ESCRITA ──────────────────────────────────────────────────────────────
 -- Só RPC SECURITY DEFINER (search_path ''): contact_create, contact_update,
 -- contact_delete, lead_contact_link, lead_contact_unlink. Org lida do
--- REGISTRO (contato/lead) + assert_org_access; master e service_role passam.
+-- REGISTRO (contato/lead) + assert_org_access + permissão `leads.view`
+-- (has_feature_permission(key, org): master e admin da org passam; membro
+-- comum segue override individual > default da org > catálogo). service_role
+-- passa. Mesma chave da rota /contatos.
 -- Vincular exige can_update_lead no lead (membro comum). Leitura em lote:
 -- contact_list (SECURITY INVOKER: a RLS decide o que aparece).
--- Erros: 42501 sem sessão/sem permissão · PT404 não encontrado (inclui org
+-- Erros: 42501 sem sessão/sem leads.view/sem permissão · PT404 não encontrado (inclui org
 -- alheia) · PT422 dado inválido.
 --
 -- ── APLICAÇÃO ────────────────────────────────────────────────────────────
@@ -421,6 +424,10 @@ BEGIN
       USING ERRCODE = 'PT422', DETAIL = 'org_obrigatoria';
   END IF;
   PERFORM public.assert_org_access(p_org);
+  IF NOT v_service AND NOT public.has_feature_permission('leads.view', p_org) THEN
+    RAISE EXCEPTION 'Você não tem permissão para gerenciar contatos.'
+      USING ERRCODE = '42501', DETAIL = 'sem_permissao_contatos';
+  END IF;
 
   IF p_name IS NULL OR length(btrim(p_name)) = 0 THEN
     RAISE EXCEPTION 'Informe o nome do contato.'
@@ -481,6 +488,10 @@ BEGIN
       USING ERRCODE = 'PT404', DETAIL = 'contato_nao_encontrado';
   END IF;
   PERFORM public.assert_org_access(v_org);
+  IF NOT v_service AND NOT public.has_feature_permission('leads.view', v_org) THEN
+    RAISE EXCEPTION 'Você não tem permissão para gerenciar contatos.'
+      USING ERRCODE = '42501', DETAIL = 'sem_permissao_contatos';
+  END IF;
 
   IF p_name IS NULL OR length(btrim(p_name)) = 0 THEN
     RAISE EXCEPTION 'Informe o nome do contato.'
@@ -532,6 +543,10 @@ BEGIN
       USING ERRCODE = 'PT404', DETAIL = 'contato_nao_encontrado';
   END IF;
   PERFORM public.assert_org_access(v_org);
+  IF NOT v_service AND NOT public.has_feature_permission('leads.view', v_org) THEN
+    RAISE EXCEPTION 'Você não tem permissão para gerenciar contatos.'
+      USING ERRCODE = '42501', DETAIL = 'sem_permissao_contatos';
+  END IF;
 
   DELETE FROM public.lead_contacts WHERE contact_id = p_contact_id;
 
@@ -576,6 +591,10 @@ BEGIN
       USING ERRCODE = 'PT404', DETAIL = 'contato_nao_encontrado';
   END IF;
   PERFORM public.assert_org_access(v_org);
+  IF NOT v_service AND NOT public.has_feature_permission('leads.view', v_org) THEN
+    RAISE EXCEPTION 'Você não tem permissão para gerenciar contatos.'
+      USING ERRCODE = '42501', DETAIL = 'sem_permissao_contatos';
+  END IF;
 
   PERFORM public.contact_link_lead_internal(p_lead_id, p_contact_id, v_org, p_papel);
   RETURN p_contact_id;
@@ -609,6 +628,10 @@ BEGIN
       USING ERRCODE = 'PT404', DETAIL = 'vinculo_nao_encontrado';
   END IF;
   PERFORM public.assert_org_access(v_org);
+  IF NOT v_service AND NOT public.has_feature_permission('leads.view', v_org) THEN
+    RAISE EXCEPTION 'Você não tem permissão para gerenciar contatos.'
+      USING ERRCODE = '42501', DETAIL = 'sem_permissao_contatos';
+  END IF;
 
   IF NOT v_master AND NOT v_service AND NOT public.can_update_lead(p_lead_id) THEN
     RAISE EXCEPTION 'Você não pode alterar este lead.'

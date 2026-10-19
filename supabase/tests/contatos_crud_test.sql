@@ -44,6 +44,7 @@ SELECT u.id::uuid, u.email, '', now(), '{}'::jsonb, now(), now(),
   FROM (VALUES
     ('33c5fd52-0000-4000-8000-0000000000a1', 'ct-admin-a@test.local'),
     ('33c5fd52-0000-4000-8000-0000000000a2', 'ct-membro-a@test.local'),
+    ('33c5fd52-0000-4000-8000-0000000000a3', 'ct-sem-view-a@test.local'),
     ('33c5fd52-0000-4000-8000-0000000000b1', 'ct-admin-b@test.local'),
     ('33c5fd52-0000-4000-8000-0000000000c1', 'ct-master@test.local')
   ) AS u(id, email)
@@ -52,11 +53,16 @@ ON CONFLICT (id) DO NOTHING;
 INSERT INTO public.team_members (id, organization_id, user_id, name, role, is_active) VALUES
   ('33c5fd52-0000-4000-8000-0000000001a1', '33c5fd52-0000-4000-8000-00000000000a', '33c5fd52-0000-4000-8000-0000000000a1', 'Admin A',  'admin',  true),
   ('33c5fd52-0000-4000-8000-0000000001a2', '33c5fd52-0000-4000-8000-00000000000a', '33c5fd52-0000-4000-8000-0000000000a2', 'Membro A', 'member', true),
+  ('33c5fd52-0000-4000-8000-0000000001a3', '33c5fd52-0000-4000-8000-00000000000a', '33c5fd52-0000-4000-8000-0000000000a3', 'Sem view A', 'member', true),
   ('33c5fd52-0000-4000-8000-0000000001b1', '33c5fd52-0000-4000-8000-00000000000b', '33c5fd52-0000-4000-8000-0000000000b1', 'Admin B',  'admin',  true)
 ON CONFLICT (id) DO NOTHING;
 
 INSERT INTO public.master_users (user_id, is_active)
 VALUES ('33c5fd52-0000-4000-8000-0000000000c1', true);
+
+-- a3: membro da org A com o override individual leads.view = false.
+INSERT INTO public.member_feature_permissions (team_member_id, organization_id, feature_key, enabled)
+VALUES ('33c5fd52-0000-4000-8000-0000000001a3', '33c5fd52-0000-4000-8000-00000000000a', 'leads.view', false);
 
 -- Org A restrita: membro só vê/edita o lead pelo qual responde.
 INSERT INTO public.organization_feature_defaults (organization_id, feature_key, enabled) VALUES
@@ -301,6 +307,46 @@ SELECT lives_ok($q$SELECT public.contact_update(current_setting('t.r1')::uuid, '
   'RL19: master edita contato de tenant');
 SELECT throws_ok($q$SELECT public.lead_contact_link('33c5fd52-0000-4000-8000-0000000002b1', current_setting('t.p1')::uuid, NULL)$q$,
   'PT404', NULL, 'RL20: nem master cruza org (contato A x lead B)');
+
+-- Permissão leads.view (a3: membro da org A com override leads.view = false)
+SELECT pg_temp.as_user('33c5fd52-0000-4000-8000-0000000000a3');
+SELECT throws_ok($q$SELECT public.contact_create('33c5fd52-0000-4000-8000-00000000000a', 'Sem view', NULL, '[]'::jsonb)$q$,
+  '42501', 'Você não tem permissão para gerenciar contatos.', 'PM1: sem leads.view não cria contato');
+SELECT throws_ok($q$SELECT public.contact_update(current_setting('t.p1')::uuid, 'X', NULL, '[]'::jsonb, NULL)$q$,
+  '42501', 'Você não tem permissão para gerenciar contatos.', 'PM2: sem leads.view não edita contato');
+SELECT throws_ok($q$SELECT public.contact_delete(current_setting('t.p1')::uuid)$q$,
+  '42501', 'Você não tem permissão para gerenciar contatos.', 'PM3: sem leads.view não exclui contato');
+SELECT throws_ok($q$SELECT public.lead_contact_link('33c5fd52-0000-4000-8000-0000000002a1', current_setting('t.p1')::uuid, NULL)$q$,
+  '42501', 'Você não tem permissão para gerenciar contatos.', 'PM4: sem leads.view não vincula');
+SELECT throws_ok($q$SELECT public.lead_contact_unlink('33c5fd52-0000-4000-8000-0000000002a1', current_setting('t.p1')::uuid)$q$,
+  '42501', 'Você não tem permissão para gerenciar contatos.', 'PM5: sem leads.view não desvincula');
+SELECT lives_ok($q$SELECT public.contact_list('33c5fd52-0000-4000-8000-00000000000a')$q$,
+  'PM6: contact_list segue invoker (a leitura é da RLS, não da permissão de escrita)');
+SELECT is((SELECT count(*)::int FROM public.contacts WHERE id = current_setting('t.p2')::uuid),
+  1, 'PM7: contato solto continua visível à org inteira, mesmo sem leads.view');
+
+RESET role;
+SET LOCAL role postgres;
+UPDATE public.member_feature_permissions SET enabled = true
+ WHERE team_member_id = '33c5fd52-0000-4000-8000-0000000001a3' AND feature_key = 'leads.view';
+SET LOCAL role authenticated;
+SELECT pg_temp.as_user('33c5fd52-0000-4000-8000-0000000000a3');
+SELECT lives_ok($q$SELECT public.contact_create('33c5fd52-0000-4000-8000-00000000000a', 'Com view', NULL, '[]'::jsonb)$q$,
+  'PM8: com leads.view (override ligado) o mesmo membro cria');
+SELECT lives_ok($q$SELECT public.contact_update(current_setting('t.p1')::uuid, 'Contato P1 editado', NULL, '[]'::jsonb, NULL)$q$,
+  'PM9: com leads.view edita');
+
+RESET role;
+SET LOCAL role postgres;
+DELETE FROM public.member_feature_permissions WHERE team_member_id = '33c5fd52-0000-4000-8000-0000000001a3';
+SET LOCAL role authenticated;
+SELECT pg_temp.as_user('33c5fd52-0000-4000-8000-0000000000a3');
+SELECT lives_ok($q$SELECT public.contact_create('33c5fd52-0000-4000-8000-00000000000a', 'Default do catálogo', NULL, '[]'::jsonb)$q$,
+  'PM10: sem override, vale o default do catálogo (leads.view = true)');
+
+SELECT pg_temp.as_user('33c5fd52-0000-4000-8000-0000000000a1');
+SELECT lives_ok($q$SELECT public.contact_create('33c5fd52-0000-4000-8000-00000000000a', 'Admin', NULL, '[]'::jsonb)$q$,
+  'PM11: admin da org passa');
 
 -- anon
 RESET role;
