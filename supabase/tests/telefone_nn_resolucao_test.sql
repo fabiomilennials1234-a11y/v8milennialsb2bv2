@@ -10,7 +10,7 @@
 --   (AD) adocao de orfas: numero que ja tem outro lead vivo NAO e adotado
 --        (lead_phones e leads.phone); numero sem dono continua adotado.
 --   (PC) leads.phone_compartilhado: coluna boolean NOT NULL DEFAULT false;
---        find_duplicate_leads ignora par em que os dois sao compartilhados.
+--        find_duplicate_leads ignora par compartilhado SO no criterio telefone.
 --
 -- Roda inteiro em transacao revertida.
 
@@ -213,22 +213,48 @@ SELECT ok((SELECT lead_id IS NULL FROM public.whatsapp_messages WHERE message_id
 -- ===========================================================================
 -- (PC) find_duplicate_leads
 -- ===========================================================================
+-- O unico parcial proibe dois leads vivos com o mesmo numero; o ramo `phone` so
+-- alcanca dado legado, entao o indice cai DENTRO da transacao revertida.
+DROP INDEX IF EXISTS public.idx_leads_org_phone_unique;
+
 SET LOCAL session_replication_role = replica;
+-- c1/c2: mesmo telefone, e-mails e nomes distintos. c3/c4: mesmo e-mail e nomes
+-- distintos, telefones distintos. Todos compartilhados.
 INSERT INTO public.leads (id, organization_id, name, phone, normalized_phone, email, phone_compartilhado) VALUES
-  ('99067f13-0000-4000-8000-0000000000c1', '99067f13-0000-4000-8000-00000000000b', 'Zeta Alfa Importadora', '11911110001', '11911110001', 'mesmo@dup.test', true),
-  ('99067f13-0000-4000-8000-0000000000c2', '99067f13-0000-4000-8000-00000000000b', 'Omega Beta Servicos',    '11911110002', '11911110002', 'mesmo@dup.test', true);
+  ('99067f13-0000-4000-8000-0000000000c1', '99067f13-0000-4000-8000-00000000000b', 'Zeta Alfa Importadora', '11911110001', '11911110001', 'c1@dup.test', true),
+  ('99067f13-0000-4000-8000-0000000000c2', '99067f13-0000-4000-8000-00000000000b', 'Omega Beta Servicos',    '11911110001', '11911110001', 'c2@dup.test', true),
+  ('99067f13-0000-4000-8000-0000000000c3', '99067f13-0000-4000-8000-00000000000b', 'Kappa Delta Comercio',   '11911110003', '11911110003', 'mesmo@dup.test', true),
+  ('99067f13-0000-4000-8000-0000000000c4', '99067f13-0000-4000-8000-00000000000b', 'Sigma Teta Logistica',   '11911110004', '11911110004', 'mesmo@dup.test', true);
 SET LOCAL session_replication_role = origin;
 
 SELECT set_config('request.jwt.claims', '{"role":"service_role"}', true);
 
 SELECT is(
-  (SELECT count(*)::int FROM public.find_duplicate_leads('99067f13-0000-4000-8000-00000000000b')),
-  0, 'PC3: par em que os DOIS tem phone_compartilhado e ignorado');
+  (SELECT count(*)::int FROM public.find_duplicate_leads('99067f13-0000-4000-8000-00000000000b')
+    WHERE match_type = 'phone'),
+  0, 'PC3: par em que os DOIS tem phone_compartilhado e ignorado no criterio telefone');
+
+SELECT is(
+  (SELECT count(*)::int FROM public.find_duplicate_leads('99067f13-0000-4000-8000-00000000000b')
+    WHERE match_type = 'email' AND lead_a_id = '99067f13-0000-4000-8000-0000000000c3'
+      AND lead_b_id = '99067f13-0000-4000-8000-0000000000c4'),
+  1, 'PC4: ... mas o MESMO tipo de par compartilhado continua aparecendo por e-mail');
 
 UPDATE public.leads SET phone_compartilhado = false WHERE id = '99067f13-0000-4000-8000-0000000000c2';
 SELECT is(
-  (SELECT count(*)::int FROM public.find_duplicate_leads('99067f13-0000-4000-8000-00000000000b')),
-  1, 'PC4: se so um e compartilhado, o par volta a aparecer');
+  (SELECT count(*)::int FROM public.find_duplicate_leads('99067f13-0000-4000-8000-00000000000b')
+    WHERE match_type = 'phone'),
+  1, 'PC5: se so um e compartilhado, o par volta a aparecer por telefone');
+
+-- Nome: dois compartilhados com o mesmo nome seguem como duplicata.
+UPDATE public.leads SET name = 'Zeta Alfa Importadora', email = 'c4@dup.test' WHERE id = '99067f13-0000-4000-8000-0000000000c4';
+UPDATE public.leads SET name = 'Zeta Alfa Importadora', phone_compartilhado = true
+ WHERE id = '99067f13-0000-4000-8000-0000000000c3';
+SELECT ok(
+  EXISTS (SELECT 1 FROM public.find_duplicate_leads('99067f13-0000-4000-8000-00000000000b')
+           WHERE lead_a_id = '99067f13-0000-4000-8000-0000000000c3'
+             AND lead_b_id = '99067f13-0000-4000-8000-0000000000c4'),
+  'PC6: dois compartilhados com o mesmo nome (e-mail e telefone distintos) continuam como par');
 
 SELECT * FROM finish();
 ROLLBACK;

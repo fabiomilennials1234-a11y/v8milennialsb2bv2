@@ -23,7 +23,7 @@
 -- (3) adocao de mensagem/summary orfaos: nao adota se o numero ja tem OUTRO lead
 --     vivo (senao um lead compartilhado novo rouba o historico).
 -- (4) find_duplicate_leads: ignora par em que os DOIS tem phone_compartilhado
---     (par inteiro, nos tres criterios). Em prod o corpo referencia a view
+--     SO no criterio telefone (email e nome continuam listando o par). Em prod o corpo referencia a view
 --     private.leads (fora do repo); aqui segue a forma do repo (public.leads,
 --     tabela base; DEFINER le como owner), igual a 20271125000000. A view
 --     private.leads pode nao enxergar a coluna nova.
@@ -288,7 +288,6 @@ BEGIN
      AND a.email <> ''
      AND lower(a.email) = lower(b.email)
      AND b.deleted_at IS NULL
-     AND NOT (a.phone_compartilhado AND b.phone_compartilhado)
     WHERE a.organization_id = p_organization_id
       AND a.deleted_at IS NULL
 
@@ -308,7 +307,6 @@ BEGIN
      AND similarity(a.name, b.name) >= 0.6
      AND b.deleted_at IS NULL
      AND length(btrim(b.name)) >= 4
-     AND NOT (a.phone_compartilhado AND b.phone_compartilhado)
     WHERE a.organization_id = p_organization_id
       AND a.deleted_at IS NULL
       AND a.name IS NOT NULL
