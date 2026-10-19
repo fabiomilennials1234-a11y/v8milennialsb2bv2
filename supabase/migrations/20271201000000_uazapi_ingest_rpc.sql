@@ -13,6 +13,10 @@
 --   * a org vem SEMPRE de whatsapp_instances.id; organization_id/instance_id
 --     do p_message são sobrescritos.
 --
+-- Timeout (57014) dentro do upsert/eco/receive também vira status (DLQ/5xx na
+-- edge) preservando a admissão; timeout no próprio register aborta tudo (= falha
+-- do register antes).
+--
 -- Erros (nunca 40001: PostgREST reexecuta 40001 sem fim):
 --   PT404 uazapi_instance_not_found  — instância inexistente
 --   PT409 uazapi_ingest_conflict     — serialização/deadlock convertidos
@@ -53,6 +57,7 @@ DECLARE
   v_received jsonb;
   v_state text;
   v_detail text;
+  v_capture_off boolean := false;
 BEGIN
   SELECT i.organization_id INTO v_org FROM public.whatsapp_instances i WHERE i.id = p_instance_id;
   IF v_org IS NULL THEN
@@ -73,14 +78,25 @@ BEGIN
   v_direction := v_msg->>'direction';
   v_is_group := coalesce(v_msg->>'is_group', 'false') = 'true';
 
-  -- 2. Grupos: opt-out explícito da org (NULL/ausente = captura).
-  IF v_is_group AND EXISTS (
-    SELECT 1 FROM public.organizations o WHERE o.id = v_org AND o.capture_groups IS FALSE
-  ) THEN
-    RETURN jsonb_build_object('status', 'group_skipped', 'organization_id', v_org);
+  -- 2. Grupos: opt-out explícito da org (NULL/ausente = captura). Leitura que
+  --    falha = captura (fail-open do caminho antigo), nunca 503.
+  IF v_is_group THEN
+    BEGIN
+      SELECT EXISTS (SELECT 1 FROM public.organizations o WHERE o.id = v_org AND o.capture_groups IS FALSE)
+        INTO v_capture_off;
+    EXCEPTION WHEN OTHERS OR query_canceled THEN
+      v_capture_off := false;
+    END;
+    IF v_capture_off THEN
+      RETURN jsonb_build_object('status', 'group_skipped', 'organization_id', v_org);
+    END IF;
   END IF;
 
   -- 3. Upsert ignore-duplicates. Sub-bloco = savepoint: falha não desfaz o passo 1.
+  --    `OTHERS` NÃO cobre query_canceled (57014 = statement_timeout do
+  --    authenticator em prod, 8 s, ou cancel): sem nomeá-lo, um timeout aqui
+  --    derrubaria a admissão junto. lock_timeout é 55P03, já coberto por OTHERS.
+  --    Os três sub-blocos tratam 57014 igual a qualquer falha.
   BEGIN
     SELECT string_agg(k, ',') INTO v_unknown
       FROM jsonb_object_keys(v_msg) AS k WHERE NOT (k = ANY (c_allowed));
@@ -92,7 +108,7 @@ BEGIN
       'INSERT INTO public.whatsapp_messages (%1$s) SELECT %1$s FROM pg_catalog.jsonb_populate_record(NULL::public.whatsapp_messages, $1) ON CONFLICT (message_id, instance_id) DO NOTHING RETURNING id',
       v_cols) INTO v_row_id USING v_msg;
     v_inserted := v_row_id IS NOT NULL;
-  EXCEPTION WHEN OTHERS THEN
+  EXCEPTION WHEN OTHERS OR query_canceled THEN
     GET STACKED DIAGNOSTICS v_state = RETURNED_SQLSTATE, v_detail = MESSAGE_TEXT;
     RETURN jsonb_build_object('status', 'upsert_failed', 'organization_id', v_org,
       'sqlstate', v_state, 'error_message', v_detail);
@@ -106,7 +122,7 @@ BEGIN
           AND m.message_id = v_message_id AND m.direction = 'outgoing'
           AND m.status = ANY (p_echo_prior_statuses);
       v_echo_updated := true;
-    EXCEPTION WHEN OTHERS THEN
+    EXCEPTION WHEN OTHERS OR query_canceled THEN
       RETURN jsonb_build_object('status', 'echo_status_failed', 'organization_id', v_org);
     END;
   END IF;
@@ -123,7 +139,7 @@ BEGIN
   IF v_direction = 'incoming' AND NOT v_is_group THEN
     BEGIN
       v_received := public.receive_workflow_button_reply(v_row_id, v_org);
-    EXCEPTION WHEN OTHERS THEN
+    EXCEPTION WHEN OTHERS OR query_canceled THEN
       RETURN jsonb_build_object('status', 'button_reply_failed', 'organization_id', v_org,
         'row_id', v_row_id, 'inserted', v_inserted, 'echo_status_updated', v_echo_updated);
     END;

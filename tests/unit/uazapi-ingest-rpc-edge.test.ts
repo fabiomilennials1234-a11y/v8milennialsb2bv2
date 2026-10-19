@@ -160,6 +160,13 @@ describe('flag vazia — caminho antigo intacto', () => {
     expect(hoist.logs.some((l) => l.action === 'uazapi_receipt_unmatched')).toBe(true);
   });
 
+  it('normalização que lança: admissão já feita, erro relançado (500)', async () => {
+    // Date(1e20) é inválida → toISOString lança RangeError dentro do normalize.
+    const res = await run(messageEvent({ messageTimestamp: 1e20 }));
+    expect(res.status).toBe(500);
+    expect(business()).toEqual(['POST rpc/register_workflow_button_ingress']);
+  });
+
   it('flag de OUTRA org não liga o caminho novo', async () => {
     env.UAZAPI_INGEST_RPC_ORGS = OTHER_ORG;
     await run(messageEvent());
@@ -225,6 +232,27 @@ describe('flag ligada — 1 RPC por evento', () => {
     expect(res.status).toBe(503);
     expect(await res.json()).toEqual({ error: 'question_buttons_ingress_unavailable' });
     expect(business()).toEqual(['POST rpc/ingest_uazapi_message']);
+    // Causa observável: código + mensagem, sem payload.
+    const logged = hoist.logs.find((l) => l.action === 'uazapi_ingest_rpc_error');
+    expect(logged).toMatchObject({ status: 'error', errorMessage: 'PT409',
+      payloadSnapshot: { instance_id: INSTANCE_ID, code: 'PT409', message: 'uazapi_ingest_conflict' } });
+    expect(JSON.stringify(logged)).not.toContain('5511999887766');
+  });
+
+  it('normalização que lança: 1 RPC só de admissão (p_message null) e erro relançado (500)', async () => {
+    const res = await run(messageEvent({ messageTimestamp: 1e20 }));
+    expect(res.status).toBe(500);
+    expect(business()).toEqual(['POST rpc/ingest_uazapi_message']);
+    expect(bodyOf('POST rpc/ingest_uazapi_message')).toMatchObject({ p_message: null, p_echo_prior_statuses: [] });
+    const err = hoist.logs.find((l) => l.action === 'uazapi_process_error');
+    expect(String((err?.payloadSnapshot as Record<string, unknown>).error)).toMatch(/Invalid time value/);
+  });
+
+  it('normalização lança E admissão falha → 503 (nada gravado, provedor reentrega)', async () => {
+    backend = { ...backend, ingest: { status: 503, body: { code: '57014', message: 'canceling statement due to statement timeout' } } };
+    const res = await run(messageEvent({ messageTimestamp: 1e20 }));
+    expect(res.status).toBe(503);
+    expect(hoist.logs.find((l) => l.action === 'uazapi_ingest_rpc_error')).toMatchObject({ errorMessage: '57014' });
   });
 
   it('upsert_failed → DLQ com o payload normalizado e 200', async () => {

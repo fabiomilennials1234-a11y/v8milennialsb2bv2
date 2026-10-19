@@ -81,20 +81,26 @@ const SKELETON = `
     INSERT INTO public.receive_calls VALUES (p_message_row_id, p_organization_id);
     SELECT * INTO m FROM public.whatsapp_messages WHERE id = p_message_row_id AND organization_id = p_organization_id;
     IF m.raw_payload->>'fail_receive' = 'true' THEN RAISE EXCEPTION 'receive down'; END IF;
+    IF m.raw_payload->>'fail_receive' = 'cancel' THEN
+      RAISE EXCEPTION 'canceling statement due to statement timeout' USING ERRCODE = 'query_canceled';
+    END IF;
     RETURN jsonb_build_object('recognized', EXISTS (SELECT 1 FROM public.workflow_button_ingress i
       WHERE i.organization_id = p_organization_id AND i.instance_id = m.instance_id AND i.message_id = m.message_id
         AND m.raw_payload->>'button' = 'true'), 'resolved', false);
   END $f$;
   REVOKE ALL ON FUNCTION public.register_workflow_button_ingress(uuid,uuid,jsonb,text), public.receive_workflow_button_reply(uuid,uuid) FROM PUBLIC;
 
+  -- Como no Supabase: função nova nasce executável por anon/authenticated.
+  ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT EXECUTE ON FUNCTIONS TO anon, authenticated, service_role;
+
   INSERT INTO public.organizations VALUES ('${ORG_A}', true), ('${ORG_B}', false);
   INSERT INTO public.whatsapp_instances VALUES ('${INST_A}', '${ORG_A}'), ('${INST_A2}', '${ORG_A}'), ('${INST_B}', '${ORG_B}');
 `;
 
-async function setup() {
+async function setup(migrationSql = read(MIG)) {
   const db = new PGlite();
   await db.exec(SKELETON);
-  await db.exec(read(MIG));
+  await db.exec(migrationSql);
   return db;
 }
 
@@ -359,6 +365,10 @@ test('grants: só service_role executa; DEFINER funciona sem grant de tabela; an
       { proname: 'apply_uazapi_receipt', anon_x: false, auth_x: false, svc_x: true, prosecdef: true, proconfig: ['search_path=""'] },
       { proname: 'ingest_uazapi_message', anon_x: false, auth_x: false, svc_x: true, prosecdef: true, proconfig: ['search_path=""'] },
     ]);
+    // Controle: o esqueleto reproduz o default do Supabase (função nova executável
+    // por anon) — sem isso o REVOKE da migration não estaria sendo testado.
+    await db.exec('CREATE FUNCTION public.probe_default_grant() RETURNS int LANGUAGE sql AS $f$ SELECT 1 $f$');
+    assert.deepEqual(await rows(db, `SELECT has_function_privilege('anon', 'public.probe_default_grant()', 'EXECUTE') AS x`), [{ x: true }]);
     await db.exec('SET ROLE service_role');
     assert.equal((await ingest(db)).status, 'persisted');
     await db.exec('RESET ROLE; SET ROLE anon');
@@ -379,4 +389,78 @@ test('migration reaplicada é idempotente; rollback remove as duas funções', a
     assert.equal(left.length, 0);
     await db.exec(read(ROLLBACK));
   } finally { await db.close(); }
+});
+
+// ─── 57014 (query_canceled) ────────────────────────────────────────────────
+// Prod: authenticator com statement_timeout=8s. `WHEN OTHERS` NÃO pega 57014;
+// sem o handler nomeado, um timeout no upsert/eco/receive derrubaria a admissão
+// do botão junto. PGlite não cancela por tempo: o cancelamento é simulado por
+// RAISE com o MESMO SQLSTATE no ponto exato em que o timeout cairia.
+const CANCEL_FN = `CREATE FUNCTION public.cancel_now() RETURNS trigger LANGUAGE plpgsql AS $f$
+  BEGIN RAISE EXCEPTION 'canceling statement due to statement timeout' USING ERRCODE = 'query_canceled'; END $f$;`;
+const cancelScenarios = [
+  {
+    name: 'timeout no INSERT → upsert_failed',
+    expect: 'upsert_failed',
+    prep: `${CANCEL_FN} CREATE TRIGGER cancel_insert BEFORE INSERT ON public.whatsapp_messages
+      FOR EACH ROW EXECUTE FUNCTION public.cancel_now();`,
+    run: (db) => ingest(db),
+  },
+  {
+    name: 'timeout no UPDATE do eco → echo_status_failed',
+    expect: 'echo_status_failed',
+    prep: `INSERT INTO public.whatsapp_messages (organization_id, instance_id, message_id, remote_jid, phone_number, direction, status)
+      VALUES ('${ORG_A}', '${INST_A}', 'OUT-T', 'j', 'p', 'outgoing', 'pending');
+      ${CANCEL_FN} CREATE TRIGGER cancel_update BEFORE UPDATE ON public.whatsapp_messages
+      FOR EACH ROW EXECUTE FUNCTION public.cancel_now();`,
+    run: (db) => ingest(db, { payload: { id: 'OUT-T' },
+      message: normalized({ message_id: 'OUT-T', direction: 'outgoing', status: 'delivered' }), prior: ['pending', 'sent'] }),
+  },
+  {
+    name: 'timeout dentro do receive → button_reply_failed',
+    expect: 'button_reply_failed',
+    prep: '',
+    run: (db) => ingest(db, { message: normalized({ raw_payload: { id: 'MSG-1', fail_receive: 'cancel' } }) }),
+  },
+];
+
+for (const sc of cancelScenarios) {
+  test(`57014: ${sc.name}; admissão do botão sobrevive`, async () => {
+    const db = await setup();
+    try {
+      if (sc.prep) await db.exec(sc.prep);
+      const r = await sc.run(db);
+      assert.equal(r.status, sc.expect);
+      assert.equal((await rows(db, 'SELECT 1 FROM public.workflow_button_ingress')).length, 1);
+    } finally { await db.close(); }
+  });
+
+  // Controle positivo: o MESMO cenário contra a função sem o handler nomeado
+  // reverte a admissão. Prova que o teste acima distingue o defeito.
+  test(`57014 controle: ${sc.name} SEM handler → erro 57014 e admissão revertida`, async () => {
+    const withoutHandler = read(MIG).replaceAll(' OR query_canceled', '');
+    assert.notEqual(withoutHandler, read(MIG));
+    const db = await setup(withoutHandler);
+    try {
+      if (sc.prep) await db.exec(sc.prep);
+      assert.equal(await errorCode(sc.run(db)), '57014');
+      assert.equal((await rows(db, 'SELECT 1 FROM public.workflow_button_ingress')).length, 0);
+    } finally { await db.close(); }
+  });
+}
+
+test('capture_groups: leitura que falha (erro ou 57014) = captura, fail-open do caminho antigo', async () => {
+  for (const code of ['XX000', 'query_canceled']) {
+    const db = await setup();
+    try {
+      // organizations vira view cuja leitura falha; a FK continua na tabela base.
+      await db.exec(`ALTER TABLE public.organizations RENAME TO organizations_base;
+        CREATE FUNCTION public.capture_boom(uuid) RETURNS boolean LANGUAGE plpgsql AS $f$
+          BEGIN RAISE EXCEPTION 'org read down' USING ERRCODE = '${code}'; END $f$;
+        CREATE VIEW public.organizations AS SELECT id, public.capture_boom(id) AS capture_groups FROM public.organizations_base;`);
+      const r = await ingest(db, { instance: INST_B, message: normalized({ is_group: true, message_id: 'G-F' }) });
+      assert.equal(r.status, 'persisted', code);
+      assert.equal((await rows(db, `SELECT 1 FROM public.whatsapp_messages WHERE message_id = 'G-F'`)).length, 1);
+    } finally { await db.close(); }
+  }
 });

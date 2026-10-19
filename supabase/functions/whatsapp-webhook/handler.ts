@@ -698,7 +698,9 @@ export async function triggerReactions(
     // FK da fila → whatsapp_messages.id (uuid). persisted.message_id é o id
     // externo do WhatsApp (text); o uuid da linha já veio da persistência
     // (persisted.row_id = mesma linha de UNIQUE(message_id, instance_id)).
-    // Antes era um SELECT extra ao PostgREST por mensagem (F5a).
+    // Antes era um SELECT extra ao PostgREST por mensagem (F5a). Vale nos DOIS
+    // caminhos — inclusive com UAZAPI_INGEST_RPC_ORGS vazio (única mudança do
+    // caminho antigo): o row_id do select em persistMessage é a mesma linha.
     const waRow = persisted.row_id ? { id: persisted.row_id } : null;
 
     if (waRow?.id) {
@@ -1144,6 +1146,24 @@ async function ingestMessageViaRpc(
       p_source: receivedVia, p_echo_prior_statuses: echoPrior,
     });
 
+  // Código + mensagem do Postgres/PostgREST (sem details/hint, que podem trazer
+  // valores da linha). Sem isto o 503 não diz se foi PT404, PT409 ou timeout.
+  const rpcUnavailable = async (error: { code?: string; message?: string }) => {
+    await logRuntime({
+      organizationId: instance.organization_id,
+      module: "webhook",
+      action: "uazapi_ingest_rpc_error",
+      status: "error",
+      errorMessage: error.code || "rpc_error",
+      payloadSnapshot: {
+        instance_id: instance.id,
+        code: error.code ?? null,
+        message: typeof error.message === "string" ? error.message.slice(0, 200) : null,
+      },
+    });
+    return new Error("question_buttons_ingress_unavailable");
+  };
+
   let normalized: NormalizedMessage;
   try {
     normalized = normalizeMessage(data, instance) as NormalizedMessage;
@@ -1151,7 +1171,7 @@ async function ingestMessageViaRpc(
   } catch (e) {
     // O caminho antigo admitia o botão ANTES de normalizar: mantém a admissão.
     const admission = await call(null, []);
-    if (admission.error) throw new Error("question_buttons_ingress_unavailable");
+    if (admission.error) throw await rpcUnavailable(admission.error);
     throw e;
   }
 
@@ -1162,7 +1182,7 @@ async function ingestMessageViaRpc(
     hasMessageId ? normalized : null,
     hasMessageId && normalized.direction === "outgoing" ? statusesBeforeEcho(normalized.status) : [],
   );
-  if (error) throw new Error("question_buttons_ingress_unavailable");
+  if (error) throw await rpcUnavailable(error);
   const result = rpcData as IngestRpcResult | null;
 
   switch (result?.status) {
