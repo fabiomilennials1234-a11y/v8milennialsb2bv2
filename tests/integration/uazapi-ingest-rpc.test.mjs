@@ -449,18 +449,28 @@ for (const sc of cancelScenarios) {
   });
 }
 
-test('capture_groups: leitura que falha (erro ou 57014) = captura, fail-open do caminho antigo', async () => {
-  for (const code of ['XX000', 'query_canceled']) {
-    const db = await setup();
-    try {
-      // organizations vira view cuja leitura falha; a FK continua na tabela base.
-      await db.exec(`ALTER TABLE public.organizations RENAME TO organizations_base;
-        CREATE FUNCTION public.capture_boom(uuid) RETURNS boolean LANGUAGE plpgsql AS $f$
-          BEGIN RAISE EXCEPTION 'org read down' USING ERRCODE = '${code}'; END $f$;
-        CREATE VIEW public.organizations AS SELECT id, public.capture_boom(id) AS capture_groups FROM public.organizations_base;`);
-      const r = await ingest(db, { instance: INST_B, message: normalized({ is_group: true, message_id: 'G-F' }) });
-      assert.equal(r.status, 'persisted', code);
-      assert.equal((await rows(db, `SELECT 1 FROM public.whatsapp_messages WHERE message_id = 'G-F'`)).length, 1);
-    } finally { await db.close(); }
-  }
+const brokenOrgRead = (code) => `ALTER TABLE public.organizations RENAME TO organizations_base;
+  CREATE FUNCTION public.capture_boom(uuid) RETURNS boolean LANGUAGE plpgsql AS $f$
+    BEGIN RAISE EXCEPTION 'org read down' USING ERRCODE = '${code}'; END $f$;
+  CREATE VIEW public.organizations AS SELECT id, public.capture_boom(id) AS capture_groups FROM public.organizations_base;`;
+
+test('capture_groups: leitura com erro comum = captura (fail-open do caminho antigo)', async () => {
+  const db = await setup();
+  try {
+    // organizations vira view cuja leitura falha; a FK continua na tabela base.
+    await db.exec(brokenOrgRead('XX000'));
+    const r = await ingest(db, { instance: INST_B, message: normalized({ is_group: true, message_id: 'G-F' }) });
+    assert.equal(r.status, 'persisted');
+    assert.equal((await rows(db, `SELECT 1 FROM public.whatsapp_messages WHERE message_id = 'G-F'`)).length, 1);
+  } finally { await db.close(); }
+});
+
+test('capture_groups: 57014 na leitura NÃO é engolido — aborta e reverte a admissão (sem seguir sem teto)', async () => {
+  const db = await setup();
+  try {
+    await db.exec(brokenOrgRead('57014'));
+    assert.equal(await errorCode(ingest(db, { instance: INST_B, message: normalized({ is_group: true, message_id: 'G-T' }) })), '57014');
+    assert.equal((await rows(db, 'SELECT 1 FROM public.workflow_button_ingress')).length, 0);
+    assert.equal((await rows(db, 'SELECT 1 FROM public.whatsapp_messages')).length, 0);
+  } finally { await db.close(); }
 });

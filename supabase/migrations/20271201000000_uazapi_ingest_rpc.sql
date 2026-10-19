@@ -79,12 +79,15 @@ BEGIN
   v_is_group := coalesce(v_msg->>'is_group', 'false') = 'true';
 
   -- 2. Grupos: opt-out explícito da org (NULL/ausente = captura). Leitura que
-  --    falha = captura (fail-open do caminho antigo), nunca 503.
+  --    falha = captura (fail-open do caminho antigo). 57014 NÃO é pego aqui de
+  --    propósito: o timer do statement_timeout já disparou, seguir para
+  --    INSERT + triggers + receive deixaria o backend sem teto. Aborta → 503,
+  --    igual a timeout no register.
   IF v_is_group THEN
     BEGIN
       SELECT EXISTS (SELECT 1 FROM public.organizations o WHERE o.id = v_org AND o.capture_groups IS FALSE)
         INTO v_capture_off;
-    EXCEPTION WHEN OTHERS OR query_canceled THEN
+    EXCEPTION WHEN OTHERS THEN
       v_capture_off := false;
     END;
     IF v_capture_off THEN
