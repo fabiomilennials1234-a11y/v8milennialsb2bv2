@@ -1,11 +1,11 @@
--- 20271127000001_avisos_varreduras_a_cada_2_min.sql
+-- 20271129000001_avisos_varreduras_a_cada_2_min.sql
 --
 -- ⚠️ VERSÃO PROVISÓRIA e NÃO APLICADA. Renumerar acima do topo real do ledger
 -- de prod na hora de aplicar. Aplicação em prod é do CTO.
 --
 -- ⚠️ DECISÃO DE PRODUTO: o aviso "em até 15 minutos" / "começando agora" e o de
 -- follow-up passam a sair com até +1 min de atraso (cadência 2 min em vez de 1).
--- Separado da 20271127000000 de propósito: aquela não tem efeito visível; esta
+-- Separado da 20271129000000 de propósito: aquela não tem efeito visível; esta
 -- tem. Aplicar uma não obriga a outra.
 --
 -- Alavanca 6 do plano de RAM/pool (.specs/perf/fora-do-banco.md). Medido em prod
@@ -35,7 +35,7 @@
 -- ~1.300 pipeline_entries com meeting_date a cada execução).
 --
 -- Contrato: tests/unit/cron-fora-do-banco-contrato.test.ts.
--- REVERSÃO EXATA: supabase/migrations/rollback/20271127000001_avisos_varreduras_a_cada_2_min.sql
+-- REVERSÃO EXATA: supabase/migrations/rollback/20271129000001_avisos_varreduras_a_cada_2_min.sql
 
 DO $$
 DECLARE
