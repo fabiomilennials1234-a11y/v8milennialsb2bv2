@@ -10,6 +10,7 @@
  */
 
 import {
+  BookUser,
   Bot,
   ChartNoAxesCombined,
   CalendarDays,
@@ -180,6 +181,7 @@ export const PITSTOP_GROUPS: PitstopGroup[] = [
     items: [
       { label: "Checklists", icon: ListChecks, path: "/checklists" },
       { label: "Templates", icon: FileText, path: "/templates" },
+      { label: "Contatos", icon: BookUser, path: "/contatos" },
       { label: "Duplicatas", icon: Copy, path: "/duplicatas" },
       { label: "Lixeira", icon: Trash2, path: "/lixeira" },
     ],
@@ -279,6 +281,8 @@ export const NAV_VIEW_PERMISSIONS: Record<string, string> = {
   "/checklists": "checklists.view",
   "/templates": "message_templates.view",
   "/duplicatas": "leads.view",
+  // Contatos: mesma chave de view de leads — nenhuma chave nova no catálogo.
+  "/contatos": "leads.view",
   "/lixeira": "leads.view",
   // SCRUM-430. A chave existe no catálogo desde a migration 20270828000000 —
   // sem ela no banco, esta linha esconde Métricas de todo membro não-admin.

@@ -4031,6 +4031,57 @@ export type Database = {
           },
         ]
       }
+      contact_phones: {
+        Row: {
+          contact_id: string
+          created_at: string
+          id: string
+          is_primary: boolean
+          label: string | null
+          normalized_phone: string
+          organization_id: string
+          phone: string
+          sort_order: number
+        }
+        Insert: {
+          contact_id: string
+          created_at?: string
+          id?: string
+          is_primary?: boolean
+          label?: string | null
+          normalized_phone: string
+          organization_id: string
+          phone: string
+          sort_order?: number
+        }
+        Update: {
+          contact_id?: string
+          created_at?: string
+          id?: string
+          is_primary?: boolean
+          label?: string | null
+          normalized_phone?: string
+          organization_id?: string
+          phone?: string
+          sort_order?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "contact_phones_contact_id_fkey"
+            columns: ["contact_id"]
+            isOneToOne: false
+            referencedRelation: "contacts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "contact_phones_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       contacts: {
         Row: {
           avatar_url: string | null
@@ -9000,6 +9051,58 @@ export type Database = {
             columns: ["lead_id"]
             isOneToOne: false
             referencedRelation: "leads_compat"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      lead_contacts: {
+        Row: {
+          added_at: string
+          added_by: string | null
+          contact_id: string
+          id: string
+          lead_id: string
+          organization_id: string
+          papel: string | null
+        }
+        Insert: {
+          added_at?: string
+          added_by?: string | null
+          contact_id: string
+          id?: string
+          lead_id: string
+          organization_id: string
+          papel?: string | null
+        }
+        Update: {
+          added_at?: string
+          added_by?: string | null
+          contact_id?: string
+          id?: string
+          lead_id?: string
+          organization_id?: string
+          papel?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lead_contacts_contact_id_fkey"
+            columns: ["contact_id"]
+            isOneToOne: false
+            referencedRelation: "contacts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lead_contacts_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "leads"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lead_contacts_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
             referencedColumns: ["id"]
           },
         ]
@@ -21363,6 +21466,38 @@ export type Database = {
         }
         Returns: undefined
       }
+      contact_create: {
+        Args: {
+          p_email?: string
+          p_job_title?: string
+          p_lead_ids?: string[]
+          p_name: string
+          p_org: string
+          p_phones?: Json
+        }
+        Returns: string
+      }
+      contact_delete: { Args: { p_contact_id: string }; Returns: string }
+      contact_has_links: { Args: { p_contact_id: string }; Returns: boolean }
+      contact_list: {
+        Args: {
+          p_limit?: number
+          p_offset?: number
+          p_org: string
+          p_search?: string
+        }
+        Returns: Json
+      }
+      contact_update: {
+        Args: {
+          p_contact_id: string
+          p_email?: string
+          p_job_title?: string
+          p_name: string
+          p_phones?: Json
+        }
+        Returns: string
+      }
       create_default_pipeline_stages: {
         Args: { org_id: string }
         Returns: undefined
@@ -23187,6 +23322,14 @@ export type Database = {
       lead_excluded_from_metrics: {
         Args: { p_lead_id: string; p_org_id: string }
         Returns: boolean
+      }
+      lead_contact_link: {
+        Args: { p_contact_id: string; p_lead_id: string; p_papel?: string }
+        Returns: string
+      }
+      lead_contact_unlink: {
+        Args: { p_contact_id: string; p_lead_id: string }
+        Returns: string
       }
       lead_in_my_org: { Args: { p_lead_id: string }; Returns: boolean }
       lead_owner_add: {
