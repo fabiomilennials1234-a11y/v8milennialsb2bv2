@@ -37,6 +37,8 @@ import { nomeComLeadPrimeiro, nomeDaConversa } from "@/modules/communication/lib
 import { useResolveChatDeepLink } from "@/modules/communication/hooks/chat/useResolveChatDeepLink";
 import { computeNeedsDeepLinkResolve } from "@/modules/communication/lib/computeNeedsDeepLinkResolve";
 import { resolvePendingDeepLink } from "@/modules/communication/lib/resolvePendingDeepLink";
+import { escolherCaixaSemConversa } from "@/modules/communication/lib/escolherCaixaSemConversa";
+import { useCaixasDeQuemAtende } from "@/modules/communication/hooks/chat/useCaixasDeQuemAtende";
 import {
   computeChatDeepLinkPlan,
   type ChatDeepLinkPlan,
@@ -545,6 +547,10 @@ export function ChatShellWithContext() {
   // acontece aqui; daí pra frente o fluxo é idêntico ao de `?phone=`.
   const [searchParams, setSearchParams] = useSearchParams();
   const initialPlanRef = useRef<ChatDeepLinkPlan | null>(null);
+  // O lead do link, mesmo quando `?phone=` venceu o plano: é dele que sai o
+  // responsável na escolha de caixa sem conversa. Lido uma vez, como o plano —
+  // os params somem da URL depois de processados.
+  const leadDoLinkRef = useRef<string | null>(null);
   if (initialPlanRef.current === null) {
     initialPlanRef.current = computeChatDeepLinkPlan({
       phone: searchParams.get("phone"),
@@ -552,6 +558,7 @@ export function ChatShellWithContext() {
       box: searchParams.get("box"),
       lead: searchParams.get("lead"),
     });
+    leadDoLinkRef.current = searchParams.get("lead");
   }
   const plan = initialPlanRef.current;
 
@@ -580,7 +587,11 @@ export function ChatShellWithContext() {
   const [deepLinkProcessed, setDeepLinkProcessed] = useState(false);
   const [pendingDeepLinkPhone, setPendingDeepLinkPhone] = useState<string | null>(null);
 
-  const { preferredInstanceId, setPreferredInstance } = usePreferredInstance(instances);
+  const {
+    preferredInstanceId,
+    setPreferredInstance,
+    isLoading: preferenciaCarregando,
+  } = usePreferredInstance(instances);
 
   /**
    * O CONJUNTO de caixas marcadas. Era um id só até a caixa unificada.
@@ -700,6 +711,10 @@ export function ChatShellWithContext() {
     enabled: needsResolve,
   });
 
+  // Em paralelo ao resolver: se o lead não tiver conversa, a caixa sai daqui.
+  const quemAtende = useCaixasDeQuemAtende(leadDoLinkRef.current, needsResolve);
+  const sinaisDaCaixaCarregando = preferenciaCarregando || quemAtende.carregando;
+
   useEffect(() => {
     if (deepLinkProcessed) return;
     if (!hasDeepLinkPhone) return;
@@ -728,15 +743,26 @@ export function ChatShellWithContext() {
 
     // Caminho B: aguardando resolver server-side.
     if (!resolveFetched) return;
+    // Sem conversa, a caixa depende da preferência e do responsável. Decidir
+    // antes de chegarem é cair na ordem alfabética (Chamado 52df972e).
+    if (!resolved && sinaisDaCaixaCarregando) return;
 
     if (resolved) {
       setSelectedBoxId(resolved.instanceId);
       setPendingDeepLinkPhone(resolved.phoneNumber);
     } else {
-      // Lead sem mensagens — selecionar instância padrão e abrir chat vazio
-      const connected = instances.find((i) => i.status === "connected");
-      const escolhida = connected ?? instances[0];
-      setSelectedBoxId(escolhida.id);
+      // Lead sem mensagens: a caixa de quem atende, na mesma ordem do seletor
+      // "Iniciar conversa por". `marcarSomente`, e não `setSelectedBoxId`: a
+      // escolha automática não regrava a preferência do usuário — era assim
+      // que a caixa de outra vendedora virava a preferida de quem só clicou.
+      const escolhida =
+        escolherCaixaSemConversa({
+          instances,
+          preferredInstanceId,
+          minhasInstanceIds: quemAtende.minhasInstanceIds,
+          doResponsavelInstanceIds: quemAtende.doResponsavelInstanceIds,
+        })?.caixa ?? instances[0];
+      marcarSomente(escolhida.id);
 
       // A caixa oficial identifica a conversa por `(instância, interlocutor)`, e
       // não por telefone solto: guardar o telefone cru aqui deixaria a tela sem
@@ -764,6 +790,11 @@ export function ChatShellWithContext() {
     instances,
     resolveFetched,
     resolved,
+    sinaisDaCaixaCarregando,
+    preferredInstanceId,
+    quemAtende.minhasInstanceIds,
+    quemAtende.doResponsavelInstanceIds,
+    marcarSomente,
   ]);
 
   // Limpa query params depois de processar (sucesso ou desistência).
