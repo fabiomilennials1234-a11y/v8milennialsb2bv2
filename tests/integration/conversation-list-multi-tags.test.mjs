@@ -21,8 +21,13 @@
 //   g. assinatura, demais colunas e linhas idênticas a 20271125; p_tags filtra;
 //      o corpo novo é o de 20271125 + só o LATERAL de etiquetas;
 //   h. rollback devolve a função de 20271125 com a mesma ACL;
-//   i. forma de prod: com as views `private.*` presentes, o corpo passa a lê-las
-//      (como o de prod hoje) e, normalizado, é o mesmo do repo.
+//   i. forma de prod: com o strict instalado e as 8 views `private.*`, o corpo
+//      passa a lê-las (como o de prod hoje), com 15 `private.` (rollback: 13) e,
+//      normalizado, é o mesmo do repo;
+//   j. falha FECHADA: strict instalado e uma das 8 views faltando → o apply
+//      aborta e a função de antes fica intacta;
+//   k. lista FECHADA: uma view `private.team_members` presente NÃO é trocada —
+//      o gate e o isolamento ficam em public, seja qual for o catálogo.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -250,6 +255,14 @@ CREATE VIEW private.lead_tags WITH (security_invoker = true) AS
   SELECT id, lead_id, tag_id, created_at
     FROM public.lead_tags
    WHERE private.strict_lead_ref_visible_in(lead_id, ( SELECT private.strict_lead_member_orgs() AS strict_lead_member_orgs));
+-- As outras 6 views de prod: aqui sem recorte (a lista não é o que se testa),
+-- só para a forma de prod existir inteira.
+CREATE VIEW private.conversation_read_state WITH (security_invoker = true) AS SELECT * FROM public.conversation_read_state;
+CREATE VIEW private.conversations WITH (security_invoker = true) AS SELECT * FROM public.conversations;
+CREATE VIEW private.pipeline_entries WITH (security_invoker = true) AS SELECT * FROM public.pipeline_entries;
+CREATE VIEW private.whatsapp_conversation_summary WITH (security_invoker = true) AS SELECT * FROM public.whatsapp_conversation_summary;
+CREATE VIEW private.whatsapp_conversations WITH (security_invoker = true) AS SELECT * FROM public.whatsapp_conversations;
+CREATE VIEW private.whatsapp_messages WITH (security_invoker = true) AS SELECT * FROM public.whatsapp_messages;
 UPDATE public.organizations SET feature_flags = '{"strict_lead_owner_access": true}' WHERE id = '${ORG_A}';
 `;
 
@@ -259,10 +272,11 @@ REVOKE ALL ON FUNCTION ${SIG} FROM PUBLIC, anon, service_role;
 GRANT EXECUTE ON FUNCTION ${SIG} TO authenticated;
 `;
 
-async function freshDb({ strict = false } = {}) {
+async function freshDb({ strict = false, extra = '' } = {}) {
   const db = new PGlite();
   await db.exec(SKELETON);
   if (strict) await db.exec(STRICT);
+  if (extra) await db.exec(extra);
   await db.exec(BASE_FN);
   await db.exec(PROD_ACL);
   return db;
@@ -296,6 +310,7 @@ const acl = async (db) => (await db.query(`SELECT
     has_function_privilege('service_role', '${SIG}', 'EXECUTE') AS service_role,
     has_function_privilege('authenticated', '${SIG}', 'EXECUTE') AS authenticated,
     (SELECT proacl::text FROM pg_proc WHERE oid = '${SIG}'::regprocedure) AS proacl`)).rows[0];
+const countPrivate = (src) => (src.match(/private\./g) ?? []).length;
 const prosrc = async (db) => (await db.query(`SELECT prosrc FROM pg_proc WHERE oid = '${SIG}'::regprocedure`)).rows[0].prosrc;
 
 test('base: o corpo de 20271125 no repo é o de prod', () => {
@@ -401,6 +416,9 @@ test('e, i: strict_lead_owner_access espelhado pelas views private.* da forma de
       'relações sem view private.* ficam em public');
     const migBody = bodyOf(MIG.slice(MIG.indexOf('CREATE FUNCTION public.get_whatsapp_conversation_list_multi')));
     assert.equal(normalize(src), migBody);
+    assert.equal(countPrivate(src), 15, '13 do corpo de prod + lead_tags e leads do LATERAL');
+    assert.ok(src.includes('public.team_members tm') && src.includes('public.organizations o')
+      && src.includes('public.member_feature_permissions mfp'), 'gate e isolamento ficam em public');
     const a = await acl(db);
     assert.deepEqual([a.anon, a.service_role, a.authenticated], [false, false, true], 'troca de prefixo preserva a ACL');
 
@@ -422,7 +440,57 @@ test('e, i: strict_lead_owner_access espelhado pelas views private.* da forma de
     await db.exec(RB);
     const rbSrc = await prosrc(db);
     assert.ok(rbSrc.includes('private.leads') && rbSrc.includes('private.lead_tags'));
+    assert.equal(countPrivate(rbSrc), 13, 'rollback = contagem de prod hoje');
     assert.equal(md5(normalize(rbSrc)), PROD_PROSRC_MD5);
+  } finally {
+    await db.close();
+  }
+});
+
+test('j: strict instalado e uma das 8 views faltando → apply falha fechado', async () => {
+  const db = await freshDb({ strict: true, extra: 'DROP VIEW private.whatsapp_messages;' });
+  try {
+    const antes = await prosrc(db);
+    await assert.rejects(db.exec(MIG), /forma de prod incompleta.*private\.whatsapp_messages/);
+    await db.exec('ROLLBACK');
+    // Nada do apply sobrou: mesma função, mesmo retorno, mesma ACL.
+    assert.equal(await prosrc(db), antes);
+    const r = (await db.query(`SELECT pg_get_function_result('${SIG}'::regprocedure) AS r`)).rows[0].r;
+    assert.ok(!r.includes('tags jsonb'));
+    const a = await acl(db);
+    assert.deepEqual([a.anon, a.service_role, a.authenticated], [false, false, true]);
+  } finally {
+    await db.close();
+  }
+});
+
+test('j: o rollback também falha fechado sem uma das 8 views', async () => {
+  const db = await freshDb({ strict: true });
+  try {
+    await db.exec(MIG);
+    await db.exec('DROP VIEW private.conversations;');
+    await assert.rejects(db.exec(RB), /forma de prod incompleta.*private\.conversations/);
+    await db.exec('ROLLBACK');
+  } finally {
+    await db.close();
+  }
+});
+
+test('k: view private.team_members presente NÃO é trocada', async () => {
+  const db = await freshDb({
+    strict: true,
+    extra: `CREATE VIEW private.team_members WITH (security_invoker = true) AS SELECT * FROM public.team_members WHERE false;
+            CREATE VIEW private.organizations WITH (security_invoker = true) AS SELECT * FROM public.organizations WHERE false;
+            CREATE VIEW private.tags WITH (security_invoker = true) AS SELECT * FROM public.tags WHERE false;`,
+  });
+  try {
+    await db.exec(MIG);
+    const src = await prosrc(db);
+    assert.ok(!src.includes('private.team_members') && !src.includes('private.organizations')
+      && !src.includes('private.tags'));
+    assert.equal(countPrivate(src), 15);
+    // As views vazias não alcançam a função: a etiqueta continua visível.
+    assert.deepEqual(names(byPhone(await call(db, U.a2, { instances: [BOX_A] }))[P1]), ['Alfa', 'Meio', 'Zeta', 'Conversa']);
   } finally {
     await db.close();
   }

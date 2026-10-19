@@ -18,7 +18,7 @@ lista multi do /chat fazia a RPC + 2 idas de fan-out só para etiquetas
 ## Mudanças
 - **DB**: a RPC devolve `tags jsonb` no fim do retorno — `[{id,name,color}]`, nunca NULL. Corpo = 20271125 verbatim + um LATERAL pós-LIMIT. Ordem: etiquetas do lead (nome, id), depois as da conversa; repetida fica a do lead.
 - **Visibilidade**: espelha a RLS das três tabelas (a função é DEFINER): lead da org pedida e não apagado; só a conversa da própria linha; `tags.organization_id = p_org`. O recorte strict_lead_owner_access vem das views `private.leads` / `private.lead_tags` de prod.
-- **Forma de prod automática**: um bloco DO troca `public.<rel>` por `private.<rel>` onde a view existe (prod: as 8 relações que o corpo vivo já lê por `private.*`). Antes a troca era instrução manual no cabeçalho de 20271125.
+- **Forma de prod automática**: com `private.strict_lead_member_orgs()` instalado, um bloco DO troca `public.<rel>` por `private.<rel>` numa lista FECHADA de 8 relações (as que o corpo vivo já lê por `private.*`); faltou uma view → RAISE (falha fechada); confere 0 `public.<8>` e 15 `private.` (rollback: 13). Gate e isolamento (organizations, team_members, member_feature_permissions, tags, whatsapp_conversation_tags) ficam sempre em public. Antes a troca era instrução manual no cabeçalho de 20271125.
 - **ACL**: DROP+CREATE com `REVOKE ALL ... FROM PUBLIC, anon, service_role` + `GRANT EXECUTE ... TO authenticated` = ACL de prod.
 - **Front (só a V5, caminho multi)**: linha com `tags` → `contato.tags` direto, e `enriquecerContatos(..., { etiquetasJaResolvidas: true })` pula o fan-out. Linha sem a coluna (banco velho, queda por caixa) → fan-out de sempre. `useWhatsAppContacts` (caixa isolada) e a clássica não mudam.
 

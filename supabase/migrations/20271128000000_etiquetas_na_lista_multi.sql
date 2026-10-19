@@ -41,9 +41,20 @@
 -- ATENÇÃO, e diferente de 20271125: em prod o corpo vivo lê as views
 -- private.<relação>, e elas APLICAM o recorte strict_lead_owner_access pelo JWT
 -- — não são equivalentes à tabela. Em vez de pedir a troca de prefixo à mão
--- antes do apply, o bloco DO ao fim desta migration a faz sozinho, só onde a
--- view existe. Depende de prod continuar com private.strict_lead_member_orgs(),
--- private.strict_lead_is_owned(uuid,uuid) e as views (aplicadas fora do repo).
+-- antes do apply, o bloco DO ao fim desta migration a faz sozinho, numa lista
+-- FECHADA de 8 relações, quando private.strict_lead_member_orgs() existe — e
+-- falha fechada se faltar alguma das 8 views. Depende de prod continuar com
+-- private.strict_lead_member_orgs(), private.strict_lead_is_owned(uuid,uuid) e as
+-- views (aplicadas fora do repo).
+--
+-- ── CONFERÊNCIA PÓS-APPLY (rodar em prod, só leitura) ───────────────────────
+--   SELECT has_function_privilege('anon',          p.oid, 'EXECUTE') AS anon,          -- false
+--          has_function_privilege('service_role',  p.oid, 'EXECUTE') AS service_role,  -- false
+--          has_function_privilege('authenticated', p.oid, 'EXECUTE') AS authenticated, -- true
+--          (SELECT count(*) FROM regexp_matches(p.prosrc, 'private\.', 'g')) AS n_private, -- 15
+--          p.proacl                                                                    -- {postgres=X/postgres,authenticated=X/postgres}
+--     FROM pg_proc p
+--    WHERE p.oid = 'public.get_whatsapp_conversation_list_multi(uuid,uuid[],integer,timestamp with time zone,uuid[],text[],uuid[],text[],uuid,boolean,text,boolean,boolean,boolean,text,boolean,uuid,text)'::regprocedure;
 --
 -- ── ORDEM DE DEPLOY ────────────────────────────────────────────────────────
 -- Qualquer uma. Front novo + banco velho: a linha não traz `tags` e o front cai
@@ -523,48 +534,75 @@ $function$;
 REVOKE ALL ON FUNCTION public.get_whatsapp_conversation_list_multi(uuid, uuid[], integer, timestamp with time zone, uuid[], text[], uuid[], text[], uuid, boolean, text, boolean, boolean, boolean, text, boolean, uuid, text) FROM PUBLIC, anon, service_role;
 GRANT EXECUTE ON FUNCTION public.get_whatsapp_conversation_list_multi(uuid, uuid[], integer, timestamp with time zone, uuid[], text[], uuid[], text[], uuid, boolean, text, boolean, boolean, boolean, text, boolean, uuid, text) TO authenticated;
 
--- ── FORMA DE PROD: public.* → private.* onde a view existe ────────────────
+-- ── FORMA DE PROD: public.* → private.* nas 8 relações do recorte strict ──
 -- Em prod o corpo desta função lê as views `private.<relação>` (security_invoker,
 -- aplicadas fora do repo) no lugar das tabelas — e elas NÃO são decorativas:
--- `private.leads`, `private.lead_tags`, `private.whatsapp_conversations` etc.
 -- aplicam o recorte de strict_lead_owner_access pelo JWT do chamador
 -- (private.strict_lead_member_orgs / strict_lead_is_owned), que continua valendo
 -- dentro do DEFINER porque lê auth.uid(), não o papel. O repo não tem essas
 -- views, então o CREATE acima usa public.*; este bloco reescreve a função para a
--- forma de prod quando — e só onde — a view existe. Regra: toda relação que o
--- corpo lê, trocada se houver VIEW homônima em `private`. Em prod (19/10) isso
--- dá exatamente as 8 relações que o corpo vivo já lê por private.* (leads,
--- lead_tags, whatsapp_conversations, whatsapp_conversation_summary,
--- whatsapp_messages, conversations, conversation_read_state, pipeline_entries);
--- tags e whatsapp_conversation_tags não têm view e ficam em public. No repo e no
--- PGlite sem as views, nada muda. CREATE OR REPLACE: a ACL acima é preservada.
+-- forma de prod.
+--
+-- LISTA FECHADA: só as 8 relações que o corpo vivo de prod lê por private.*
+-- (19/10). organizations, team_members, member_feature_permissions, tags e
+-- whatsapp_conversation_tags ficam SEMPRE em public: são o gate de org, o
+-- isolamento por responsável e o recorte de etiqueta por org, e a semântica
+-- deles não pode depender de o catálogo ter ou não uma view homônima.
+--
+-- O RAMO é decidido pela existência de private.strict_lead_member_orgs() — o
+-- marcador de que o recorte strict está instalado —, não pela das views:
+--   * instalado: as 8 views TÊM de existir (relkind 'v'); faltou uma → RAISE.
+--     Falha FECHADA: trocar só parte deixaria leitura sem o recorte. Depois do
+--     EXECUTE, confere no pg_get_functiondef: zero `public.<8 rels>` e
+--     exatamente 15 ocorrências de `private.` (13 do corpo de 20271125 + lead_tags e leads do LATERAL). Não bateu → RAISE.
+--   * não instalado (repo, PGlite): nada é trocado.
+-- CREATE OR REPLACE: a ACL acima é preservada.
 DO $troca$
 DECLARE
   v_sig regprocedure := 'public.get_whatsapp_conversation_list_multi(uuid,uuid[],integer,timestamp with time zone,uuid[],text[],uuid[],text[],uuid,boolean,text,boolean,boolean,boolean,text,boolean,uuid,text)'::regprocedure;
-  v_def text := pg_get_functiondef(v_sig);
-  v_rel text;
-  v_trocas integer := 0;
-BEGIN
-  FOREACH v_rel IN ARRAY ARRAY[
+  v_rels text[] := ARRAY[
     'conversation_read_state', 'conversations', 'lead_tags', 'leads',
-    'member_feature_permissions', 'organizations', 'pipeline_entries', 'tags',
-    'team_members', 'whatsapp_conversation_summary', 'whatsapp_conversation_tags',
-    'whatsapp_conversations', 'whatsapp_messages'
-  ] LOOP
-    IF EXISTS (
-      SELECT 1 FROM pg_catalog.pg_class c
-      JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
-      WHERE n.nspname = 'private' AND c.relname = v_rel AND c.relkind = 'v'
-    ) THEN
-      -- `\M` = fim de palavra: `public.conversations` não casa
-      -- `public.conversation_read_state`, nem `public.whatsapp_conversations`
-      -- casa `public.whatsapp_conversation_tags`.
-      v_def := regexp_replace(v_def, 'public\.' || v_rel || '\M', 'private.' || v_rel, 'g');
-      v_trocas := v_trocas + 1;
-    END IF;
+    'pipeline_entries', 'whatsapp_conversation_summary', 'whatsapp_conversations',
+    'whatsapp_messages'
+  ];
+  v_esperado constant integer := 15;
+  v_def text;
+  v_rel text;
+  v_faltando text[];
+  v_sobra integer;
+  v_private integer;
+BEGIN
+  IF to_regprocedure('private.strict_lead_member_orgs()') IS NULL THEN
+    RETURN;
+  END IF;
+
+  SELECT array_agg(r ORDER BY r) INTO v_faltando
+    FROM unnest(v_rels) AS r
+   WHERE NOT EXISTS (
+     SELECT 1 FROM pg_catalog.pg_class c
+     JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+     WHERE n.nspname = 'private' AND c.relname = r AND c.relkind = 'v');
+  IF v_faltando IS NOT NULL THEN
+    RAISE EXCEPTION 'forma de prod incompleta: strict instalado, mas faltam as views private.% — abortado para não ler sem o recorte',
+      array_to_string(v_faltando, ', private.');
+  END IF;
+
+  v_def := pg_get_functiondef(v_sig);
+  FOREACH v_rel IN ARRAY v_rels LOOP
+    -- `\M` = fim de palavra: `public.conversations` não casa
+    -- `public.conversation_read_state`, nem `public.whatsapp_conversations`
+    -- casa `public.whatsapp_conversation_tags`.
+    v_def := regexp_replace(v_def, 'public\.' || v_rel || '\M', 'private.' || v_rel, 'g');
   END LOOP;
-  IF v_trocas > 0 THEN
-    EXECUTE v_def;
+  EXECUTE v_def;
+
+  v_def := pg_get_functiondef(v_sig);
+  SELECT count(*) INTO v_sobra
+    FROM regexp_matches(v_def, 'public\.(' || array_to_string(v_rels, '|') || ')\M', 'g');
+  SELECT count(*) INTO v_private FROM regexp_matches(v_def, 'private\.', 'g');
+  IF v_sobra <> 0 OR v_private <> v_esperado THEN
+    RAISE EXCEPTION 'forma de prod divergente: % referência(s) public.* às 8 relações e % private.* (esperado 0 e %)',
+      v_sobra, v_private, v_esperado;
   END IF;
 END
 $troca$;
