@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useCurrentTeamMember } from "@/modules/identity";
 import { normalizePhone } from "@/lib/normalizePhone";
+import { invalidarListaDeConversas } from "./chat/chatReconcile";
 import type { Tag } from "@/modules/leads/hooks/useTags";
 
 // ============================================
@@ -138,7 +139,7 @@ export function useArchiveConversation() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["whatsapp_conversations"] });
-      queryClient.invalidateQueries({ queryKey: ["whatsapp_contacts"] });
+      void invalidarListaDeConversas(queryClient, teamMember?.organization_id);
     },
   });
 }
@@ -149,6 +150,7 @@ export function useArchiveConversation() {
 
 export function useUnarchiveConversation() {
   const queryClient = useQueryClient();
+  const { data: teamMember } = useCurrentTeamMember();
 
   return useMutation({
     mutationFn: async ({ conversationId }: { conversationId: string }) => {
@@ -161,7 +163,7 @@ export function useUnarchiveConversation() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["whatsapp_conversations"] });
-      queryClient.invalidateQueries({ queryKey: ["whatsapp_contacts"] });
+      void invalidarListaDeConversas(queryClient, teamMember?.organization_id);
     },
   });
 }
@@ -195,9 +197,9 @@ export function useDeleteConversation() {
       if (error) throw error;
       return data;
     },
-    onSuccess: () => {
+    onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: ["whatsapp_conversations"] });
-      queryClient.invalidateQueries({ queryKey: ["whatsapp_contacts"] });
+      void invalidarListaDeConversas(queryClient, variables.organizationId);
     },
   });
 }
@@ -251,7 +253,7 @@ export function useAddConversationTag() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["whatsapp_conversation_tags"] });
-      queryClient.invalidateQueries({ queryKey: ["whatsapp_contacts"] });
+      void invalidarListaDeConversas(queryClient, teamMember?.organization_id);
     },
   });
 }
@@ -262,6 +264,7 @@ export function useAddConversationTag() {
 
 export function useRemoveConversationTag() {
   const queryClient = useQueryClient();
+  const { data: teamMember } = useCurrentTeamMember();
 
   return useMutation({
     mutationFn: async ({
@@ -281,7 +284,7 @@ export function useRemoveConversationTag() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["whatsapp_conversation_tags"] });
-      queryClient.invalidateQueries({ queryKey: ["whatsapp_contacts"] });
+      void invalidarListaDeConversas(queryClient, teamMember?.organization_id);
     },
   });
 }

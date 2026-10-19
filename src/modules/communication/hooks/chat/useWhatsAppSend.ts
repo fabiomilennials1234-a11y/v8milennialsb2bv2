@@ -21,6 +21,7 @@ import { sendWithBoundedRecovery, SendRetriesExhausted, MAX_SEND_RETRIES, type S
 import type { WhatsAppMessage, FailedMessage, ReplyContext } from "./types";
 import { makeOptimisticId, promoteOptimisticMessage } from "./shared/optimistic-messages";
 import { userMessageOf } from "@/shared/errors";
+import { reconciliarListaAposEnvio } from "./chatReconcile";
 import { MEDIA_UPLOAD_TIMEOUT_MS, MediaOperationError, withMediaDeadline } from "@/modules/communication/lib/media-operation";
 
 /**
@@ -423,7 +424,9 @@ export function useSendWhatsAppMessage() {
       queryClient.invalidateQueries({
         queryKey: ["whatsapp_messages", teamMember?.organization_id, variables.phoneNumber, variables.instanceId],
       });
-      queryClient.invalidateQueries({ queryKey: ["whatsapp_contacts"] });
+      // A lista NÃO é refeita a cada envio (perf F3): o realtime patcha a
+      // linha; só conversa nova pede a RPC, pelo teto. Ver chatReconcile.ts.
+      reconciliarListaAposEnvio(queryClient, teamMember?.organization_id, variables.phoneNumber, variables.instanceId);
     },
   });
 }
@@ -706,7 +709,9 @@ export function useSendWhatsAppMedia() {
       queryClient.invalidateQueries({
         queryKey: ["whatsapp_messages", teamMember?.organization_id, variables.phoneNumber, variables.instanceId],
       });
-      queryClient.invalidateQueries({ queryKey: ["whatsapp_contacts"] });
+      // A lista NÃO é refeita a cada envio (perf F3): o realtime patcha a
+      // linha; só conversa nova pede a RPC, pelo teto. Ver chatReconcile.ts.
+      reconciliarListaAposEnvio(queryClient, teamMember?.organization_id, variables.phoneNumber, variables.instanceId);
     },
   });
 }

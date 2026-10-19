@@ -67,6 +67,7 @@ import { useConversasUnificadas } from "@/modules/communication/hooks/chat/useCo
 import { useCaixasSelecionadas } from "@/modules/communication/hooks/chat/useCaixasSelecionadas";
 import { useNaoLidasPorCaixa } from "@/modules/communication/hooks/chat/useNaoLidasPorCaixa";
 import { pedirAtualizacaoDeNaoLidas } from "@/modules/communication/hooks/chat/unreadRefresh";
+import { invalidarListaDeConversas } from "@/modules/communication/hooks/chat/chatReconcile";
 import { useSendSocialMessage } from "@/modules/communication/hooks/chat/useSendSocialMessage";
 import { useNotificameWhatsAppSend } from "@/modules/communication/hooks/chat/useNotificameWhatsAppSend";
 import {
@@ -1048,10 +1049,10 @@ export function ChatShellWithContext() {
       p_instance_id: instanceId, p_normalized_phone: norm,
     } as never)).catch(() => ({ error: new Error("Falha de conexão") }));
     if (error) { toast.error("Não foi possível marcar como não lido"); return; }
-    await queryClient.invalidateQueries({ queryKey: ["whatsapp_contacts"] });
+    await invalidarListaDeConversas(queryClient, organizationId);
     await queryClient.invalidateQueries({ predicate: query => query.queryKey.some(key => typeof key === "string" && /unread|nao.lidas/.test(key)) });
     toast.success("Conversa marcada como não lida");
-  }, [telefoneSelecionado, selectedInstanceId, queryClient]);
+  }, [telefoneSelecionado, selectedInstanceId, queryClient, organizationId]);
 
   const markConversationRead = useCallback(
     (phone: string, instanceId: string) => {

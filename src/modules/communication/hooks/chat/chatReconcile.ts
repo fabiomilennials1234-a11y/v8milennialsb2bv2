@@ -24,7 +24,9 @@
  * cancelar uma RPC de 11–15 s no pico e recomeçar é pagar duas vezes.
  */
 import type { QueryClient, QueryKey } from "@tanstack/react-query";
+import { normalizePhone } from "@/lib/normalizePhone";
 import { criarThrottle, type Relogio, type Throttle } from "./unreadRefresh";
+import { contatosDoCache, listaMostraCaixa } from "./shared/cacheDeContatos";
 
 /** Teto de vazão: no máximo uma reconciliação por alvo por aba a cada 15 s. */
 export const CHAT_RECONCILE_MIN_INTERVAL_MS = 15_000;
@@ -138,4 +140,80 @@ export function pedirReconciliacaoDaLista(
     () => invalidar(queryClient, queryKey),
     relogio,
   );
+}
+
+/**
+ * Depois de um ENVIO (perf F3, 19/10).
+ *
+ * O envio invalidava a raiz `["whatsapp_contacts"]` no `onSettled` — uma RPC de
+ * lista multi (~500 ms) por mensagem enviada, sem teto, em todas as listas da
+ * aba. Redundante: o INSERT outgoing chega pelo realtime e `useWhatsAppRealtime`
+ * já patcha a linha (prévia, hora, ordem) — inclusive pedindo esta mesma
+ * reconciliação quando o contato não está na lista.
+ *
+ * Só a lista que mostra a caixa do envio e AINDA não tem a conversa (primeira
+ * mensagem para o contato) precisa da RPC — e vai pelo teto de 15 s, no mesmo
+ * alvo que o realtime usa, então os dois pedidos colapsam num só.
+ *
+ * Escopo inalterado: só listas da org do envio, nunca a raiz sem tenant; a RPC
+ * continua decidindo visibilidade. Lista ainda não carregada não tem o que
+ * reconciliar.
+ *
+ * Tradeoff aceito: se o realtime perder o evento outgoing, prévia/ordem da
+ * conversa esperam a reconciliação de reconexão, o foco ou o backstop de 300 s.
+ */
+export function reconciliarListaAposEnvio(
+  queryClient: QueryClient,
+  organizationId: string | null | undefined,
+  phoneNumber: string,
+  instanceId: string | null | undefined,
+  relogio: Relogio = relogioReal,
+): void {
+  if (!organizationId) return;
+  const fone = normalizePhone(phoneNumber) ?? "";
+
+  for (const query of queryClient.getQueryCache().findAll({
+    queryKey: ["whatsapp_contacts", organizationId],
+  })) {
+    if (instanceId && !listaMostraCaixa(query.queryKey, instanceId)) continue;
+    const contatos = contatosDoCache(query.state.data);
+    if (!contatos) continue;
+
+    // A linha é `(caixa, telefone)`: o mesmo contato na outra caixa é outra
+    // conversa, e não está "na lista" para este envio.
+    const temAConversa =
+      fone !== "" &&
+      contatos.some(
+        (c) =>
+          normalizePhone(c.phone_number) === fone &&
+          (!instanceId || c.instance_id == null || c.instance_id === instanceId),
+      );
+    if (!temAConversa) pedirReconciliacaoDaLista(queryClient, query.queryKey, relogio);
+  }
+}
+
+/**
+ * Mutação que muda a COMPOSIÇÃO da lista (arquivar, desarquivar, excluir,
+ * etiqueta, lead vinculado, transferência, não-lida): o patch local não sabe
+ * recalcular filtro, escopo e arquivamento — só a RPC sabe.
+ *
+ * Refaz JÁ, sem teto: é ação explícita do operador, rara, e ele espera ver o
+ * efeito (a conversa arquivada sumir). O teto de 15 s aqui atrasaria a segunda
+ * ação seguida. O que muda em relação à invalidação crua da raiz:
+ *   - org na chave quando conhecida (multi-tenant; nada de outra org em cache);
+ *   - aba oculta só marca stale; refaz ao voltar.
+ *
+ * ⚠️ SEM `cancelRefetch: false`, ao contrário da reconciliação por evento: um
+ * fetch em voo começou ANTES do commit da mutação e devolveria a lista velha —
+ * pegar carona nele apagaria o arquivamento da tela até o backstop. Aqui o
+ * cancelamento é o que garante ler a própria escrita, e o volume é desprezível.
+ */
+export function invalidarListaDeConversas(
+  queryClient: QueryClient,
+  organizationId?: string | null,
+): Promise<void> {
+  return queryClient.invalidateQueries({
+    queryKey: organizationId ? ["whatsapp_contacts", organizationId] : ["whatsapp_contacts"],
+    refetchType: abaEscondida() ? "none" : "active",
+  });
 }

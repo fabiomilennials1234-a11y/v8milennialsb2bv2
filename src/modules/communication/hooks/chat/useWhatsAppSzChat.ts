@@ -4,6 +4,7 @@
  */
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { invalidarListaDeConversas } from "./chatReconcile";
 
 /**
  * Hook to transfer a conversation back to an SZ.chat department.
@@ -37,8 +38,8 @@ export function useTransferToSzChatDepartment() {
       if (!data?.success) throw new Error(data?.error || "Falha ao transferir");
       return data;
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["whatsapp_contacts"] });
+    onSuccess: (_data, variables) => {
+      void invalidarListaDeConversas(queryClient, variables.organizationId);
       queryClient.invalidateQueries({ queryKey: ["sz_chat_session"] });
     },
   });

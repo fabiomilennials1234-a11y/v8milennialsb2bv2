@@ -47,6 +47,7 @@ function contato(phone: string, time: string, unread = 0) {
     lead_id: null,
     conversation_id: null,
     archived_at: null as string | null,
+    last_message_sent_source: null as "manual" | "copilot" | "workflow" | null,
   };
 }
 
@@ -120,6 +121,36 @@ describe("useWhatsAppMessagesRealtime — ordem da lista de conversas", () => {
     expect(topo.last_message_time).toBe("2026-08-06T15:00:00Z");
     // Conversa não aberta (o hook subiu com phoneNumber null) → não-lida sobe.
     expect(topo.unread_count).toBe(3);
+  });
+
+  it("fonte da última mensagem acompanha o patch — resposta manual tira a conversa da aba IA", () => {
+    const qc = setup([
+      { ...contato("5548999990001", "2026-08-06T10:00:00Z"), last_message_sent_source: "copilot" },
+    ]);
+
+    const evento = insertDe("5548999990001", "2026-08-06T15:00:00Z");
+    capturedOnEvent?.({
+      ...evento,
+      new: { ...evento.new, direction: "outgoing", sent_source: "manual" },
+    });
+    expect(lista(qc)[0].last_message_sent_source).toBe("manual");
+
+    // Incoming não tem fonte: a RPC devolve null, e o patch também.
+    capturedOnEvent?.({
+      ...insertDe("5548999990001", "2026-08-06T16:00:00Z"),
+      new: { ...insertDe("5548999990001", "2026-08-06T16:00:00Z").new, sent_source: null },
+    });
+    expect(lista(qc)[0].last_message_sent_source).toBeNull();
+  });
+
+  it("payload sem a coluna sent_source preserva a fonte em cache", () => {
+    const qc = setup([
+      { ...contato("5548999990001", "2026-08-06T10:00:00Z"), last_message_sent_source: "workflow" },
+    ]);
+
+    capturedOnEvent?.(insertDe("5548999990001", "2026-08-06T15:00:00Z"));
+
+    expect(lista(qc)[0].last_message_sent_source).toBe("workflow");
   });
 
   it("mensagem ANTIGA não reordena nada — evento fora de ordem não bagunça a lista", () => {

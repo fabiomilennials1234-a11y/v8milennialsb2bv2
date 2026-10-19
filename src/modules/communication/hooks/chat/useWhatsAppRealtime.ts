@@ -20,10 +20,11 @@ import { useRealtimeChannel } from "@/shared/realtime/useRealtimeChannel";
 import type { WhatsAppMessage } from "./types";
 import type { RealtimePostgresChangesPayload } from "@supabase/supabase-js";
 import { normalizePhone as canonicalNormalizePhone } from "@/lib/normalizePhone";
-import { chatQueryKeys, MULTI_KEY_PREFIX } from "./shared/queryKeys";
+import { chatQueryKeys } from "./shared/queryKeys";
 import {
   comContatos,
   contatosDoCache,
+  listaMostraCaixa,
   type CacheDeContatos,
 } from "./shared/cacheDeContatos";
 import { upsertRealtimeMessage } from "./shared/optimistic-messages";
@@ -142,18 +143,8 @@ export function useWhatsAppMessagesRealtime(
         const raiz = ["whatsapp_contacts", organizationId ?? null] as const;
         const normPhone = normalizePhone(messagePhone);
 
-        const contemACaixa = (key: readonly unknown[]): boolean => {
-          const eixo = key[2];
-          if (typeof eixo !== "string") return false;
-          if (!eixo.startsWith(MULTI_KEY_PREFIX)) return eixo === caixaDaMensagem;
-          return eixo
-            .slice(MULTI_KEY_PREFIX.length)
-            .split(",")
-            .includes(caixaDaMensagem);
-        };
-
         for (const query of queryClient.getQueryCache().findAll({ queryKey: raiz })) {
-          if (!contemACaixa(query.queryKey)) continue;
+          if (!listaMostraCaixa(query.queryKey, caixaDaMensagem)) continue;
 
           // A raiz guarda DUAS formas — o array da lista de uma caixa e o
           // envelope `{ contatos, cheia }` da lista por conjunto. Ler o `.data`
@@ -213,6 +204,14 @@ export function useWhatsAppMessagesRealtime(
                 last_message: message.content ?? contact.last_message,
                 last_message_time: message.timestamp,
                 last_message_direction: message.direction as "incoming" | "outgoing",
+                // A fonte da ÚLTIMA mensagem, como a RPC devolve (incoming = null).
+                // Sem isto, a resposta manual numa conversa da aba "IA" a deixava
+                // lá até o refetch — que deixou de vir a cada envio (perf F3).
+                // `undefined` (coluna ausente no payload) preserva o valor.
+                last_message_sent_source:
+                  message.sent_source !== undefined
+                    ? message.sent_source
+                    : contact.last_message_sent_source,
                 unread_count:
                   isIncoming && !isCurrentConversation
                     ? contact.unread_count + 1

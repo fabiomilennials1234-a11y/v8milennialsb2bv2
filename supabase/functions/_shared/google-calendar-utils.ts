@@ -148,12 +148,64 @@ export async function refreshAccessToken(refreshToken: string): Promise<{
   return response.json();
 }
 
-// ─── Obtém access token válido (decodifica + renova) ─────────────────────────
+// ─── Obtém access token válido (reaproveita ou renova) ───────────────────────
+//
+// Perf F5c (RAM/pool do PostgREST, 19/10): antes, TODA leitura de agenda
+// renovava o token no Google e fazia UPDATE na linha do dono — em série por dono
+// no GET de eventos, com disputa de lock na mesma linha (~1,7% do tempo do banco).
+// O access token do Google vale ~1 h; agora ele fica cifrado em
+// `access_token_cache` e é reaproveitado até `exp - margem`.
+//
+// O cache carrega o `encryption_nonce` do refresh token que o gerou: o callback
+// de OAuth regrava o refresh token (nonce novo) na reconexão, e isso invalida o
+// cache sozinho — nunca reaproveitamos access token de uma concessão anterior.
+
+/** Renova antes de vencer: cobre relógio torto e a duração da chamada à API. */
+export const ACCESS_TOKEN_REUSE_MARGIN_MS = 5 * 60 * 1000;
+
+interface AccessTokenCache {
+  /** access token em claro (só existe cifrado no banco). */
+  t: string;
+  /** vencimento ISO devolvido pelo Google na renovação. */
+  exp: string;
+  /** `encryption_nonce` do refresh token que gerou este access token. */
+  rn: string;
+}
+
+async function lerCacheDeAccessToken(
+  tokenRecord: Record<string, unknown>,
+  now: number
+): Promise<string | null> {
+  const blob = tokenRecord.access_token_cache;
+  if (typeof blob !== "string" || !blob) return null;
+  const sep = blob.indexOf(".");
+  if (sep <= 0) return null;
+  try {
+    const cache = JSON.parse(
+      await decryptToken(blob.slice(sep + 1), blob.slice(0, sep))
+    ) as Partial<AccessTokenCache>;
+    if (typeof cache.t !== "string" || typeof cache.exp !== "string") return null;
+    if (cache.rn !== tokenRecord.encryption_nonce) return null;
+    const exp = Date.parse(cache.exp);
+    if (!Number.isFinite(exp) || exp - ACCESS_TOKEN_REUSE_MARGIN_MS <= now) return null;
+    return cache.t;
+  } catch {
+    // Cifra inválida (blob corrompido, chave trocada): renovar é o caminho seguro.
+    return null;
+  }
+}
 
 export async function getValidAccessToken(
   userId: string,
-  supabase: SupabaseClient
+  supabase: SupabaseClient,
+  deps: {
+    now?: () => number;
+    refresh?: typeof refreshAccessToken;
+  } = {}
 ): Promise<{ accessToken: string; googleEmail: string } | null> {
+  const now = (deps.now ?? Date.now)();
+  const refresh = deps.refresh ?? refreshAccessToken;
+
   const { data: tokenRecord } = await supabase
     .from("google_calendar_tokens")
     .select("*")
@@ -163,23 +215,48 @@ export async function getValidAccessToken(
 
   if (!tokenRecord) return null;
 
+  const emCache = await lerCacheDeAccessToken(tokenRecord, now);
+  if (emCache) {
+    return { accessToken: emCache, googleEmail: tokenRecord.google_email };
+  }
+
   const refreshToken = await decryptToken(
     tokenRecord.encrypted_refresh_token,
     tokenRecord.encryption_nonce
   );
 
-  const refreshed = await refreshAccessToken(refreshToken);
+  const refreshed = await refresh(refreshToken);
+  const expiresAt = new Date(now + refreshed.expires_in * 1000).toISOString();
 
-  await supabase
+  const cifrado = await encryptToken(
+    JSON.stringify({
+      t: refreshed.access_token,
+      exp: expiresAt,
+      rn: tokenRecord.encryption_nonce,
+    } satisfies AccessTokenCache)
+  );
+
+  const base = {
+    access_token_expires_at: expiresAt,
+    last_sync_at: new Date(now).toISOString(),
+    last_error: null,
+  };
+
+  const { error } = await supabase
     .from("google_calendar_tokens")
-    .update({
-      access_token_expires_at: new Date(
-        Date.now() + refreshed.expires_in * 1000
-      ).toISOString(),
-      last_sync_at: new Date().toISOString(),
-      last_error: null,
-    })
+    .update({ ...base, access_token_cache: `${cifrado.nonce}.${cifrado.encrypted}` })
     .eq("user_id", userId);
+
+  if (error) {
+    console.warn("[GoogleCalendar] cache do access token não gravado:", error.code ?? error.message);
+    // Coluna ainda inexistente (migration não aplicada): grava o que o código
+    // antigo gravava — a edge fn pode subir antes da migration. Outro erro
+    // (timeout, lock) não ganha segunda escrita: dobraria a carga sob pressão,
+    // e o token devolvido já é válido.
+    if (error.code === "PGRST204" || error.code === "42703") {
+      await supabase.from("google_calendar_tokens").update(base).eq("user_id", userId);
+    }
+  }
 
   return {
     accessToken: refreshed.access_token,

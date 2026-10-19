@@ -4,6 +4,7 @@ import { useCurrentTeamMember } from "@/modules/identity";
 import { responsavelParaGravar } from "@/modules/communication/lib/lead-responsible";
 import { FALLBACK_STAGES } from "@/contracts/pipe";
 import { normalizePhone } from "@/lib/normalizePhone";
+import { invalidarListaDeConversas } from "./chat/chatReconcile";
 import type { Tables, TablesInsert } from "@/integrations/supabase/types";
 import {
   createCustomPipelineEntry as criarCardCustom,
@@ -552,7 +553,7 @@ export function useCreateLeadFromWhatsApp() {
       queryClient.invalidateQueries({ queryKey: ["campanha_leads"] });
       queryClient.invalidateQueries({ queryKey: ["custom_pipe_entries"] });
       queryClient.invalidateQueries({ queryKey: ["lead_all_pipelines"] });
-      queryClient.invalidateQueries({ queryKey: ["whatsapp_contacts"] });
+      void invalidarListaDeConversas(queryClient, teamMember?.organization_id);
       queryClient.invalidateQueries({ queryKey: ["lead_by_phone"] });
     },
   });
@@ -639,7 +640,7 @@ export function useLinkLeadToWhatsApp() {
       queryClient.invalidateQueries({ queryKey: ["leads"] });
       queryClient.invalidateQueries({ queryKey: ["pipeline_entries"] });
       queryClient.invalidateQueries({ queryKey: ["pipe_whatsapp_by_lead"] });
-      queryClient.invalidateQueries({ queryKey: ["whatsapp_contacts"] });
+      void invalidarListaDeConversas(queryClient, organizationId);
       queryClient.invalidateQueries({ queryKey: ["whatsapp_messages"] });
       queryClient.invalidateQueries({ queryKey: ["lead_by_phone"] });
     },
