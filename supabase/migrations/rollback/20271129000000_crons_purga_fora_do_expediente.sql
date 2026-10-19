@@ -1,4 +1,4 @@
--- ROLLBACK de 20271127000001_avisos_varreduras_a_cada_2_min.sql
+-- ROLLBACK de 20271129000000_crons_purga_fora_do_expediente.sql
 -- Devolve as agendas medidas em prod em 2026-10-19. Mesmo contrato de execução
 -- (por jobname; só toca o job cuja agenda é exatamente a que a migration deixou).
 
@@ -16,8 +16,9 @@ BEGIN
   FOR alvo IN
     SELECT * FROM (VALUES
       -- reescalonamento:inicio
-      ('avisos-varredura-reuniao-proxima', '1-59/2 * * * *', '* * * * *'),
-      ('avisos-varredura-followups', '*/2 * * * *', '* * * * *')
+      ('purge-runtime-logs', '9 6 * * *', '9-59/10 * * * *'),
+      ('cleanup-wa-health-checks-7d', '4 * * * *', '4-59/10 * * * *'),
+      ('cleanup-audit-log-14d', '6 * * * *', '6-59/10 * * * *')
       -- reescalonamento:fim
     ) AS t(nome, antes, depois)
   LOOP
