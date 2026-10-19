@@ -410,6 +410,12 @@ function createCustomPipeDb(opts: {
         stage_role: roleOf(entry.stage_id)?.stage_role ?? "open",
       }));
 
+    // `pipeline_entries` é a tabela que `moverNegocioQueDisparou` lê pelo
+    // `entryId`. No fake a etapa é identificada pelo id, então `stage_key`
+    // deriva de `stage_id` — a mesma convenção de `unifiedStageRows`.
+    const rawEntries = (): Record<string, unknown>[] =>
+      entries.map((entry) => ({ ...entry, stage_key: entry.stage_id }));
+
     const source = (): Record<string, unknown>[] =>
       table === "custom_pipeline_stages"
         ? (stages as unknown as Record<string, unknown>[])
@@ -419,6 +425,8 @@ function createCustomPipeDb(opts: {
           ? pipelineRows()
         : table === "negocio_projetado"
           ? projectedEntries()
+        : table === "pipeline_entries"
+          ? rawEntries()
           : table === "organizations"
             ? [{ id: "__any__", feature_flags: opts.featureFlags ?? {} }]
             : [];
@@ -439,7 +447,11 @@ function createCustomPipeDb(opts: {
           descNullsLast(a.created_at, b.created_at) ||
           descNullsLast(a.id, b.id),
       );
-      return rows.map((r) => ({ id: r.id, stage_role: roleOf(r.stage_id)?.stage_role ?? "open" }));
+      return rows.map((r) => ({
+        id: r.id,
+        pipeline_id: r.pipeline_id,
+        stage_role: roleOf(r.stage_id)?.stage_role ?? "open",
+      }));
     };
 
     const run = () => {
@@ -516,6 +528,34 @@ function createCustomPipeDb(opts: {
       updated.push({ id: entry.id, payload: { ...payload } });
       return { data: entry, error: null };
     }
+    // Espelha `public.mover_negocio` (20271119000002): valida a etapa DENTRO do
+    // funil de destino, funde com o card que o lead já tem lá (devolvendo o id
+    // sobrevivente) e, no caso comum, MOVE a própria linha — mesmo id, novo
+    // funil. É o MOVE do ADR-0023 §4, por oposição ao INSERT do caminho custom.
+    if (name === "mover_negocio") {
+      const entry = entries.find((row) => row.id === params.p_entry_id);
+      if (!entry) return { data: null, error: { message: "Negócio não encontrado." } };
+
+      const alvoPipe = params.p_target_pipeline_id as string;
+      const alvoStage = params.p_target_stage_key as string;
+      if (!stages.some((s) => s.pipeline_id === alvoPipe && s.id === alvoStage)) {
+        return { data: null, error: { message: `Etapa "${alvoStage}" não existe no funil ${alvoPipe}.` } };
+      }
+
+      // Passo 2a da RPC: chegando onde o lead já tem card, o de lá sobrevive.
+      const existente = entries.find(
+        (row) => row.id !== entry.id && row.pipeline_id === alvoPipe && row.lead_id === entry.lead_id,
+      );
+      if (existente) {
+        entries.splice(entries.indexOf(entry), 1);
+        updated.push({ id: existente.id, payload: { stage_id: alvoStage } });
+        return { data: existente.id, error: null };
+      }
+
+      Object.assign(entry, { pipeline_id: alvoPipe, stage_id: alvoStage });
+      updated.push({ id: entry.id, payload: { pipeline_id: alvoPipe, stage_id: alvoStage } });
+      return { data: entry.id, error: null };
+    }
     return { data: null, error: { message: `RPC not mocked: ${name}` } };
   }
 
@@ -533,12 +573,13 @@ const STAGES: FakeStage[] = [
   { id: "st-lost", pipeline_id: PIPE, organization_id: ORG, stage_role: "lost" },
 ];
 
-function move(sb: never, stageId: string, pipelineId = PIPE) {
+function move(sb: never, stageId: string, pipelineId = PIPE, entryId?: string) {
   return moveStage({
     supabase: sb,
     organizationId: ORG,
     leadId: "lead-1",
     conversationId: null,
+    ...(entryId ? { entryId } : {}),
     params: { target_stage: stageId, target_pipe: pipelineId },
   });
 }
@@ -649,9 +690,18 @@ describe("moveStage — funil customizado não duplica card (inv:H4-08 / SCRUM-1
     expect(db.inserted).toHaveLength(1);
   });
 
-  it("negócio em OUTRO funil customizado não conta como existente — insere no funil pedido", async () => {
-    // Fronteira oposta: deduplicar por `lead_id` sozinho apagaria a regra de que
-    // um lead pode estar em vários funis ao mesmo tempo. O filtro é o PAR.
+  it("negócio ÚNICO aberto em OUTRO funil customizado é MOVIDO, não copiado (chamado 52b4f4ca)", async () => {
+    // Este caso já existiu afirmando o CONTRÁRIO ("não conta como existente —
+    // insere no funil pedido"), sob o argumento de que um lead pode estar em
+    // vários funis ao mesmo tempo. O argumento é verdadeiro, mas não é deste
+    // verbo: quem PÕE o lead num funil a mais é `duplicateToPipe`
+    // (`_shared/action-handlers/pipe-operations.ts:72`). `move_stage` é MOVE —
+    // ADR-0023 §4, "o Negócio guarda uma posição por vez, e avançar é um MOVE,
+    // não uma cópia".
+    //
+    // Era exatamente este caminho que duplicava na Rafthel: gatilho
+    // `lead_created` não traz `entryId`, o ramo custom ia direto para o INSERT
+    // e o lead terminava com um card aberto em CADA funil.
     const outroPipe = "pipe-custom-outro";
     const db = createCustomPipeDb({
       stages: [
@@ -667,10 +717,12 @@ describe("moveStage — funil customizado não duplica card (inv:H4-08 / SCRUM-1
     const result = await move(db.sb, "st-open-1");
 
     expect(result.success).toBe(true);
-    expect(db.inserted).toHaveLength(1);
-    expect(db.inserted[0]).toMatchObject({ pipeline_id: PIPE, stage_id: "st-open-1", lead_id: "lead-1" });
-    expect(db.updated).toHaveLength(0);
-    expect(db.entries).toHaveLength(2);
+    expect(db.inserted).toHaveLength(0);
+    expect(db.entries).toHaveLength(1);
+    // MESMO card: mesmo id, agora no funil pedido.
+    expect(db.entries[0].id).toBe("entry-outro-funil");
+    expect(db.entries[0].pipeline_id).toBe(PIPE);
+    expect(db.entries[0].stage_id).toBe("st-open-1");
   });
 
   it("auto-transição is_final_positive não duplica card quando o lead já está no funil de destino", async () => {
@@ -696,12 +748,19 @@ describe("moveStage — funil customizado não duplica card (inv:H4-08 / SCRUM-1
     const result = await move(db.sb, "st-final");
 
     expect(result.success).toBe(true);
-    // Um único INSERT: o card na origem. O destino é MOVIDO, não recriado.
+    // O invariante é de CONTAGEM: uma posição por funil, nunca duas.
     expect(db.inserted).toHaveLength(1);
-    expect(db.inserted[0]).toMatchObject({ pipeline_id: PIPE, stage_id: "st-final" });
-    expect(db.updated.map((u) => u.id)).toEqual(["entry-destino"]);
-    expect(db.entries.find((e) => e.id === "entry-destino")!.stage_id).toBe("st-destino-2");
     expect(db.entries.filter((e) => e.pipeline_id === destino)).toHaveLength(1);
+    expect(db.entries.filter((e) => e.pipeline_id === PIPE)).toHaveLength(1);
+
+    // Qual LINHA ocupa cada posição mudou com o chamado 52b4f4ca, e a mudança é
+    // o conserto, não um efeito colateral: o card que o lead já tinha é MOVIDO
+    // para a etapa pedida (antes ele ficava parado e nascia um gêmeo em PIPE) e
+    // a auto-transição é que repõe a posição no funil de destino.
+    expect(db.entries.find((e) => e.id === "entry-destino")).toMatchObject({
+      pipeline_id: PIPE, stage_id: "st-final",
+    });
+    expect(db.inserted[0]).toMatchObject({ pipeline_id: destino, stage_id: "st-destino-2" });
   });
 
   it("falha ao LER custom_pipe_entries não vira INSERT — o erro propaga", async () => {
@@ -720,5 +779,156 @@ describe("moveStage — funil customizado não duplica card (inv:H4-08 / SCRUM-1
     expect(db.inserted).toHaveLength(0);
     expect(db.updated).toHaveLength(0);
     expect(db.entries).toHaveLength(0);
+  });
+});
+
+// ===========================================================================
+// CHAMADO 52b4f4ca — mover entre funis CUSTOM é MOVE, não cópia
+// ---------------------------------------------------------------------------
+// Sintoma na Rafthel: o nó `move_stage` de um workflow levava o lead de
+// Comercial para Lead Ruim e o lead terminava com UM CARD ABERTO EM CADA FUNIL.
+//
+// Duas causas somadas:
+//   1. só o ramo de funil de SISTEMA tentava `moverNegocioQueDisparou` (a RPC
+//      `mover_negocio`, que MOVE). O ramo custom ia para `moverOuCriarCardCustom`,
+//      que anda o card já existente NO DESTINO ou cria um — a origem não sai do
+//      lugar, logo o resultado é cópia. O comentário que justificava isso ("a
+//      RPC recusa destino custom") estava velho: desde
+//      `20271119000002_preserve_closed_card_on_forwarding.sql` a RPC valida a
+//      etapa em `pipeline_stages` e aceita destino customizado;
+//   2. no gatilho `lead_created` não existe `entryId` (é gatilho da pessoa, não
+//      do negócio — `types.ts:20`), então nem o ramo de sistema saberia qual
+//      card mover. Daí o fallback por card único aberto.
+//
+// Os casos abaixo fixam as duas pontas e, principalmente, as FRONTEIRAS: sem
+// `entryId` só é seguro mover quando não há dúvida sobre qual card é o certo.
+// ===========================================================================
+describe("moveStage — funil custom MOVE em vez de copiar (chamado 52b4f4ca)", () => {
+  const ORIGEM = "pipe-custom-origem";
+  const STAGES_2F: FakeStage[] = [
+    ...STAGES,
+    { id: "st-origem", pipeline_id: ORIGEM, organization_id: ORG, stage_role: "open" },
+    { id: "st-origem-won", pipeline_id: ORIGEM, organization_id: ORG, stage_role: "won" },
+  ];
+  const cardNaOrigem = (id = "entry-origem", stage = "st-origem") => ({
+    id, lead_id: "lead-1", organization_id: ORG, pipeline_id: ORIGEM, stage_id: stage,
+    stage_changed_at: "2026-08-01T10:00:00Z", created_at: "2026-08-01T09:00:00Z",
+  });
+
+  it("K1 — com entryId, MOVE o card que disparou: mesmo id, novo funil, nenhum card novo", async () => {
+    const db = createCustomPipeDb({ stages: STAGES_2F, entries: [cardNaOrigem()] });
+
+    const result = await move(db.sb, "st-open-1", PIPE, "entry-origem");
+
+    expect(result.success).toBe(true);
+    expect(db.inserted).toHaveLength(0);
+    expect(db.entries).toHaveLength(1);
+    expect(db.entries[0].id).toBe("entry-origem");
+    expect(db.entries[0].pipeline_id).toBe(PIPE);
+    expect(db.entries[0].stage_id).toBe("st-open-1");
+  });
+
+  it("K1b — com entryId, o card movido é O QUE DISPAROU, não o 'corrente' por heurística", async () => {
+    // Dois cards abertos na origem. `moverOuCriarCardCustom` escolheria por
+    // ordenação; com `entryId` não há escolha a fazer — move o que disparou.
+    const db = createCustomPipeDb({
+      stages: STAGES_2F,
+      entries: [
+        cardNaOrigem("entry-antigo", "st-origem"),
+        { ...cardNaOrigem("entry-recente", "st-origem"), stage_changed_at: "2026-09-01T10:00:00Z" },
+      ],
+    });
+
+    const result = await move(db.sb, "st-open-1", PIPE, "entry-antigo");
+
+    expect(result.success).toBe(true);
+    expect(db.inserted).toHaveLength(0);
+    expect(db.entries.find((e) => e.id === "entry-antigo")!.pipeline_id).toBe(PIPE);
+    expect(db.entries.find((e) => e.id === "entry-recente")!.pipeline_id).toBe(ORIGEM);
+  });
+
+  it("K2 — sem entryId e com UM card aberto em outro funil, MOVE esse card", async () => {
+    const db = createCustomPipeDb({ stages: STAGES_2F, entries: [cardNaOrigem()] });
+
+    const result = await move(db.sb, "st-open-1");
+
+    expect(result.success).toBe(true);
+    expect(db.inserted).toHaveLength(0);
+    expect(db.entries).toHaveLength(1);
+    expect(db.entries[0].id).toBe("entry-origem");
+    expect(db.entries[0].pipeline_id).toBe(PIPE);
+  });
+
+  it("K2 — sem entryId e com ZERO card, cria no destino (comportamento antigo)", async () => {
+    const db = createCustomPipeDb({ stages: STAGES_2F, entries: [] });
+
+    const result = await move(db.sb, "st-open-1");
+
+    expect(result.success).toBe(true);
+    expect(db.inserted).toHaveLength(1);
+    expect(db.inserted[0]).toMatchObject({ pipeline_id: PIPE, stage_id: "st-open-1", lead_id: "lead-1" });
+    expect(db.entries).toHaveLength(1);
+  });
+
+  it("K2 — sem entryId e com DOIS cards abertos em outros funis, não chuta: cria no destino", async () => {
+    const terceiro = "pipe-custom-terceiro";
+    const db = createCustomPipeDb({
+      stages: [
+        ...STAGES_2F,
+        { id: "st-terceiro", pipeline_id: terceiro, organization_id: ORG, stage_role: "open" },
+      ],
+      entries: [
+        cardNaOrigem(),
+        { ...cardNaOrigem("entry-terceiro", "st-terceiro"), pipeline_id: terceiro },
+      ],
+    });
+
+    const result = await move(db.sb, "st-open-1");
+
+    expect(result.success).toBe(true);
+    expect(db.inserted).toHaveLength(1);
+    expect(db.entries).toHaveLength(3);
+    // Nenhum dos dois saiu do lugar.
+    expect(db.entries.find((e) => e.id === "entry-origem")!.pipeline_id).toBe(ORIGEM);
+    expect(db.entries.find((e) => e.id === "entry-terceiro")!.pipeline_id).toBe(terceiro);
+  });
+
+  it("K2 — sem entryId, card GANHO em outro funil não é movido (decisão G, sale_reversed)", async () => {
+    // Tirar um negócio ganho da etapa de ganho dispara `sale_reversed`, que é
+    // irreversível. Card fechado não é candidato: o lead ganha card novo.
+    const db = createCustomPipeDb({
+      stages: STAGES_2F,
+      entries: [cardNaOrigem("entry-ganho", "st-origem-won")],
+    });
+
+    const result = await move(db.sb, "st-open-1");
+
+    expect(result.success).toBe(true);
+    expect(db.inserted).toHaveLength(1);
+    expect(db.entries.find((e) => e.id === "entry-ganho")!.pipeline_id).toBe(ORIGEM);
+    expect(db.entries.find((e) => e.id === "entry-ganho")!.stage_id).toBe("st-origem-won");
+  });
+
+  it("K2 — card aberto JÁ no destino manda: anda de etapa lá e ignora o de fora", async () => {
+    // Com card no destino não há o que mover de outro funil — o lead já está
+    // aqui. Mexer no de fora seria esvaziar um funil que ninguém pediu.
+    const db = createCustomPipeDb({
+      stages: STAGES_2F,
+      entries: [
+        cardNaOrigem(),
+        {
+          id: "entry-destino", lead_id: "lead-1", organization_id: ORG, pipeline_id: PIPE,
+          stage_id: "st-open-1", stage_changed_at: "2026-08-02T10:00:00Z", created_at: "2026-08-02T09:00:00Z",
+        },
+      ],
+    });
+
+    const result = await move(db.sb, "st-open-2");
+
+    expect(result.success).toBe(true);
+    expect(db.inserted).toHaveLength(0);
+    expect(db.entries).toHaveLength(2);
+    expect(db.entries.find((e) => e.id === "entry-destino")!.stage_id).toBe("st-open-2");
+    expect(db.entries.find((e) => e.id === "entry-origem")!.pipeline_id).toBe(ORIGEM);
   });
 });
