@@ -204,6 +204,14 @@ export function useWhatsAppMessagesRealtime(
                 last_message: message.content ?? contact.last_message,
                 last_message_time: message.timestamp,
                 last_message_direction: message.direction as "incoming" | "outgoing",
+                // A fonte da ÚLTIMA mensagem, como a RPC devolve (incoming = null).
+                // Sem isto, a resposta manual numa conversa da aba "IA" a deixava
+                // lá até o refetch — que deixou de vir a cada envio (perf F3).
+                // `undefined` (coluna ausente no payload) preserva o valor.
+                last_message_sent_source:
+                  message.sent_source !== undefined
+                    ? message.sent_source
+                    : contact.last_message_sent_source,
                 unread_count:
                   isIncoming && !isCurrentConversation
                     ? contact.unread_count + 1

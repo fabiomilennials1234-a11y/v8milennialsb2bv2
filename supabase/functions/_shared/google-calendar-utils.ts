@@ -248,10 +248,14 @@ export async function getValidAccessToken(
     .eq("user_id", userId);
 
   if (error) {
-    // Coluna ainda inexistente (migration não aplicada) ou outra falha: grava o
-    // que o código antigo gravava. A edge fn pode subir antes da migration.
     console.warn("[GoogleCalendar] cache do access token não gravado:", error.code ?? error.message);
-    await supabase.from("google_calendar_tokens").update(base).eq("user_id", userId);
+    // Coluna ainda inexistente (migration não aplicada): grava o que o código
+    // antigo gravava — a edge fn pode subir antes da migration. Outro erro
+    // (timeout, lock) não ganha segunda escrita: dobraria a carga sob pressão,
+    // e o token devolvido já é válido.
+    if (error.code === "PGRST204" || error.code === "42703") {
+      await supabase.from("google_calendar_tokens").update(base).eq("user_id", userId);
+    }
   }
 
   return {

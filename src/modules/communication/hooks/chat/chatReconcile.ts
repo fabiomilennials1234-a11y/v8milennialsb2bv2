@@ -201,19 +201,19 @@ export function reconciliarListaAposEnvio(
  * efeito (a conversa arquivada sumir). O teto de 15 s aqui atrasaria a segunda
  * ação seguida. O que muda em relação à invalidação crua da raiz:
  *   - org na chave quando conhecida (multi-tenant; nada de outra org em cache);
- *   - `cancelRefetch: false`: pega carona na RPC em voo em vez de cancelá-la e
- *     abrir outra (pagar duas vezes no pool);
  *   - aba oculta só marca stale; refaz ao voltar.
+ *
+ * ⚠️ SEM `cancelRefetch: false`, ao contrário da reconciliação por evento: um
+ * fetch em voo começou ANTES do commit da mutação e devolveria a lista velha —
+ * pegar carona nele apagaria o arquivamento da tela até o backstop. Aqui o
+ * cancelamento é o que garante ler a própria escrita, e o volume é desprezível.
  */
 export function invalidarListaDeConversas(
   queryClient: QueryClient,
   organizationId?: string | null,
 ): Promise<void> {
-  return queryClient.invalidateQueries(
-    {
-      queryKey: organizationId ? ["whatsapp_contacts", organizationId] : ["whatsapp_contacts"],
-      refetchType: abaEscondida() ? "none" : "active",
-    },
-    { cancelRefetch: false },
-  );
+  return queryClient.invalidateQueries({
+    queryKey: organizationId ? ["whatsapp_contacts", organizationId] : ["whatsapp_contacts"],
+    refetchType: abaEscondida() ? "none" : "active",
+  });
 }

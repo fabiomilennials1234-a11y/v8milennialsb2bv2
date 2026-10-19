@@ -31,6 +31,8 @@ type Row = Record<string, unknown>;
 interface FakeOpts {
   /** Simula a coluna `access_token_cache` ainda inexistente no banco. */
   semColunaDeCache?: boolean;
+  /** Simula falha transitória (timeout/lock) em todo UPDATE. */
+  updateFalha?: boolean;
 }
 
 function fakeSupabase(row: Row | null, opts: FakeOpts = {}) {
@@ -55,6 +57,10 @@ function fakeSupabase(row: Row | null, opts: FakeOpts = {}) {
         update(patch: Row) {
           return {
             eq: () => {
+              if (opts.updateFalha) {
+                updates.push({ ...patch, __falhou: true });
+                return Promise.resolve({ data: null, error: { code: "57014", message: "statement timeout" } });
+              }
               if (opts.semColunaDeCache && "access_token_cache" in patch) {
                 return Promise.resolve({
                   data: null,
@@ -207,4 +213,14 @@ Deno.test("cache de um usuário não serve para outro (nonce do refresh token di
 
   assertNotEquals(r?.accessToken, "access-de-A");
   assertEquals(refreshB.chamadas.length, 1);
+});
+
+Deno.test("falha transitória no UPDATE → devolve o token, sem segunda escrita", async () => {
+  const row = await linhaConectada();
+  const sb = fakeSupabase(row, { updateFalha: true });
+
+  const r = await getValidAccessToken(USER, sb as never, { now: () => AGORA, refresh: refreshFake("access-novo").fn });
+
+  assertEquals(r?.accessToken, "access-novo");
+  assertEquals(sb.updates.length, 1); // só a tentativa com cache; o fallback é só p/ coluna ausente
 });

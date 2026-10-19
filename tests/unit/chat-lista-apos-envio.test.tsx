@@ -18,7 +18,7 @@
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { act, renderHook } from "@testing-library/react";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryClient, QueryClientProvider, QueryObserver } from "@tanstack/react-query";
 import React from "react";
 
 const { mockFrom, mockFunctionsInvoke } = vi.hoisted(() => ({
@@ -245,16 +245,42 @@ describe("invalidarListaDeConversas", () => {
     Object.defineProperty(document, "visibilityState", { value: "visible", configurable: true });
   });
 
-  it("mira a raiz da org, refaz ativas e pega carona em fetch em voo", async () => {
+  it("mira a raiz da org e refaz as ativas", async () => {
     const qc = novoClient();
     const spy = vi.spyOn(qc, "invalidateQueries");
 
     await invalidarListaDeConversas(qc, ORG);
 
-    expect(spy).toHaveBeenCalledWith(
-      { queryKey: ["whatsapp_contacts", ORG], refetchType: "active" },
-      { cancelRefetch: false },
-    );
+    expect(spy).toHaveBeenCalledWith({ queryKey: ["whatsapp_contacts", ORG], refetchType: "active" });
+  });
+
+  it("fetch em voo ANTES da mutação não serve de resposta: abre fetch novo (ler a própria escrita)", async () => {
+    const qc = novoClient();
+    const chave = chatQueryKeys.contactsMulti(ORG, [CAIXA]);
+    // Lista já carregada e sendo refeita (backstop, foco) quando a mutação termina.
+    qc.setQueryData(chave, { contatos: [contato(FONE, CAIXA)], cheia: false });
+    let chamadas = 0;
+    const pendentes: Array<(v: unknown) => void> = [];
+    const observer = new QueryObserver(qc, {
+      queryKey: chave,
+      staleTime: 0,
+      queryFn: () => {
+        chamadas++;
+        return new Promise((resolve) => pendentes.push(resolve));
+      },
+    });
+    const parar = observer.subscribe(() => undefined);
+    await Promise.resolve();
+    expect(chamadas).toBe(1); // refetch em voo, começou antes do commit da mutação
+
+    const invalidacao = invalidarListaDeConversas(qc, ORG);
+    await Promise.resolve();
+    // Com `cancelRefetch: false` pegaria carona no fetch velho (chamadas = 1).
+    expect(chamadas).toBe(2);
+
+    pendentes.forEach((resolver) => resolver({ contatos: [], cheia: false }));
+    await invalidacao;
+    parar();
   });
 
   it("aba oculta → só marca stale, não refaz", async () => {
@@ -264,10 +290,7 @@ describe("invalidarListaDeConversas", () => {
 
     await invalidarListaDeConversas(qc, ORG);
 
-    expect(spy).toHaveBeenCalledWith(
-      { queryKey: ["whatsapp_contacts", ORG], refetchType: "none" },
-      { cancelRefetch: false },
-    );
+    expect(spy).toHaveBeenCalledWith({ queryKey: ["whatsapp_contacts", ORG], refetchType: "none" });
   });
 });
 

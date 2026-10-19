@@ -150,6 +150,7 @@ export function useArchiveConversation() {
 
 export function useUnarchiveConversation() {
   const queryClient = useQueryClient();
+  const { data: teamMember } = useCurrentTeamMember();
 
   return useMutation({
     mutationFn: async ({ conversationId }: { conversationId: string }) => {
@@ -162,7 +163,7 @@ export function useUnarchiveConversation() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["whatsapp_conversations"] });
-      void invalidarListaDeConversas(queryClient);
+      void invalidarListaDeConversas(queryClient, teamMember?.organization_id);
     },
   });
 }
@@ -263,6 +264,7 @@ export function useAddConversationTag() {
 
 export function useRemoveConversationTag() {
   const queryClient = useQueryClient();
+  const { data: teamMember } = useCurrentTeamMember();
 
   return useMutation({
     mutationFn: async ({
@@ -282,7 +284,7 @@ export function useRemoveConversationTag() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["whatsapp_conversation_tags"] });
-      void invalidarListaDeConversas(queryClient);
+      void invalidarListaDeConversas(queryClient, teamMember?.organization_id);
     },
   });
 }
