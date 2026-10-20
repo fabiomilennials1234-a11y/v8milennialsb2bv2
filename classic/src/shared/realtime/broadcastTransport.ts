@@ -3,7 +3,7 @@
  *
  * Perf S1 (2026-10-19, `.specs/perf/realtime-broadcast/S1.md`): o poll do WAL
  * do `postgres_changes` é 16,2% do banco. Uma tabela daqui é publicada por
- * trigger (`private.rt_broadcast_*`, migration 20271201000000) num tópico
+ * trigger (`private.rt_broadcast_*`, migration 20271205000000) num tópico
  * PRIVADO por org; a autorização roda no join do canal, não por evento.
  *
  * Os consumidores não mudam: o registry converte o envelope do trigger no

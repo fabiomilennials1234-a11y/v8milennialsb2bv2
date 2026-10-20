@@ -1,4 +1,4 @@
-// Realtime Broadcast S1 (20271201000000): who joins org:{org}:pe, what the
+// Realtime Broadcast S1 (20271205000000): who joins org:{org}:pe, what the
 // trigger publishes, and the transport plan the front reads.
 //
 // The skeleton (fixtures/realtime-broadcast-s1-baseline.sql) carries the prod
@@ -18,8 +18,8 @@ import { readFileSync } from 'node:fs';
 import { PGlite } from '@electric-sql/pglite';
 
 const read = (path) => readFileSync(new URL(path, import.meta.url), 'utf8');
-const MIG = read('../../supabase/migrations/20271201000000_realtime_broadcast_s1_pipeline_entries.sql');
-const RB = read('../../supabase/migrations/rollback/20271201000000_realtime_broadcast_s1_pipeline_entries.sql');
+const MIG = read('../../supabase/migrations/20271205000000_realtime_broadcast_s1_pipeline_entries.sql');
+const RB = read('../../supabase/migrations/rollback/20271205000000_realtime_broadcast_s1_pipeline_entries.sql');
 const SKELETON = read('./fixtures/realtime-broadcast-s1-baseline.sql');
 const FRONT = read('../../src/shared/realtime/broadcastTransport.ts');
 

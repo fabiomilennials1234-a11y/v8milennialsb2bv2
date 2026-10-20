@@ -10038,7 +10038,7 @@ index 000000000..31aaec7e0
 + *
 + * Perf S1 (2026-10-19, `.specs/perf/realtime-broadcast/S1.md`): o poll do WAL
 + * do `postgres_changes` é 16,2% do banco. Uma tabela daqui é publicada por
-+ * trigger (`private.rt_broadcast_*`, migration 20271201000000) num tópico
++ * trigger (`private.rt_broadcast_*`, migration 20271205000000) num tópico
 + * PRIVADO por org; a autorização roda no join do canal, não por evento.
 + *
 + * Os consumidores não mudam: o registry converte o envelope do trigger no
@@ -11119,7 +11119,7 @@ index 000000000..27ccbc700
 + * ESTE usuário: `postgres_changes` (padrão) ou Broadcast privado.
 + *
 + * Fonte única: RPC `realtime_subscription_plan(org)` (migration
-+ * 20271201000000). Ela diz `broadcast` só quando a org ligou a flag E o
++ * 20271205000000). Ela diz `broadcast` só quando a org ligou a flag E o
 + * usuário pode entrar no tópico (membro ativo, fora do modo estrito de dono) —
 + * o cliente nunca tenta um join que o servidor recusaria.
 + *

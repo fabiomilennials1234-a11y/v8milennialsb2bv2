@@ -1,4 +1,4 @@
--- Rollback de 20271201000000_realtime_broadcast_s1_pipeline_entries.sql
+-- Rollback de 20271205000000_realtime_broadcast_s1_pipeline_entries.sql
 --
 -- Antes: desligue a flag das orgs piloto e espere ≤5 min (TTL do plano no
 -- front) — senão quem está no broadcast fica sem eventos até recarregar:
