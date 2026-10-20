@@ -1362,12 +1362,14 @@ Deno.serve(
             return jsonResponse(400, { error: "Missing message_id/number/text" }, corsHeaders);
           }
           await provider.edit(message_id, number, text);
-          // Reflect locally
+          // Reflect locally, marked as edited (the badge reads `edited`). The
+          // webhook echo of this edit updates the same row (Chamado 4b8d5fd1).
           await supabaseAdmin
             .from("whatsapp_messages")
-            .update({ content: text })
-            .eq("message_id", message_id)
-            .eq("instance_id", instanceId);
+            .update({ content: text, edited: true })
+            .eq("organization_id", callerOrgId)
+            .eq("instance_id", instanceId)
+            .eq("message_id", message_id);
           result = { ok: true };
           break;
         }

@@ -37,6 +37,26 @@ export function uazapiMessageReaction(message: Data): UazapiReaction | null {
   return { messageId, emoji, from: message.fromMe ? "me" : "them", sender };
 }
 
+export interface UazapiMessageEdit {
+  /** Bare id of the edited message, as the provider sends it (never composite). */
+  originalId: string;
+  /** New text or caption; null when the event carries none. */
+  text: string | null;
+}
+
+/**
+ * An edit arrives as a `messages` event with its own id and `edited` holding the
+ * ORIGINAL message id; ordinary messages carry `edited: ""`. The new body is in
+ * content.text (text) or content.caption (media caption, with `text: ""`).
+ */
+export function uazapiMessageEdit(message: Data): UazapiMessageEdit | null {
+  const originalId = message.edited;
+  if (typeof originalId !== "string" || !originalId.trim()) return null;
+  const content = record(message.content);
+  const text = [content.text, content.caption, message.text].find((value) => typeof value === "string");
+  return { originalId: originalId.trim(), text: typeof text === "string" ? text : null };
+}
+
 /** One reaction per sender. Replays replace; an empty emoji removes. */
 export function mergeUazapiReaction(existing: unknown, reaction: UazapiReaction): Data[] {
   const rows: Data[] = Array.isArray(existing) ? existing.map(record) : [];

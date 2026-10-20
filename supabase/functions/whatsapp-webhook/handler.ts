@@ -1,5 +1,11 @@
 import { applyMessageUpdate, isFileDownloadedNotification, isPureReceiptUpdate, normalizeMessageUpdatePayload, type UnmatchedReceiptOutcome } from "./message-update.ts";
-import { uazapiEventMessage, uazapiMessageReaction, mergeUazapiReaction } from "../_shared/uazapi-event.ts";
+import {
+  uazapiEventMessage,
+  uazapiMessageEdit,
+  uazapiMessageReaction,
+  mergeUazapiReaction,
+  type UazapiMessageEdit,
+} from "../_shared/uazapi-event.ts";
 import { storedUazapiConnectionState } from "../_shared/uazapi-connection-state.ts";
 import { messageTimestamp } from "./message-timestamp.ts";
 import { recordQuotePresentation, completeQuotePresentations } from "../_shared/quotes/presentation.ts";
@@ -146,6 +152,12 @@ export interface NormalizedMessage {
   raw_payload: Record<string, unknown>;
   is_group: boolean;
   received_via?: string;
+  /**
+   * Só a edição cuja original não está gravada (handleMessagesEvent). Vai pelo
+   * upsert PostgREST: a RPC `ingest_uazapi_message` recusa chaves fora do
+   * c_allowed, e `edited` não está lá.
+   */
+  edited?: boolean;
 }
 
 export interface PersistedMessage {
@@ -1254,6 +1266,90 @@ async function ingestMessageViaRpc(
 }
 
 // ============================================================================
+// Group opt-out + message edit
+// ============================================================================
+
+/**
+ * Explicit group opt-out (organizations.capture_groups = false). A failed or
+ * empty lookup means capture: the same fail-open policy as persistMessage, so
+ * absence never implies a skip.
+ */
+async function orgCapturesGroups(supabase: SupabaseClient, organizationId: string): Promise<boolean> {
+  try {
+    const { data: org, error } = await supabase.from("organizations")
+      .select("capture_groups").eq("id", organizationId).maybeSingle();
+    return !!error || org?.capture_groups !== false;
+  } catch (_) {
+    return true;
+  }
+}
+
+/**
+ * Edição de mensagem (Chamado 4b8d5fd1). A Uazapi avisa como evento `messages`
+ * com id PRÓPRIO e `edited` = id da original; gravá-la como mensagem nova
+ * duplicava o balão e, na edição do cliente, disparava copilot e wait-response.
+ *
+ * Original gravada → UPDATE content + edited nela (nenhum trigger de whatsapp_messages
+ * escuta UPDATE dessas colunas). Original ausente → a edição vira linha própria
+ * marcada `edited`, sempre pelo upsert PostgREST, com a flag F5a ligada ou não:
+ * a RPC `ingest_uazapi_message` recusa chaves fora do c_allowed e `edited` não
+ * está lá. Nos dois casos: sem admissão de botão (uma edição registrada como
+ * `other` resolveria a pergunta pendente), sem copilot, sem wait-response.
+ */
+async function handleMessageEdit(
+  supabase: SupabaseClient,
+  instance: ResolvedInstance,
+  data: Record<string, unknown>,
+  edit: UazapiMessageEdit,
+  receivedVia: "webhook" | "dlq_replay",
+): Promise<void> {
+  // Mesma política da reação: a original de um grupo com opt-out nunca foi gravada.
+  if (messageChatIdentity(data).isGroup && !(await orgCapturesGroups(supabase, instance.organization_id))) {
+    await logRuntime({
+      organizationId: instance.organization_id,
+      module: "webhook",
+      action: "uazapi_group_edit_skipped",
+      status: "success",
+      payloadSnapshot: { instance_id: instance.id, reason: "capture_groups_off" },
+    });
+    return;
+  }
+
+  const ids = buildMessageIdCandidates(edit.originalId, instance.phone_number, data.owner);
+  const { data: original, error } = await supabase.from("whatsapp_messages")
+    .select("id").eq("organization_id", instance.organization_id)
+    .eq("instance_id", instance.id).in("message_id", ids).limit(1).maybeSingle();
+  // Erro de leitura não é "original ausente": inserir aqui recriaria a duplicata.
+  if (error) throw new Error("Edit target lookup failed");
+
+  if (original) {
+    // Evento sem texto só marca: nunca apagar o conteúdo da original.
+    const patch = edit.text === null ? { edited: true } : { content: edit.text, edited: true };
+    const { error: updateError } = await supabase.from("whatsapp_messages").update(patch)
+      .eq("id", original.id).eq("organization_id", instance.organization_id).eq("instance_id", instance.id);
+    if (updateError) throw new Error("Edit persistence failed");
+    return;
+  }
+
+  const normalized = normalizeMessage(data, instance) as NormalizedMessage;
+  normalized.received_via = receivedVia;
+  normalized.edited = true;
+  // Legenda editada chega em content.caption com `text: ""`: sem isto, linha vazia.
+  if (edit.text !== null) normalized.content = edit.text;
+  if (!normalized.message_id) {
+    await logRuntime({
+      organizationId: instance.organization_id,
+      module: "webhook",
+      action: "uazapi_missing_message_id",
+      status: "error",
+      payloadSnapshot: { instance_id: instance.id, type: normalized.message_type },
+    });
+    return;
+  }
+  await persistMessage(supabase, instance, normalized, receivedVia === "dlq_replay" ? "dlq_replay" : null);
+}
+
+// ============================================================================
 // handleMessagesEvent — ~20 LOC pipeline
 // ============================================================================
 
@@ -1268,25 +1364,15 @@ async function handleMessagesEvent(
     // The target of a group reaction was deliberately not captured when this
     // org opted out of groups. Apply the same explicit policy as persistMessage
     // before looking for that target; absence alone must never imply a skip.
-    if (messageChatIdentity(data).isGroup) {
-      let captureGroups = true;
-      try {
-        const { data: org, error } = await supabase.from("organizations")
-          .select("capture_groups").eq("id", instance.organization_id).maybeSingle();
-        if (!error && org?.capture_groups === false) captureGroups = false;
-      } catch (_) {
-        // Same fail-open policy as ordinary group messages: try to persist.
-      }
-      if (!captureGroups) {
-        await logRuntime({
-          organizationId: instance.organization_id,
-          module: "webhook",
-          action: "uazapi_group_reaction_skipped",
-          status: "success",
-          payloadSnapshot: { instance_id: instance.id, reason: "capture_groups_off" },
-        });
-        return;
-      }
+    if (messageChatIdentity(data).isGroup && !(await orgCapturesGroups(supabase, instance.organization_id))) {
+      await logRuntime({
+        organizationId: instance.organization_id,
+        module: "webhook",
+        action: "uazapi_group_reaction_skipped",
+        status: "success",
+        payloadSnapshot: { instance_id: instance.id, reason: "capture_groups_off" },
+      });
+      return;
     }
     const ids = buildMessageIdCandidates(reaction.messageId, instance.phone_number, data.owner);
     // Compare-and-swap prevents simultaneous reactions from overwriting each other.
@@ -1305,6 +1391,12 @@ async function handleMessagesEvent(
       if (changed?.length) return;
     }
     throw new Error("Reaction update contention");
+  }
+  // Antes da divisão RPC/PostgREST: a edição vale igual com a flag F5a ligada ou não.
+  const edit = uazapiMessageEdit(data);
+  if (edit) {
+    await handleMessageEdit(supabase, instance, data, edit, receivedVia);
+    return;
   }
   // F5a: 1 RPC em vez de ingress + upsert + select + receive (rollout por org).
   if (uazapiIngestRpcEnabled(instance.organization_id)) {
