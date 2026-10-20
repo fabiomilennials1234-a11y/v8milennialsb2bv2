@@ -80,6 +80,12 @@ vi.mock("@/modules/leads/hooks/useTags", () => ({
 }));
 vi.mock("@/shared/hooks/useLogLeadAction", () => ({ useLogLeadAction: () => vi.fn() }));
 // Chamado 82c50502: telefones do lead (lead_phones). Sem QueryClient aqui.
+// Número compartilhado (PR4): sem marca, o bloco não aparece.
+vi.mock("@/modules/leads/hooks/useLeadPhoneCompartilhado", () => ({
+  useLeadPhoneCompartilhado: () => ({ data: false }),
+  useDescompartilharNumero: () => ({ mutateAsync: vi.fn(), isPending: false }),
+}));
+
 vi.mock("@/modules/leads/hooks/useLeadPhones", () => ({
   useLeadPhones: () => ({ data: [], isLoading: false }),
   useSalvarTelefonesDoLead: () => ({ mutateAsync: vi.fn(), isPending: false }),

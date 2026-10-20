@@ -102,6 +102,9 @@ const RECUSAS: Record<string, string> = {
   lead_phone_invalid: "Este telefone não é mais deste lead. Atualize a ficha.",
   lead_phone_required: "Escolha com quem é este negócio",
   lead_not_found: "Lead não encontrado. Atualize a ficha.",
+  sem_permissao_lead: "Você não pode editar este lead.",
+  phone_compartilhado_sem_dono:
+    "Não foi possível compartilhar: nenhum outro lead da organização mantém este número como principal.",
 };
 
 /** A frase da tela para uma recusa CONHECIDA das RPCs de telefone; `null` se não for uma. */
@@ -124,13 +127,62 @@ const PRINCIPAL_OCUPADO_GENERICO = "Este número já é o principal de outro lea
  * lead segura o número; se o RLS não deixa o usuário ver esse lead (`null`),
  * mantém a frase genérica, sem vazar nada.
  */
-export function mensagemDePrincipalOcupado(
-  dono: { name: string | null; erp_code: string | null } | null | undefined,
-): string {
+export function mensagemDePrincipalOcupado(dono: DonoDoNumero | null | undefined): string {
   if (!dono) return PRINCIPAL_OCUPADO_GENERICO;
+  return `Este número já é o principal do lead ${rotuloDoDono(dono)}. Tire-o de lá ou escolha outro número.`;
+}
+
+/** O lead que já segura o número, como o RLS do usuário deixa ver. */
+export interface DonoDoNumero {
+  name: string | null;
+  erp_code: string | null;
+}
+
+/** "4545 - REFEICOES AO PONTO LTDA", ou só o nome sem código do ERP. */
+function rotuloDoDono(dono: DonoDoNumero): string {
   const nome = dono.name?.trim() || "sem nome";
-  const rotulo = dono.erp_code ? `${dono.erp_code} - ${nome}` : nome;
-  return `Este número já é o principal do lead ${rotulo}. Tire-o de lá ou escolha outro número.`;
+  return dono.erp_code ? `${dono.erp_code} - ${nome}` : nome;
+}
+
+/**
+ * Pergunta do diálogo de confirmação (Chamado 99067f13, PR4): o número escolhido
+ * como principal já é o principal de outro lead e o usuário pode COMPARTILHÁ-LO.
+ * Dono invisível (RLS) → frase genérica, sem nome.
+ */
+export function mensagemDeCompartilharNumero(dono: DonoDoNumero | null | undefined): string {
+  const quem = dono ? `do lead ${rotuloDoDono(dono)}` : "de outro lead da organização";
+  return `Este número já é o principal ${quem}. Compartilhar o número entre os dois leads?`;
+}
+
+/** "Deixar de compartilhar" recusado: outro lead já é o dono do número. */
+export function mensagemDeDescompartilharOcupado(dono: DonoDoNumero | null | undefined): string {
+  const quem = dono ? `o lead ${rotuloDoDono(dono)}` : "outro lead da organização";
+  return `Não dá para deixar de compartilhar: ${quem} já é o principal deste número. Tire-o de lá ou troque o número deste lead.`;
+}
+
+/**
+ * O número escolhido como principal já é o principal de outro lead vivo
+ * (`idx_leads_org_phone_unique`). A mensagem é a antiga (quem chama sem tratar
+ * continua vendo a frase de #2331); a tela tipa o erro para oferecer o diálogo
+ * "Compartilhar". `dono` é `null` quando o RLS esconde o outro lead.
+ */
+export class PrincipalOcupadoError extends Error {
+  constructor(readonly dono: DonoDoNumero | null) {
+    super(mensagemDePrincipalOcupado(dono));
+    this.name = "PrincipalOcupadoError";
+  }
+}
+
+/**
+ * 23505 do índice do principal: o UPDATE em `leads` (a mensagem do Postgres
+ * nomeia `idx_leads_org_phone_unique`) ou a recusa de `lead_phone_descompartilhar`
+ * (`principal_ocupado`). Outro 23505 — `phone_duplicated` ou um índice que não é
+ * o do principal — não vira oferta de compartilhar.
+ */
+export function ehPrincipalOcupado(error: { code?: string; message?: string } | null | undefined): boolean {
+  if (error?.code !== "23505") return false;
+  const msg = error.message ?? "";
+  return msg === "principal_ocupado" || msg.includes("idx_leads_org_phone_unique");
 }
 
 export function mensagemDoErroDeTelefone(

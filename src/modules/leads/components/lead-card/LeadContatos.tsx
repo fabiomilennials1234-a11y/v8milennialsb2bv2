@@ -1,6 +1,16 @@
 import { useMemo, useState } from "react";
 import { Loader2, MessageCircle, Pencil, Plus, Star, Trash2 } from "lucide-react";
 import { toast } from "sonner";
+import {
+  AlertDialog,
+  AlertDialogCancel,
+  AlertDialogAction,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
@@ -8,7 +18,13 @@ import { reportError, toAppError } from "@/shared/errors";
 import { ErrorReference } from "@/shared/errors/ErrorReference";
 import { formatPhoneBR } from "@/shared/format/phone";
 import { useLeadPhones, useSalvarTelefonesDoLead, type TelefoneEditado } from "../../hooks/useLeadPhones";
-import { agruparPorContato } from "../../lib/lead-phones";
+import { useDescompartilharNumero, useLeadPhoneCompartilhado } from "../../hooks/useLeadPhoneCompartilhado";
+import {
+  PrincipalOcupadoError,
+  agruparPorContato,
+  mensagemDeCompartilharNumero,
+  type DonoDoNumero,
+} from "../../lib/lead-phones";
 
 /**
  * Contatos do lead — o campo Telefone virou lista (Chamado 82c50502).
@@ -37,6 +53,10 @@ const novaChave = () => `novo-${++sequencia}`;
 export function LeadContatos({ leadId, podeEditar = true }: { leadId: string; podeEditar?: boolean }) {
   const { data: telefones = [], isLoading } = useLeadPhones(leadId);
   const salvar = useSalvarTelefonesDoLead(leadId);
+  const { data: compartilhado = false } = useLeadPhoneCompartilhado(leadId);
+  const descompartilhar = useDescompartilharNumero(leadId);
+  // Número que já é o principal de outro lead: espera a confirmação do usuário.
+  const [confirmar, setConfirmar] = useState<{ dono: DonoDoNumero | null } | null>(null);
   const [editando, setEditando] = useState(false);
   const [rascunho, setRascunho] = useState<Rascunho[]>([]);
   // `referencia` só quando o erro é inesperado: recusa conhecida já diz o que fazer.
@@ -76,19 +96,38 @@ export function LeadContatos({ leadId, podeEditar = true }: { leadId: string; po
       return restantes;
     });
 
-  const gravar = async () => {
+  const gravar = async (permitirCompartilhado = false) => {
     setErro(null);
     try {
-      await salvar.mutateAsync(rascunho.filter((l) => l.phone.trim() || l.id));
+      const telefones = rascunho.filter((l) => l.phone.trim() || l.id);
+      await salvar.mutateAsync(permitirCompartilhado ? { telefones, permitirCompartilhado } : telefones);
       setEditando(false);
-      toast.success("Contatos salvos");
+      toast.success(permitirCompartilhado ? "Contatos salvos. Número compartilhado." : "Contatos salvos");
     } catch (e) {
+      // O principal escolhido já é o de outro lead: pergunta antes de compartilhar.
+      if (e instanceof PrincipalOcupadoError) {
+        setConfirmar({ dono: e.dono });
+        return;
+      }
       const appError = toAppError(e, "Não foi possível salvar os telefones.");
       reportError(appError, { source: "handled", where: "lead-contatos" });
       setErro({
         mensagem: appError.userMessage,
         referencia: appError.reportable ? appError.reference : null,
       });
+    }
+  };
+
+  const deixarDeCompartilhar = async () => {
+    try {
+      await descompartilhar.mutateAsync({
+        telefonePrincipal: telefones.find((t) => t.isPrimary)?.phone ?? null,
+      });
+      toast.success("O número deixou de ser compartilhado");
+    } catch (e) {
+      const appError = toAppError(e, "Não foi possível deixar de compartilhar o número.");
+      reportError(appError, { source: "handled", where: "lead-contatos-descompartilhar" });
+      toast.error(appError.userMessage);
     }
   };
 
@@ -108,6 +147,25 @@ export function LeadContatos({ leadId, podeEditar = true }: { leadId: string; po
           </button>
         )}
       </div>
+
+      {compartilhado && !editando && (
+        <div className="flex flex-wrap items-center gap-1.5" data-testid="lead-contatos-compartilhado">
+          <span className="rounded-full bg-muted px-1.5 py-px text-[10.5px] font-semibold text-muted-foreground">
+            Número compartilhado
+          </span>
+          {podeEditar && (
+            <button
+              type="button"
+              onClick={deixarDeCompartilhar}
+              disabled={descompartilhar.isPending}
+              className="rounded-md px-1.5 py-0.5 text-[11.5px] font-semibold text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
+              data-testid="lead-contatos-descompartilhar"
+            >
+              Deixar de compartilhar
+            </button>
+          )}
+        </div>
+      )}
 
       {isLoading ? (
         <p className="flex items-center gap-2 text-[12.5px] text-muted-foreground">
@@ -207,13 +265,33 @@ export function LeadContatos({ leadId, podeEditar = true }: { leadId: string; po
             <Button variant="ghost" size="sm" onClick={() => setEditando(false)} disabled={salvar.isPending}>
               Cancelar
             </Button>
-            <Button size="sm" onClick={gravar} disabled={salvar.isPending} data-testid="lead-contatos-salvar">
+            <Button size="sm" onClick={() => gravar()} disabled={salvar.isPending} data-testid="lead-contatos-salvar">
               {salvar.isPending && <Loader2 className="mr-1.5 size-3.5 animate-spin" aria-hidden />}
               Salvar
             </Button>
           </div>
         </div>
       )}
+
+      <AlertDialog open={confirmar !== null} onOpenChange={(aberto) => !aberto && setConfirmar(null)}>
+        <AlertDialogContent data-testid="lead-contatos-compartilhar-dialogo">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Compartilhar número</AlertDialogTitle>
+            <AlertDialogDescription>{mensagemDeCompartilharNumero(confirmar?.dono)}</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                setConfirmar(null);
+                void gravar(true);
+              }}
+            >
+              Compartilhar
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </section>
   );
 }

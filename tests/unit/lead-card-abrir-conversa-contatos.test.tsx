@@ -56,6 +56,12 @@ vi.mock("@/modules/leads/components/lead-detail/modal/pipes/RegisterHistoricalSa
 
 // Os contatos do lead — a variável deste arquivo.
 const phonesRef: { data: LeadPhone[]; isLoading: boolean } = { data: [], isLoading: false };
+// Número compartilhado (PR4): sem marca, o bloco não aparece.
+vi.mock("@/modules/leads/hooks/useLeadPhoneCompartilhado", () => ({
+  useLeadPhoneCompartilhado: () => ({ data: false }),
+  useDescompartilharNumero: () => ({ mutateAsync: vi.fn(), isPending: false }),
+}));
+
 vi.mock("@/modules/leads/hooks/useLeadPhones", () => ({
   useLeadPhones: () => ({ data: phonesRef.data, isLoading: phonesRef.isLoading }),
   useSalvarTelefonesDoLead: () => ({ mutateAsync: vi.fn(), isPending: false }),

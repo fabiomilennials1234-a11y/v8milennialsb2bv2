@@ -16,7 +16,7 @@ const donoQuery = vi.fn();
 const filtros: Array<[string, string, unknown]> = [];
 
 function chain() {
-  const c: Record<string, any> = {};
+  const c: Record<string, unknown> = {};
   c.select = vi.fn().mockReturnValue(c);
   c.limit = vi.fn().mockReturnValue(c);
   for (const m of ["eq", "neq", "is"]) {
@@ -73,7 +73,7 @@ describe("useSalvarTelefonesDoLead — número que é principal de outro lead", 
   const telefones = [{ id: "p1", phone: "(51) 98203-0889", label: "LISI", isPrimary: true }];
 
   it("23505 vira a frase com o lead que segura o número", async () => {
-    rpc.mockResolvedValue({ error: { code: "23505", message: "duplicate key value" } });
+    rpc.mockResolvedValue({ error: { code: "23505", message: 'duplicate key value violates unique constraint "idx_leads_org_phone_unique"' } });
     donoQuery.mockResolvedValue({ data: { id: "lead-4545", name: "TRENTIN LTDA", erp_code: "4545" }, error: null });
 
     const { result } = renderHook(() => useSalvarTelefonesDoLead("lead-3759"), { wrapper: createWrapper() });
@@ -91,7 +91,7 @@ describe("useSalvarTelefonesDoLead — número que é principal de outro lead", 
   });
 
   it("não acha o dono (RLS): frase genérica", async () => {
-    rpc.mockResolvedValue({ error: { code: "23505", message: "duplicate key value" } });
+    rpc.mockResolvedValue({ error: { code: "23505", message: 'duplicate key value violates unique constraint "idx_leads_org_phone_unique"' } });
     donoQuery.mockResolvedValue({ data: null, error: null });
 
     const { result } = renderHook(() => useSalvarTelefonesDoLead("lead-3759"), { wrapper: createWrapper() });

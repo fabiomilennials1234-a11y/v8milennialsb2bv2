@@ -9856,6 +9856,7 @@ export type Database = {
           origin: string | null
           origin_detail: string | null
           phone: string | null
+          phone_compartilhado: boolean
           phone_digits: string | null
           pipe_whatsapp: string | null
           pre_qualification_tier:
@@ -9921,6 +9922,7 @@ export type Database = {
           origin?: string | null
           origin_detail?: string | null
           phone?: string | null
+          phone_compartilhado?: boolean
           phone_digits?: string | null
           pipe_whatsapp?: string | null
           pre_qualification_tier?:
@@ -9986,6 +9988,7 @@ export type Database = {
           origin?: string | null
           origin_detail?: string | null
           phone?: string | null
+          phone_compartilhado?: boolean
           phone_digits?: string | null
           pipe_whatsapp?: string | null
           pre_qualification_tier?:
@@ -23333,6 +23336,7 @@ export type Database = {
         Returns: string
       }
       lead_in_my_org: { Args: { p_lead_id: string }; Returns: boolean }
+      lead_phone_descompartilhar: { Args: { p_lead_id: string }; Returns: boolean }
       lead_owner_add: {
         Args: { p_lead_id: string; p_team_member_id: string }
         Returns: Json
@@ -23781,7 +23785,11 @@ export type Database = {
       restore_leads_bulk: { Args: { p_lead_ids: string[] }; Returns: number }
       rollback_import_batch: { Args: { p_batch_id: string }; Returns: Json }
       salvar_telefones_do_lead: {
-        Args: { p_lead_id: string; p_phones: Json }
+        Args: {
+          p_lead_id: string
+          p_permitir_compartilhado?: boolean
+          p_phones: Json
+        }
         Returns: Database["public"]["Tables"]["lead_phones"]["Row"][]
       }
       save_document_content: {
