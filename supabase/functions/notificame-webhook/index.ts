@@ -202,6 +202,7 @@ import {
   type LinhaDeStatus,
   type MessageStatusUpdate,
 } from "../_shared/notificame-inbound.ts";
+import { canonicalBrWhatsappId } from "../_shared/br-whatsapp-contact-id.ts";
 import { isMissingTableError } from "../_shared/notificame-schema-guard.ts";
 import { mirrorContactAvatar } from "../_shared/notificame-avatar.ts";
 import { normalizarConteudo } from "../_shared/notificame-content.ts";
@@ -1635,6 +1636,13 @@ Deno.serve(withErrorBoundary(FUNCTION_NAME, async (req: Request) => {
     if (!contact.externalId) {
       return { kind: "park", reason: "missing_contact_id" };
     }
+    // A CHAVE do interlocutor. No WhatsApp a Meta entrega números antigos sem o
+    // nono dígito, e o envio grava com ele — sem a forma canônica a mesma pessoa
+    // vira duas conversas. `sender_id` continua com o `wa_id` CRU que a Meta
+    // mandou (é o registro de quem enviou); tudo que CASA conversa usa a chave.
+    const contactKey = channel!.kind === "whatsapp"
+      ? canonicalBrWhatsappId(contact.externalId)
+      : contact.externalId;
 
     // (c2) VÍNCULO COM O LEAD — **RESOLVE, JAMAIS CRIA**.
     //
@@ -1664,7 +1672,7 @@ Deno.serve(withErrorBoundary(FUNCTION_NAME, async (req: Request) => {
         .select("lead_id")
         .eq("organization_id", organizationId)
         .eq("channel_type", channel!.channelType)
-        .eq("external_user_id", contact.externalId)
+        .eq("external_user_id", contactKey)
         .maybeSingle();
 
       if (identityError) {
@@ -1778,7 +1786,7 @@ Deno.serve(withErrorBoundary(FUNCTION_NAME, async (req: Request) => {
         : { kind: "instagram", messagingChannelId: channel!.id },
       externalId,
       contact: avatarEspelhado ? { ...contact, avatarUrl: avatarEspelhado } : contact,
-      contactExternalId: contact.externalId,
+      contactExternalId: contactKey,
       content: { ...conteudo, mediaUrl: midiaFinal },
       conditionText: conteudo.content,
       conditionTextSource: conteudo.content == null ? null

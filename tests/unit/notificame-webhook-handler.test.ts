@@ -20,6 +20,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import "../../tests/helpers/deno-mock";
 import { setDenoEnv } from "../../tests/helpers/deno-mock";
 import { createMockSupabase } from "../helpers/supabase-mock";
+import { buildOutboundChannelMessageRow } from "../../supabase/functions/_shared/whatsapp-providers/notificame-provider.ts";
 
 const SECRET = "s3cr3t-de-teste";
 const SUB_ID = "1ff9fbfb-2a3a-4210-aedf-9b80e2095494";
@@ -147,6 +148,22 @@ describe("resolução de canal — o ramo do WhatsApp oficial", () => {
       instance_id: INSTANCIA,
       messaging_channel_id: null,
       content: "Olá, testando a conexão",
+    });
+  });
+
+  it("grava a chave CANÔNICA do contato — o wa_id sem o nono dígito não abre outra conversa", async () => {
+    // O defeito de 20/10: o envio grava 5548984334050 (telefone do lead) e a
+    // Meta entrega a resposta como 554884334050. A caixa agrupa por
+    // contact_external_id; sem a chave canônica, duas conversas.
+    const res = await post(payloadWhatsApp());
+    expect(res.status).toBe(200);
+
+    const [linha] = state.mock!.getInserted("channel_messages");
+    expect(linha).toMatchObject({
+      contact_external_id: "5548984334050",
+      phone_number: "5548984334050",
+      // Quem mandou continua registrado como a Meta mandou.
+      sender_id: "554884334050",
     });
   });
 });
@@ -414,7 +431,9 @@ describe("perna de volta", () => {
       .find((c) => c.name === "resolve_wait_response_by_phone");
 
     expect(chamada, "o workflow nunca soube que o cliente respondeu").toBeDefined();
-    expect((chamada!.params as { p_phone?: string }).p_phone).toBe("554884334050");
+    // A forma CANÔNICA (com o nono dígito), não o wa_id cru de 12 dígitos: é a
+    // mesma chave da conversa, e a forma em que o lead está cadastrado.
+    expect((chamada!.params as { p_phone?: string }).p_phone).toBe("5548984334050");
     expect((chamada!.params as { p_organization_id?: string }).p_organization_id).toBe(ORG);
   });
 
@@ -569,5 +588,81 @@ describe("perna de volta — Instagram", () => {
 
     const res = await post(payloadInstagram());
     expect(res.status).toBe(200);
+  });
+});
+
+/**
+ * A CONVERSA PARTIDA PELO NONO DÍGITO — de ponta a ponta.
+ *
+ * O caso medido em prod em 2026-10-20: o CRM envia um template para o telefone
+ * do lead, com o nono dígito; o cliente clica no botão e a Meta entrega a
+ * resposta com o `wa_id` SEM ele. A caixa agrupa por
+ * `(instance_id, contact_external_id)` e a mesma pessoa virava duas conversas.
+ *
+ * O envio é montado pelo builder REAL do provider; a resposta entra pela
+ * REQUISIÇÃO, no formato real de clique de botão (`from` de 12 dígitos +
+ * `context` citando o template). Números fictícios.
+ */
+describe("envio com 13 dígitos + resposta com 12 → UMA conversa", () => {
+  const COM_9 = "5591999990000";
+  const SEM_9 = "559199990000";
+
+  const respostaDeBotao = () => ({
+    id: "e2e-resposta-botao-0001",
+    type: "MESSAGE",
+    channel: "whatsapp_business_account",
+    message: {
+      id: "e2e-resposta-botao-0001",
+      to: CANAL_WA,
+      from: SEM_9,
+      channel: "whatsapp_business_account",
+      context: { id: "wamid.template-enviado-0001", from: "5511900000000" },
+      visitor: { name: "Cliente Fictício", picture: "", lastName: "", firstName: "" },
+      contents: [{ type: "button", button: { text: "Sim", payload: "Sim" } }],
+      direction: "IN",
+      timestamp: "2026-10-20 04:21:00 pm",
+    },
+    direction: "IN",
+    timestamp: "2026-10-20 04:21:00 pm",
+    subscriptionId: CANAL_WA,
+    providerMessageId: "wamid.resposta-0001",
+  });
+
+  it("as duas linhas caem no mesmo grupo (instance_id, contact_external_id)", async () => {
+    const enviada = buildOutboundChannelMessageRow({
+      organizationId: ORG,
+      channelKind: "whatsapp",
+      instanceId: INSTANCIA,
+      messagingChannelId: null,
+      contactExternalId: COM_9,
+      externalId: "wamid.template-enviado-0001",
+      messageType: "template",
+      content: "Olá! Podemos falar?",
+      mediaUrl: null,
+      timestampIso: "2026-10-20T16:17:00.000Z",
+      rawPayload: {},
+    });
+
+    const res = await post(respostaDeBotao());
+    expect(res.status).toBe(200);
+
+    const recebidas = state.mock!.getInserted("channel_messages");
+    expect(recebidas).toHaveLength(1);
+    const recebida = recebidas[0] as Record<string, unknown>;
+
+    // A chave é a mesma nos dois sentidos…
+    expect(enviada.contact_external_id).toBe(COM_9);
+    expect(recebida.contact_external_id).toBe(COM_9);
+    expect(recebida.phone_number).toBe(COM_9);
+    // …e quem mandou continua registrado como a Meta mandou.
+    expect(recebida.sender_id).toBe(SEM_9);
+
+    // O agrupamento da lista da caixa: DISTINCT ON (instance_id, contact_external_id).
+    const grupos = new Set(
+      [enviada, recebida].map((r) =>
+        `${(r as Record<string, unknown>).instance_id}|${(r as Record<string, unknown>).contact_external_id}`
+      ),
+    );
+    expect(grupos.size, "a mesma pessoa virou duas conversas").toBe(1);
   });
 });
