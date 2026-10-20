@@ -146,7 +146,7 @@ interface LinhaDeChip {
   unread_count: number | null;
   /**
    * Etiquetas da conversa (lead + conversa), resolvidas pela RPC desde a
-   * migration 20271129000000. AUSENTE em banco sem a migration e na queda para a
+   * migration 20271202000000. AUSENTE em banco sem a migration e na queda para a
    * RPC de uma caixa — e é a ausência, não o `[]`, que manda fazer o fan-out.
    */
   tags?: ChatContactTag[];

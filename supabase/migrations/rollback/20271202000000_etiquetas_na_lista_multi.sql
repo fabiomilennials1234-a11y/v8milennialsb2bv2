@@ -1,68 +1,12 @@
--- Etiquetas DENTRO de get_whatsapp_conversation_list_multi (perf: RAM/pool do PostgREST).
+-- Rollback de 20271202000000_etiquetas_na_lista_multi.sql
 --
--- Cada refetch da lista multi do /chat fazia a RPC e mais DUAS idas de fan-out
--- só para etiquetas (src/modules/communication/hooks/chat/shared/enriquecerContatos.ts:
--- lead_tags com `tags!inner` + whatsapp_conversation_tags). pg_stat_statements
--- desde 05/10: RPC multi 16.896 chamadas; lead_tags+tags 55.236 (@50,4 ms);
--- whatsapp_conversation_tags 20.043. A função passa a devolver `tags jsonb` —
--- array [{id,name,color}], nunca NULL — e o front pula o fan-out quando a coluna
--- vem: 3 idas → 1 para etiquetas.
+-- Devolve get_whatsapp_conversation_list_multi à definição de
+-- 20271125000000_co_donos_na_conversa.sql (sem a coluna `tags`). O front segue
+-- funcionando: sem a coluna, volta ao fan-out de etiquetas.
 --
--- ── POR QUE DROP + CREATE ─────────────────────────────────────────────────
--- Mudar RETURNS TABLE é recusado por CREATE OR REPLACE (42P13). DROP + CREATE
--- NÃO preserva a ACL: a função renasce com EXECUTE para PUBLIC (Postgres) e para
--- anon/authenticated/service_role por nome (ALTER DEFAULT PRIVILEGES do Supabase;
--- REVOKE FROM PUBLIC não alcança grant nominal). Por isso o bloco de ACL revoga
--- os TRÊS e concede só a authenticated — a ACL de prod lida em 19/10:
--- {postgres=X/postgres, authenticated=X/postgres}. Conferir depois do apply:
--- has_function_privilege('anon'|'service_role', ..., 'EXECUTE') = false.
---
--- ── BASE ───────────────────────────────────────────────────────────────────
--- O corpo é o de 20271125000000_co_donos_na_conversa.sql VERBATIM (md5 do
--- prosrc == prod em 19/10, normalizado CRLF e private.→public.) com DUAS
--- mudanças e nada além: a coluna `tags jsonb` no FIM do RETURNS TABLE (a
--- posição das 13 colunas não muda) e o LEFT JOIN LATERAL de etiquetas no SELECT
--- final, pós-LIMIT. Filtros, cursor, isolamento por responsável, escopo de
--- caixa, gate de org: intocados. Assinatura (argumentos e defaults), SECURITY
--- DEFINER, STABLE e search_path: iguais. A guarda textual está em
--- tests/integration/conversation-list-multi-tags.test.mjs.
---
--- ── VISIBILIDADE DAS ETIQUETAS ─────────────────────────────────────────────
--- DEFINER bypassa a RLS de lead_tags, whatsapp_conversation_tags e tags; o corpo
--- espelha as policies (detalhe no comentário do LATERAL):
---   lead_tags   PERMISSIVE lead_in_my_org (lead não apagado, org minha) — aqui:
---               lead da org pedida, que o gate de org já provou ser minha;
---               RESTRICTIVE strict_owner_related_select — em prod vem da view
---               private.lead_tags (+ private.leads), ver o bloco DO abaixo.
---   conversa    só a conversation_id que a própria linha devolve (org pedida).
---   tags        organization_id = p_org (mais estreito; vínculo cross-org = 0).
---
--- ── private.* ──────────────────────────────────────────────────────────────
--- ATENÇÃO, e diferente de 20271125: em prod o corpo vivo lê as views
--- private.<relação>, e elas APLICAM o recorte strict_lead_owner_access pelo JWT
--- — não são equivalentes à tabela. Em vez de pedir a troca de prefixo à mão
--- antes do apply, o bloco DO ao fim desta migration a faz sozinho, numa lista
--- FECHADA de 8 relações, quando private.strict_lead_member_orgs() existe — e
--- falha fechada se faltar alguma das 8 views. Depende de prod continuar com
--- private.strict_lead_member_orgs(), private.strict_lead_is_owned(uuid,uuid) e as
--- views (aplicadas fora do repo).
---
--- ── CONFERÊNCIA PÓS-APPLY (rodar em prod, só leitura) ───────────────────────
---   SELECT has_function_privilege('anon',          p.oid, 'EXECUTE') AS anon,          -- false
---          has_function_privilege('service_role',  p.oid, 'EXECUTE') AS service_role,  -- false
---          has_function_privilege('authenticated', p.oid, 'EXECUTE') AS authenticated, -- true
---          (SELECT count(*) FROM regexp_matches(p.prosrc, 'private\.', 'g')) AS n_private, -- 15
---          p.proacl                                                                    -- {postgres=X/postgres,authenticated=X/postgres}
---     FROM pg_proc p
---    WHERE p.oid = 'public.get_whatsapp_conversation_list_multi(uuid,uuid[],integer,timestamp with time zone,uuid[],text[],uuid[],text[],uuid,boolean,text,boolean,boolean,boolean,text,boolean,uuid,text)'::regprocedure;
---
--- ── ORDEM DE DEPLOY ────────────────────────────────────────────────────────
--- Qualquer uma. Front novo + banco velho: a linha não traz `tags` e o front cai
--- no fan-out de sempre. Banco novo + front velho: a coluna a mais é ignorada.
--- NOTIFY recarrega o schema cache do PostgREST.
---
--- Rollback: supabase/migrations/rollback/20271129000000_etiquetas_na_lista_multi.sql
--- NÃO APLICADA em nenhum banco remoto por esta entrega.
+-- Mesmo cuidado da ida: tirar a coluna do RETURNS TABLE exige DROP + CREATE,
+-- que reseta a ACL — por isso os três REVOKEs antes do GRANT — e o bloco DO
+-- devolve o corpo à forma de prod (private.* onde a view existe).
 
 BEGIN;
 SET LOCAL lock_timeout = '3s';
@@ -70,7 +14,7 @@ SET LOCAL lock_timeout = '3s';
 DROP FUNCTION public.get_whatsapp_conversation_list_multi(uuid, uuid[], integer, timestamp with time zone, uuid[], text[], uuid[], text[], uuid, boolean, text, boolean, boolean, boolean, text, boolean, uuid, text);
 
 CREATE FUNCTION public.get_whatsapp_conversation_list_multi(p_org uuid, p_instances uuid[] DEFAULT NULL::uuid[], p_limit integer DEFAULT 50, p_before timestamp with time zone DEFAULT NULL::timestamp with time zone, p_funnels uuid[] DEFAULT NULL::uuid[], p_stages text[] DEFAULT NULL::text[], p_tags uuid[] DEFAULT NULL::uuid[], p_tiers text[] DEFAULT NULL::text[], p_vendor_id uuid DEFAULT NULL::uuid, p_unassigned boolean DEFAULT NULL::boolean, p_lead_presence text DEFAULT NULL::text, p_needs_human boolean DEFAULT NULL::boolean, p_unread boolean DEFAULT NULL::boolean, p_waiting boolean DEFAULT NULL::boolean, p_source text DEFAULT NULL::text, p_include_groups boolean DEFAULT false, p_before_box uuid DEFAULT NULL::uuid, p_before_phone text DEFAULT NULL::text)
- RETURNS TABLE(instance_id uuid, phone_number text, normalized_phone text, push_name text, last_message text, last_message_time timestamp with time zone, last_message_direction text, last_message_sent_source text, lead_id uuid, is_group boolean, conversation_id uuid, archived_at timestamp with time zone, unread_count integer, tags jsonb)
+ RETURNS TABLE(instance_id uuid, phone_number text, normalized_phone text, push_name text, last_message text, last_message_time timestamp with time zone, last_message_direction text, last_message_sent_source text, lead_id uuid, is_group boolean, conversation_id uuid, archived_at timestamp with time zone, unread_count integer)
  LANGUAGE plpgsql
  STABLE SECURITY DEFINER
  SET search_path TO 'public'
@@ -458,8 +402,7 @@ BEGIN
   )
   SELECT p.box, p.phone_number, p.normalized_phone, p.last_push_name, p.last_message,
          p.last_message_time, p.last_message_direction, p.last_message_sent_source,
-         p.lid, p.grp, cp.id, cp.archived_at, GREATEST(COALESCE(u.cnt, 0)::integer, CASE WHEN public.is_conversation_marked_unread(p_org, p.box, p.normalized_phone) THEN 1 ELSE 0 END),
-         et.etiquetas
+         p.lid, p.grp, cp.id, cp.archived_at, GREATEST(COALESCE(u.cnt, 0)::integer, CASE WHEN public.is_conversation_marked_unread(p_org, p.box, p.normalized_phone) THEN 1 ELSE 0 END)
   FROM page p
   LEFT JOIN conv_pick cp ON cp.box = p.box AND cp.np = p.normalized_phone
   -- CONTAGEM de não-lida: só para as linhas da página, depois do LIMIT.
@@ -481,49 +424,6 @@ BEGIN
       AND m."timestamp" > now() - interval '30 days'
       AND m."timestamp" > COALESCE(r.last_read_at, now() - interval '7 days')
   ) u ON true
-  -- ── ETIQUETAS da linha ─────────────────────────────────────────────────
-  -- Só para as linhas da página, depois do LIMIT, como a contagem acima: duas
-  -- sondas por índice por linha — lead_tags UNIQUE(lead_id, tag_id) e
-  -- whatsapp_conversation_tags(conversation_id) — e o PK de tags.
-  --
-  -- VISIBILIDADE = a que a RLS daria ao chamador nas três tabelas (esta função
-  -- é DEFINER e NÃO herda a policy):
-  --   * do lead: só lead da org pedida e não apagado (policy lead_in_my_org).
-  --     O recorte RESTRICTIVE de strict_lead_owner_access vem das views
-  --     leads / lead_tags do schema `private`, que o bloco DO da migration põe
-  --     no lugar das tabelas onde elas existem — ver o cabeçalho dela. (Este
-  --     comentário não escreve o prefixo do schema de propósito: o bloco DO e a
-  --     guarda de md5 trocam o texto do prefixo no corpo inteiro.)
-  --   * da conversa: só a conversation_id que a própria linha devolve
-  --     (conv_pick, já na org pedida).
-  --   * tag.organization_id = p_org: mais estreito que "minhas orgs" só para
-  --     vínculo cross-org, que em prod é zero.
-  -- ORDEM: as do lead primeiro, depois as da conversa; repetida fica a do lead
-  -- (o mesmo merge que o front fazia); dentro de cada origem, nome e id — o
-  -- fan-out devolvia ordem de heap. Nunca NULL: sem etiqueta é '[]'.
-  LEFT JOIN LATERAL (
-    SELECT COALESCE(
-             jsonb_agg(jsonb_build_object('id', x.id, 'name', x.name, 'color', x.color)
-                       ORDER BY x.origem, x.name, x.id),
-             '[]'::jsonb) AS etiquetas
-    FROM (
-      SELECT DISTINCT ON (t.id) t.id, t.name, t.color, e.origem
-      FROM (
-        SELECT lt.tag_id, 0 AS origem
-        FROM public.lead_tags lt
-        JOIN public.leads l ON l.id = lt.lead_id
-        WHERE lt.lead_id = p.lid
-          AND l.organization_id = p_org
-          AND l.deleted_at IS NULL
-        UNION ALL
-        SELECT ct.tag_id, 1
-        FROM public.whatsapp_conversation_tags ct
-        WHERE ct.conversation_id = cp.id
-      ) e
-      JOIN public.tags t ON t.id = e.tag_id AND t.organization_id = p_org
-      ORDER BY t.id, e.origem
-    ) x
-  ) et ON true
   WHERE cp.deleted_at IS NULL
   -- Mesma ordem TOTAL do CTE `page`: é desta última linha que o cliente tira o
   -- cursor da página seguinte, então as duas ordenações têm que coincidir.
@@ -554,7 +454,7 @@ GRANT EXECUTE ON FUNCTION public.get_whatsapp_conversation_list_multi(uuid, uuid
 --   * instalado: as 8 views TÊM de existir (relkind 'v'); faltou uma → RAISE.
 --     Falha FECHADA: trocar só parte deixaria leitura sem o recorte. Depois do
 --     EXECUTE, confere no pg_get_functiondef: zero `public.<8 rels>` e
---     exatamente 15 ocorrências de `private.` (13 do corpo de 20271125 + lead_tags e leads do LATERAL). Não bateu → RAISE.
+--     exatamente 13 ocorrências de `private.` (o corpo de 20271125, como prod hoje). Não bateu → RAISE.
 --   * não instalado (repo, PGlite): nada é trocado.
 -- CREATE OR REPLACE: a ACL acima é preservada.
 DO $troca$
@@ -565,7 +465,7 @@ DECLARE
     'pipeline_entries', 'whatsapp_conversation_summary', 'whatsapp_conversations',
     'whatsapp_messages'
   ];
-  v_esperado constant integer := 15;
+  v_esperado constant integer := 13;
   v_def text;
   v_rel text;
   v_faltando text[];

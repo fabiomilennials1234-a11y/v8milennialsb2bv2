@@ -1,5 +1,5 @@
 // get_whatsapp_conversation_list_multi devolve as etiquetas da linha
-// (20271129000000_etiquetas_na_lista_multi.sql).
+// (20271202000000_etiquetas_na_lista_multi.sql).
 //
 // A lista multi do /chat fazia a RPC + 2 idas de fan-out (lead_tags e
 // whatsapp_conversation_tags) por refetch. A migration traz as etiquetas numa
@@ -35,8 +35,8 @@ import { createHash } from 'node:crypto';
 import { PGlite } from '@electric-sql/pglite';
 
 const read = (path) => readFileSync(new URL(path, import.meta.url), 'utf8');
-const MIG = read('../../supabase/migrations/20271129000000_etiquetas_na_lista_multi.sql');
-const RB = read('../../supabase/migrations/rollback/20271129000000_etiquetas_na_lista_multi.sql');
+const MIG = read('../../supabase/migrations/20271202000000_etiquetas_na_lista_multi.sql');
+const RB = read('../../supabase/migrations/rollback/20271202000000_etiquetas_na_lista_multi.sql');
 const BASE = read('../../supabase/migrations/20271125000000_co_donos_na_conversa.sql');
 
 // A função de 20271125, sozinha: é o estado de prod antes desta migration.

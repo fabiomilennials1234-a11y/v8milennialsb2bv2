@@ -2,7 +2,7 @@
  * `enriquecerContatos` com etiquetas já resolvidas pela RPC.
  *
  * A lista multi passou a receber as etiquetas DENTRO de
- * `get_whatsapp_conversation_list_multi` (migration 20271129000000). Quando a
+ * `get_whatsapp_conversation_list_multi` (migration 20271202000000). Quando a
  * linha já traz as etiquetas, o fan-out a `lead_tags` e
  * `whatsapp_conversation_tags` é requisição jogada fora — duas idas por refetch
  * no pool do PostgREST. Sem a opção, o comportamento é o de sempre: a caixa
