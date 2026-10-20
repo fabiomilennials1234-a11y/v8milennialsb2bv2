@@ -376,7 +376,7 @@ describe("useConversasUnificadas — rede contra evento realtime perdido", () =>
 });
 
 /**
- * Etiquetas DENTRO da RPC multi (migration 20271202000000). Cada refetch fazia
+ * Etiquetas DENTRO da RPC multi (migration 20271203000000). Cada refetch fazia
  * a RPC + 2 idas de fan-out só para etiquetas; com a coluna `tags` na linha, o
  * enriquecimento é avisado de que elas já vieram e não vai buscá-las. Sem a
  * coluna — banco ainda sem a migration, ou a queda para a RPC de uma caixa —,

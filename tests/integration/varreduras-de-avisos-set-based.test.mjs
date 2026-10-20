@@ -1,4 +1,4 @@
-// Perf — 20271202000000 reescreve o corpo das duas varreduras de avisos
+// Perf — 20271203000000 reescreve o corpo das duas varreduras de avisos
 // (follow-ups e reunião próxima). Contrato: os avisos emitidos são os MESMOS.
 //
 // Prova: dois bancos com a mesma base sorteada; um roda o corpo antigo
@@ -19,8 +19,8 @@ import { PGlite } from '@electric-sql/pglite';
 
 const sql = name => readFileSync(new URL(`../../supabase/migrations/${name}`, import.meta.url), 'utf8');
 const antiga = sql('20271126000000_avisos_a_todos_os_donos_e_owner_includes.sql');
-const nova = sql('20271202000000_varreduras_de_avisos_set_based.sql');
-const rollback = sql('rollback/20271202000000_varreduras_de_avisos_set_based.sql');
+const nova = sql('20271203000000_varreduras_de_avisos_set_based.sql');
+const rollback = sql('rollback/20271203000000_varreduras_de_avisos_set_based.sql');
 
 // Corpo vigente em prod (19/10): md5(prosrc).
 const MD5_PROD = {
