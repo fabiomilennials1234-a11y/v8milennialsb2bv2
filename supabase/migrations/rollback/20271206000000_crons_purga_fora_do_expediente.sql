@@ -1,4 +1,4 @@
--- ROLLBACK de 20271129000000_crons_purga_fora_do_expediente.sql
+-- ROLLBACK de 20271206000000_crons_purga_fora_do_expediente.sql
 -- Devolve as agendas medidas em prod em 2026-10-19. Mesmo contrato de execução
 -- (por jobname; só toca o job cuja agenda é exatamente a que a migration deixou).
 

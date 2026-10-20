@@ -124,7 +124,7 @@ Madrugada, já fora do expediente: `raw-payload-retention` 17,5 s (03:33), `clea
 2,2 s (04:00), `cleanup-automation-jobs` 1,4 s (02:00).
 
 ### Migrations propostas (no repo, **não aplicadas**)
-- **A · `20271129000000_crons_purga_fora_do_expediente.sql`**. Sem efeito visível.
+- **A · `20271206000000_crons_purga_fora_do_expediente.sql`**. Sem efeito visível.
   - `purge-runtime-logs`: `9-59/10` → `9 6 * * *`.
   - `cleanup-wa-health-checks-7d`: `4-59/10` → `4 * * * *`.
   - `cleanup-audit-log-14d`: `6-59/10` → `6 * * * *`.
@@ -133,7 +133,7 @@ Madrugada, já fora do expediente: `raw-payload-retention` 17,5 s (03:33), `clea
   30.000. De hora em hora sobra folga de 25×. `audit_log` tem ~3,6 mil linhas/dia, contra LIMIT
   20.000. Ganho: −383 execuções/dia (−144 no expediente), ~−62 s/dia de banco (~−23 s no
   expediente). É um teto: nas duas purgas horárias, cada execução apaga 6× mais linhas.
-- **B · `20271129000001_avisos_varreduras_a_cada_2_min.sql`**. **Decisão de produto:** o aviso pode
+- **B · `20271129000001_avisos_varreduras_a_cada_2_min.sql`** — ⛔ **não aplicada (20/10)**: a 20271202000000 reescreveu o corpo set-based e o ganho virou marginal. **Decisão de produto:** o aviso pode
   sair até +1 min mais tarde. Nenhum aviso se perde: as janelas têm 20 min e a dedupe é por chave.
   As fases são diferentes (ímpar/par), então os dois jobs nunca caem no mesmo minuto. Ganho:
   ~−11,5 s/h, −1.440 backends/dia.

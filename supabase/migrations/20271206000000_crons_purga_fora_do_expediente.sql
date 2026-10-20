@@ -1,4 +1,4 @@
--- 20271129000000_crons_purga_fora_do_expediente.sql
+-- 20271206000000_crons_purga_fora_do_expediente.sql
 --
 -- ⚠️ VERSÃO PROVISÓRIA e NÃO APLICADA. O ledger de prod colide com
 -- frequência; renumerar acima do topo real de supabase_migrations.schema_migrations
@@ -53,7 +53,7 @@
 --   • agenda = antes → cron.alter_job só com schedule;
 --   • qualquer outra agenda → NOTICE e NÃO toca; jobname duplicado → NÃO toca.
 --
--- REVERSÃO EXATA: supabase/migrations/rollback/20271129000000_crons_purga_fora_do_expediente.sql
+-- REVERSÃO EXATA: supabase/migrations/rollback/20271206000000_crons_purga_fora_do_expediente.sql
 
 DO $$
 DECLARE

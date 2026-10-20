@@ -31,9 +31,9 @@ type Job = { jobid: number; jobname: string; schedule: string; avgSeconds: numbe
 const RAIZ = path.resolve(__dirname, '../..');
 const ler = (rel: string) => readFileSync(path.join(RAIZ, rel), 'utf8');
 
-const PURGAS = 'supabase/migrations/20271129000000_crons_purga_fora_do_expediente.sql';
+const PURGAS = 'supabase/migrations/20271206000000_crons_purga_fora_do_expediente.sql';
 const AVISOS = 'supabase/migrations/20271129000001_avisos_varreduras_a_cada_2_min.sql';
-const ROLLBACK_PURGAS = 'supabase/migrations/rollback/20271129000000_crons_purga_fora_do_expediente.sql';
+const ROLLBACK_PURGAS = 'supabase/migrations/rollback/20271206000000_crons_purga_fora_do_expediente.sql';
 const ROLLBACK_AVISOS = 'supabase/migrations/rollback/20271129000001_avisos_varreduras_a_cada_2_min.sql';
 
 const { jobs } = JSON.parse(ler('scripts/cron/prod-snapshot-2026-10-19.json')) as { jobs: Job[] };

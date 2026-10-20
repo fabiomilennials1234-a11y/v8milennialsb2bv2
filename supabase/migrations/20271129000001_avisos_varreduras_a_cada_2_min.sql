@@ -1,11 +1,16 @@
 -- 20271129000001_avisos_varreduras_a_cada_2_min.sql
 --
+-- ⛔ DECIDIDO NÃO APLICAR (20/10/2026): o corpo das duas varreduras foi reescrito
+-- set-based (20271202000000, aplicada em prod), o que já cortou ~5× os blocos por
+-- chamada. Espaçar para 2 min agora troca +1 min de atraso no aviso por ganho
+-- marginal. Fica no repo só como registro; não entra em apply nem em db push.
+--
 -- ⚠️ VERSÃO PROVISÓRIA e NÃO APLICADA. Renumerar acima do topo real do ledger
 -- de prod na hora de aplicar. Aplicação em prod é do CTO.
 --
 -- ⚠️ DECISÃO DE PRODUTO: o aviso "em até 15 minutos" / "começando agora" e o de
 -- follow-up passam a sair com até +1 min de atraso (cadência 2 min em vez de 1).
--- Separado da 20271129000000 de propósito: aquela não tem efeito visível; esta
+-- Separado da 20271206000000 de propósito: aquela não tem efeito visível; esta
 -- tem. Aplicar uma não obriga a outra.
 --
 -- Alavanca 6 do plano de RAM/pool (.specs/perf/fora-do-banco.md). Medido em prod
