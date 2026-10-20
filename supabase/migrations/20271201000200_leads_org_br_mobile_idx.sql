@@ -1,0 +1,37 @@
+-- 20271201000200_leads_org_br_mobile_idx.sql — F5b (RAM/pool PostgREST, onda 4)
+--
+-- ⚠ VERSÃO PROVISÓRIA. Renumerar contra o ledger de prod na hora de aplicar.
+--
+-- ── POR QUÊ (medido em prod, 2026-10-19) ───────────────────────────────────
+-- trg_resolve_message_lead_id (BEFORE INSERT em whatsapp_messages) roda o
+-- passe 2 sempre que o telefone não bate exato (75% das mensagens de 24 h
+-- chegam sem lead: 8.788/11.724):
+--     WHERE organization_id = $org AND deleted_at IS NULL AND phone_digits != ''
+--       AND length(phone_digits) >= 10 AND normalize_br_mobile(phone_digits) = $n
+-- Não há índice nessa expressão em `leads` (lead_phones tem o equivalente,
+-- lead_phones_org_br_mobile_idx). normalize_br_mobile tem SET search_path, então
+-- não é inlinada: uma chamada de função por lead da org. EXPLAIN ANALYZE na
+-- maior org (11.303 leads elegíveis): 239 ms, 11.519 buffers, 11.435 linhas
+-- descartadas — por INSERT. Estimativa ponderada pelo fluxo de 24 h: ~11 ms
+-- dos ~41 ms médios do INSERT principal (pg_stat_statements, 165.841 chamadas).
+--
+-- Índice com o MESMO predicado da consulta: o planner o escolhe no plano
+-- genérico do plpgsql (provado em tests/integration/whatsapp-messages-insert-triggers.test.mjs).
+-- Sem mudança de comportamento: em prod há 0 grupos (org, normalize_br_mobile)
+-- com phone_digits distintos entre leads vivos, então o LIMIT 1 sem ORDER BY
+-- não pode escolher outro lead. A trigger NÃO é tocada (decide dono do lead).
+-- ~77 mil leads → índice de poucos MB.
+--
+-- RISCO PERMANENTE (o mesmo que lead_phones_org_br_mobile_idx já tem): se
+-- alguém fizer CREATE OR REPLACE de normalize_br_mobile mudando a lógica, este
+-- índice fica inconsistente. Mudou a função → REINDEX deste índice.
+--
+-- ── COMO APLICAR ───────────────────────────────────────────────────────────
+-- CREATE INDEX CONCURRENTLY não roda em transação. psql em autocommit no
+-- pooler modo session (5432):  SET lock_timeout = '3s';  \i este arquivo
+-- NÃO por apply_migration do MCP nem `supabase db push` (embrulham em
+-- transação e falham). Se falhar no meio, sobra índice INVALID
+-- (pg_index.indisvalid = false): rodar o rollback e repetir.
+-- Registrar a versão no ledger à mão. Rollback: rollback/<este arquivo>.
+
+CREATE INDEX CONCURRENTLY IF NOT EXISTS leads_org_br_mobile_idx ON public.leads USING btree (organization_id, public.normalize_br_mobile(phone_digits)) WHERE ((deleted_at IS NULL) AND (phone_digits <> ''::text) AND (length(phone_digits) >= 10));

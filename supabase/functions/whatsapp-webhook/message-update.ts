@@ -2,6 +2,7 @@ import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { completeQuotePresentations } from "../_shared/quotes/presentation.ts";
 import { logRuntime } from "../_shared/logger.ts";
 import { buildMessageIdCandidates, extractRawMessageIds, mapReceiptStatus } from "./message-id.ts";
+import { uazapiIngestRpcEnabled } from "./ingest-rpc-flag.ts";
 
 type Instance = { id: string; organization_id: string; phone_number?: string | null };
 type Reaction = Record<string, unknown>;
@@ -205,7 +206,20 @@ export async function applyMessageUpdate(db: SupabaseClient, instance: Instance,
   }
   if (receipt && data.fromMe !== true) {
     const predecessors = receiptPredecessors(receipt);
-    if (predecessors.length) {
+    // F5a: no caminho quente (sem escopo pré-lido, sem recuperação exata) o
+    // update com predecessores + lookup de fallback vira 1 RPC. Mesmos filtros,
+    // mesmo log; erro da RPC = nada gravado = mesma falha do update.
+    if (predecessors.length && scopedTargets === null && !options.exactRecoveryMessageId
+      && uazapiIngestRpcEnabled(instance.organization_id)) {
+      const { data: applied, error } = await db.rpc("apply_uazapi_receipt", {
+        p_instance_id: instance.id, p_message_ids: ids, p_status: receipt, p_predecessors: predecessors,
+      });
+      if (error) throw new Error("Receipt persistence failed");
+      const result = applied as { changed_count?: number; has_outgoing?: boolean } | null;
+      if (!result?.changed_count && !result?.has_outgoing) await logRuntime({ organizationId: instance.organization_id,
+        module: "webhook", action: "uazapi_receipt_unmatched", status: "skipped",
+        errorMessage: "no_row_matched", payloadSnapshot: { instance_id: instance.id, receipt_status: receipt } });
+    } else if (predecessors.length) {
       let statusWrite = db.from("whatsapp_messages").update({ status: receipt })
         .eq("organization_id", instance.organization_id).eq("instance_id", instance.id)
         .eq("direction", "outgoing").in("message_id", ids).in("status", predecessors);

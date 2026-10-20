@@ -260,3 +260,21 @@ export interface LeadCardData {
   campos: LeadCardFieldGroup[];
   historico: LeadCardEvent[];
 }
+
+/**
+ * Um contato oferecido pelo "Abrir conversa" quando o lead tem 2+ telefones e
+ * ninguém escolheu com qual se fala (Chamado b7941f5e). Chega pronto de quem
+ * tem banco: o card não formata nem consulta.
+ */
+export interface ContatoDaConversa {
+  id: string;
+  /** Nome do contato; `null` quando ninguém o nomeou. */
+  nome: string | null;
+  /** Número para leitura, já formatado. */
+  numero: string;
+  /** O telefone que vai para o chat. */
+  telefone: string;
+  principal: boolean;
+  /** `false` = sabidamente sem WhatsApp. `null` = não se sabe. */
+  whatsApp: boolean | null;
+}
