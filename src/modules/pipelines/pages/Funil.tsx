@@ -986,6 +986,12 @@ function FunilPageInner() {
           pipelineId={pipeline.id}
           pipelineName={pipeline.name}
           stages={stages}
+          onMoverCardExistente={(entryId, stageId) => {
+            const stage = stages.find((x) => x.id === stageId);
+            if (!stage || !findEntry(entryId)) return false;
+            flow.requestMove(entryId, stage);
+            return true;
+          }}
         />
       )}
 

@@ -993,7 +993,14 @@ export function useAddLeadToCustomPipe() {
         });
       } catch (error) {
         if (isLeadJaNoFunil(error)) {
-          throw new Error("Este lead já está neste funil");
+          // Recusa deliberada, não defeito: com o SQLSTATE 23505 o `toAppError`
+          // a classifica como `record.duplicate` (não reportável), e a tela
+          // responde com aviso em vez de erro com código de suporte.
+          throw Object.assign(new Error("Este lead já está neste funil"), {
+            code: "23505",
+            details: "",
+            hint: "",
+          });
         }
         throw error;
       }
