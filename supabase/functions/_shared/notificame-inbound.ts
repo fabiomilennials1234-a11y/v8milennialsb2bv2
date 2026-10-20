@@ -78,6 +78,7 @@ function readPath(source: unknown, path: string): unknown {
 // Duplicar a comparação seria a QUINTA ocorrência, no mesmo dia, do defeito de
 // comparar string crua enquanto a normalização existia a um import de distância.
 import { normalizeSeamlessType } from "./notificame.ts";
+import { canonicalBrWhatsappId } from "./br-whatsapp-contact-id.ts";
 
 function firstNonEmpty(source: unknown, paths: readonly string[]): string | null {
   for (const path of paths) {
@@ -1010,6 +1011,12 @@ export function buildInboundChannelMessageRow(params: {
    */
   direction?: "incoming" | "outgoing";
 }): InboundChannelMessageRow {
+  // A CHAVE é canônica no WhatsApp: a Meta entrega o `wa_id` de números antigos
+  // sem o nono dígito, e o outbound grava com ele. Sem isto a mesma pessoa vira
+  // duas conversas. Mesma função do outbound (`buildOutboundChannelMessageRow`).
+  const contactKey = params.target.kind === "whatsapp"
+    ? canonicalBrWhatsappId(params.contactExternalId)
+    : params.contactExternalId;
   return {
     organization_id: params.organizationId,
     channel: params.target.kind,
@@ -1017,11 +1024,11 @@ export function buildInboundChannelMessageRow(params: {
       ? params.target.messagingChannelId
       : null,
     instance_id: params.target.kind === "whatsapp" ? params.target.instanceId : null,
-    contact_external_id: params.contactExternalId,
+    contact_external_id: contactKey,
     // No WhatsApp o `contact_external_id` É o telefone, e a coluna existe para as
     // telas que só sabem falar de número. No Instagram fica NULA de propósito: o
     // IGSID não é telefone, e preenchê-la faria 13 superfícies mentirem.
-    phone_number: params.target.kind === "whatsapp" ? params.contactExternalId : null,
+    phone_number: params.target.kind === "whatsapp" ? contactKey : null,
     external_id: params.externalId,
     direction: params.direction ?? "incoming",
     message_type: params.content.messageType,

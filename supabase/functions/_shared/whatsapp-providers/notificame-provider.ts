@@ -93,6 +93,7 @@ import {
   type NotificameOrgConfig,
 } from "../notificame.ts";
 import { loadNotificameSubaccount } from "../notificame-credentials.ts";
+import { canonicalBrWhatsappId } from "../br-whatsapp-contact-id.ts";
 import {
   buildTemplateSendContent,
   type TemplateSendComponent,
@@ -976,12 +977,19 @@ export function buildOutboundChannelMessageRow(params: {
    */
   botoes?: string[];
 }): OutboundChannelMessageRow {
+  // A CHAVE gravada é canônica (13 dígitos para celular BR), não o que foi
+  // enviado à Meta. O destinatário enviado continua o que já entrega hoje; só a
+  // chave de agrupamento precisa bater com a do inbound, que passa pela MESMA
+  // função. Instagram fica cru: o IGSID é opaco.
+  const contactKey = params.channelKind === "whatsapp"
+    ? canonicalBrWhatsappId(params.contactExternalId)
+    : params.contactExternalId;
   return {
     organization_id: params.organizationId,
     channel: params.channelKind,
     instance_id: params.instanceId,
     messaging_channel_id: params.messagingChannelId,
-    contact_external_id: params.contactExternalId,
+    contact_external_id: contactKey,
     external_id: params.externalId,
     direction: "outgoing",
     message_type: params.messageType,
@@ -992,7 +1000,7 @@ export function buildOutboundChannelMessageRow(params: {
     sender_name: null,
     sender_profile_pic: null,
     remote_jid: null,
-    phone_number: params.channelKind === "whatsapp" ? params.contactExternalId : null,
+    phone_number: params.channelKind === "whatsapp" ? contactKey : null,
     page_id: null,
     lead_id: null,
     timestamp: params.timestampIso,
