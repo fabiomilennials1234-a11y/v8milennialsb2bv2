@@ -23,13 +23,13 @@ import {
   useAddLeadToCustomPipe,
   type CustomPipelineStage,
 } from "@/modules/pipelines/hooks/custom/useCustomPipelines";
-import { Loader2, Search, Building2, Phone, UserCheck, Plus } from "lucide-react";
+import { Loader2, Search, Building2, Phone, UserCheck, Plus, Info } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useDebounce } from "@/shared/hooks/useDebounce";
 import { LeadModal, buscarLeadIdsPorTelefoneSecundario } from "@/modules/leads";
-import { notifyError } from "@/shared/errors";
+import { notifyError, toAppError } from "@/shared/errors";
 import {
   ETAPA_DE_PERDA_INDISPONIVEL,
   isEtapaDePerda,
@@ -44,6 +44,19 @@ interface AddLeadToPipeModalProps {
   stages: CustomPipelineStage[];
   /** Etapa já escolhida ao abrir (o "+" ao pé da coluna). */
   defaultStageId?: string | null;
+  /**
+   * Move o card que o lead já tem neste funil para a etapa escolhida. Devolve
+   * `false` quando não conseguiu (card fora do quadro): o modal então manda
+   * arrastar o card. Sem a prop, o modal só avisa onde o lead está.
+   */
+  onMoverCardExistente?: (entryId: string, stageId: string) => boolean;
+}
+
+/** Card aberto, sem negócio, que o lead já tem neste funil. */
+interface CardExistente {
+  id: string;
+  lead_id: string;
+  stage_id: string;
 }
 
 interface LeadResult {
@@ -61,6 +74,7 @@ export function AddLeadToPipeModal({
   pipelineName,
   stages,
   defaultStageId,
+  onMoverCardExistente,
 }: AddLeadToPipeModalProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null);
@@ -114,7 +128,39 @@ export function AddLeadToPipeModal({
     enabled: !!teamMember?.organization_id && debouncedSearch.trim().length >= 2,
   });
 
+  // Uma consulta para a busca inteira (nunca uma por lead): quem já tem card
+  // aberto sem negócio neste funil — o mesmo recorte do índice que recusa o insert.
+  const idsDaBusca = (searchResults ?? []).map((l) => l.id);
+  const { data: cardsExistentes } = useQuery({
+    queryKey: ["lead_search_for_pipe_cards", pipelineId, idsDaBusca],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("pipeline_entries")
+        .select("id, lead_id, stage_id")
+        .eq("pipeline_id", pipelineId)
+        .is("closed_at", null)
+        .is("deal_id", null)
+        .in("lead_id", idsDaBusca)
+        .limit(1000);
+      if (error) throw error;
+      return (data || []) as CardExistente[];
+    },
+    enabled: open && idsDaBusca.length > 0,
+  });
+  const cardPorLead = new Map((cardsExistentes ?? []).map((c) => [c.lead_id, c]));
+  const nomeDaEtapa = (stageId: string) => stages.find((s) => s.id === stageId)?.name ?? "outra etapa";
+
   const selectedLead = searchResults?.find((l) => l.id === selectedLeadId);
+  const cardDoSelecionado = selectedLeadId ? cardPorLead.get(selectedLeadId) : undefined;
+  const etapaAtual = cardDoSelecionado ? nomeDaEtapa(cardDoSelecionado.stage_id) : "";
+  const etapaEscolhida = stages.find((s) => s.id === selectedStageId);
+  const [moverFalhou, setMoverFalhou] = useState(false);
+
+  const handleMover = () => {
+    if (!cardDoSelecionado || !selectedStageId || selecionadaEhPerda || !onMoverCardExistente) return;
+    if (onMoverCardExistente(cardDoSelecionado.id, selectedStageId)) handleClose();
+    else setMoverFalhou(true);
+  };
 
   const handleAdd = async () => {
     if (!selectedLeadId || !selectedStageId || selecionadaEhPerda) return;
@@ -128,7 +174,13 @@ export function AddLeadToPipeModal({
 
       toast.success(`Lead adicionado ao funil "${pipelineName}"`);
       handleClose();
-    } catch (error: any) {
+    } catch (error: unknown) {
+      // O lead já tem card aqui (outra aba, busca antiga): é aviso, não defeito.
+      if (toAppError(error).code === "record.duplicate") {
+        toast.info("Este lead já está neste funil.");
+        void queryClient.invalidateQueries({ queryKey: ["lead_search_for_pipe_cards", pipelineId] });
+        return;
+      }
       notifyError(error, { fallback: "Não foi possível adicionar lead." });
     }
   };
@@ -155,6 +207,7 @@ export function AddLeadToPipeModal({
     onOpenChange(false);
     setSearchQuery("");
     setSelectedLeadId(null);
+    setMoverFalhou(false);
     setSelectedStageId(etapaPadrao(null));
     setIsLeadModalOpen(false);
   };
@@ -210,7 +263,10 @@ export function AddLeadToPipeModal({
                 searchResults.map((lead) => (
                   <button
                     key={lead.id}
-                    onClick={() => setSelectedLeadId(lead.id)}
+                    onClick={() => {
+                      setSelectedLeadId(lead.id);
+                      setMoverFalhou(false);
+                    }}
                     className={cn(
                       "w-full text-left p-2 rounded-md transition-colors",
                       selectedLeadId === lead.id
@@ -218,7 +274,14 @@ export function AddLeadToPipeModal({
                         : "hover:bg-muted"
                     )}
                   >
-                    <div className="font-medium text-sm">{lead.name}</div>
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="font-medium text-sm">{lead.name}</div>
+                      {cardPorLead.has(lead.id) && (
+                        <span className="shrink-0 rounded-full border border-warning/30 bg-warning/10 px-2 py-0.5 text-[11px] font-medium text-warning-strong">
+                          Já neste funil · {nomeDaEtapa(cardPorLead.get(lead.id)!.stage_id)}
+                        </span>
+                      )}
+                    </div>
                     <div className="flex items-center gap-3 mt-0.5">
                       {lead.company && (
                         <span className="flex items-center gap-1 text-xs text-muted-foreground">
@@ -256,9 +319,21 @@ export function AddLeadToPipeModal({
             </div>
           )}
 
+          {cardDoSelecionado && (
+            <div className="flex items-start gap-2 rounded-xl border border-warning/30 bg-warning/10 p-2 text-sm">
+              <Info className="w-4 h-4 text-warning-strong shrink-0 mt-0.5" />
+              <div>
+                <p>Este lead já está neste funil, na etapa {etapaAtual}.</p>
+                {onMoverCardExistente && moverFalhou && (
+                  <p className="mt-1 text-muted-foreground">Arraste o card no quadro para mudar de etapa.</p>
+                )}
+              </div>
+            </div>
+          )}
+
           {/* Etapa inicial */}
           <div className="space-y-2">
-            <Label>Etapa inicial</Label>
+            <Label>{cardDoSelecionado ? "Etapa" : "Etapa inicial"}</Label>
             <Select
               value={selectedStageId}
               onValueChange={setSelectedStageId}
@@ -292,13 +367,29 @@ export function AddLeadToPipeModal({
           <Button variant="outline" onClick={handleClose}>
             Cancelar
           </Button>
-          <Button
-            onClick={handleAdd}
-            disabled={!selectedLeadId || !selectedStageId || selecionadaEhPerda || addLead.isPending}
-          >
-            {addLead.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-            Adicionar
-          </Button>
+          {cardDoSelecionado ? (
+            onMoverCardExistente &&
+            !moverFalhou && (
+              <Button
+                onClick={handleMover}
+                disabled={
+                  !selectedStageId ||
+                  selecionadaEhPerda ||
+                  selectedStageId === cardDoSelecionado.stage_id
+                }
+              >
+                Mover para {etapaEscolhida?.name ?? "a etapa"}
+              </Button>
+            )
+          ) : (
+            <Button
+              onClick={handleAdd}
+              disabled={!selectedLeadId || !selectedStageId || selecionadaEhPerda || addLead.isPending}
+            >
+              {addLead.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+              Adicionar
+            </Button>
+          )}
         </DialogFooter>
       </DialogContent>
     </Dialog>

@@ -115,6 +115,7 @@ import {
   type FunnelTemplateType,
 } from "@/modules/pipelines/hooks/custom/useCustomPipelines";
 import { supabase } from "@/integrations/supabase/client";
+import { toAppError } from "@/shared/errors/to-app-error";
 
 // ---------------------------------------------------------------------------
 // Wrapper
@@ -657,6 +658,31 @@ describe("useAddLeadToCustomPipe", () => {
     });
     expect(supabase.rpc).toHaveBeenCalledWith("fn_entrada_custom_criar", expect.any(Object));
     expect(mockFrom).toHaveBeenCalledWith("pipeline_entries");
+  });
+
+  it("recusa do índice de um card por funil vira record.duplicate, não reportável", async () => {
+    vi.mocked(supabase.rpc).mockResolvedValueOnce({
+      data: null,
+      error: {
+        code: "23505",
+        message: 'duplicate key value violates unique constraint "uq_pipeline_entries_um_card_sem_negocio"',
+        details: "",
+        hint: "",
+      },
+    } as never);
+    const { result } = renderHook(() => useAddLeadToCustomPipe(), { wrapper: createWrapper() });
+    let erro: unknown;
+    await act(async () => {
+      try {
+        await result.current.mutateAsync({ pipeline_id: "p1", lead_id: "l1", stage_id: "s1" });
+      } catch (e) {
+        erro = e;
+      }
+    });
+    const app = toAppError(erro);
+    expect(app.code).toBe("record.duplicate");
+    expect(app.reportable).toBe(false);
+    expect(app.userMessage).toBe("Este lead já está neste funil");
   });
 
   it("atualiza negócios do chat e funis do lead após criar", async () => {
