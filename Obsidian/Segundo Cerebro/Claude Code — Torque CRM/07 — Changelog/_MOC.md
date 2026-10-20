@@ -182,3 +182,4 @@ owner: claude-agent
 - [[2026-10-16-carteira-rota-propria|Carteira em rota própria /carteira]] 🔵 wip
 - [[2026-10-16-master-orgs-inativas|Organizações inativas na Área Master]]
 - [[2026-10-16-perf-onda1-busca-telefone-avisos|Perf onda 1 — busca de telefone em Leads e polling do sino]] 🔵 wip
+- [[2026-10-19-perf-etiquetas-na-lista-multi|Perf — etiquetas dentro da RPC da lista multi do chat]] 🔵 wip
