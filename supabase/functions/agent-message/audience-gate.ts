@@ -9,6 +9,7 @@
  */
 
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { resolveLeadByPhone } from "../_shared/lead-by-phone.ts";
 
 export type AudienceGateResult =
   | { blocked: false }
@@ -19,14 +20,12 @@ export async function checkAudienceGate(
   organizationId: string,
   normalizedPhone: string,
 ): Promise<AudienceGateResult> {
-  const { data: existingLead } = await supabase
-    .from("leads")
-    .select("id")
-    .eq("organization_id", organizationId)
-    .eq("normalized_phone", normalizedPhone)
-    .maybeSingle();
-
-  if (existingLead) return { blocked: false };
+  // Contato que já é lead nunca é "desconhecido", mesmo quando o número
+  // pertence a 2+ leads (Chamados 99067f13, 33c5fd52): ali o resolvedor devolve
+  // leadId null, mas `candidateIds` prova que o número tem lead. O `.maybeSingle()`
+  // antigo errava com 2 linhas, virava "sem lead" e podia bloquear quem é lead.
+  const { candidateIds } = await resolveLeadByPhone(supabase, organizationId, normalizedPhone);
+  if (candidateIds.length > 0) return { blocked: false };
 
   const { data: blockingAgent } = await supabase
     .from("copilot_agents")

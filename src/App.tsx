@@ -49,6 +49,7 @@ const Carteira = lazy(() => lazyRetry(() => import("@/modules/leads/pages/Cartei
 
 const TrashPage = lazy(() => lazyRetry(() => import("@/modules/leads/pages/Trash")));
 const Duplicates = lazy(() => lazyRetry(() => import("@/modules/leads/pages/Duplicates")));
+const Contatos = lazy(() => lazyRetry(() => import("@/modules/leads/pages/Contatos")));
 const Configuracoes = lazy(() => lazyRetry(() => import("@/modules/platform/pages/Configuracoes")));
 const TVDashboard = lazy(() => lazyRetry(() => import("@/modules/analytics/pages/TVDashboard")));
 const TvRenderersDemo = lazy(() => lazyRetry(() => import("@/modules/analytics/pages/TvRenderersDemo")));
@@ -502,6 +503,20 @@ function AppRoutes() {
             <LayoutWrapper><FeatureRoute feature="leads">
               <PermissionProtectedRoute featureKey="leads.view">
                 <TrashPage />
+              </PermissionProtectedRoute>
+            </FeatureRoute></LayoutWrapper>
+          </ProtectedRoute>
+        }
+      />
+      {/* Contatos (Chamado 33c5fd52 · PR6): mesmas guardas de /leads — permissão
+          `leads.view` + feature `leads`; nenhuma chave de nav nova. */}
+      <Route
+        path="/contatos"
+        element={
+          <ProtectedRoute>
+            <LayoutWrapper><FeatureRoute feature="leads">
+              <PermissionProtectedRoute featureKey="leads.view">
+                <Contatos />
               </PermissionProtectedRoute>
             </FeatureRoute></LayoutWrapper>
           </ProtectedRoute>

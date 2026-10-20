@@ -7,6 +7,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
+import { fakeSupabaseTables } from '../../helpers/fake-supabase-tables';
 import { createToolExecutor, ToolError, type ToolContext } from '../../../supabase/functions/_shared/copilot-v2/tool-executor.ts';
 
 function mockSupabase(results: Record<string, unknown> = {}) {
@@ -61,12 +62,41 @@ describe('get_lead_360', () => {
     expect(q.filters).toContainEqual(['id', 'lead-1']);
   });
 
-  it('falls back to normalized_phone when no leadId is in context', async () => {
-    const sb = mockSupabase({ leads: { id: 'l2' } });
-    const exec = createToolExecutor(sb, { organizationId: 'org-1', canonicalPhone: '11987654321' });
-    await exec('get_lead_360', {});
-    const q = sb.queries.find((x) => x.table === 'leads')!;
-    expect(q.filters).toContainEqual(['normalized_phone', '11987654321']);
+  it('sem leadId no contexto: resolve pelo NÚMERO (um lead vivo → esse lead)', async () => {
+    const { supabase } = fakeSupabaseTables({
+      leads: [{ id: 'l2', organization_id: 'org-1', normalized_phone: '11987654321', deleted_at: null }],
+      lead_phones: [],
+    });
+    const exec = createToolExecutor(supabase, { organizationId: 'org-1', canonicalPhone: '11987654321' });
+    expect(await exec('get_lead_360', {})).toMatchObject({ id: 'l2' });
+  });
+
+  it('sem leadId e número em 2 leads sem negócio aberto: null (nunca "o primeiro")', async () => {
+    const { supabase } = fakeSupabaseTables({
+      leads: [
+        { id: 'l1', organization_id: 'org-1', normalized_phone: '11987654321', deleted_at: null },
+        { id: 'l2', organization_id: 'org-1', normalized_phone: null, deleted_at: null },
+      ],
+      lead_phones: [{ organization_id: 'org-1', lead_id: 'l2', normalized_phone: '11987654321', deleted_at: null }],
+      deals: [],
+    });
+    const exec = createToolExecutor(supabase, { organizationId: 'org-1', canonicalPhone: '11987654321' });
+    expect(await exec('get_lead_360', {})).toBeNull();
+    expect(await exec('get_contact_status', {})).toEqual({ status: 'NOVO', leadId: null });
+  });
+
+  it('número em 2 leads, um com negócio aberto: get_contact_status devolve esse lead', async () => {
+    const { supabase } = fakeSupabaseTables({
+      leads: [
+        { id: 'l1', organization_id: 'org-1', normalized_phone: '11987654321', deleted_at: null },
+        { id: 'l2', organization_id: 'org-1', normalized_phone: null, deleted_at: null },
+      ],
+      lead_phones: [{ organization_id: 'org-1', lead_id: 'l2', normalized_phone: '11987654321', deleted_at: null }],
+      deals: [{ id: 'd1', organization_id: 'org-1', source_lead_id: 'l2', created_at: '2026-05-01', closed_at: null, deleted_at: null }],
+      upsell_clients: [],
+    });
+    const exec = createToolExecutor(supabase, { organizationId: 'org-1', canonicalPhone: '11987654321' });
+    expect(await exec('get_contact_status', {})).toEqual({ status: 'LEAD_NO_PIPELINE', leadId: 'l2' });
   });
 
   it('IGNORES an organization_id passed in args — org comes only from ctx', async () => {

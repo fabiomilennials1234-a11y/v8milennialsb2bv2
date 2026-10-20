@@ -11,6 +11,8 @@ import type {
 } from "@/modules/engagement/components/agenda/agenda-helpers";
 import {
   EVENT_TYPE_KEYS,
+  isOverdueEvent,
+  matchesStatusFilter,
   outcomeOf,
   podeRegistrarResultado,
   resumirComparecimento,
@@ -287,5 +289,37 @@ describe("reunião cancelada não aceita resultado", () => {
     expect(podeRegistrarResultado(evento({ status: "scheduled" }))).toBe(true);
     expect(podeRegistrarResultado(evento({ status: "completed" }))).toBe(true);
     expect(podeRegistrarResultado(evento({ status: "no_show" }))).toBe(true);
+  });
+});
+
+describe("em atraso: o que deu errado no dia continua pedindo ação", () => {
+  const agora = new Date(2026, 7, 3, 18, 0);
+
+  it("não compareceu fica em atraso, mesmo sendo terminal para a contagem", () => {
+    const faltou = evento({ status: "no_show" });
+    expect(isOverdueEvent(faltou, agora)).toBe(true);
+    expect(matchesStatusFilter(faltou, "overdue")).toBe(true);
+    expect(outcomeOf(faltou)).toBe("nao_compareceu");
+  });
+
+  it("passou do horário sem resultado também está em atraso", () => {
+    expect(isOverdueEvent(evento({ status: "scheduled" }), agora)).toBe(true);
+  });
+
+  it("futura e concluída não estão em atraso", () => {
+    const futura = evento({ start: new Date(2026, 7, 4, 9), end: new Date(2026, 7, 4, 10) });
+    expect(isOverdueEvent(futura, agora)).toBe(false);
+    expect(isOverdueEvent(evento({ status: "completed" }), agora)).toBe(false);
+  });
+
+  it("só reunião aceita atraso: follow-up, tarefa e cancelada ficam de fora", () => {
+    expect(isOverdueEvent(evento({ source: "follow_up", status: "scheduled" }), agora)).toBe(false);
+    expect(isOverdueEvent(evento({ eventType: "task", status: "no_show" }), agora)).toBe(false);
+    expect(isOverdueEvent(evento({ status: "cancelled" }), agora)).toBe(false);
+  });
+
+  it("marcar compareceu tira do atraso; desmarcar devolve", () => {
+    expect(isOverdueEvent(evento({ status: statusDoResultado("compareceu") }), agora)).toBe(false);
+    expect(isOverdueEvent(evento({ status: STATUS_SEM_RESULTADO }), agora)).toBe(true);
   });
 });

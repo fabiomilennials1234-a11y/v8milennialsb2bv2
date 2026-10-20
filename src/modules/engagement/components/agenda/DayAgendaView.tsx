@@ -19,7 +19,7 @@ import { motion } from "framer-motion";
 import { CalendarOff, Check, ChevronLeft, ChevronRight, X } from "lucide-react";
 
 import type { UnifiedEvent } from "./agenda-helpers";
-import { SOURCE_LABELS, getMonthGrid, outcomeOf } from "./agenda-helpers";
+import { SOURCE_LABELS, getMonthGrid, isFinishedEvent, outcomeOf } from "./agenda-helpers";
 import { agendaAttributionLabel } from "../../lib/agenda-attribution";
 
 interface DayAgendaViewProps {
@@ -229,7 +229,9 @@ export function DayAgendaView({
                           aria-label="Não compareceu"
                         />
                       )}
-                      <div className="min-w-0 truncate text-[13px] font-semibold text-foreground">
+                      <div
+                      className={`min-w-0 truncate text-[13px] font-semibold text-foreground ${isFinishedEvent(event) && (event.status ?? "").toLowerCase() !== "no_show" ? "line-through opacity-70" : ""}`}
+                      >
                         {event.title}
                       </div>
                     </div>
