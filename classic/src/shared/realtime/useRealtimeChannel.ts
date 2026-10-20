@@ -6,6 +6,8 @@ import {
   type ChannelHandle,
   type ChannelTransition,
 } from "./realtimeChannelRegistry";
+import { useRealtimeOrgId } from "./realtime-org-context";
+import { useRealtimeTransport } from "./realtimeTransportPlan";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -71,6 +73,12 @@ const MAX_DIAGNOSTICS = 50;
 /**
  * Assina `postgres_changes` de uma tabela (com filtro opcional).
  *
+ * Transporte: tabela com Broadcast (`broadcastTransport.ts`) numa org que o
+ * plano marca `broadcast` vai pelo tópico privado da org, com o mesmo contrato
+ * de evento — o filtro `eq` é aplicado no cliente. Enquanto o plano não chega
+ * (≤3 s, normalmente já pré-buscado pelo `RealtimeOrgProvider`), o canal
+ * espera em `idle`. Troca de transporte = troca de chave (re-entra no canal).
+ *
  * O canal é COMPARTILHADO por (tabela, filtro, evento) dentro da aba — ver
  * `realtimeChannelRegistry.ts`. N hooks com a mesma chave = 1 assinatura no
  * servidor; cada hook recebe todos os eventos e espelha o estado do canal
@@ -83,7 +91,13 @@ const MAX_DIAGNOSTICS = 50;
 export function useRealtimeChannel(
   options: UseRealtimeChannelOptions
 ): UseRealtimeChannelResult {
-  const { table, filter, onEvent, circuitBreaker, enabled = true, statusKey } = options;
+  const { table, filter, onEvent, circuitBreaker, statusKey } = options;
+  const organizationId = useRealtimeOrgId();
+  const wanted = options.enabled ?? true;
+  // `undefined` = plano chegando; `null` = postgres_changes; string = tópico.
+  const transport = useRealtimeTransport(table, filter, wanted ? organizationId : null);
+  const enabled = wanted && transport !== undefined;
+  const topic = transport ?? undefined;
 
   const threshold = circuitBreaker?.threshold ?? DEFAULT_THRESHOLD;
   const cooldownMs = circuitBreaker?.cooldownMs ?? DEFAULT_COOLDOWN_MS;
@@ -138,7 +152,7 @@ export function useRealtimeChannel(
     // aberto por outra instância: o estado dele) — por isso a marca é local.
     let initial = true;
     const handle = acquireRealtimeChannel(
-      { table, filter, event: "*", threshold, cooldownMs },
+      { table, filter, event: "*", threshold, cooldownMs, ...(topic && { topic }) },
       {
         statusKey,
         onEvent: (payload) => onEventRef.current(payload),
@@ -164,7 +178,7 @@ export function useRealtimeChannel(
       handleRef.current = null;
       handle.release();
     };
-  }, [table, filter, enabled, threshold, cooldownMs, statusKey, applyTransition]);
+  }, [table, filter, enabled, topic, threshold, cooldownMs, statusKey, applyTransition]);
 
   // ─── Visibility + Online reconnect effect ─────────────────────────────────
 

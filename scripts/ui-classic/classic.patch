@@ -10027,6 +10027,149 @@ index 5d9e09138..599f54355 100644
            allNodes={nodes as any}
          />
        </div>
+diff --git a/classic/src/shared/realtime/broadcastTransport.ts b/classic/src/shared/realtime/broadcastTransport.ts
+new file mode 100644
+index 000000000..31aaec7e0
+--- /dev/null
++++ b/classic/src/shared/realtime/broadcastTransport.ts
+@@ -0,0 +1,137 @@
++/**
++ * broadcastTransport — tradução Broadcast privado ⇄ contrato `postgres_changes`.
++ *
++ * Perf S1 (2026-10-19, `.specs/perf/realtime-broadcast/S1.md`): o poll do WAL
++ * do `postgres_changes` é 16,2% do banco. Uma tabela daqui é publicada por
++ * trigger (`private.rt_broadcast_*`, migration 20271205000000) num tópico
++ * PRIVADO por org; a autorização roda no join do canal, não por evento.
++ *
++ * Os consumidores não mudam: o registry converte o envelope do trigger no
++ * mesmo `RealtimePostgresChangesPayload` que recebiam, e aplica no cliente o
++ * filtro `coluna=eq.valor` que antes ia ao servidor. O tópico já é da org
++ * inteira e autorizado no join — o filtro é recorte de tela, não segurança.
++ *
++ * Contrato com o SQL: `columns` = allowlist de `private.rt_pipeline_entry_row`
++ * (o teste de integração `realtime-broadcast-s1` confere os dois). Filtro numa
++ * coluna fora dela não dá para aplicar no cliente → a assinatura fica no
++ * `postgres_changes`.
++ */
++import type { RealtimePostgresChangesPayload } from "@supabase/supabase-js";
++
++type Row = Record<string, unknown>;
++
++interface BroadcastTable {
++  /** Sufixo do tópico: `org:{org}:{suffix}`. */
++  suffix: string;
++  /** Chave da tabela no plano (`realtime_subscription_plan`). */
++  planKey: string;
++  /** Colunas do payload (allowlist do trigger). */
++  columns: readonly string[];
++}
++
++export const BROADCAST_TABLES: Readonly<Record<string, BroadcastTable>> = {
++  pipeline_entries: {
++    suffix: "pe",
++    planKey: "pipeline_entries",
++    columns: [
++      "id",
++      "organization_id",
++      "pipeline_id",
++      "lead_id",
++      "deal_id",
++      "stage_id",
++      "stage_key",
++      "assigned_to",
++      "entered_at",
++      "stage_changed_at",
++      "closed_at",
++      "created_at",
++      "updated_at",
++    ],
++  },
++};
++
++export function broadcastTopic(table: string, organizationId: string): string | null {
++  const t = BROADCAST_TABLES[table];
++  return t ? `org:${organizationId}:${t.suffix}` : null;
++}
++
++export interface EqFilter {
++  column: string;
++  value: string;
++}
++
++/** `coluna=eq.valor` (o único formato que os chamadores usam). Outro formato → null. */
++export function parseEqFilter(filter: string): EqFilter | null {
++  const m = /^([a-z_][a-z0-9_]*)=eq\.(.+)$/.exec(filter);
++  return m ? { column: m[1], value: m[2] } : null;
++}
++
++/**
++ * Esta assinatura pode ir para o broadcast? Tabela conhecida e filtro que o
++ * cliente consegue reproduzir (ausente, ou `eq` numa coluna do payload).
++ */
++export function broadcastSupports(table: string, filter: string | undefined): boolean {
++  const t = BROADCAST_TABLES[table];
++  if (!t) return false;
++  if (filter === undefined) return true;
++  const eq = parseEqFilter(filter);
++  return eq !== null && t.columns.includes(eq.column);
++}
++
++/** Envelope v1 publicado pelo trigger. */
++export interface BroadcastEnvelope {
++  v: 1;
++  t: string;
++  op: "INSERT" | "UPDATE" | "DELETE";
++  id: string;
++  row: Row | null;
++  old: Row | null;
++  ts?: string;
++}
++
++function isEnvelope(x: unknown): x is BroadcastEnvelope {
++  if (!x || typeof x !== "object") return false;
++  const e = x as Partial<BroadcastEnvelope>;
++  return e.v === 1 && typeof e.t === "string" && (e.op === "INSERT" || e.op === "UPDATE" || e.op === "DELETE");
++}
++
++/**
++ * Envelope → payload no formato do `postgres_changes`. Diferenças conhecidas,
++ * a favor do consumidor: `old` traz a allowlist (o `postgres_changes` com RLS
++ * trazia só a PK) e `new` traz só a allowlist (sem `notes`/`metadata`).
++ * Envelope de outra versão/tabela → null (ignorado).
++ */
++export function envelopeToPayload(
++  table: string,
++  envelope: unknown,
++): RealtimePostgresChangesPayload<Row> | null {
++  if (!isEnvelope(envelope) || envelope.t !== table) return null;
++  const base = {
++    schema: "public",
++    table,
++    commit_timestamp: envelope.ts ?? new Date().toISOString(),
++    errors: [] as string[],
++  };
++  const row = envelope.row ?? {};
++  const old = envelope.old ?? {};
++  switch (envelope.op) {
++    case "INSERT":
++      return { ...base, eventType: "INSERT", new: row, old: {} };
++    case "UPDATE":
++      return { ...base, eventType: "UPDATE", new: row, old };
++    case "DELETE":
++      return { ...base, eventType: "DELETE", new: {}, old };
++  }
++}
++
++/**
++ * O evento passa no filtro `eq`? Mesma regra do servidor: INSERT/UPDATE
++ * olham a linha nova, DELETE a antiga.
++ */
++export function payloadMatches(payload: RealtimePostgresChangesPayload<Row>, filter: EqFilter | null): boolean {
++  if (!filter) return true;
++  const row = (payload.eventType === "DELETE" ? payload.old : payload.new) as Row;
++  const v = row?.[filter.column];
++  return v !== null && v !== undefined && String(v) === filter.value;
++}
 diff --git a/classic/src/shared/realtime/invalidation-scheduler.ts b/classic/src/shared/realtime/invalidation-scheduler.ts
 new file mode 100644
 index 000000000..08849e788
@@ -10499,12 +10642,32 @@ index 000000000..08849e788
 +export function isRealtimeTabHidden(): boolean {
 +  return isDocumentHidden();
 +}
+diff --git a/classic/src/shared/realtime/realtime-org-context.tsx b/classic/src/shared/realtime/realtime-org-context.tsx
+index 4446e73e4..117aa9cd9 100644
+--- a/classic/src/shared/realtime/realtime-org-context.tsx
++++ b/classic/src/shared/realtime/realtime-org-context.tsx
+@@ -1,4 +1,5 @@
+ import { createContext, useContext, type ReactNode } from "react";
++import { useRealtimePlanRefresh } from "./realtimeTransportPlan";
+ 
+ /**
+  * Org-id corrente para scoping de subscriptions realtime.
+@@ -15,6 +16,9 @@ export function RealtimeOrgProvider({
+   organizationId: string | null;
+   children: ReactNode;
+ }) {
++  // Plano de transporte (Broadcast S1) pré-buscado assim que a org resolve:
++  // as telas montam com ele pronto e o canal abre direto no transporte certo.
++  useRealtimePlanRefresh(organizationId);
+   return (
+     <RealtimeOrgContext.Provider value={organizationId}>
+       {children}
 diff --git a/classic/src/shared/realtime/realtimeChannelRegistry.ts b/classic/src/shared/realtime/realtimeChannelRegistry.ts
 new file mode 100644
-index 000000000..df769dace
+index 000000000..c4920d58c
 --- /dev/null
 +++ b/classic/src/shared/realtime/realtimeChannelRegistry.ts
-@@ -0,0 +1,325 @@
+@@ -0,0 +1,440 @@
 +/**
 + * realtimeChannelRegistry — UMA assinatura `postgres_changes` por
 + * (tabela, filtro, evento) por aba, compartilhada por refcount.
@@ -10534,6 +10697,13 @@ index 000000000..df769dace
 + *     nada muda no store.
 + *   - threshold/cooldown entram na chave: configurações diferentes não se
 + *     misturam (todos os chamadores de prod usam o padrão).
++ *
++ * Broadcast privado (perf S1, 2026-10-19 — `broadcastTransport.ts`): com
++ * `spec.topic`, o canal é o tópico privado da org e a chave é o TÓPICO, não o
++ * filtro — o servidor só conhece o tópico e o supabase-js devolve o canal
++ * existente quando ele se repete. Cada assinante carrega o seu filtro `eq`,
++ * aplicado no cliente antes de entregar. Mesma máquina de estado; reabrir
++ * espera o canal anterior do mesmo tópico sair (leave assíncrono).
 + */
 +import type {
 +  RealtimeChannel,
@@ -10541,6 +10711,7 @@ index 000000000..df769dace
 +  RealtimePostgresChangesPayload,
 +} from "@supabase/supabase-js";
 +import { supabase } from "@/integrations/supabase/client";
++import { envelopeToPayload, parseEqFilter, payloadMatches, type EqFilter } from "./broadcastTransport";
 +import {
 +  incrementFailures,
 +  openCircuitBreaker,
@@ -10559,6 +10730,8 @@ index 000000000..df769dace
 +  event?: PostgresChangeEvent;
 +  threshold: number;
 +  cooldownMs: number;
++  /** Tópico privado do Broadcast. Ausente = `postgres_changes`. */
++  topic?: string;
 +}
 +
 +export interface ChannelTransition {
@@ -10582,10 +10755,21 @@ index 000000000..df769dace
 +}
 +
 +const MAX_BACKOFF_MS = 30_000;
++/** Teto da espera pelo leave de um tópico (o push de leave do realtime-js expira em 10 s). */
++const LEAVE_WAIT_MAX_MS = 10_000;
 +const BASE_BACKOFF_MS = 1_000;
 +const DEDUP_WINDOW_MS = 1_000;
 +
 +type TimerName = "backoffTimer" | "cooldownTimer" | "dedupTimer";
++
++/** Assinante dentro do canal: chave de status e recorte já resolvidos. */
++interface Member {
++  sub: ChannelSubscriber;
++  statusKey: string;
++  /** Broadcast: filtro `eq` e evento aplicados no cliente. */
++  match: EqFilter | null;
++  event: PostgresChangeEvent;
++}
 +
 +interface Entry {
 +  key: string;
@@ -10594,8 +10778,8 @@ index 000000000..df769dace
 +  event: PostgresChangeEvent;
 +  threshold: number;
 +  cooldownMs: number;
-+  defaultStatusKey: string;
-+  subscribers: Set<ChannelSubscriber>;
++  topic: string | null;
++  members: Set<Member>;
 +  channel: RealtimeChannel | null;
 +  channelName: string;
 +  generation: number;
@@ -10610,13 +10794,24 @@ index 000000000..df769dace
 +
 +const entries = new Map<string, Entry>();
 +
++/** Broadcast: saída (leave) em voo por tópico. O próximo join do tópico espera. */
++const leaving = new Map<string, Promise<void>>();
++
 +export function realtimeChannelKey(spec: ChannelSpec): string {
++  // Broadcast: UMA entrada por tópico (o cliente só aceita um canal por
++  // tópico). Configuração de circuito diferente no mesmo tópico usa a do
++  // primeiro a entrar — duas entradas se derrubariam no detachStale.
++  if (spec.topic) return ["bc", spec.topic, spec.table].join("|");
 +  return [spec.table, spec.filter ?? "*", spec.event ?? "*", spec.threshold, spec.cooldownMs].join("|");
++}
++
++function defaultStatusKey(spec: Pick<ChannelSpec, "table" | "filter">): string {
++  return `rt_${spec.table}_${spec.filter ?? "all"}`;
 +}
 +
 +function statusKeys(entry: Entry): Set<string> {
 +  const keys = new Set<string>();
-+  for (const s of entry.subscribers) keys.add(s.statusKey ?? entry.defaultStatusKey);
++  for (const m of entry.members) keys.add(m.statusKey);
 +  return keys;
 +}
 +
@@ -10632,16 +10827,20 @@ index 000000000..df769dace
 +    channelName: entry.channelName,
 +    failureCount: entry.failureCount,
 +  };
-+  for (const s of [...entry.subscribers]) s.onTransition(full);
++  for (const m of [...entry.members]) m.sub.onTransition(full);
 +}
 +
 +function dispatch(entry: Entry, payload: RealtimePostgresChangesPayload<Row>) {
 +  // Um consumidor que lança não pode roubar o evento dos outros; o primeiro
 +  // erro é relançado depois para não sumir (mesma propagação de antes).
 +  let firstError: unknown = null;
-+  for (const s of [...entry.subscribers]) {
++  for (const m of [...entry.members]) {
++    if (entry.topic) {
++      if (m.event !== "*" && m.event !== payload.eventType) continue;
++      if (!payloadMatches(payload, m.match)) continue;
++    }
 +    try {
-+      s.onEvent(payload);
++      m.sub.onEvent(payload);
 +    } catch (e) {
 +      firstError ??= e;
 +    }
@@ -10706,10 +10905,16 @@ index 000000000..df769dace
 +  const generation = entry.generation;
 +  // Nome único por geração: supabase-js devolve o canal EXISTENTE quando o
 +  // tópico se repete, e o canal recém-removido ainda pode estar saindo.
-+  entry.channelName = `rt_${entry.table}_${entry.filter ?? "all"}_${crypto.randomUUID()}`;
++  // Broadcast não tem essa saída: o nome É o tópico autorizado no servidor.
++  entry.channelName = entry.topic ?? `rt_${entry.table}_${entry.filter ?? "all"}_${crypto.randomUUID()}`;
 +  entry.state = "joining";
 +  for (const k of statusKeys(entry)) setChannelState(k, "joining", undefined);
 +  notify(entry, { state: "joining", type: "transition" });
++
++  if (entry.topic) {
++    openBroadcast(entry, generation);
++    return;
++  }
 +
 +  // O overload de `.on` amarra o literal do evento ao tipo do filtro; o
 +  // evento aqui é dado de runtime (chave do canal), daí a asserção.
@@ -10735,10 +10940,72 @@ index 000000000..df769dace
 +    });
 +}
 +
++function openBroadcast(entry: Entry, generation: number) {
++  const topic = entry.topic!;
++  const live = () => entries.get(entry.key) === entry && entry.generation === generation;
++  const join = () => {
++    if (!live()) return;
++    detachStale(topic);
++    const channel = supabase.channel(topic, { config: { private: true } });
++    entry.channel = channel;
++    channel
++      .on("broadcast", { event: entry.table }, (message: { payload?: unknown }) => {
++        if (!live()) return;
++        const payload = envelopeToPayload(entry.table, message?.payload);
++        if (payload) dispatch(entry, payload);
++      })
++      .subscribe((status: string, err?: Error) => {
++        if (live()) handleStatus(entry, status, err);
++      });
++  };
++  const pending = leaving.get(topic);
++  if (pending) void pending.then(join);
++  else join();
++}
++
++/**
++ * Canal do mesmo tópico que ficou na lista do cliente (leave respondido com
++ * erro não o tira de lá): `supabase.channel(topic)` o devolveria e o
++ * `.subscribe` lançaria "subscribe multiple times". `_remove` é interno do
++ * realtime-js (2.89) — sem ele, segue (o join falha e o backoff tenta de novo).
++ */
++function detachStale(topic: string) {
++  const client = supabase as unknown as {
++    getChannels?: () => Array<{ topic: string }>;
++    realtime?: { _remove?: (ch: unknown) => void };
++  };
++  const stale = client.getChannels?.().find((c) => c.topic === `realtime:${topic}`);
++  if (stale) client.realtime?._remove?.(stale);
++}
++
 +function close(entry: Entry) {
 +  const ch = entry.channel;
 +  entry.channel = null;
-+  if (ch) supabase.removeChannel(ch);
++  if (!ch) return;
++  if (!entry.topic) {
++    supabase.removeChannel(ch);
++    return;
++  }
++  const topic = entry.topic;
++  let leave: Promise<unknown>;
++  try {
++    leave = Promise.resolve(supabase.removeChannel(ch));
++  } catch {
++    leave = Promise.resolve();
++  }
++  let cap: ReturnType<typeof setTimeout> | undefined;
++  const capped = Promise.race([
++    leave.catch(() => undefined),
++    new Promise<void>((r) => {
++      cap = setTimeout(r, LEAVE_WAIT_MAX_MS);
++    }),
++  ]);
++  const done: Promise<void> = capped
++    .then(() => clearTimeout(cap))
++    .then(() => {
++      if (leaving.get(topic) === done) leaving.delete(topic);
++    });
++  leaving.set(topic, done);
 +}
 +
 +function reopen(entry: Entry) {
@@ -10757,17 +11024,28 @@ index 000000000..df769dace
 +export function acquireRealtimeChannel(spec: ChannelSpec, subscriber: ChannelSubscriber): ChannelHandle {
 +  const key = realtimeChannelKey(spec);
 +  let entry = entries.get(key);
++  const member: Member = {
++    sub: subscriber,
++    statusKey: subscriber.statusKey ?? defaultStatusKey(spec),
++    match: spec.topic && spec.filter ? parseEqFilter(spec.filter) : null,
++    event: spec.event ?? "*",
++  };
++  if (spec.topic && spec.filter && !member.match) {
++    // `useRealtimeTransport` só manda para o broadcast filtro `eq`; outro
++    // formato aqui entregaria a org inteira a quem pediu um recorte.
++    throw new Error(`realtime broadcast: filtro não suportado "${spec.filter}"`);
++  }
 +
 +  if (!entry) {
 +    entry = {
 +      key,
 +      table: spec.table,
-+      filter: spec.filter,
-+      event: spec.event ?? "*",
++      filter: spec.topic ? undefined : spec.filter,
++      event: spec.topic ? "*" : spec.event ?? "*",
 +      threshold: spec.threshold,
 +      cooldownMs: spec.cooldownMs,
-+      defaultStatusKey: `rt_${spec.table}_${spec.filter ?? "all"}`,
-+      subscribers: new Set([subscriber]),
++      topic: spec.topic ?? null,
++      members: new Set([member]),
 +      channel: null,
 +      channelName: "",
 +      generation: 0,
@@ -10781,9 +11059,9 @@ index 000000000..df769dace
 +    entries.set(key, entry);
 +    open(entry);
 +  } else {
-+    const sk = subscriber.statusKey ?? entry.defaultStatusKey;
++    const sk = member.statusKey;
 +    const keyIsNew = !statusKeys(entry).has(sk);
-+    entry.subscribers.add(subscriber);
++    entry.members.add(member);
 +    const error = entry.state === "joined" ? undefined : entry.lastError;
 +    if (keyIsNew) setChannelState(sk, entry.state, error);
 +    subscriber.onTransition({
@@ -10802,8 +11080,8 @@ index 000000000..df769dace
 +    release() {
 +      if (released) return;
 +      released = true;
-+      owned.subscribers.delete(subscriber);
-+      if (owned.subscribers.size > 0 || entries.get(key) !== owned) return;
++      owned.members.delete(member);
++      if (owned.members.size > 0 || entries.get(key) !== owned) return;
 +      entries.delete(key);
 +      clearTimer(owned, "backoffTimer");
 +      clearTimer(owned, "cooldownTimer");
@@ -10828,13 +11106,210 @@ index 000000000..df769dace
 +  subscribers: number;
 +  state: SharedChannelState;
 +}> {
-+  return [...entries.values()].map((e) => ({ key: e.key, subscribers: e.subscribers.size, state: e.state }));
++  return [...entries.values()].map((e) => ({ key: e.key, subscribers: e.members.size, state: e.state }));
++}
+diff --git a/classic/src/shared/realtime/realtimeTransportPlan.ts b/classic/src/shared/realtime/realtimeTransportPlan.ts
+new file mode 100644
+index 000000000..27ccbc700
+--- /dev/null
++++ b/classic/src/shared/realtime/realtimeTransportPlan.ts
+@@ -0,0 +1,191 @@
++/**
++ * realtimeTransportPlan — qual transporte cada tabela usa NESTA org, para
++ * ESTE usuário: `postgres_changes` (padrão) ou Broadcast privado.
++ *
++ * Fonte única: RPC `realtime_subscription_plan(org)` (migration
++ * 20271205000000). Ela diz `broadcast` só quando a org ligou a flag E o
++ * usuário pode entrar no tópico (membro ativo, fora do modo estrito de dono) —
++ * o cliente nunca tenta um join que o servidor recusaria.
++ *
++ * Store de módulo (não React Query): o transporte vive abaixo de qualquer
++ * QueryClientProvider e é lido por hooks que os testes montam sem provider.
++ *   - 1ª leitura de uma org dispara a busca; enquanto ela não volta, tabela
++ *     com broadcast possível fica PENDENTE (o canal espera, até 3 s) — abrir
++ *     no postgres_changes e trocar logo depois custaria dois joins por aba.
++ *   - Falha, timeout ou cliente sem `rpc` (dublê de teste) → postgres_changes.
++ *   - `RealtimeOrgProvider` busca assim que a org resolve e relê a cada 5 min
++ *     (kill switch: desligar a flag devolve todos ao postgres_changes em ≤5 min).
++ *   - `VITE_REALTIME_BROADCAST=off` desliga tudo no cliente, sem rede.
++ */
++import { useEffect, useSyncExternalStore } from "react";
++import { supabase } from "@/integrations/supabase/client";
++import { BROADCAST_TABLES, broadcastSupports, broadcastTopic, parseEqFilter } from "./broadcastTransport";
++
++export type RealtimeTransport = "pg_changes" | "broadcast";
++type Plan = Readonly<Record<string, RealtimeTransport>>;
++
++interface PlanEntry {
++  readonly status: "loading" | "ready";
++  readonly plan: Plan;
++}
++
++export const PLAN_TTL_MS = 5 * 60_000;
++export const PLAN_TIMEOUT_MS = 3_000;
++const EMPTY: Plan = Object.freeze({});
++
++const entries = new Map<string, PlanEntry>();
++const fetchedAt = new Map<string, number>();
++const inFlight = new Set<string>();
++const listeners = new Set<() => void>();
++
++function disabledByEnv(): boolean {
++  return import.meta.env.VITE_REALTIME_BROADCAST === "off";
++}
++
++function emit() {
++  for (const l of [...listeners]) l();
++}
++
++function subscribe(listener: () => void) {
++  listeners.add(listener);
++  return () => {
++    listeners.delete(listener);
++  };
++}
++
++function parsePlan(data: unknown): Plan {
++  if (!data || typeof data !== "object") return EMPTY;
++  const out: Record<string, RealtimeTransport> = {};
++  for (const [k, v] of Object.entries(data as Record<string, unknown>)) {
++    if (v === "broadcast" || v === "pg_changes") out[k] = v;
++  }
++  return out;
++}
++
++function samePlan(a: Plan, b: Plan): boolean {
++  const ka = Object.keys(a);
++  return ka.length === Object.keys(b).length && ka.every((k) => a[k] === b[k]);
++}
++
++/** Grava o plano; avisa os ouvintes só se algo visível mudou. */
++function settle(org: string, plan: Plan, notify: boolean) {
++  const prev = entries.get(org);
++  const changed = !prev || prev.status !== "ready" || !samePlan(prev.plan, plan);
++  // Mesmo conteúdo = mesmo objeto: o snapshot do useSyncExternalStore não muda.
++  if (changed) entries.set(org, { status: "ready", plan });
++  if (notify && changed) emit();
++}
++
++/**
++ * Busca (ou rebusca) o plano. Erro mantém o plano anterior (sem flapping);
++ * sem anterior, postgres_changes. `notify=false` só no caminho síncrono de
++ * dentro do getSnapshot (avisar ali re-renderizaria durante o render).
++ */
++function load(org: string, notify: boolean): void {
++  if (inFlight.has(org)) return;
++  const prev = entries.get(org);
++  const fallback = prev?.plan ?? EMPTY;
++  if (!prev) entries.set(org, { status: "loading", plan: fallback });
++  fetchedAt.set(org, Date.now());
++
++  let call: PromiseLike<{ data: unknown; error: unknown }>;
++  try {
++    call = supabase.rpc("realtime_subscription_plan" as never, { p_organization_id: org } as never) as never;
++  } catch {
++    settle(org, fallback, notify);
++    return;
++  }
++  inFlight.add(org);
++  const timer = setTimeout(() => {
++    // Lento demais: segue no postgres_changes; se a resposta chegar depois,
++    // ela ainda vale (troca de transporte uma vez).
++    if (entries.get(org)?.status === "loading") settle(org, fallback, true);
++  }, PLAN_TIMEOUT_MS);
++  Promise.resolve(call)
++    .then(
++      (res) => (res && !res.error ? parsePlan(res.data) : fallback),
++      () => fallback,
++    )
++    .then((plan) => {
++      clearTimeout(timer);
++      inFlight.delete(org);
++      settle(org, plan, true);
++    });
++}
++
++function read(org: string): PlanEntry {
++  const e = entries.get(org);
++  if (e) return e;
++  load(org, false);
++  return entries.get(org)!;
++}
++
++/** Plano é por usuário: logout descarta tudo (o próximo login rebusca). */
++let authWatch = false;
++function watchAuth() {
++  if (authWatch) return;
++  const auth = (supabase as unknown as { auth?: { onAuthStateChange?: (cb: (event: string) => void) => unknown } }).auth;
++  if (typeof auth?.onAuthStateChange !== "function") return;
++  authWatch = true;
++  auth.onAuthStateChange((event) => {
++    // Só SIGNED_OUT: o supabase-js reemite SIGNED_IN ao refocar a aba, e
++    // limpar ali derrubaria e reabriria todos os canais a cada foco.
++    if (event !== "SIGNED_OUT") return;
++    entries.clear();
++    fetchedAt.clear();
++    emit();
++  });
++}
++
++/** Prefetch + releitura periódica. Montado uma vez, no `RealtimeOrgProvider`. */
++export function useRealtimePlanRefresh(organizationId: string | null): void {
++  useEffect(() => {
++    if (!organizationId || disabledByEnv()) return;
++    watchAuth();
++    const last = fetchedAt.get(organizationId);
++    if (last === undefined || Date.now() - last >= PLAN_TTL_MS) load(organizationId, true);
++    const refresh = () => load(organizationId, true);
++    const id = setInterval(refresh, PLAN_TTL_MS);
++    window.addEventListener("online", refresh);
++    return () => {
++      clearInterval(id);
++      window.removeEventListener("online", refresh);
++    };
++  }, [organizationId]);
++}
++
++/**
++ * Transporte desta assinatura:
++ *   - `null`      → postgres_changes (padrão; tabela sem broadcast, filtro que
++ *                   o cliente não reproduz, sem org, plano diz pg_changes);
++ *   - `string`    → tópico privado do Broadcast;
++ *   - `undefined` → plano ainda chegando: o canal espera.
++ */
++export type TransportChoice = string | null | undefined;
++
++export function useRealtimeTransport(
++  table: string,
++  filter: string | undefined,
++  organizationId: string | null,
++): TransportChoice {
++  const eligible =
++    !!organizationId && !disabledByEnv() && broadcastSupports(table, filter) && sameOrg(filter, organizationId);
++  const entry = useSyncExternalStore(subscribe, () => (eligible ? read(organizationId!) : undefined));
++  if (!eligible || !entry) return null;
++  if (entry.status === "loading") return undefined;
++  const key = BROADCAST_TABLES[table].planKey;
++  return entry.plan[key] === "broadcast" ? broadcastTopic(table, organizationId!) : null;
++}
++
++/** Filtro por OUTRA org não cabe no tópico desta (o evento nunca chegaria). */
++function sameOrg(filter: string | undefined, organizationId: string): boolean {
++  const eq = filter ? parseEqFilter(filter) : null;
++  return !eq || eq.column !== "organization_id" || eq.value === organizationId;
++}
++
++/** Testes. */
++export function __resetRealtimeTransportPlan(): void {
++  entries.clear();
++  fetchedAt.clear();
++  inFlight.clear();
 +}
 diff --git a/classic/src/shared/realtime/useRealtimeChannel.ts b/classic/src/shared/realtime/useRealtimeChannel.ts
-index 7085a68c6..3c8259caf 100644
+index 7085a68c6..db46e28ad 100644
 --- a/classic/src/shared/realtime/useRealtimeChannel.ts
 +++ b/classic/src/shared/realtime/useRealtimeChannel.ts
-@@ -1,12 +1,11 @@
+@@ -1,12 +1,13 @@
  import { useEffect, useRef, useState, useCallback } from "react";
 -import { supabase } from "@/integrations/supabase/client";
  import type { RealtimePostgresChangesPayload } from "@supabase/supabase-js";
@@ -10849,10 +11324,12 @@ index 7085a68c6..3c8259caf 100644
 +  type ChannelHandle,
 +  type ChannelTransition,
 +} from "./realtimeChannelRegistry";
++import { useRealtimeOrgId } from "./realtime-org-context";
++import { useRealtimeTransport } from "./realtimeTransportPlan";
  
  // ─── Types ────────────────────────────────────────────────────────────────────
  
-@@ -23,16 +22,37 @@ export interface DiagnosticEvent {
+@@ -23,16 +24,37 @@ export interface DiagnosticEvent {
    error?: string;
  }
  
@@ -10891,7 +11368,7 @@ index 7085a68c6..3c8259caf 100644
  }
  
  export interface UseRealtimeChannelResult {
-@@ -45,12 +65,21 @@ export interface UseRealtimeChannelResult {
+@@ -45,16 +67,37 @@ export interface UseRealtimeChannelResult {
  const DEFAULT_THRESHOLD = 5;
  const DEFAULT_COOLDOWN_MS = 120_000;
  const MAX_DIAGNOSTICS = 50;
@@ -10903,6 +11380,12 @@ index 7085a68c6..3c8259caf 100644
  
 +/**
 + * Assina `postgres_changes` de uma tabela (com filtro opcional).
++ *
++ * Transporte: tabela com Broadcast (`broadcastTransport.ts`) numa org que o
++ * plano marca `broadcast` vai pelo tópico privado da org, com o mesmo contrato
++ * de evento — o filtro `eq` é aplicado no cliente. Enquanto o plano não chega
++ * (≤3 s, normalmente já pré-buscado pelo `RealtimeOrgProvider`), o canal
++ * espera em `idle`. Troca de transporte = troca de chave (re-entra no canal).
 + *
 + * O canal é COMPARTILHADO por (tabela, filtro, evento) dentro da aba — ver
 + * `realtimeChannelRegistry.ts`. N hooks com a mesma chave = 1 assinatura no
@@ -10916,7 +11399,18 @@ index 7085a68c6..3c8259caf 100644
  export function useRealtimeChannel(
    options: UseRealtimeChannelOptions
  ): UseRealtimeChannelResult {
-@@ -62,207 +91,96 @@ export function useRealtimeChannel(
+-  const { table, filter, onEvent, circuitBreaker, enabled = true, statusKey } = options;
++  const { table, filter, onEvent, circuitBreaker, statusKey } = options;
++  const organizationId = useRealtimeOrgId();
++  const wanted = options.enabled ?? true;
++  // `undefined` = plano chegando; `null` = postgres_changes; string = tópico.
++  const transport = useRealtimeTransport(table, filter, wanted ? organizationId : null);
++  const enabled = wanted && transport !== undefined;
++  const topic = transport ?? undefined;
+ 
+   const threshold = circuitBreaker?.threshold ?? DEFAULT_THRESHOLD;
+   const cooldownMs = circuitBreaker?.cooldownMs ?? DEFAULT_COOLDOWN_MS;
+@@ -62,207 +105,96 @@ export function useRealtimeChannel(
    const [state, setState] = useState<ChannelState>("idle");
    const [diagnostics, setDiagnostics] = useState<DiagnosticEvent[]>([]);
  
@@ -11109,7 +11603,7 @@ index 7085a68c6..3c8259caf 100644
 +    // aberto por outra instância: o estado dele) — por isso a marca é local.
 +    let initial = true;
 +    const handle = acquireRealtimeChannel(
-+      { table, filter, event: "*", threshold, cooldownMs },
++      { table, filter, event: "*", threshold, cooldownMs, ...(topic && { topic }) },
 +      {
 +        statusKey,
 +        onEvent: (payload) => onEventRef.current(payload),
@@ -11140,7 +11634,7 @@ index 7085a68c6..3c8259caf 100644
      };
 -    // eslint-disable-next-line react-hooks/exhaustive-deps
 -  }, [table, filter, enabled, threshold, cooldownMs, reconnectEpoch, statusKey]);
-+  }, [table, filter, enabled, threshold, cooldownMs, statusKey, applyTransition]);
++  }, [table, filter, enabled, topic, threshold, cooldownMs, statusKey, applyTransition]);
  
    // ─── Visibility + Online reconnect effect ─────────────────────────────────
  
@@ -11169,7 +11663,7 @@ index 7085a68c6..3c8259caf 100644
      };
  
      document.addEventListener("visibilitychange", handleVisibilityChange);
-@@ -272,17 +190,7 @@ export function useRealtimeChannel(
+@@ -272,17 +204,7 @@ export function useRealtimeChannel(
        document.removeEventListener("visibilitychange", handleVisibilityChange);
        window.removeEventListener("online", handleOnline);
      };
