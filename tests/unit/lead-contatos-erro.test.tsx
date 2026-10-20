@@ -10,6 +10,12 @@ import { erroDeTelefone } from "@/modules/leads/lib/lead-phones";
 
 const mutateAsync = vi.fn();
 
+// Número compartilhado (PR4): sem marca, o bloco não aparece.
+vi.mock("@/modules/leads/hooks/useLeadPhoneCompartilhado", () => ({
+  useLeadPhoneCompartilhado: () => ({ data: false }),
+  useDescompartilharNumero: () => ({ mutateAsync: vi.fn(), isPending: false }),
+}));
+
 vi.mock("@/modules/leads/hooks/useLeadPhones", () => ({
   useLeadPhones: () => ({
     data: [

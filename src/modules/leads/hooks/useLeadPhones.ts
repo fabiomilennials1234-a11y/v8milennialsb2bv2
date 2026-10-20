@@ -1,10 +1,12 @@
 import { useMutation, useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import {
+  PrincipalOcupadoError,
+  ehPrincipalOcupado,
   erroDeTelefone,
   leadPhoneFromRow,
-  mensagemDePrincipalOcupado,
   ordenarTelefones,
+  type DonoDoNumero,
   type LeadPhone,
   type LeadPhoneRow,
 } from "../lib/lead-phones";
@@ -21,6 +23,9 @@ import { extractSearchDigits } from "../lib/lead-list-filters";
  * e `definir_telefone_do_negocio`.
  */
 export const leadPhonesKey = (leadId: string | null) => ["lead-phones", leadId] as const;
+/** Marca `leads.phone_compartilhado` do lead (Chamado 99067f13, PR4). */
+export const leadPhoneCompartilhadoKey = (leadId: string | null) =>
+  ["lead-phone-compartilhado", leadId] as const;
 
 const SELECT = "id, phone, normalized_phone, label, label_locked, is_primary, is_whatsapp, source";
 
@@ -113,6 +118,7 @@ export interface TelefoneEditado {
 function invalidarTelefones(qc: ReturnType<typeof useQueryClient>, leadId: string | null) {
   return Promise.all([
     qc.invalidateQueries({ queryKey: leadPhonesKey(leadId) }),
+    qc.invalidateQueries({ queryKey: leadPhoneCompartilhadoKey(leadId) }),
     // Número que entrou/saiu muda quem a busca por telefone secundário acha.
     qc.invalidateQueries({ queryKey: BUSCA_SECUNDARIA_ROOT }),
     // A ficha (telefone principal) e o chat (nome "Cód - Contato - Lead").
@@ -122,12 +128,48 @@ function invalidarTelefones(qc: ReturnType<typeof useQueryClient>, leadId: strin
   ]);
 }
 
+/**
+ * `permitirCompartilhado` só vai a `true` DEPOIS que o usuário confirmou o
+ * diálogo "Compartilhar o número entre os dois leads?" (Chamado 99067f13, PR4).
+ * Sem ele a RPC é chamada como sempre foi.
+ */
+export interface SalvarTelefonesInput {
+  telefones: TelefoneEditado[];
+  permitirCompartilhado?: boolean;
+}
+
+/** Busca QUEM segura o número como principal (RLS do usuário recorta; sem acesso → null). */
+export async function buscarDonoDoNumero(
+  organizationId: string | null | undefined,
+  leadId: string,
+  telefone: string | null | undefined,
+): Promise<DonoDoNumero | null> {
+  const principal = normalizePhone(telefone ?? null);
+  if (!organizationId || !principal) return null;
+  const { data } = await supabase
+    .from("leads")
+    .select("id, name, erp_code")
+    .eq("organization_id", organizationId)
+    .eq("normalized_phone", principal)
+    // O dono é quem NÃO compartilha: os compartilhados são cópias.
+    .eq("phone_compartilhado", false)
+    .is("deleted_at", null)
+    .neq("id", leadId)
+    .limit(1)
+    .maybeSingle();
+  return data ?? null;
+}
+
 export function useSalvarTelefonesDoLead(leadId: string | null) {
   const qc = useQueryClient();
   const { organizationId } = useOrganization();
   return useMutation({
-    mutationFn: async (telefones: TelefoneEditado[]): Promise<void> => {
+    // Aceita a lista pura (chamadores antigos) ou { telefones, permitirCompartilhado }.
+    mutationFn: async (entrada: TelefoneEditado[] | SalvarTelefonesInput): Promise<void> => {
       if (!leadId) throw new Error("Lead não encontrado. Atualize a ficha.");
+      const { telefones, permitirCompartilhado = false } = Array.isArray(entrada)
+        ? { telefones: entrada }
+        : entrada;
       // Chamado NO objeto: `const rpc = supabase.rpc` perde o receiver.
       const { error } = await supabase.rpc("salvar_telefones_do_lead", {
         p_lead_id: leadId,
@@ -137,24 +179,20 @@ export function useSalvarTelefonesDoLead(leadId: string | null) {
           label: t.label?.trim() || null,
           is_primary: t.isPrimary,
         })),
+        ...(permitirCompartilhado ? { p_permitir_compartilhado: true } : {}),
       });
       if (error) {
         // 23505 = o principal escolhido já é o principal de outro lead: busca
-        // QUAL (RLS do usuário recorta; sem acesso, a frase fica genérica).
-        if (error.code === "23505" && organizationId) {
-          const principal = normalizePhone(telefones.find((t) => t.isPrimary)?.phone ?? null);
-          if (principal) {
-            const { data: dono } = await supabase
-              .from("leads")
-              .select("id, name, erp_code")
-              .eq("organization_id", organizationId)
-              .eq("normalized_phone", principal)
-              .is("deleted_at", null)
-              .neq("id", leadId)
-              .limit(1)
-              .maybeSingle();
-            throw new Error(mensagemDePrincipalOcupado(dono));
-          }
+        // QUAL (RLS do usuário recorta; sem acesso, a frase fica genérica) e deixa
+        // a tela perguntar se compartilha. Com a confirmação já dada o banco não
+        // devolve 23505 — se devolver, é outra coisa e sobe como erro.
+        if (!permitirCompartilhado && ehPrincipalOcupado(error)) {
+          const dono = await buscarDonoDoNumero(
+            organizationId,
+            leadId,
+            telefones.find((t) => t.isPrimary)?.phone,
+          );
+          throw new PrincipalOcupadoError(dono);
         }
         throw erroDeTelefone(error);
       }
