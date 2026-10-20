@@ -147,7 +147,7 @@ export function ClosedOutcomeStack<T extends { id: string }>({
             <span className="mt-0.5 flex items-center gap-1.5 text-[10.5px] text-muted-foreground">
               {group.total !== null && (
                 <>
-                  <span className={cn("font-medium tabular-nums", tone.text)}>{formatBRL(group.total)}</span>
+                  <span className={cn("font-medium tabular-nums", tone.text)}>{formatBRL(group.total, 2)}</span>
                   <span aria-hidden className="text-muted-foreground/50">·</span>
                 </>
               )}
@@ -232,8 +232,8 @@ export function ClosedOutcomeStack<T extends { id: string }>({
                 <span className="truncate text-[11.5px] font-medium">{month.label}</span>
                 <span className="text-[10.5px] tabular-nums text-muted-foreground">{month.items.length}</span>
                 {month.total !== null && (
-                  <span className={cn("ml-auto text-[10.5px] font-medium tabular-nums", tone.text)}>
-                    {formatBRL(month.total)}
+                  <span data-testid="closed-month-total" className={cn("ml-auto text-[10.5px] font-medium tabular-nums", tone.text)}>
+                    {formatBRL(month.total, 2)}
                   </span>
                 )}
               </button>

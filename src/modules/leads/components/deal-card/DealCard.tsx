@@ -605,7 +605,7 @@ export function DealCard({
                 {formatarData(negocio.desfecho.quando)}
               </DataDoDesfecho>
               {negocio.desfecho.valorVenda ? (
-                <BlocoNoOuro rotulo="Valor da venda">{formatBRL(negocio.desfecho.valorVenda)}</BlocoNoOuro>
+                <BlocoNoOuro rotulo="Valor da venda">{formatBRL(negocio.desfecho.valorVenda, 2)}</BlocoNoOuro>
               ) : null}
               {negocio.desfecho.motivo && <BlocoNoOuro rotulo="Motivo">{negocio.desfecho.motivo}</BlocoNoOuro>}
             </div>
