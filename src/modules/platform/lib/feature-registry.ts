@@ -105,6 +105,8 @@ export const ROUTE_FEATURE_MAP: Record<string, FeatureKey> = {
   "/leads": "leads",
   "/lixeira": "leads",
   "/duplicatas": "leads",
+  // Contatos (Chamado 33c5fd52 · PR6) — mesma feature de leads.
+  "/contatos": "leads",
   // Carteira (CTO 2026-10-16) — ex-aba Clientes de /leads; mesma feature.
   "/carteira": "leads",
   // revisão / follow-ups

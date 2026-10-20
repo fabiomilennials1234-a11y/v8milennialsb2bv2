@@ -119,7 +119,7 @@ export function normalizeEventType(t: string | null | undefined): EventTypeKey {
 // ─── Estado do compromisso (pendente × finalizado) ────────────────────────────
 
 /** Abas de estado da tela — mesmo vocabulário que a operação usa. */
-export type AgendaStatusFilter = "pending" | "all" | "done";
+export type AgendaStatusFilter = "pending" | "all" | "done" | "overdue";
 
 /**
  * Status terminais das CINCO fontes da agenda. Cada uma fala um dialeto:
@@ -161,6 +161,7 @@ export function matchesStatusFilter(
   filter: AgendaStatusFilter,
 ): boolean {
   if (filter === "all") return true;
+  if (filter === "overdue") return isOverdueEvent(event);
   const done = isFinishedEvent(event);
   return filter === "done" ? done : !done;
 }
@@ -691,6 +692,30 @@ export function outcomeOf(event: UnifiedEvent): AttendanceOutcome | null {
   return null;
 }
 
+
+/**
+ * Em atraso = reunião que NÃO deu certo e ainda pede uma ação.
+ *
+ * Duas portas, e as duas são "deu errado" do ponto de vista de quem opera o dia:
+ *
+ * 1. **Não compareceu** (`no_show`). É terminal para a contagem de comparecimento
+ *    — continua valendo em "Não compareceram" —, mas não é terminal para o
+ *    trabalho: a reunião precisa ser remarcada. Por isso ela fica em atraso em
+ *    vez de sumir atrás de "Finalizadas".
+ * 2. **Passou do horário e ninguém registrou o resultado** (`scheduled` com o
+ *    fim no passado). É o "aguardando desfecho" que vencia sem aparecer.
+ *
+ * Só reuniões que aceitam resultado (`podeRegistrarResultado`): follow-up e
+ * mensagem agendada têm o próprio conceito de atraso e a própria tela. A
+ * reunião concluída (`completed`) sai do atraso assim que o resultado muda.
+ */
+export function isOverdueEvent(event: UnifiedEvent, now: Date = new Date()): boolean {
+  if (!podeRegistrarResultado(event)) return false;
+  const status = (event.status ?? "").toLowerCase();
+  if (status === "no_show") return true;
+  if (status === "completed") return false;
+  return event.end.getTime() < now.getTime();
+}
 
 export interface ResumoComparecimento {
   compareceu: number;

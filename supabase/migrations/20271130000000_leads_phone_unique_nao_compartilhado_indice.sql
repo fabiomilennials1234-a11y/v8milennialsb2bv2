@@ -1,0 +1,45 @@
+-- Telefone N:N, PR3 (Chamado 99067f13), passo 1 de 2: constroi o indice unico novo.
+--
+-- Regra do CTO: o mesmo numero pode ser telefone principal de mais de um lead; so
+-- uma acao explicita do usuario marca o lead como leads.phone_compartilhado
+-- (coluna da 20271128000000). Webhook/import/Toth/chat nunca marcam, entao
+-- continuam protegidos pelo 23505.
+--
+-- Este arquivo cria idx_leads_org_phone_unique_v2, identico ao atual, mais
+-- `AND NOT phone_compartilhado` no predicado. Nada muda de comportamento aqui: o
+-- indice antigo continua valendo. A troca (DROP do antigo + RENAME do v2 + o
+-- ON CONFLICT de api_create_lead) esta na 20271130000010.
+--
+-- ORDEM DE APLICACAO (obrigatoria):
+--   1. ESTE arquivo, sozinho, FORA de transacao e de arquivo multi-statement:
+--      CREATE INDEX CONCURRENTLY nao roda dentro de BEGIN/COMMIT. Por isso nao ha
+--      BEGIN/COMMIT aqui e o arquivo tem UM statement so.
+--      Aplique com `psql -f` / `supabase db query --linked -f` (uma conexao, sem
+--      BEGIN implicito), nunca embrulhado em transacao pelo runner.
+--   2. Confirmar que o indice ficou VALIDO:
+--        SELECT indisvalid FROM pg_index
+--         WHERE indexrelid = 'public.idx_leads_org_phone_unique_v2'::regclass;
+--      Tem que devolver `true`.
+--   3. So entao a 20271130000010.
+--
+-- CONCURRENTLY e INVALID: se o build falhar no meio (deadlock, cancelamento,
+-- violacao de unicidade por uma escrita concorrente), o Postgres NAO desfaz o
+-- indice: deixa-o no catalogo com indisvalid = false. Ele continua sendo mantido
+-- a cada escrita (custo sem beneficio) e, por ser UNIQUE, ainda pode recusar
+-- INSERT. Deteccao:
+--   SELECT c.relname FROM pg_index i JOIN pg_class c ON c.oid = i.indexrelid
+--    WHERE NOT i.indisvalid AND c.relname = 'idx_leads_org_phone_unique_v2';
+-- Se existir invalido: rode o rollback pareado
+-- (rollback/20271130000000_...sql, DROP INDEX CONCURRENTLY IF EXISTS) e repita.
+-- O `IF NOT EXISTS` NAO ajuda aqui: ele pula a criacao se o nome existir, mesmo
+-- invalido. Por isso a 20271130000010 aborta se o v2 estiver invalido.
+--
+-- Por que o build nao viola dados: o predicado novo e MAIS FRACO que o antigo (so
+-- exclui linhas, nunca inclui), logo todo conjunto de linhas que satisfaz o
+-- indice antigo satisfaz este. Hoje nenhum lead tem phone_compartilhado = true.
+--
+-- Rollback: supabase/migrations/rollback/20271130000000_leads_phone_unique_nao_compartilhado_indice.sql
+
+CREATE UNIQUE INDEX CONCURRENTLY IF NOT EXISTS idx_leads_org_phone_unique_v2
+  ON public.leads (organization_id, normalized_phone)
+  WHERE normalized_phone IS NOT NULL AND deleted_at IS NULL AND NOT phone_compartilhado;

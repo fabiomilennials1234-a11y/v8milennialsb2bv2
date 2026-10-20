@@ -21,6 +21,7 @@ import { getWhatsAppProvider } from "../_shared/whatsapp-client.ts";
 import { resolveInstance, normalizeBrazilianPhone } from "../_shared/whatsapp-dispatch.ts";
 import { governSend, isSkippedSend } from "../_shared/send-governor/gate.ts";
 import { processBatch, type QueueRow } from "../_shared/copilot-v2/queue-processor.ts";
+import { resolveLeadByPhone } from "../_shared/lead-by-phone.ts";
 import { routeArchetype, type ContactStatus } from "../_shared/copilot-v2/contact-status.ts";
 import { modelForArchetype, type Archetype, type ModelId } from "../_shared/copilot-v2/model-selector.ts";
 import { createToolExecutor } from "../_shared/copilot-v2/tool-executor.ts";
@@ -98,10 +99,14 @@ serve(
  */
 async function resolveContext(supabase: any, row: QueueRow): Promise<ResolvedContext> {
   // Contact status: lead → carteira (upsell_clients) → qualifying tier.
-  const { data: lead } = await supabase
-    .from("leads").select("id, qualification_tier")
-    .eq("organization_id", row.organization_id).eq("normalized_phone", row.canonical_phone)
-    .is("deleted_at", null).maybeSingle();
+  // Número em 2+ leads: só o lead com negócio aberto vale; sem ele, o contato
+  // é tratado como NOVO (nunca "o primeiro" lead).
+  const { leadId: resolvedLeadId } = await resolveLeadByPhone(supabase, row.organization_id, row.canonical_phone);
+  const { data: lead } = resolvedLeadId
+    ? await supabase.from("leads").select("id, qualification_tier")
+        .eq("organization_id", row.organization_id).eq("id", resolvedLeadId)
+        .is("deleted_at", null).maybeSingle()
+    : { data: null };
 
   let status: ContactStatus = "NOVO";
   if (lead) {
