@@ -1,4 +1,4 @@
--- 20271127000000_varreduras_de_avisos_set_based.sql
+-- 20271202000000_varreduras_de_avisos_set_based.sql
 --
 -- Perf (RAM/pool do Supabase de prod, plano de 4 GB). As duas varreduras de
 -- avisos rodam 1×/min pelo pg_cron e eram os jobs mais caros depois do
@@ -84,8 +84,8 @@
 -- 20271126000000 conferido no teste contra prod em 19/10). CREATE OR REPLACE
 -- preserva owner e ACL (postgres, service_role).
 --
--- ORDEM: depois de 20271126000000. Numeração provisória: renumerar ao aplicar.
--- ROLLBACK: supabase/migrations/rollback/20271127000000_varreduras_de_avisos_set_based.sql
+-- ORDEM: depois de 20271126000000. Renumerada de 20271127000000 (colidia no ledger de prod).
+-- ROLLBACK: supabase/migrations/rollback/20271202000000_varreduras_de_avisos_set_based.sql
 
 BEGIN;
 
@@ -130,7 +130,7 @@ DECLARE
   v_dia text := to_char(timezone('America/Sao_Paulo', now()), 'YYYY-MM-DD');
 BEGIN
   IF NOT pg_try_advisory_xact_lock(hashtextextended('avisos:followups', 0)) THEN RETURN 0; END IF;
-  -- Set-based (20271127000000): o regime estável é "todo mundo já avisado hoje";
+  -- Set-based (20271202000000): o regime estável é "todo mundo já avisado hoje";
   -- cada etapa descarta o que já foi avisado antes de pagar a seguinte.
   FOR r IN
     WITH membro AS MATERIALIZED (
@@ -261,7 +261,7 @@ BEGIN
 
   -- Preserve appointments created in funnels, which need not have a meetings
   -- row. A malformed legacy date must not stop all organizations' reminders.
-  -- Pré-filtro por índice (20271127000000): instante ISO com fuso explícito a
+  -- Pré-filtro por índice (20271202000000): instante ISO com fuso explícito a
   -- ±1 h, mais todo texto que a função não data (NULL). A janela exata, na
   -- conversão da sessão, continua logo abaixo.
   FOR r IN
@@ -327,7 +327,7 @@ END;
 $$;
 
 COMMENT ON FUNCTION public.fn_donos_do_lead(uuid) IS
-  'Contas de usuário que recebem o aviso do lead: TODOS os donos (principais por papel + co-donos de lead_owners), principal primeiro, sem repetir usuário. Org sem a flag lead_owners_n_donos: só o principal (= fn_dono_do_lead). fn_dono_do_lead segue existindo para quem lê o principal. Chamado 793f4b05 · PR4b. RÉPLICA set-based em fn_varredura_avisos_followups (20271127000000): mudar a regra aqui exige mudar lá.';
+  'Contas de usuário que recebem o aviso do lead: TODOS os donos (principais por papel + co-donos de lead_owners), principal primeiro, sem repetir usuário. Org sem a flag lead_owners_n_donos: só o principal (= fn_dono_do_lead). fn_dono_do_lead segue existindo para quem lê o principal. Chamado 793f4b05 · PR4b. RÉPLICA set-based em fn_varredura_avisos_followups (20271202000000): mudar a regra aqui exige mudar lá.';
 
 ANALYZE public.pipeline_entries;
 
