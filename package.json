@@ -8,6 +8,7 @@
     "test:historical-correction": "node --test tests/integration/historical-sale-correction.test.mjs",
     "test:sale-correction": "node --test tests/integration/won-sale-correction.test.mjs tests/integration/historical-sale-correction.test.mjs tests/integration/outcome-date-correction.test.mjs",
     "test:toth-drafts": "node --test tests/integration/toth-order-drafts.test.mjs",
+    "test:deal-outcome": "node --test tests/integration/workflow-deal-outcome.test.mjs tests/integration/workflow-stage-admission.test.mjs",
     "test:toth-preorders": "node --test tests/integration/toth-preorder-operations.test.mjs",
     "predev": "node scripts/assert-dev-not-prod.mjs",
     "dev": "vite",

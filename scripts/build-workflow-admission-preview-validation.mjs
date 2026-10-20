@@ -9,8 +9,12 @@ const isolate = sql => sql.replaceAll('public.', 'workflow_admission_test.')
   .replaceAll("search_path TO 'public'", "search_path TO 'workflow_admission_test'")
   .replaceAll('auth.uid()', 'workflow_admission_test.uid()')
   .replaceAll('net.http_post(', 'workflow_admission_test.http_post(');
+// 20271115000000 redefines the admission (only stage_changed admits). Only the
+// function is taken: the rest of that migration touches deals/workflows.
+const outcomeFix = () => read('supabase/migrations/20271115000000_negocio_ganho_dispara_automacao.sql')
+  .match(/CREATE OR REPLACE FUNCTION public\.trigger_workflow_pipeline_stage_changed\(\)[\s\S]*?\$function\$;/)[0];
 export function buildWorkflowAdmissionPreviewValidation() {
-  const migration = isolate(read(`supabase/migrations/${name}`));
+  const migration = isolate(read(`supabase/migrations/${name}`)) + '\n\n' + isolate(outcomeFix());
   const rollback = isolate(read(`supabase/migrations/rollback/${name}`));
   return [
     '-- DISPOSABLE PREVIEW ONLY. Isolated schema, mocked HTTP and auth, full rollback.',
@@ -27,7 +31,7 @@ export function buildWorkflowAdmissionPreviewValidation() {
     'TRUNCATE workflow_admission_test.workflows; SELECT workflow_admission_test.assert_move(1);',
     migration,
     'SELECT workflow_admission_test.assert_move(0);',
-    "SELECT 'PASS: workflow admission tenant/active/derived, complete payload/auth/actor, non-retroactive enable, security, rollback/reapply' AS validation;",
+    "SELECT 'PASS: workflow admission tenant/active/stage_changed-only, complete payload/auth/actor, non-retroactive enable, security, rollback/reapply' AS validation;",
     'ROLLBACK;',
   ].join('\n\n');
 }
