@@ -16,7 +16,7 @@ const donoQuery = vi.fn();
 const filtros: Array<[string, string, unknown]> = [];
 
 function chain() {
-  const c: Record<string, any> = {};
+  const c: Record<string, unknown> = {};
   c.select = vi.fn().mockReturnValue(c);
   c.limit = vi.fn().mockReturnValue(c);
   for (const m of ["eq", "neq", "is"]) {
