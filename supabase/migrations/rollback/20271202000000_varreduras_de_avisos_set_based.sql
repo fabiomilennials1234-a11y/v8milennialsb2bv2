@@ -1,4 +1,4 @@
--- ROLLBACK de 20271127000000_varreduras_de_avisos_set_based.sql
+-- ROLLBACK de 20271202000000_varreduras_de_avisos_set_based.sql
 -- Restaura o corpo das duas varreduras vigente em prod em 19/10 (o de
 -- 20271126000000, md5 conferido no teste), o índice parcial antigo do 2º laço
 -- da reunião e o COMMENT de fn_donos_do_lead; remove o índice de expressão e
