@@ -53,8 +53,12 @@ export function uazapiMessageEdit(message: Data): UazapiMessageEdit | null {
   const originalId = message.edited;
   if (typeof originalId !== "string" || !originalId.trim()) return null;
   const content = record(message.content);
-  const text = [content.text, content.caption, message.text].find((value) => typeof value === "string");
-  return { originalId: originalId.trim(), text: typeof text === "string" ? text : null };
+  const bodies = [content.text, content.caption, message.text]
+    .filter((value): value is string => typeof value === "string");
+  // O primeiro corpo NÃO vazio vence (legenda editada pode vir com `content.text: ""`);
+  // todos vazios = o usuário apagou o texto/legenda, e isso também é edição.
+  const text = bodies.find((value) => value.trim() !== "") ?? bodies[0] ?? null;
+  return { originalId: originalId.trim(), text };
 }
 
 /** One reaction per sender. Replays replace; an empty emoji removes. */

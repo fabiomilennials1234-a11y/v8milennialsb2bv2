@@ -62,6 +62,11 @@ describe('uazapiMessageEdit', () => {
       .toEqual({ originalId: 'ORIGINAL3', text: 'só no topo' });
   });
 
+  it('prefers a filled caption over an empty content.text', () => {
+    expect(uazapiMessageEdit({ edited: 'ORIGINAL6', text: '', content: { text: '', caption: 'legenda nova' } }))
+      .toEqual({ originalId: 'ORIGINAL6', text: 'legenda nova' });
+  });
+
   it('keeps an emptied caption as an empty string (removal is an edit)', () => {
     expect(uazapiMessageEdit({ edited: 'ORIGINAL4', text: '', content: { caption: '' } }))
       .toEqual({ originalId: 'ORIGINAL4', text: '' });
