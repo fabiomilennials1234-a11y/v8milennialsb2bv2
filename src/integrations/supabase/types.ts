@@ -23146,6 +23146,7 @@ export type Database = {
           normalized_phone: string
           phone_number: string
           push_name: string
+          tags: Json
           unread_count: number
         }[]
       }

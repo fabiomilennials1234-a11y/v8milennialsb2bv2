@@ -90,6 +90,16 @@ export interface OpcoesDeEnriquecimento {
    */
   tagsCriticas: boolean;
   organizationId?: string;
+  /**
+   * As linhas JÁ trazem `tags` resolvidas pelo servidor — a RPC multi devolve a
+   * coluna desde a migration 20271203000000, com a visibilidade da RLS e o mesmo
+   * merge (lead primeiro, dedupe por id). Quando `true`, o fan-out a
+   * `lead_tags` e `whatsapp_conversation_tags` NÃO roda e `c.tags` fica como
+   * veio: são duas idas ao PostgREST por refetch a menos. Opt-in explícito, e não
+   * "tem tag na linha?", porque `[]` é resposta válida e não pode ser lido como
+   * "não veio" — quem sabe se a coluna existiu é o chamador.
+   */
+  etiquetasJaResolvidas?: boolean;
 }
 
 /**
@@ -101,7 +111,7 @@ export interface OpcoesDeEnriquecimento {
  */
 export async function enriquecerContatos(
   contatos: ChatContact[],
-  { tagsCriticas, organizationId }: OpcoesDeEnriquecimento,
+  { tagsCriticas, organizationId, etiquetasJaResolvidas = false }: OpcoesDeEnriquecimento,
 ): Promise<ChatContact[]> {
   if (contatos.length === 0) return contatos;
   if (organizationId) await enrichSavedContactNames(contatos, organizationId);
@@ -125,6 +135,11 @@ export async function enriquecerContatos(
     ),
   ];
 
+  // Etiquetas já resolvidas: nenhuma id vai ao fan-out, e `selectInChunks` com
+  // lista vazia devolve [] sem tocar a rede.
+  const leadIdsDeEtiqueta = etiquetasJaResolvidas ? [] : leadIds;
+  const convIdsDeEtiqueta = etiquetasJaResolvidas ? [] : convIds;
+
   const [leadNameRows, leadTagRows, convTagRows, contatosDasConversas] = await Promise.all([
     soft(
       selectInChunks<{ id: string; name: string | null; erp_code: string | null }>(
@@ -136,7 +151,7 @@ export async function enriquecerContatos(
     ),
     softTags(
       selectInChunks<LinhaDeEtiqueta>(
-        leadIds,
+        leadIdsDeEtiqueta,
         (chunk) =>
           supabase
             .from("lead_tags")
@@ -150,7 +165,7 @@ export async function enriquecerContatos(
     ),
     softTags(
       selectInChunks<LinhaDeEtiqueta>(
-        convIds,
+        convIdsDeEtiqueta,
         (chunk) =>
           supabase
             .from("whatsapp_conversation_tags")
@@ -199,6 +214,7 @@ export async function enriquecerContatos(
         ? contatosDasConversas.get(`${c.lead_id}:${normalizarTelefoneBr(c.phone_number)}`) ?? null
         : null;
     }
+    if (etiquetasJaResolvidas) continue;
     const tagIds = new Set<string>();
     const merged: ChatContactTag[] = [];
     for (const t of (c.lead_id ? leadTagsMap.get(c.lead_id) : undefined) || [])
