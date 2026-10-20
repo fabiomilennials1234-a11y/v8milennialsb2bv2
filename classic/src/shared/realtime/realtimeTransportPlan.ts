@@ -3,7 +3,7 @@
  * ESTE usuário: `postgres_changes` (padrão) ou Broadcast privado.
  *
  * Fonte única: RPC `realtime_subscription_plan(org)` (migration
- * 20271128000000). Ela diz `broadcast` só quando a org ligou a flag E o
+ * 20271201000000). Ela diz `broadcast` só quando a org ligou a flag E o
  * usuário pode entrar no tópico (membro ativo, fora do modo estrito de dono) —
  * o cliente nunca tenta um join que o servidor recusaria.
  *

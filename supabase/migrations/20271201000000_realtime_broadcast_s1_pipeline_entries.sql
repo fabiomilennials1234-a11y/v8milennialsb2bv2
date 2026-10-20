@@ -1,4 +1,4 @@
--- 20271128000000_realtime_broadcast_s1_pipeline_entries.sql
+-- 20271201000000_realtime_broadcast_s1_pipeline_entries.sql
 --
 -- Realtime postgres_changes → Broadcast privado · fatia S1: fundação + piloto
 -- pipeline_entries. Desenho: .specs/perf/realtime-broadcast/S1.md (MACRO ao lado).
@@ -49,7 +49,7 @@
 -- Kill switch: a mesma linha com false. O trigger para na hora; o front relê o
 -- plano em ≤5 min (TTL) e volta ao postgres_changes, com catch-up.
 --
--- Rollback exato: supabase/migrations/rollback/20271128000000_realtime_broadcast_s1_pipeline_entries.sql
+-- Rollback exato: supabase/migrations/rollback/20271201000000_realtime_broadcast_s1_pipeline_entries.sql
 
 -- ─── 1. Predicado de join ──────────────────────────────────────────────────
 
@@ -88,7 +88,7 @@ END;
 $$;
 
 COMMENT ON FUNCTION private.realtime_can_join(text) IS
-  'Realtime Broadcast: quem pode entrar no tópico. Default-deny; hoje só org:{uuid}:pe. Ver 20271128000000.';
+  'Realtime Broadcast: quem pode entrar no tópico. Default-deny; hoje só org:{uuid}:pe. Ver 20271201000000.';
 
 -- Função nova nasce executável por anon/authenticated/service_role (default
 -- privileges do Supabase): REVOKE de PUBLIC não alcança. A policy roda como
@@ -137,7 +137,7 @@ AS $$
 $$;
 
 COMMENT ON FUNCTION public.realtime_subscription_plan(uuid) IS
-  'Transporte realtime por tabela para o chamador nesta org (broadcast | pg_changes). Fonte única do front. Ver 20271128000000.';
+  'Transporte realtime por tabela para o chamador nesta org (broadcast | pg_changes). Fonte única do front. Ver 20271201000000.';
 
 REVOKE ALL ON FUNCTION public.realtime_subscription_plan(uuid) FROM PUBLIC, anon, authenticated, service_role;
 GRANT EXECUTE ON FUNCTION public.realtime_subscription_plan(uuid) TO authenticated;
@@ -233,7 +233,7 @@ END;
 $$;
 
 COMMENT ON FUNCTION private.rt_broadcast_pipeline_entries() IS
-  'Publica pipeline_entries no tópico privado org:{org}:pe (allowlist) quando a org tem feature_flags.realtime_broadcast_pe. Ver 20271128000000.';
+  'Publica pipeline_entries no tópico privado org:{org}:pe (allowlist) quando a org tem feature_flags.realtime_broadcast_pe. Ver 20271201000000.';
 
 REVOKE ALL ON FUNCTION private.rt_broadcast_pipeline_entries() FROM PUBLIC, anon, authenticated, service_role;
 
