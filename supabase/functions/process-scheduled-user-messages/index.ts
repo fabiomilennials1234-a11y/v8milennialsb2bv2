@@ -82,9 +82,27 @@ function diaEmSaoPaulo(agora: Date = new Date()): string {
 }
 
 /**
+ * Um aviso por cliente e dia (Chamado fb8abe55). A chave só do dia juntava a
+ * rajada das 09:00 num cartão ×9 que mostrava o último cliente e o último
+ * link — quem agendou perdia de vista quem recebeu. O mesmo cliente duas vezes
+ * no dia segue num aviso ×2, e a rajada continua tocando um som só: o front
+ * contém o som pela raiz `sched_sent:<dia>` (`chaveDeSom`, em
+ * decisao-de-entrega.ts). Sem lead vinculado, o telefone identifica o cliente;
+ * sem dígitos, a própria mensagem — a chave nunca fica sem cliente, que é o
+ * que juntaria clientes diferentes de novo.
+ */
+function chaveDoAvisoDeEnvio(
+  dia: string,
+  msg: { id: string; lead_id?: string | null; phone_number?: string | null },
+): string {
+  const cliente = msg.lead_id || (msg.phone_number ?? "").replace(/\D/g, "") || msg.id;
+  return `sched_sent:${dia}:${cliente}`;
+}
+
+/**
  * Emite pelo `fn_emit_aviso` (ADR-0035), o mesmo caminho dos outros avisos:
  * a RPC faz o upsert por (user_id, group_key) enquanto não lido, e é isso que
- * transforma uma rajada numa linha só. Falha ao avisar não derruba o envio,
+ * transforma a rajada de uma mesma chave numa linha só. Falha ao avisar não derruba o envio,
  * que já saiu.
  */
 async function emitirAviso(supabase: any, params: Record<string, unknown>): Promise<void> {
@@ -357,13 +375,13 @@ Deno.serve(withErrorBoundary("process-scheduled-user-messages", async (req) => {
           .single();
 
         if (member?.user_id) {
-          // Uma chave por dia: dez agendamentos às 09:00 engordam UM aviso
-          // (×10, um cartão, um som) em vez de dez. O link fica no último envio.
+          // Um aviso por cliente e dia, cada um com a sua conversa — ver
+          // chaveDoAvisoDeEnvio.
           await emitirAviso(supabase, {
             p_organization_id: msg.organization_id,
             p_user_id: member.user_id,
             p_type: "scheduled_message_sent",
-            p_group_key: `sched_sent:${diaEmSaoPaulo()}`,
+            p_group_key: chaveDoAvisoDeEnvio(diaEmSaoPaulo(), msg),
             p_title: "Mensagem agendada enviada",
             p_description: `Mensagem para ${msg.lead?.name || "lead"} enviada com sucesso`,
             p_link: linkDaConversa(instance, msg.phone_number),
