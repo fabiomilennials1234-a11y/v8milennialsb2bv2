@@ -7,7 +7,7 @@
  * `get_pipeline_page` por evento, por pessoa). O que está sob prova:
  *
  *  1. move de OUTRO usuário invalida só as colunas de origem e destino + a
- *     contagem DESTE funil;
+ *     contagem e a pilha de Ganhos/Perdidos (por mês) DESTE funil;
  *  2. o eco do próprio move é ignorado;
  *  3. evento de outro funil da org não invalida nada;
  *  4. card criado por automação neste funil aparece (coluna dele refaz);
@@ -122,6 +122,7 @@ describe("useFunilRealtime — invalidação só das colunas afetadas", () => {
       ["pipeline-page", PL, "a"],
       ["pipeline-page", PL, "b"],
       ["pipeline-stage-counts", PL],
+      ["pipeline-desfecho-por-mes", PL],
     ]);
     // Nunca o prefixo de todos os boards.
     expect(chavesInvalidadas(spy)).not.toContainEqual(["pipeline-page"]);
@@ -137,6 +138,7 @@ describe("useFunilRealtime — invalidação só das colunas afetadas", () => {
       ["pipeline-page", PL, "b"],
       ["pipeline-page", PL, "c"],
       ["pipeline-stage-counts", PL],
+      ["pipeline-desfecho-por-mes", PL],
     ]);
   });
 
@@ -157,6 +159,7 @@ describe("useFunilRealtime — invalidação só das colunas afetadas", () => {
       ["pipeline-page", PL, "a"],
       ["pipeline-page", PL, "c"],
       ["pipeline-stage-counts", PL],
+      ["pipeline-desfecho-por-mes", PL],
     ]);
   });
 
@@ -183,6 +186,7 @@ describe("useFunilRealtime — invalidação só das colunas afetadas", () => {
     expect(chavesInvalidadas(spy)).toEqual([
       ["pipeline-page", PL, "a"],
       ["pipeline-stage-counts", PL],
+      ["pipeline-desfecho-por-mes", PL],
     ]);
   });
 
@@ -193,6 +197,7 @@ describe("useFunilRealtime — invalidação só das colunas afetadas", () => {
     expect(chavesInvalidadas(spy)).toEqual([
       ["pipeline-page", PL, "a"],
       ["pipeline-stage-counts", PL],
+      ["pipeline-desfecho-por-mes", PL],
     ]);
   });
 
@@ -203,6 +208,7 @@ describe("useFunilRealtime — invalidação só das colunas afetadas", () => {
     expect(chavesInvalidadas(spy)).toEqual([
       ["pipeline-page", PL, "a"],
       ["pipeline-stage-counts", PL],
+      ["pipeline-desfecho-por-mes", PL],
     ]);
   });
 

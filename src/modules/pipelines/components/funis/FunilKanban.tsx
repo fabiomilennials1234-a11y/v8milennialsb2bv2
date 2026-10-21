@@ -22,6 +22,8 @@ import type { CustomPipelineStage } from "@/contracts/pipe";
 import { projectSaleValue } from "./funil-card-value";
 import { cardClosedAt, cardOutcome } from "./funil-card-outcome";
 import type { ClosedGroupingAccessors } from "@/modules/pipelines/lib/closed-outcome-groups";
+import { recorteCanonicoDeContagem } from "@/modules/pipelines/lib/stage-counts-query";
+import { useFunilDesfechoPorMes } from "@/modules/pipelines/hooks/model/useFunilDesfechoPorMes";
 
 /**
  * Card de funil na página unificada — o shape que `get_pipeline_page` devolve,
@@ -212,6 +214,20 @@ export function FunilKanban({
     [emDesfecho],
   );
 
+  // Os NÚMEROS da pilha (quantos e quanto, por mês) vêm da etapa inteira —
+  // Chamado 172ef046: a pilha somava só os 20 cards carregados. O resumo é da
+  // etapa SEM recorte; com qualquer filtro ativo no board ele contaria outra
+  // coisa, então não se aplica e a pilha fica no modo parcial ("+", "≥").
+  // "Filtro ativo" = o mesmo recorte canônico da contagem das colunas, sem a
+  // org. Sem `filterParams` não dá para saber: fica parcial.
+  const semFiltro = useMemo(
+    () =>
+      !!filterParams &&
+      Object.keys(recorteCanonicoDeContagem(filterParams)).every((k) => k === "p_org_id"),
+    [filterParams],
+  );
+  const { porEtapa: desfechoPorEtapa } = useFunilDesfechoPorMes(pipelineId, { enabled: semFiltro });
+
   // Destino do "Marcar perdido": papel PRIMEIRO, flag depois — em duas
   // passadas. Um `find` único com OR escolhe por acidente de posição: etapa de
   // falta marcada final_negative que vem antes ganharia da etapa `lost` real,
@@ -334,10 +350,12 @@ export function FunilKanban({
           hasMore: slot?.hasMore ?? false,
           isFetchingMore: slot?.isFetchingMore ?? false,
           onLoadMore: slot?.fetchMore,
+          // Etapa sem linha no resumo = nenhum encerrado nela (exato, zero).
+          closedSummary: desfechoPorEtapa ? (desfechoPorEtapa[stage.stage_key] ?? []) : null,
         };
       }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [stages, stageData, metricsMap],
+    [stages, stageData, metricsMap, desfechoPorEtapa],
   );
 
   const findEntry = (entryId: string): FunilEntry | undefined => {

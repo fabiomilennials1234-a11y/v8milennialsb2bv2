@@ -67,6 +67,8 @@ export function invalidateAfterMove(queryClient: QueryClient, leadId?: string): 
   // Boards e contadores de coluna.
   queryClient.invalidateQueries({ queryKey: ["pipeline-page"] });
   queryClient.invalidateQueries({ queryKey: ["pipeline-stage-counts"] });
+  // Pilha de Ganhos/Perdidos (contagem e valor por mês da etapa inteira).
+  queryClient.invalidateQueries({ queryKey: ["pipeline-desfecho-por-mes"] });
   queryClient.invalidateQueries({ queryKey: ["pipeline_entries"] });
   queryClient.invalidateQueries({ queryKey: ["custom_pipe_entries"] });
   queryClient.invalidateQueries({ queryKey: ["custom_pipe_stage_counts"] });

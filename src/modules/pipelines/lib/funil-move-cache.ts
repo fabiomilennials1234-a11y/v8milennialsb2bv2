@@ -23,10 +23,14 @@ import {
  *
  * Chaves (ver `usePaginatedFunil`): `["pipeline-page", pipelineId, stageKey,
  * orgId, filtersKey]` e `["pipeline-stage-counts", pipelineId, orgId, args]`.
+ * A pilha de Ganhos/Perdidos lê `["pipeline-desfecho-por-mes", pipelineId,
+ * orgId, tz]` (`useFunilDesfechoPorMes`) e anda junto com as contagens: move e
+ * Realtime mudam quantos encerrados cada etapa tem.
  */
 
 const PAGE = "pipeline-page";
 const COUNTS = "pipeline-stage-counts";
+const DESFECHO_POR_MES = "pipeline-desfecho-por-mes";
 
 // ── Otimismo ─────────────────────────────────────────────────────────────────
 
@@ -140,6 +144,7 @@ export function reconciliarMoveNoFunil(qc: QueryClient, p: ReconciliarMoveParams
   const outroFunil = (key: QueryKey) => key[1] !== p.pipelineId;
   qc.invalidateQueries({ queryKey: [PAGE], predicate: (q) => outroFunil(q.queryKey), refetchType: "none" });
   qc.invalidateQueries({ queryKey: [COUNTS], predicate: (q) => outroFunil(q.queryKey), refetchType: "none" });
+  qc.invalidateQueries({ queryKey: [DESFECHO_POR_MES], predicate: (q) => outroFunil(q.queryKey), refetchType: "none" });
   for (const prefixo of PREFIXOS_DE_OUTRAS_TELAS) {
     qc.invalidateQueries({ queryKey: [prefixo], refetchType: "none" });
   }
@@ -155,6 +160,7 @@ export function reconciliarMoveNoFunil(qc: QueryClient, p: ReconciliarMoveParams
     qc.invalidateQueries({ queryKey: [PAGE, p.pipelineId] });
   }
   qc.invalidateQueries({ queryKey: [COUNTS, p.pipelineId] });
+  qc.invalidateQueries({ queryKey: [DESFECHO_POR_MES, p.pipelineId] });
   qc.invalidateQueries({ queryKey: ["deal-card-extras", p.entryId] });
 
   if (p.leadId) {
@@ -289,10 +295,11 @@ export function planejarInvalidacaoRealtime(
   return { stages: [...stages] };
 }
 
-/** Aplica um lote de colunas afetadas: só elas + contagens do funil. */
+/** Aplica um lote de colunas afetadas: só elas + contagens e pilha do funil. */
 export function invalidarColunasDoFunil(qc: QueryClient, pipelineId: string, stages: Iterable<string>): void {
   for (const stage of stages) {
     qc.invalidateQueries({ queryKey: [PAGE, pipelineId, stage], refetchType: "active" });
   }
   qc.invalidateQueries({ queryKey: [COUNTS, pipelineId], refetchType: "active" });
+  qc.invalidateQueries({ queryKey: [DESFECHO_POR_MES, pipelineId], refetchType: "active" });
 }

@@ -1,6 +1,6 @@
 import { useId, type ReactNode } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
-import { Check, ChevronDown, ChevronRight, ChevronsDownUp, ChevronsUpDown, X } from "lucide-react";
+import { Check, ChevronDown, ChevronRight, ChevronsDownUp, ChevronsUpDown, Loader2, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatBRL } from "@/lib/format";
 import type { ClosedOutcome, ClosedOutcomeGroup } from "@/modules/pipelines/lib/closed-outcome-groups";
@@ -56,11 +56,21 @@ export interface ClosedOutcomeStackProps<T> {
   onOpenAllMonths: () => void;
   renderItem: (item: T) => ReactNode;
   /**
-   * A coluna ainda tem página por carregar: o grupo pode crescer. Só marca a
-   * contagem com "+"; carregar mais é da coluna, num lugar só.
+   * A coluna ainda tem página por carregar. Com o grupo exato (resumo do
+   * servidor) só decide se o mês aberto oferece "Carregar mais na coluna";
+   * sem ele, o grupo pode crescer: contagens ganham "+" e valores "≥".
    */
   hasMore?: boolean;
+  /**
+   * O "Carregar mais" da COLUNA — o mesmo do pé dela, não uma busca por mês.
+   * Oferecido dentro do mês aberto que tem menos cards que a contagem.
+   */
+  onLoadMore?: () => void;
+  isFetchingMore?: boolean;
 }
+
+/** "≥" sem quebrar a linha entre o sinal e o valor. */
+const AT_LEAST = "≥\u00a0";
 
 /**
  * Os negócios ganhos (ou perdidos) de uma etapa, empilhados.
@@ -80,14 +90,20 @@ export function ClosedOutcomeStack<T extends { id: string }>({
   onOpenAllMonths,
   renderItem,
   hasMore,
+  onLoadMore,
+  isFetchingMore,
 }: ClosedOutcomeStackProps<T>) {
   const tone = TONE[group.outcome];
   const reduceMotion = useReducedMotion();
   const panelId = useId();
-  const count = group.items.length;
-  // "12+" quando a coluna ainda não carregou tudo: o grupo mostra o que tem,
-  // sem fingir que é o total da etapa.
-  const countText = `${count}${hasMore ? "+" : ""}`;
+  const count = group.count;
+  // Sem o resumo do servidor, os números são do que a coluna carregou. Com
+  // página por vir, "12+" e "≥ R$" dizem isso — sem fingir que é a etapa.
+  const partial = !group.exact && !!hasMore;
+  const plus = partial ? "+" : "";
+  const atLeast = partial ? AT_LEAST : "";
+  const partialTitle = partial ? "Soma do que a coluna já carregou — há mais negócios por carregar" : undefined;
+  const countText = `${count}${plus}`;
   const monthsText = group.months.length === 1 ? group.months[0].label : `${group.months.length} meses`;
   const allOpen = group.months.every((m) => openMonths.has(m.key));
   const layers = Math.min(count - 1, 2);
@@ -141,13 +157,16 @@ export function ClosedOutcomeStack<T extends { id: string }>({
             <span className="flex items-baseline gap-1.5">
               <span className="text-[13px] font-semibold tabular-nums tracking-[-0.01em]">{countText}</span>
               <span className="truncate text-[12px] font-medium text-foreground/80">
-                {count === 1 && !hasMore ? tone.singular : tone.label.toLowerCase()}
+                {count === 1 && !partial ? tone.singular : tone.label.toLowerCase()}
               </span>
             </span>
             <span className="mt-0.5 flex items-center gap-1.5 text-[10.5px] text-muted-foreground">
               {group.total !== null && (
                 <>
-                  <span className={cn("font-medium tabular-nums", tone.text)}>{formatBRL(group.total, 2)}</span>
+                  <span className={cn("font-medium tabular-nums", tone.text)} title={partialTitle}>
+                    {atLeast}
+                    {formatBRL(group.total, 2)}
+                  </span>
                   <span aria-hidden className="text-muted-foreground/50">·</span>
                 </>
               )}
@@ -208,6 +227,7 @@ export function ClosedOutcomeStack<T extends { id: string }>({
         {group.months.map((month) => {
           const open = openMonths.has(month.key);
           const monthPanelId = `${panelId}-${month.key}`;
+          const notLoaded = month.count - month.items.length;
           return (
             <div key={month.key}>
               <button
@@ -230,9 +250,17 @@ export function ClosedOutcomeStack<T extends { id: string }>({
                   )}
                 />
                 <span className="truncate text-[11.5px] font-medium">{month.label}</span>
-                <span className="text-[10.5px] tabular-nums text-muted-foreground">{month.items.length}</span>
+                <span className="text-[10.5px] tabular-nums text-muted-foreground">
+                  {month.count}
+                  {plus}
+                </span>
                 {month.total !== null && (
-                  <span data-testid="closed-month-total" className={cn("ml-auto text-[10.5px] font-medium tabular-nums", tone.text)}>
+                  <span
+                    data-testid="closed-month-total"
+                    title={partialTitle}
+                    className={cn("ml-auto text-[10.5px] font-medium tabular-nums", tone.text)}
+                  >
+                    {atLeast}
                     {formatBRL(month.total, 2)}
                   </span>
                 )}
@@ -250,6 +278,23 @@ export function ClosedOutcomeStack<T extends { id: string }>({
                   >
                     <div className="space-y-2 px-0.5 pb-1.5 pt-1">
                       {month.items.map((item) => renderItem(item))}
+                      {notLoaded > 0 && hasMore && onLoadMore && (
+                        <button
+                          type="button"
+                          onClick={onLoadMore}
+                          disabled={isFetchingMore}
+                          className={cn(
+                            "flex w-full items-center justify-center gap-1.5 rounded-md px-2 py-1.5",
+                            "text-[11px] font-medium text-muted-foreground transition-colors",
+                            "hover:bg-foreground/[0.05] hover:text-foreground disabled:opacity-60",
+                            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                          )}
+                        >
+                          {isFetchingMore && <Loader2 className="size-3.5 animate-spin" aria-hidden />}
+                          Carregar mais na coluna
+                          <span className="tabular-nums text-muted-foreground/70">· faltam {notLoaded}</span>
+                        </button>
+                      )}
                     </div>
                   </motion.div>
                 )}
