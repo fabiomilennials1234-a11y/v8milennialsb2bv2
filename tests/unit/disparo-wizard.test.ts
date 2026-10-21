@@ -84,6 +84,20 @@ describe("validateStep", () => {
     expect(validateStep("message", withErr).reason).toContain("máximo");
   });
 
+  it("message waits for the attachment upload — a pending file never becomes a text-only Disparo", () => {
+    const pending = freshDraft({
+      message: "Olá",
+      media: { type: "document", sizeBytes: 10, name: "catalogo.pdf", url: null },
+    });
+    expect(validateStep("message", pending).ok).toBe(false);
+    expect(validateStep("message", pending).reason).toMatch(/anexo/i);
+    const uploaded = freshDraft({
+      message: "Olá",
+      media: { type: "document", sizeBytes: 10, name: "catalogo.pdf", url: "https://x/storage/v1/object/public/media/disparo/c.pdf" },
+    });
+    expect(validateStep("message", uploaded).ok).toBe(true);
+  });
+
   it("speed requires at least one selected number with capacity", () => {
     expect(validateStep("speed", freshDraft({ numbers: NUMBERS.map((n) => ({ ...n, selected: false })) })).ok).toBe(false);
     expect(validateStep("speed", freshDraft()).ok).toBe(true);
