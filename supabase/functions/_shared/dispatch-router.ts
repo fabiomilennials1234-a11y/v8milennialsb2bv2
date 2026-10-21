@@ -98,7 +98,15 @@ export function decideDispatchRoute(
 // ============================================================================
 
 export type UazapiSenderInput = {
-  recipients: Array<{ number: string; type: "text" | "image"; text?: string; file?: string; caption?: string }>;
+  recipients: Array<{
+    number: string;
+    type: "text" | "image" | "document";
+    text?: string;
+    file?: string;
+    /** Document items only — the file name the lead sees (Uazapi `docName`). */
+    docName?: string;
+    caption?: string;
+  }>;
   delayMin?: number;
   delayMax?: number;
   scheduledFor?: string; // ISO 8601 — converted to epoch ms for Uazapi

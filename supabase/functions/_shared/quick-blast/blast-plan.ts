@@ -26,6 +26,7 @@
  * without a live DB — mirroring runQuickBlast.
  */
 import { buildRecipients, type BlastLead, type BlastRecipient } from "./recipients.ts";
+import { blastMediaColumns, resolvePlanMedia, type BlastMedia, type BlastMediaKind } from "./blast-media.ts";
 import { resolveBlastMessage } from "./message-resolver.ts";
 import { personalizationName, personalizationFirstName } from "../lead-name.ts";
 import {
@@ -73,7 +74,14 @@ export interface PlanRow {
   pipeline_id?: string | null;
   message: string;
   refinements: Record<string, unknown> | null;
+  /** Legacy image column — still the only one an image plan writes. */
   image_url: string | null;
+  /** The attachment of a document plan (Chamado dac7e647, migration
+   *  20271211000000). Absent on text and image plans — read through
+   *  resolvePlanMedia, which falls back to image_url. */
+  media_url?: string | null;
+  media_type?: BlastMediaKind | null;
+  media_name?: string | null;
   delay_min_ms: number | null;
   delay_max_ms: number | null;
   total_recipients: number;
@@ -141,7 +149,7 @@ function ehCanalOficial(instance: { provider?: string } | null | undefined): boo
 export type DispatchFn = (
   instance: { id: string; organization_id: string; provider?: string },
   input: {
-    recipients: Array<{ number: string; text?: string; type?: string; file?: string; caption?: string }>;
+    recipients: BlastRecipient[];
     delayMin?: number;
     delayMax?: number;
     triggeredByUserId?: string | null;
@@ -236,7 +244,11 @@ export interface CreateBlastPlanParams {
    */
   template?: Record<string, unknown> | null;
   refinements: BlastRefinementOptions;
+  /** Legacy image-only attachment (older callers). `media` wins when both are set. */
   imageUrl?: string;
+  /** The attachment — image or document (PDF/Word), already validated
+   *  fail-closed by the edge fn (parseBlastMediaInput). */
+  media?: BlastMedia | null;
   delayMinMs?: number;
   delayMaxMs?: number;
   /** Resolved Daily Blast Budget (#706). The caller reads it fail-closed. */
@@ -331,7 +343,7 @@ export async function createBlastPlan(
     message: params.message,
     template: params.template ?? null,
     refinements: (params.refinements as Record<string, unknown>) ?? null,
-    image_url: params.imageUrl ?? null,
+    ...blastMediaColumns(paramsMedia(params)),
     delay_min_ms: params.delayMinMs ?? null,
     delay_max_ms: params.delayMaxMs ?? null,
     total_recipients: total,
@@ -399,7 +411,7 @@ export async function createBlastPlan(
   if (slice.toSend > 0) {
     const toSendRows = lot0.slice(0, slice.toSend);
     if (!ehCanalOficial(singleInstance)) {
-      const recipients = buildPlanRecipients(toSendRows, params.message, params.imageUrl);
+      const recipients = buildPlanRecipients(toSendRows, params.message, paramsMedia(params));
       await deps.dispatch(singleInstance, {
         recipients,
         delayMin: params.delayMinMs,
@@ -489,7 +501,7 @@ async function createMultiNumberBlastPlan(
     message: params.message,
     template: params.template ?? null,
     refinements: (params.refinements as Record<string, unknown>) ?? null,
-    image_url: params.imageUrl ?? null,
+    ...blastMediaColumns(paramsMedia(params)),
     delay_min_ms: params.delayMinMs ?? null,
     delay_max_ms: params.delayMaxMs ?? null,
     total_recipients: total,
@@ -545,7 +557,7 @@ async function createMultiNumberBlastPlan(
 
     if (toSendRows.length > 0) {
       if (!ehCanalOficial(n.instance)) {
-        const recipients = buildPlanRecipients(toSendRows, params.message, params.imageUrl);
+        const recipients = buildPlanRecipients(toSendRows, params.message, paramsMedia(params));
         await deps.dispatch(n.instance, {
           recipients,
           delayMin: params.delayMinMs,
@@ -776,7 +788,7 @@ export async function releaseBlastPlanLot(
       deferredRows.push(...rows.slice(allowed));
       if (toSendRows.length > 0) {
         if (!ehCanalOficial(inst)) {
-          const recipients = buildPlanRecipients(toSendRows, plan.message, plan.image_url ?? undefined);
+          const recipients = buildPlanRecipients(toSendRows, plan.message, resolvePlanMedia(plan));
           await deps.dispatch(inst, { recipients, ...dispatchOpts });
           await deps.store.markRecipients(params.planId, toSendRows.map((r) => r.lead_id), "sent", null);
           await notifyRecipientsSent(deps, toSendRows.map((r) => r.lead_id));
@@ -818,7 +830,7 @@ export async function releaseBlastPlanLot(
     if (slice.toSend > 0) {
       const toSendRows = kept.slice(0, slice.toSend);
       if (!ehCanalOficial(instance)) {
-        const recipients = buildPlanRecipients(toSendRows, plan.message, plan.image_url ?? undefined);
+        const recipients = buildPlanRecipients(toSendRows, plan.message, resolvePlanMedia(plan));
         await deps.dispatch(instance, { recipients, ...dispatchOpts });
         await deps.store.markRecipients(params.planId, toSendRows.map((r) => r.lead_id), "sent", null);
         await notifyRecipientsSent(deps, toSendRows.map((r) => r.lead_id));
@@ -890,16 +902,22 @@ function snapshotVars(lead: BlastLead): Record<string, unknown> {
   };
 }
 
+/** The attachment a create request carries: `media`, else the legacy imageUrl. */
+function paramsMedia(params: CreateBlastPlanParams): BlastMedia | null {
+  if (params.media) return params.media;
+  return params.imageUrl ? { type: "image", url: params.imageUrl, name: null } : null;
+}
+
 /** Build provider-ready recipients from frozen rows: normalize phone, resolve the
  *  message against each row's FROZEN variable snapshot (not a fresh lead read),
- *  apply the image shape, dedup by number. Phone-less rows are dropped by
+ *  apply the media shape (image or document), dedup by number. Phone-less rows are dropped by
  *  buildRecipients' own guard. The per-lead template is resolved here (one literal
  *  per recipient) so the frozen snapshot is honoured rather than re-reading leads;
  *  the budget was already applied by selectLotSlice, so cap never re-clamps. */
 function buildPlanRecipients(
   rows: PlanRecipientRow[],
   message: string,
-  imageUrl?: string,
+  media: BlastMedia | null,
 ): BlastRecipient[] {
   const out: BlastRecipient[] = [];
   const seen = new Set<string>();
@@ -907,7 +925,7 @@ function buildPlanRecipients(
     const built = buildRecipients([{ id: r.lead_id, phone: r.phone }], {
       template: resolveBlastMessage(message, r.variable_snapshot as Record<string, string | number | null | undefined>),
       cap: 1,
-      imageUrl,
+      media,
     });
     for (const rec of built.recipients) {
       if (seen.has(rec.number)) continue;

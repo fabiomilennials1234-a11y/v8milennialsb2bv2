@@ -121,6 +121,60 @@ describe("buildRecipients — image attachment", () => {
   });
 });
 
+// Chamado dac7e647 — the Disparo carries PDF/Word. Contract of the item, from the
+// Uazapi spec (openapi-bundled.json, POST /sender/advanced, messages[].items):
+// type "document" + `file` (URL) + `docName` (file name); the caption travels in
+// `text` ("Texto da mensagem … ou legenda para mídia"). Internally the recipient
+// keeps the resolved message in `caption`, exactly like the image path —
+// runUazapiSenderJob moves `caption` into `text` on the wire.
+describe("buildRecipients — document attachment", () => {
+  const ana = { id: "a", name: "Ana", company: "Co", phone: "11999990001" };
+
+  it("emits a document item with file + docName and the resolved message as caption", () => {
+    const out = buildRecipients([ana], {
+      template: "Oi {primeiro_nome}, segue o catálogo",
+      cap: 10,
+      media: { type: "document", url: "https://ref.supabase.co/storage/v1/object/public/media/disparo/u-catalogo.pdf", name: "Catálogo 2026.pdf" },
+    });
+    expect(out.recipients).toEqual([
+      {
+        number: "5511999990001",
+        leadId: "a",
+        type: "document",
+        file: "https://ref.supabase.co/storage/v1/object/public/media/disparo/u-catalogo.pdf",
+        docName: "Catálogo 2026.pdf",
+        caption: "Oi Ana, segue o catálogo",
+      },
+    ]);
+  });
+
+  it("an image passed as media keeps the image shape (no docName)", () => {
+    const out = buildRecipients([ana], {
+      template: "Oi {primeiro_nome}",
+      cap: 10,
+      media: { type: "image", url: "https://cdn/x.jpg", name: "x.jpg" },
+    });
+    expect(out.recipients[0]).toEqual({
+      number: "5511999990001",
+      leadId: "a",
+      type: "image",
+      file: "https://cdn/x.jpg",
+      caption: "Oi Ana",
+    });
+  });
+
+  it("media wins over the legacy imageUrl when both are given", () => {
+    const out = buildRecipients([ana], {
+      template: "Oi",
+      cap: 10,
+      imageUrl: "https://cdn/legacy.jpg",
+      media: { type: "document", url: "https://cdn/p.docx", name: "p.docx" },
+    });
+    expect(out.recipients[0].type).toBe("document");
+    expect(out.recipients[0].file).toBe("https://cdn/p.docx");
+  });
+});
+
 describe("buildRecipients — per-recipient variable resolution", () => {
   it("resolves lead + carteira variables into each recipient's text", () => {
     const out = buildRecipients(
