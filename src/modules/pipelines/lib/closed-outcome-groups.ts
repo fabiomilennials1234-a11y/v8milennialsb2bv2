@@ -11,9 +11,13 @@
  * um ganho às 22h de 31/08 em Brasília é agosto para quem o vê, embora seja
  * setembro em UTC. É a mesma fronteira que o operador usa ao fechar o mês.
  *
- * ⚠️ Agrupa o que já está CARREGADO. A coluna pagina de 20 em 20 por
- * `created_at`; o grupo cresce conforme a coluna carrega mais. Quem desenha o
- * grupo sinaliza quando ainda há página por vir.
+ * Os CARDS são os que a coluna já carregou — ela pagina de 20 em 20 por
+ * `created_at`. Os NÚMEROS (quantos e quanto, no grupo e no mês) vêm do resumo
+ * do servidor (`get_funil_desfecho_por_mes`) quando ele existe: a etapa
+ * inteira, não a página (Chamado 172ef046 — "setembro: 8" quando eram 69).
+ * Sem resumo (RPC ausente, erro, filtro ativo no board), os números são do
+ * carregado e o grupo diz que não é exato (`exact: false`); quem desenha marca
+ * a parcialidade quando ainda há página por vir.
  *
  * Genérico sobre o item: o board só garante `id`. Os acessores dizem onde
  * estão desfecho, data e valor.
@@ -35,16 +39,40 @@ export interface ClosedMonthGroup<T> {
   key: string;
   /** "Setembro de 2026" / "Sem data". */
   label: string;
+  /** Os cards CARREGADOS do mês — pode ser menos que `count`, ou nenhum. */
   items: T[];
-  /** Soma dos valores conhecidos; `null` quando nenhum card do mês tem valor. */
+  /** Quantos negócios o mês tem: da etapa com resumo; senão, os carregados. */
+  count: number;
+  /** Soma dos valores conhecidos; `null` quando nenhum negócio do mês tem valor. */
   total: number | null;
 }
 
 export interface ClosedOutcomeGroup<T> {
   outcome: ClosedOutcome;
+  /** Os cards CARREGADOS do grupo, mais recente primeiro. */
   items: T[];
   /** Mês mais recente primeiro; "Sem data" por último. */
   months: ClosedMonthGroup<T>[];
+  /** Soma das contagens dos meses. */
+  count: number;
+  total: number | null;
+  /**
+   * `true` = contagem e valores vêm do resumo do servidor e valem para a etapa
+   * inteira. `false` = são do que a coluna carregou.
+   */
+  exact: boolean;
+}
+
+/**
+ * Uma linha do resumo do servidor para UMA coluna: quantos negócios a etapa
+ * tem com aquele desfecho naquele mês, e quanto somam. O mês é calculado no
+ * banco no fuso do navegador (`p_tz`), então casa com `monthKeyOf`.
+ */
+export interface ClosedMonthSummary {
+  outcome: ClosedOutcome;
+  /** `YYYY-MM`, ou `UNDATED_MONTH_KEY`. */
+  monthKey: string;
+  count: number;
   total: number | null;
 }
 
@@ -89,14 +117,36 @@ function sumValues<T>(items: T[], amountOf?: (item: T) => number | null | undefi
   return total;
 }
 
+function addTotals(a: number | null, b: number | null): number | null {
+  if (a === null) return b;
+  if (b === null) return a;
+  return a + b;
+}
+
+/** Ordem dos meses: mais recente primeiro, "Sem data" por último. */
+function compareMonthKeys(a: string, b: string): number {
+  if (a === b) return 0;
+  if (a === UNDATED_MONTH_KEY) return 1;
+  if (b === UNDATED_MONTH_KEY) return -1;
+  return a < b ? 1 : -1;
+}
+
 /**
  * Separa abertos de encerrados preservando a ordem dos abertos (a ordenação
  * escolhida na coluna continua valendo para eles). Dentro do mês, o desfecho
  * mais recente vem primeiro.
+ *
+ * `summary` (opcional) é o resumo do servidor para ESTA coluna. Com ele, a
+ * contagem e o valor de cada mês são os da etapa inteira; meses e grupos que
+ * só o servidor conhece aparecem com a contagem e sem card. Se o carregado
+ * passa o resumo num mês (resumo velho entre um move e o refetch), vale o
+ * carregado naquele mês — card na tela é prova de que o mês tem pelo menos
+ * aquilo.
  */
 export function partitionClosedOutcomes<T>(
   items: readonly T[],
   accessors: ClosedGroupingAccessors<T>,
+  summary?: readonly ClosedMonthSummary[] | null,
 ): PartitionedColumn<T> {
   const open: T[] = [];
   const byOutcome = new Map<ClosedOutcome, Array<{ item: T; time: number | null }>>();
@@ -112,10 +162,23 @@ export function partitionClosedOutcomes<T>(
     byOutcome.set(outcome, bucket);
   }
 
+  const exact = summary != null;
+  const serverMonths = new Map<ClosedOutcome, Map<string, { count: number; total: number | null }>>();
+  for (const row of summary ?? []) {
+    const months = serverMonths.get(row.outcome) ?? new Map<string, { count: number; total: number | null }>();
+    const prev = months.get(row.monthKey);
+    months.set(row.monthKey, {
+      count: (prev?.count ?? 0) + row.count,
+      total: addTotals(prev?.total ?? null, row.total),
+    });
+    serverMonths.set(row.outcome, months);
+  }
+
   const closed: ClosedOutcomeGroup<T>[] = [];
   for (const outcome of OUTCOME_ORDER) {
-    const bucket = byOutcome.get(outcome);
-    if (!bucket?.length) continue;
+    const bucket = byOutcome.get(outcome) ?? [];
+    const fromServer = serverMonths.get(outcome);
+    if (!bucket.length && !fromServer?.size) continue;
 
     // Mais recente primeiro; sem data no fim. `sort` é estável: empate mantém
     // a ordem que a coluna já tinha.
@@ -126,29 +189,39 @@ export function partitionClosedOutcomes<T>(
       return b.time - a.time;
     });
 
-    const months = new Map<string, T[]>();
+    const loadedByMonth = new Map<string, T[]>();
     for (const { item, time } of sorted) {
       const key = monthKeyOf(time);
-      const list = months.get(key) ?? [];
+      const list = loadedByMonth.get(key) ?? [];
       list.push(item);
-      months.set(key, list);
+      loadedByMonth.set(key, list);
     }
 
-    // A ordem de inserção já é a decrescente (vem do sort), com "Sem data" por
-    // último — porque os sem data foram os últimos a entrar.
-    const monthGroups: ClosedMonthGroup<T>[] = [...months].map(([key, monthItems]) => ({
-      key,
-      label: monthLabelOf(key),
-      items: monthItems,
-      total: sumValues(monthItems, accessors.amountOf),
-    }));
+    const monthKeys = [...new Set([...loadedByMonth.keys(), ...(fromServer?.keys() ?? [])])].sort(
+      compareMonthKeys,
+    );
 
-    const groupItems = sorted.map((s) => s.item);
+    const monthGroups: ClosedMonthGroup<T>[] = monthKeys.map((key) => {
+      const monthItems = loadedByMonth.get(key) ?? [];
+      const loadedTotal = sumValues(monthItems, accessors.amountOf);
+      const server = fromServer?.get(key);
+      const useServer = server !== undefined && server.count >= monthItems.length;
+      return {
+        key,
+        label: monthLabelOf(key),
+        items: monthItems,
+        count: useServer ? server.count : monthItems.length,
+        total: useServer ? server.total : loadedTotal,
+      };
+    });
+
     closed.push({
       outcome,
-      items: groupItems,
+      items: sorted.map((s) => s.item),
       months: monthGroups,
-      total: sumValues(groupItems, accessors.amountOf),
+      count: monthGroups.reduce((n, m) => n + m.count, 0),
+      total: monthGroups.reduce<number | null>((acc, m) => addTotals(acc, m.total), null),
+      exact,
     });
   }
 
