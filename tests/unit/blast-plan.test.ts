@@ -549,3 +549,155 @@ describe("releaseBlastPlanLot — daily releaser", () => {
     expect(state.plans.get(planId).status).toBe("completed");
   });
 });
+
+// ── Chamado dac7e647 — the Disparo carries PDF/Word, not only image ──────────
+//
+// A Blast Plan persists its attachment as media_url/media_type/media_name
+// (migration 20271211000000) and every lot — today's at creation and each
+// later one released by the cron — rebuilds the recipients from the persisted
+// row. A plan that only has the legacy image_url keeps sending the image.
+describe("Blast Plan media — document attachment (Chamado dac7e647)", () => {
+  type Store = ReturnType<typeof planStore>["store"];
+  type SentItem = Record<string, unknown>;
+  /** Recipients handed to the dispatch fn on its Nth call. */
+  const sent = (dispatch: ReturnType<typeof okDispatch>, call = 0): SentItem[] =>
+    (dispatch.mock.calls[call][1] as { recipients: SentItem[] }).recipients;
+
+  const DOC = {
+    type: "document" as const,
+    url: "https://ref.supabase.co/storage/v1/object/public/media/disparo/u-catalogo.pdf",
+    name: "Catálogo 2026.pdf",
+  };
+
+  async function seedReleasable(store: Store, planFields: Record<string, unknown>) {
+    const planId = await store.insertPlan({
+      organization_id: "org-1",
+      instance_id: "inst-1",
+      status: "active",
+      message: "Olá {primeiro_nome}",
+      refinements: {},
+      image_url: null,
+      delay_min_ms: 1000,
+      delay_max_ms: 3000,
+      total_recipients: 2,
+      lots_total: 2,
+      lots_released: 1,
+      next_release_date: "2026-06-06",
+      instance: INSTANCE,
+      ...planFields,
+    });
+    await store.insertRecipients(
+      leads(2).map((l) => ({
+        plan_id: planId,
+        lead_id: l.id,
+        phone: l.phone,
+        variable_snapshot: { primeiro_nome: l.name },
+        lot_index: 1,
+        status: "pending",
+        reason: null,
+      })),
+    );
+    return planId;
+  }
+
+  it("persists media_url/media_type/media_name for a document (and no image_url)", async () => {
+    const { store, state } = planStore();
+    const out = await createBlastPlan(
+      { store, usageSource: usageStub(0).source, dispatch: okDispatch() },
+      baseCreateParams({ leads: leads(3), media: DOC }),
+    );
+    const plan = state.plans.get(out.planId);
+    expect(plan.media_url).toBe(DOC.url);
+    expect(plan.media_type).toBe("document");
+    expect(plan.media_name).toBe("Catálogo 2026.pdf");
+    expect(plan.image_url).toBeNull();
+  });
+
+  it("dispatches lot 0 as document items (file + docName, message as caption)", async () => {
+    const { store } = planStore();
+    const dispatch = okDispatch();
+    await createBlastPlan(
+      { store, usageSource: usageStub(0).source, dispatch },
+      baseCreateParams({ leads: leads(2), message: "Olá {{primeiro_nome}}", media: DOC }),
+    );
+    const recipients = sent(dispatch);
+    expect(recipients).toHaveLength(2);
+    expect(recipients[0]).toMatchObject({
+      type: "document",
+      file: DOC.url,
+      docName: "Catálogo 2026.pdf",
+      caption: "Olá L0",
+    });
+  });
+
+  it("the multi-number path persists and sends the document too", async () => {
+    const { store, state } = planStore();
+    const dispatch = okDispatch();
+    const out = await createBlastPlan(
+      { store, usageSource: usageStub(0).source, dispatch },
+      baseCreateParams({
+        instance: undefined,
+        numbers: [{ instance: INSTANCE, cap: 50 }],
+        leads: leads(2),
+        media: DOC,
+      }),
+    );
+    expect(state.plans.get(out.planId)).toMatchObject({ media_type: "document", media_url: DOC.url });
+    expect(sent(dispatch)[0]).toMatchObject({ type: "document", docName: DOC.name });
+  });
+
+  it("the daily release rebuilds document items from the persisted row", async () => {
+    const { store } = planStore();
+    const dispatch = okDispatch();
+    const planId = await seedReleasable(store, {
+      media_url: DOC.url,
+      media_type: "document",
+      media_name: DOC.name,
+    });
+    const out = await releaseBlastPlanLot(
+      { store, usageSource: usageStub(0).source, dispatch },
+      { planId, now: new Date("2026-06-06T12:00:00Z"), dailyBudget: 200 },
+    );
+    expect(out.sent).toBe(2);
+    const recipients = sent(dispatch);
+    expect(recipients.every((r) => r.type === "document" && r.file === DOC.url && r.docName === DOC.name)).toBe(true);
+  });
+
+  it("legacy: imageUrl still persists image_url only and sends image items", async () => {
+    const { store, state } = planStore();
+    const dispatch = okDispatch();
+    const out = await createBlastPlan(
+      { store, usageSource: usageStub(0).source, dispatch },
+      baseCreateParams({ leads: leads(2), imageUrl: "https://cdn/promo.jpg" }),
+    );
+    const plan = state.plans.get(out.planId);
+    expect(plan.image_url).toBe("https://cdn/promo.jpg");
+    // The image path does not depend on the new columns (deploy-order safe).
+    expect(plan).not.toHaveProperty("media_url");
+    expect(sent(dispatch)[0]).toMatchObject({ type: "image", file: "https://cdn/promo.jpg" });
+  });
+
+  it("legacy: a plan row with only image_url is released as image", async () => {
+    const { store } = planStore();
+    const dispatch = okDispatch();
+    const planId = await seedReleasable(store, { image_url: "https://cdn/promo.jpg" });
+    await releaseBlastPlanLot(
+      { store, usageSource: usageStub(0).source, dispatch },
+      { planId, now: new Date("2026-06-06T12:00:00Z"), dailyBudget: 200 },
+    );
+    expect(sent(dispatch)[0]).toMatchObject({ type: "image", file: "https://cdn/promo.jpg" });
+  });
+
+  it("text-only plans touch none of the new columns", async () => {
+    const { store, state } = planStore();
+    const out = await createBlastPlan(
+      { store, usageSource: usageStub(0).source, dispatch: okDispatch() },
+      baseCreateParams({ leads: leads(2) }),
+    );
+    const plan = state.plans.get(out.planId);
+    expect(plan.image_url).toBeNull();
+    expect(plan).not.toHaveProperty("media_url");
+    expect(plan).not.toHaveProperty("media_type");
+    expect(plan).not.toHaveProperty("media_name");
+  });
+});

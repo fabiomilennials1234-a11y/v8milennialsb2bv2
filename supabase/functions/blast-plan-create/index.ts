@@ -29,6 +29,7 @@ import { isPipelineResolutionError, resolvePipeline } from "../_shared/pipeline-
 import { instanceDailyUsageSource, resolveInstanceCap } from "../_shared/quick-blast/instance-budget.ts";
 import { resolveBlastWindow } from "../_shared/quick-blast/blast-plan-distribution.ts";
 import { loadBlastLeadsByIds } from "../_shared/quick-blast/load-blast-leads.ts";
+import { parseBlastMediaInput } from "../_shared/quick-blast/blast-media.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -90,6 +91,9 @@ Deno.serve(
       delay_min_ms,
       delay_max_ms,
       image_url,
+      media_url,
+      media_type,
+      media_name,
       exclude_blasted_within_days,
       only_non_responders,
       release_time,
@@ -116,7 +120,14 @@ Deno.serve(
       } | null;
       delay_min_ms?: number;
       delay_max_ms?: number;
+      /** Legacy image-only attachment — still accepted on its own. */
       image_url?: string;
+      /** The attachment (Chamado dac7e647): a public object of this project's
+       *  `media` bucket, its kind and the file name the lead sees. Validated
+       *  FAIL-CLOSED below. */
+      media_url?: string;
+      media_type?: string;
+      media_name?: string;
       exclude_blasted_within_days?: number;
       only_non_responders?: boolean;
       release_time?: string;
@@ -137,6 +148,18 @@ Deno.serve(
 
     if (idList.length === 0 || !Array.isArray(lead_ids) || lead_ids.length === 0 || !message) {
       return jsonResponse(400, { error: "Missing instance_id(s), lead_ids or message" }, corsHeaders);
+    }
+
+    // Attachment — FAIL-CLOSED: the URL goes to the provider, which downloads it
+    // and delivers it to every lead, so only a public object of OUR `media`
+    // bucket passes. A bad attachment is a 400 here, never a plan that silently
+    // goes out as text.
+    const mediaInput = parseBlastMediaInput(
+      { media_url, media_type, media_name, image_url },
+      SUPABASE_URL,
+    );
+    if (!mediaInput.ok) {
+      return jsonResponse(400, { error: mediaInput.error }, corsHeaders);
     }
 
     // Post-send destination — FAIL-CLOSED: an invalid/foreign-org target is a
@@ -280,7 +303,7 @@ Deno.serve(
           message: mensagemDoPlano,
           template: oficial ? (template as unknown as Record<string, unknown>) : null,
           refinements,
-          imageUrl: image_url,
+          media: mediaInput.media,
           delayMinMs: delay_min_ms,
           delayMaxMs: delay_max_ms,
           dailyBudget,

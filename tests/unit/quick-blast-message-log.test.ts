@@ -45,6 +45,42 @@ describe("buildBlastLogRows", () => {
     expect(rows[0].metadata).toMatchObject({ source: "quick_blast", image_url: "https://cdn/x.jpg" });
   });
 
+  it("records the attachment as media_url/media_type, keeping image_url for images", () => {
+    const rows = buildBlastLogRows({
+      ...base,
+      recipients: [{ number: "5511999990001", leadId: "a", type: "image", file: "https://cdn/x.jpg", caption: "Promo" }],
+    });
+    expect(rows[0].metadata).toMatchObject({
+      image_url: "https://cdn/x.jpg",
+      media_url: "https://cdn/x.jpg",
+      media_type: "image",
+    });
+  });
+
+  it("logs a document recipient with media_url/media_type/media_name — never as image_url", () => {
+    const rows = buildBlastLogRows({
+      ...base,
+      recipients: [
+        {
+          number: "5511999990001",
+          leadId: "a",
+          type: "document",
+          file: "https://cdn/catalogo.pdf",
+          docName: "Catálogo.pdf",
+          caption: "Segue o catálogo",
+        },
+      ],
+    });
+    expect(rows[0].content).toBe("Segue o catálogo");
+    expect(rows[0].metadata).toMatchObject({
+      source: "quick_blast",
+      media_url: "https://cdn/catalogo.pdf",
+      media_type: "document",
+      media_name: "Catálogo.pdf",
+    });
+    expect(rows[0].metadata).not.toHaveProperty("image_url");
+  });
+
   it("skips recipients without a leadId (cannot attach to a conversation)", () => {
     const rows = buildBlastLogRows({
       ...base,

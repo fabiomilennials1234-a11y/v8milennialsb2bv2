@@ -31,6 +31,7 @@ import { StepReview } from "./StepReview";
 import { StepMonitor } from "./StepMonitor";
 import { instancesToNumbers } from "@/shared/disparo/disparo-numbers";
 import { DISPARO_STEPS, type DisparoNumber } from "./wizard-machine";
+import { buildDisparoMediaPayload } from "./disparo-media-payload";
 import { DisparoPreview } from "./DisparoPreview";
 import { DisparosTabs } from "../DisparosTabs";
 import { notifyError } from "@/shared/errors";
@@ -101,8 +102,14 @@ function DisparoWizardInner({ numbers, onClose, onFinish }: DisparoWizardInnerPr
     for (const n of selected) caps[n.id] = Math.max(0, Math.floor(n.cap));
     // Anti-ban widens the inter-send jitter; off keeps a tighter cadence.
     const [delayMin, delayMax] = draft.antiBan ? [5000, 30000] : [1000, 4000];
-    const imageUrl =
-      draft.media?.type === "image" && draft.media.url ? draft.media.url : undefined;
+    // The attachment (image, PDF or Word) travels as media_* — and an image also
+    // as image_url. One still uploading refuses the release: never a text-only
+    // Disparo that silently drops the file (Chamado dac7e647).
+    const media = buildDisparoMediaPayload(draft.media);
+    if (!media.ok) {
+      toast.error(media.error);
+      return;
+    }
 
     // Post-send destination: each lead is moved when ITS message is sent (per
     // lot, over the plan's days). Validated fail-closed by blast-plan-create.
@@ -134,7 +141,7 @@ function DisparoWizardInner({ numbers, onClose, onFinish }: DisparoWizardInnerPr
         template: draft.template ?? null,
         delay_min_ms: delayMin,
         delay_max_ms: delayMax,
-        image_url: imageUrl,
+        ...media.payload,
         source: draft.audienceSource ?? undefined,
         post_send_target: postSendTarget,
       });

@@ -6,7 +6,10 @@
  * the real `validateBlastMedia` pure guard. The right-hand preview renders the
  * message as a real sample Lead will receive it (WhatsApp bubble), resolved by
  * the pure `resolvePreview`; the operator cycles the sample to spot-check
- * personalization. Video attachments surface a ban-risk note (decision Q13).
+ * personalization.
+ * Attachments: image, PDF or Word — the kinds the Disparo sends (Chamado
+ * dac7e647). Every accepted file is uploaded now and its public URL travels on
+ * the draft; audio and video are refused up front instead of being dropped.
  */
 import { useRef, useState } from "react";
 import {
@@ -20,8 +23,9 @@ import {
 } from "lucide-react";
 import {
   validateBlastMedia,
+  classifyBlastMedia,
   BLAST_MEDIA_LIMITS_MB,
-  type BlastMediaType,
+  BLAST_MEDIA_ACCEPT,
 } from "@/modules/communication";
 import { Loader2 } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
@@ -43,13 +47,12 @@ import { MOCK_PREVIEW_SAMPLES } from "./mock-disparo-data";
 
 const VARIABLES = ["{{primeiro_nome}}", "{{nome}}", "{{empresa}}", "{{segmento}}"];
 
-/** Map a File's MIME type onto a blast media kind, or null if unsupported. */
-function mediaTypeOf(file: File): BlastMediaType | null {
-  if (file.type.startsWith("image/")) return "image";
-  if (file.type.startsWith("audio/")) return "audio";
-  if (file.type.startsWith("video/")) return "video";
-  if (file.type === "application/pdf") return "pdf";
-  return null;
+/** What the attachment card says the file is: "imagem", or the document's
+ *  extension (PDF, DOCX, DOC). */
+function mediaKindLabel(media: { type: string; name: string }): string {
+  if (media.type === "image") return "imagem";
+  const ext = media.name.split(".").pop()?.toUpperCase();
+  return ext && ext.length <= 4 ? ext : "documento";
 }
 
 interface StepMessageProps {
@@ -61,6 +64,9 @@ export function StepMessage({ draft, patch }: StepMessageProps) {
   const fileRef = useRef<HTMLInputElement>(null);
   const [sampleIdx, setSampleIdx] = useState(0);
   const [uploading, setUploading] = useState(false);
+  // Bumped on every pick and on remove: an upload that finishes after the file
+  // was replaced or removed must not resurrect it on the draft.
+  const uploadSeq = useRef(0);
   const sample = MOCK_PREVIEW_SAMPLES[sampleIdx % MOCK_PREVIEW_SAMPLES.length];
 
   const onPickFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -68,44 +74,53 @@ export function StepMessage({ draft, patch }: StepMessageProps) {
     if (fileRef.current) fileRef.current.value = "";
     if (!file) return;
 
-    const type = mediaTypeOf(file);
-    if (!type) {
-      patch({ media: null, mediaError: "Tipo de mídia não suportado." });
+    const seq = ++uploadSeq.current;
+    setUploading(false);
+    const kind = classifyBlastMedia(file);
+    if (!kind.ok) {
+      patch({ media: null, mediaError: kind.error });
       return;
     }
+    const { type, contentType } = kind;
     const result = validateBlastMedia(type, file.size);
     if (!result.ok) {
       patch({ media: null, mediaError: result.error });
       return;
     }
 
-    // The backend dispatch (blast-plan-create) sends an `image_url`, so images
-    // are uploaded to storage now and the public URL travels on the draft. Other
-    // media kinds keep their metadata (their transport lands with #901 backend).
-    if (type !== "image") {
-      patch({ media: { type, sizeBytes: file.size, name: file.name, url: null }, mediaError: null });
-      return;
-    }
-
+    // Every supported attachment (image, PDF, Word) is uploaded now and its
+    // public URL travels on the draft — blast-plan-create sends it as media_*.
+    // Until the URL lands the Mensagem step holds (wizard-machine), so a file
+    // can never be dropped from the Disparo in silence.
     setUploading(true);
     patch({ media: { type, sizeBytes: file.size, name: file.name, url: null }, mediaError: null });
     try {
+      // Same path as before: `disparo/` is a first-segment prefix the bucket
+      // policy admits; the name is ASCII-only (an accent breaks the Storage key).
       const path = `disparo/${crypto.randomUUID()}-${file.name.replace(/[^\w.-]/g, "_")}`;
       const { error } = await supabase.storage.from("media").upload(path, file, {
-        contentType: file.type,
+        contentType,
         upsert: false,
       });
       if (error) throw error;
+      if (seq !== uploadSeq.current) return;
       const { data } = supabase.storage.from("media").getPublicUrl(path);
       patch({
         media: { type, sizeBytes: file.size, name: file.name, url: data.publicUrl },
         mediaError: null,
       });
     } catch (err) {
-      patch({ media: null, mediaError: (err as Error).message ?? "Falha ao enviar a imagem." });
+      if (seq !== uploadSeq.current) return;
+      patch({ media: null, mediaError: (err as Error).message || "Falha ao enviar o anexo." });
     } finally {
-      setUploading(false);
+      if (seq === uploadSeq.current) setUploading(false);
     }
+  };
+
+  const removeMedia = () => {
+    uploadSeq.current += 1;
+    setUploading(false);
+    patch({ media: null, mediaError: null });
   };
 
   const insertVar = (token: string) =>
@@ -164,7 +179,7 @@ export function StepMessage({ draft, patch }: StepMessageProps) {
             <input
               ref={fileRef}
               type="file"
-              accept="image/*,audio/*,video/*,application/pdf"
+              accept={BLAST_MEDIA_ACCEPT}
               className="hidden"
               onChange={onPickFile}
             />
@@ -176,7 +191,7 @@ export function StepMessage({ draft, patch }: StepMessageProps) {
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-medium text-foreground">{draft.media.name}</p>
                   <p className="flex items-center gap-1.5 text-[11px] uppercase tracking-wide text-muted-foreground">
-                    {draft.media.type} · {(draft.media.sizeBytes / (1024 * 1024)).toFixed(1)} MB
+                    {mediaKindLabel(draft.media)} · {(draft.media.sizeBytes / (1024 * 1024)).toFixed(1)} MB
                     {uploading && (
                       <span className="flex items-center gap-1 normal-case text-primary">
                         <Loader2 className="h-3 w-3 animate-spin" /> enviando…
@@ -186,7 +201,8 @@ export function StepMessage({ draft, patch }: StepMessageProps) {
                 </div>
                 <button
                   type="button"
-                  onClick={() => patch({ media: null, mediaError: null })}
+                  onClick={removeMedia}
+                  aria-label="Remover anexo"
                   className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
                 >
                   <X className="h-4 w-4" />
@@ -199,7 +215,7 @@ export function StepMessage({ draft, patch }: StepMessageProps) {
                 className="flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-border/70 py-3 text-sm text-muted-foreground transition-colors hover:border-primary/40 hover:text-foreground"
               >
                 <Paperclip className="h-4 w-4" />
-                Anexar imagem, áudio, vídeo ou PDF
+                Anexar imagem, PDF ou Word
               </button>
             )}
 
@@ -208,15 +224,10 @@ export function StepMessage({ draft, patch }: StepMessageProps) {
                 <AlertTriangle className="h-3.5 w-3.5" />
                 {draft.mediaError}
               </p>
-            ) : draft.media?.type === "video" ? (
-              <p className="flex items-center gap-1.5 text-xs text-amber-500">
-                <AlertTriangle className="h-3.5 w-3.5" />
-                Vídeo em massa aumenta o risco de bloqueio — prefira imagem ou link quando der.
-              </p>
             ) : (
               <p className="text-[11px] text-muted-foreground/70">
-                Limites: imagem {BLAST_MEDIA_LIMITS_MB.image} MB · áudio {BLAST_MEDIA_LIMITS_MB.audio} MB ·
-                vídeo {BLAST_MEDIA_LIMITS_MB.video} MB · PDF {BLAST_MEDIA_LIMITS_MB.pdf} MB
+                Limites: imagem {BLAST_MEDIA_LIMITS_MB.image} MB · PDF ou Word {BLAST_MEDIA_LIMITS_MB.document} MB.
+                A mensagem vai como legenda do arquivo.
               </p>
             )}
           </div>
@@ -265,7 +276,7 @@ export function StepMessage({ draft, patch }: StepMessageProps) {
                 {draft.media && (
                   <div className="mb-1.5 flex items-center gap-1.5 rounded-md bg-black/20 px-2 py-1 text-[11px] text-white/80">
                     <Paperclip className="h-3 w-3" />
-                    {draft.media.type}
+                    {mediaKindLabel(draft.media)}
                   </div>
                 )}
                 <p className="whitespace-pre-wrap break-words leading-snug">
