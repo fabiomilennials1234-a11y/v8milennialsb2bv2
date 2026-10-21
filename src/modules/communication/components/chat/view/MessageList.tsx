@@ -109,6 +109,20 @@ const DESKTOP_OVERSCAN = 3;
 const MOBILE_OVERSCAN = 5;
 
 /**
+ * Rolagem programática da lista VIRTUALIZADA: sempre instantânea, nunca suave.
+ *
+ * Durante um `scrollToIndex(..., { behavior: "smooth" })` o
+ * `@tanstack/virtual-core` (3.14) descarta a medição de todo item fora de
+ * `alvo ± max(overscan, metade da faixa visível)` — a do ref E a do
+ * ResizeObserver (`shouldMeasureDuringScroll`). O observer só avisa de novo se
+ * o tamanho mudar, e um texto não muda: o item fica com a ESTIMATIVA (80 px)
+ * enquanto estiver montado, e as bolhas seguintes sobem por cima dele. Era a
+ * metade de cima da tela ao abrir uma conversa longa (Chamado 6885e65d). O
+ * modo plain (≤100 itens) não tem virtualizer e segue suave.
+ */
+const VIRTUAL_SCROLL_BEHAVIOR = "auto" as const;
+
+/**
  * Identidade estável para "sem ligações". `calls ?? []` inline criaria um array
  * novo a cada render e derrubaria o `useMemo` do timeline em toda passada —
  * custo por render no caminho mais quente do produto.
@@ -329,7 +343,7 @@ export function MessageList({
 
     const scrollToBottom = () => {
       if (shouldVirtualize) {
-        virtualizer.scrollToIndex(timeline.length - 1, { align: "end", behavior: "smooth" });
+        virtualizer.scrollToIndex(timeline.length - 1, { align: "end", behavior: VIRTUAL_SCROLL_BEHAVIOR });
       } else if (viewport) {
         viewport.scrollTo({ top: viewport.scrollHeight, behavior: "smooth" });
       } else {
@@ -350,7 +364,7 @@ export function MessageList({
   const handleScrollToBottom = useCallback(() => {
     const viewport = scrollAreaRef.current?.querySelector<HTMLElement>("[data-radix-scroll-area-viewport]");
     if (shouldVirtualize) {
-      virtualizer.scrollToIndex(timeline.length - 1, { align: "end", behavior: "smooth" });
+      virtualizer.scrollToIndex(timeline.length - 1, { align: "end", behavior: VIRTUAL_SCROLL_BEHAVIOR });
     } else if (viewport) {
       viewport.scrollTo({ top: viewport.scrollHeight, behavior: "smooth" });
     } else {
