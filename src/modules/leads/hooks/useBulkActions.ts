@@ -1,6 +1,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { LEAD_RESPONSIBLE_MAP_KEY } from "./useLeads";
+import { useTaskMoveGate } from "@/modules/engagement/tasks";
 
 /**
  * @deprecated SCRUM-633 — era o caminho por slug dos 3 pipes de sistema
@@ -41,6 +42,7 @@ export function useBulkMoveStage() {
  */
 export function useBulkMoveToPipeline() {
   const qc = useQueryClient();
+  const requestTaskMove = useTaskMoveGate();
   return useMutation({
     mutationFn: async ({
       lead_ids,
@@ -57,6 +59,7 @@ export function useBulkMoveToPipeline() {
     }) => {
       if (source_pipeline_id) {
         if (!entry_ids?.length) throw new Error("Nenhum negócio de origem selecionado");
+        if (!(await requestTaskMove(entry_ids))) throw new Error("Movimentação cancelada.");
         const { data, error } = await supabase.rpc("bulk_move_pipeline_entries" as never, {
           p_entry_ids: entry_ids, p_source_pipeline_id: source_pipeline_id,
           p_target_pipeline_id: pipeline_id, p_target_stage_id: stage_id,
@@ -64,6 +67,7 @@ export function useBulkMoveToPipeline() {
         if (error) throw error;
         return data;
       }
+      if (!(await requestTaskMove({leadIds:lead_ids,pipelineId:pipeline_id}))) throw new Error("Movimentação cancelada.");
       const { data, error } = await supabase.rpc("bulk_add_to_pipeline" as any, {
         p_lead_ids: lead_ids,
         p_pipeline_id: pipeline_id,
@@ -75,6 +79,8 @@ export function useBulkMoveToPipeline() {
     onSuccess: () => {
       // Boards novos (pipeline-page/counts) + espelhos legados ainda montados.
       qc.invalidateQueries({ queryKey: ["pipeline-page"] });
+      qc.invalidateQueries({ queryKey: ["task-queue"] });
+      qc.invalidateQueries({ queryKey: ["task-entry-history"] });
       qc.invalidateQueries({ queryKey: ["pipeline-stage-counts"] });
       qc.invalidateQueries({ queryKey: ["custom_pipe_entries"] });
       qc.invalidateQueries({ queryKey: ["pipeline_entries"] });

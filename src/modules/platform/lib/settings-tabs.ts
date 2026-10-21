@@ -142,7 +142,7 @@ export const SETTINGS_TABS: SettingsTab[] = [
   { value: "marcos", slug: "marcos", label: "Marcos", icon: Award, outboundOnly: true, group: "general" },
   { value: "ajuda", slug: "ajuda", label: "Central de Ajuda", icon: HelpCircle, adminOnly: true, group: "general" },
   // Duplicava `/checklists` (Pitstop › Rotas). Link antigo vai para lá.
-  { value: "checklists", slug: "checklists", label: "Checklists", icon: ClipboardList, redirect: "/checklists" },
+  { value: "checklists", slug: "checklists", label: "Checklists", icon: ClipboardList, redirect: "/tarefas?tab=playbooks" },
 ];
 
 export const SETTINGS_BASE_PATH = "/configuracoes";

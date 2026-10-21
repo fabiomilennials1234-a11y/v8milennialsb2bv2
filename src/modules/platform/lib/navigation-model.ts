@@ -32,7 +32,6 @@ import {
   Tv,
   Wallet,
   Workflow,
-  Wrench,
   Zap,
 } from "lucide-react";
 
@@ -146,6 +145,7 @@ export const SIDEBAR_PITSTOP: NavNode = {
   icon: Settings,
   path: "/configuracoes",
 };
+export const SIDEBAR_TASKS: NavNode = { label: "Gestão de tarefas", icon: ListChecks, path: "/tarefas" };
 
 /**
  * V5: o Pitstop deixou de ser painel ao lado da lateral e virou página-hub.
@@ -179,7 +179,6 @@ export const PITSTOP_GROUPS: PitstopGroup[] = [
       // sem tirá-lo de lá: duplicado, ele aparece nos dois lugares.
       { label: "Ranking", icon: Trophy, path: "/performance" },
       { label: "Comissões", icon: DollarSign, path: "/comissoes" },
-      { label: "Revisão", icon: Wrench, path: "/follow-ups" },
     ],
   },
   {
@@ -187,7 +186,6 @@ export const PITSTOP_GROUPS: PitstopGroup[] = [
     title: "Rotas",
     hint: "Rotinas de apoio da operação",
     items: [
-      { label: "Checklists", icon: ListChecks, path: "/checklists" },
       { label: "Templates", icon: FileText, path: "/templates" },
       { label: "Contatos", icon: BookUser, path: "/contatos" },
       { label: "Duplicatas", icon: Copy, path: "/duplicatas" },
@@ -266,6 +264,7 @@ export const OUTBOUND_MEMBER_ALLOWED_PATHS = [
   "/funil",
   "/funis",
   "/follow-ups",
+  "/tarefas",
 ] as const;
 
 /**
@@ -283,6 +282,7 @@ export const NAV_VIEW_PERMISSIONS: Record<string, string> = {
   "/upsell": "upsell.view",
   "/agenda": "agenda.view",
   "/follow-ups": "followups.view",
+  "/tarefas": "followups.view",
   "/leads": "leads.view",
   // Ex-aba Clientes de /leads (CTO 2026-10-16): mesma permissão da tela-mãe.
   "/carteira": "leads.view",

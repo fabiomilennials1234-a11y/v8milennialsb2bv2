@@ -39,6 +39,7 @@ import { numeroDoNegocio } from "@/modules/communication/lib/telefoneDoNegocio";
 import { AdicionarProdutoDialog } from "./AdicionarProdutoDialog";
 import { DealCard } from "./DealCard";
 import { DealCardChecklists } from "./DealCardChecklists";
+import { DealTasks,useTaskMoveGate } from "@/modules/engagement/tasks";
 import { TothOrderDraftSlot } from "./TothOrderDraftSlot";
 import { useDealCardData } from "./useDealCardData";
 import { useAjustarPedidoGanho } from "./useAjustarPedidoGanho";
@@ -85,6 +86,7 @@ export const DealCardPanel = memo(function DealCardPanel() {
   const { openLead } = useLeadSheet();
   const { isMobile } = useViewport();
   const queryClient = useQueryClient();
+  const requestTaskMove = useTaskMoveGate();
 
   const { data, isLoading, organizacaoId, membroId, souAdmin, resumoChecklists } =
     useDealCardData(entryId, leadId, isOpen);
@@ -222,6 +224,7 @@ export const DealCardPanel = memo(function DealCardPanel() {
       if (!data || !entryId) return;
       const etapa = data.etapas.find((e) => e.chave === chave);
       if (!etapa) return;
+      if (!(await requestTaskMove(entryId))) return;
       const perdaNoAlvo = { isLoss: etapa.ehPerda === true, perda };
 
       // SCRUM-637: discriminação por FAMÍLIA (`funilEhSystem`), não mais pelo
@@ -232,7 +235,7 @@ export const DealCardPanel = memo(function DealCardPanel() {
         await move({ kind: "custom", entryId, stageId: chave, stageLabel: etapa.nome, ...perdaNoAlvo });
       }
     },
-    [data, entryId, move],
+    [data, entryId, move, requestTaskMove],
   );
 
   /**
@@ -281,6 +284,7 @@ export const DealCardPanel = memo(function DealCardPanel() {
   const definirDesfecho = useCallback(
     async (desfecho: "open" | "won" | "lost", valor?: number) => {
       if (!entryId || decidindo) return;
+      if (desfecho !== "open" && !(await requestTaskMove(entryId))) return;
 
       // Perder exige o motivo (SCRUM-369), gravado no metadata da entrada
       // ANTES do desfecho — o mesmo par id+rótulo que o `/funil` grava — e
@@ -364,7 +368,7 @@ export const DealCardPanel = memo(function DealCardPanel() {
         setDecidindo(false);
       }
     },
-    [entryId, decidindo, queryClient, data, moverEtapa, origemDo, celebrar, capturarMotivoDaPerda],
+    [entryId, decidindo, queryClient, data, moverEtapa, origemDo, celebrar, capturarMotivoDaPerda, requestTaskMove],
   );
 
   /**
@@ -633,7 +637,7 @@ export const DealCardPanel = memo(function DealCardPanel() {
         resumoChecklists={resumoChecklists ?? null}
         /* O elemento é criado aqui, montado lá — e só quando a aba está aberta.
            Ver o bloco `painelChecklists` no `DealCard` para o porquê do slot. */
-        painelChecklists={<DealCardChecklists leadId={leadId} entryId={entryId} />}
+        painelChecklists={<div className="space-y-6">{entryId && <DealTasks key={entryId} entryId={entryId}/>}<DealCardChecklists leadId={leadId} entryId={entryId}/></div>}
         painelPedidoErp={dealId ? (
           <TothOrderDraftSlot key={dealId} dealId={dealId} organizationId={organizacaoId} />
         ) : undefined}

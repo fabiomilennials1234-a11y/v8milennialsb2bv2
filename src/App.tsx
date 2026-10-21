@@ -17,6 +17,7 @@ import { PipeOpsProvider } from "@/modules/pipelines";
 // Deep import de propósito: o barril de `leads` é grande e não deve entrar no
 // chunk do shell só por causa do provider.
 import { LossReasonGateProvider } from "@/modules/leads/loss-reason-gate";
+import { TaskMoveGateProvider } from "@/modules/engagement/tasks";
 import { ProtectedRoute } from "@/modules/identity/auth";
 import { PermissionProtectedRoute } from "@/modules/identity/permissions";
 import { CobrancaRoute } from "@/modules/cobranca";
@@ -88,7 +89,7 @@ const Pitstop = lazy(() => lazyRetry(() => import("@/modules/platform/pages/Pits
 const AreaGestor = lazy(() => lazyRetry(() => import("@/modules/identity/gestor/pages/AreaGestor")));
 const MasterGestores = lazy(() => lazyRetry(() => import("@/modules/identity/master/pages/MasterGestores")));
 const CopilotPlayground = lazy(() => lazyRetry(() => import("@/modules/copilot/components/playground").then(m => ({ default: m.CopilotPlayground }))));
-const ChecklistPage = lazy(() => lazyRetry(() => import("@/modules/engagement/pages/ChecklistPage")));
+const Tarefas = lazy(() => lazyRetry(() => import("@/modules/engagement/pages/Tarefas")));
 const MessageTemplates = lazy(() => lazyRetry(() => import("@/modules/communication/pages/MessageTemplates")));
 const Automacoes = lazy(() => lazyRetry(() => import("./modules/workflows/pages/Automacoes")));
 const AutomacoesEditor = lazy(() => lazyRetry(() => import("./modules/workflows/pages/AutomacoesEditor")));
@@ -460,14 +461,13 @@ function AppRoutes() {
           </ProtectedRoute>
         }
       />
+      <Route path="/tarefas" element={<ProtectedRoute><LayoutWrapper><PermissionProtectedRoute featureKey="followups.view"><FeatureRoute feature="review"><Tarefas /></FeatureRoute></PermissionProtectedRoute></LayoutWrapper></ProtectedRoute>} />
       <Route
         path="/checklists"
         element={
           <ProtectedRoute>
             <LayoutWrapper>
-              <PermissionProtectedRoute featureKey="checklists.view">
-                <ChecklistPage />
-              </PermissionProtectedRoute>
+              <Navigate to="/tarefas?tab=playbooks" replace />
             </LayoutWrapper>
           </ProtectedRoute>
         }
@@ -1040,6 +1040,7 @@ const App = () => {
                           massa). Dentro do PipeOpsProvider — o catálogo de
                           motivos chega pela porta. */}
                       <LossReasonGateProvider>
+                        <TaskMoveGateProvider>
                         {/* SupportPanelProvider envolve o palette: a ação
                             "Abrir chamado" do Cmd+K abre este painel. */}
                         <FloatingDockProvider>
@@ -1067,6 +1068,7 @@ const App = () => {
                             </CommandPaletteProvider>
                           </SupportPanelProvider>
                         </FloatingDockProvider>
+                        </TaskMoveGateProvider>
                       </LossReasonGateProvider>
                     </GlobalErrorBoundary>
                   </PipeOpsProvider>

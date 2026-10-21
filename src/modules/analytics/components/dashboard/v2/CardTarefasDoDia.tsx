@@ -1,265 +1,45 @@
-import { useMemo, useState, type FormEvent } from "react";
-import { Link } from "react-router-dom";
-import { ArrowUpRight, Check, ListChecks, Plus, X } from "lucide-react";
-import {
-  useAcoesDoDia,
-  useCreateAcaoDoDia,
-  useCompleteAcaoDoDia,
-  useUncompleteAcaoDoDia,
-  useDeleteAcaoDoDia,
-} from "@/modules/engagement";
-import { useOrganization, useTeamMembers } from "@/modules/identity";
-import { classificarTarefas } from "@/modules/analytics/lib/tarefas-do-dia";
-import { useComandoScope } from "@/modules/analytics/hooks/useComandoScope";
-import { cn } from "@/lib/utils";
-import { ComandoCard } from "./ComandoCard";
-import { DonoDaLinha } from "./DonoDaLinha";
-
-/**
- * Bloco 3 — o que EU preciso fazer hoje.
- *
- * Reusa `acoes_do_dia` inteiro (tabela + 5 hooks de CRUD). Não nasceu sistema
- * paralelo de tarefa: essa é a única tabela do produto que é por USUÁRIO e de
- * texto livre — `checklists` é template por org preso a lead, e `follow_ups`
- * exige `lead_id` NOT NULL.
- *
- * ⚠️ ATRASADA SEM COLUNA DE PRAZO. `acoes_do_dia` não tem `due_date`; o prazo é
- * o próprio dia, que é o que o nome da tabela diz. Então atrasada = não
- * concluída E criada antes do começo de hoje. O corte usa o fuso da ORG
- * (`zonedDayStart`), não o do browser: um vendedor em Lisboa e outro em Manaus
- * têm de ver a MESMA lista de atrasadas da mesma org.
- *
- * A regra "não concluída + prazo no passado" é a de `RevisionItem.tsx`, que está
- * em produção — e não a de `FollowUpCard.tsx`, que diverge e não tem nenhum
- * importador.
- */
+import { useState,type FormEvent } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { ListChecks,Plus } from 'lucide-react';
+import { useCreateAcaoDoDia,useCompleteAcaoDoDia,useUncompleteAcaoDoDia,useDeleteAcaoDoDia } from '@/modules/engagement';
+import { TaskList,TaskDetails,useTaskWrite,type WorkItem } from '@/modules/engagement/tasks';
+import { useOrganization,useIdentity } from '@/modules/identity';
+import { Button } from '@/components/ui/button';
+import { useComandoTasks } from '@/modules/analytics/hooks/useComandoTasks';
+import { ComandoCard } from './ComandoCard';
 
 export function CardTarefasDoDia() {
-  const { timezone } = useOrganization();
-  const { isAdmin, meuUserId } = useComandoScope();
-  // Admin pede a lista do time; todo o resto pede a própria. Quem GARANTE isso
-  // é o RLS (`20270825000030`): pedir "tudo" sem ser admin devolve só as suas.
-  const { data, isLoading, isError, refetch } = useAcoesDoDia(
-    isAdmin ? "tudo" : "meu",
-  );
-  const criar = useCreateAcaoDoDia();
-  const concluir = useCompleteAcaoDoDia();
-  const desfazer = useUncompleteAcaoDoDia();
-  const remover = useDeleteAcaoDoDia();
-
-  const [texto, setTexto] = useState("");
-  const [mostrarConcluidas, setMostrarConcluidas] = useState(false);
-
-  const { pendentes, concluidasHoje, atrasadasCount } = useMemo(
-    () => classificarTarefas(data, timezone),
-    [data, timezone],
-  );
-
-  // `acoes_do_dia.user_id` é `auth.users.id` — a única coluna de pessoa da
-  // tabela, e ela NÃO aponta para `team_members`. Não há FK, então o PostgREST
-  // não consegue fazer embed do nome; a ponte é `team_members.user_id`, e é
-  // resolvida aqui. (Um embed novo também reabriria o `PGRST201` que deixou
-  // este hook 100% quebrado até 21/08 — melhor não tentar.)
-  const { data: membros } = useTeamMembers();
-  const nomePorUserId = useMemo(() => {
-    const mapa = new Map<string, string>();
-    for (const m of membros ?? []) {
-      if (m.user_id && m.name) mapa.set(m.user_id, m.name);
-    }
-    return mapa;
-  }, [membros]);
-
-  /**
-   * 🔴 Ver ≠ mexer.
-   *
-   * A migration `20270825000030` deu ao admin só a policy de SELECT: as de
-   * UPDATE e DELETE continuam `auth.uid() = user_id`. Isso é de propósito — o
-   * pedido é de VISIBILIDADE ("visão geral da produtividade e das pendências"),
-   * e dar ao admin o poder de concluir a tarefa alheia seria escalada que
-   * ninguém pediu.
-   *
-   * Mas isso obriga a UI a acompanhar: sem esta checagem, o admin clicaria em
-   * "concluir" numa tarefa de outro, o RLS recusaria a linha em SILÊNCIO
-   * (0 linhas afetadas, sem erro) e o hook ainda assim toastaria "Tarefa
-   * concluída!". O botão precisa não existir, e não apenas não funcionar.
-   */
-  const souDono = (userId: string) => !!meuUserId && userId === meuUserId;
-
-  const adicionar = (e: FormEvent) => {
-    e.preventDefault();
-    const titulo = texto.trim();
-    if (!titulo || criar.isPending) return;
-    // Otimismo controlado: limpa o campo já, porque o hook toasta o erro e a
-    // lista se reconcilia sozinha na invalidação.
-    setTexto("");
-    criar.mutate({ title: titulo });
+  const {organizationId}=useOrganization();const {userId}=useIdentity();
+  return <PersonalTasks key={`${organizationId}:${userId}`}/>;
+}
+function PersonalTasks() {
+  const {timezone}=useOrganization();const {isAdmin}=useIdentity();const navigate=useNavigate();
+  const [tab,setTab]=useState<'today'|'future'|'history'>('today');const [page,setPage]=useState(0);
+  const [selected,setSelected]=useState<WorkItem|null>(null);const [title,setTitle]=useState('');
+  const queue=useComandoTasks({history:tab==='history',future:tab==='future',page});
+  const create=useCreateAcaoDoDia();const complete=useCompleteAcaoDoDia();const reopen=useUncompleteAcaoDoDia();const remove=useDeleteAcaoDoDia();const write=useTaskWrite();
+  const busy=create.isPending || complete.isPending || reopen.isPending || remove.isPending || write.isPending;
+  const openBusiness=(item:WorkItem)=>{if(item.lead_id){setSelected(null);navigate(`/leads?lead=${item.lead_id}`);}};
+  const action=async(item:WorkItem,kind:'start'|'complete',result?:string)=>{
+    try{
+      if(item.daily_action_id){if(kind==='start'){setSelected(item);return;}await complete.mutateAsync(item.daily_action_id);}
+      else await write.mutateAsync({rpc:'task_transition',args:{p_id:item.id,p_action:kind,p_result:result}});
+      setSelected(kind==='start'?{...item,status:'in_progress'}:null);
+    }catch{/* each mutation reports its error */}
   };
-
-  return (
-    <ComandoCard
-      icon={ListChecks}
-      title="Tarefas do dia"
-      count={pendentes.length}
-      tone={atrasadasCount > 0 ? "urgent" : "default"}
-      scopeHint={isAdmin ? "Equipe" : undefined}
-      action={{ label: "Revisão", to: "/follow-ups" }}
-      isLoading={isLoading}
-      isError={isError}
-      onRetry={() => void refetch()}
-      /* Nunca "vazio": o campo de adicionar É o estado vazio útil. */
-      isEmpty={false}
-      footer={
-        concluidasHoje.length > 0 ? (
-          <button
-            type="button"
-            onClick={() => setMostrarConcluidas((v) => !v)}
-            className="text-[11px] font-semibold text-muted-foreground/70 transition-colors hover:text-foreground"
-          >
-            {mostrarConcluidas ? "Esconder" : "Ver"}{" "}
-            <span className="tabular-nums">{concluidasHoje.length}</span>{" "}
-            {concluidasHoje.length === 1 ? "concluída hoje" : "concluídas hoje"}
-          </button>
-        ) : null
-      }
-    >
-
-      {pendentes.length === 0 && concluidasHoje.length === 0 && (
-        <p className="px-4 pb-1 pt-2 text-[11px] text-muted-foreground/60">
-          {isAdmin
-            ? "Ninguém do time tem tarefa aberta. Escreva abaixo para criar a sua."
-            : "Nenhuma tarefa. Escreva abaixo e aperte Enter."}
-        </p>
-      )}
-
-      <ul className="divide-y divide-border/50">
-        {pendentes.map(({ tarefa, atrasada }) => (
-          <li
-            key={tarefa.id}
-            className="group flex items-center gap-2.5 px-4 py-2 transition-colors hover:bg-muted/40"
-          >
-            {souDono(tarefa.user_id) ? (
-              <button
-                type="button"
-                onClick={() => concluir.mutate(tarefa.id)}
-                disabled={concluir.isPending}
-                aria-label={`Concluir ${tarefa.title}`}
-                className="grid h-5 w-5 shrink-0 place-items-center rounded-[7px] border-[1.5px] border-border bg-card transition-colors hover:border-success-strong disabled:opacity-50"
-              />
-            ) : (
-              // Tarefa de outra pessoa: o admin acompanha, não executa.
-              <span aria-hidden className="h-5 w-5 shrink-0 rounded-[7px] border-[1.5px] border-dashed border-border" />
-            )}
-
-            <span className="min-w-0 flex-1">
-              <span className="block truncate text-[13px]">{tarefa.title}</span>
-              {tarefa.description && (
-                <span className="block truncate text-[11px] text-muted-foreground/60">
-                  {tarefa.description}
-                </span>
-              )}
-              {/* Só o admin: a lista do vendedor é inteira dele. */}
-              {isAdmin && (
-                <DonoDaLinha
-                  nome={nomePorUserId.get(tarefa.user_id)}
-                  className="mt-0.5"
-                  semDonoLabel="Fora do time"
-                />
-              )}
-            </span>
-
-            {atrasada && (
-              <span className="shrink-0 rounded-full bg-destructive/10 px-2 py-0.5 text-[10.5px] font-bold text-destructive">
-                atrasada
-              </span>
-            )}
-
-            {tarefa.lead_id && (
-              <Link
-                to={`/leads?lead=${tarefa.lead_id}`}
-                aria-label={`Abrir o lead de ${tarefa.title}`}
-                className="grid h-[30px] w-[30px] shrink-0 place-items-center rounded-[10px] border border-border bg-card text-muted-foreground transition-colors hover:text-foreground"
-              >
-                <ArrowUpRight className="h-3.5 w-3.5" />
-              </Link>
-            )}
-
-            {souDono(tarefa.user_id) && (
-              <button
-                type="button"
-                onClick={() => remover.mutate(tarefa.id)}
-                aria-label={`Remover ${tarefa.title}`}
-                className="shrink-0 text-muted-foreground/30 opacity-0 transition-all hover:text-destructive focus-visible:opacity-100 group-hover:opacity-100"
-              >
-                <X className="h-3.5 w-3.5" />
-              </button>
-            )}
-          </li>
-        ))}
-
-        {mostrarConcluidas &&
-          concluidasHoje.map((tarefa) => (
-            <li
-              key={tarefa.id}
-              className="flex items-center gap-2.5 px-4 py-2 transition-colors hover:bg-muted/40"
-            >
-              {souDono(tarefa.user_id) ? (
-                <button
-                  type="button"
-                  onClick={() => desfazer.mutate(tarefa.id)}
-                  disabled={desfazer.isPending}
-                  aria-label={`Reabrir ${tarefa.title}`}
-                  className="grid h-5 w-5 shrink-0 place-items-center rounded-[7px] bg-success-strong text-white transition-opacity hover:opacity-80 disabled:opacity-50"
-                >
-                  <Check className="h-3.5 w-3.5" strokeWidth={3} />
-                </button>
-              ) : (
-                <span aria-hidden className="grid h-5 w-5 shrink-0 place-items-center rounded-[7px] bg-success-strong/40 text-white">
-                  <Check className="h-3.5 w-3.5" strokeWidth={3} />
-                </span>
-              )}
-              <span className="min-w-0 flex-1">
-                <span
-                  className={cn(
-                    "block truncate text-[13px] text-muted-foreground/50",
-                    "line-through",
-                  )}
-                >
-                  {tarefa.title}
-                </span>
-                {isAdmin && (
-                  <DonoDaLinha
-                    nome={nomePorUserId.get(tarefa.user_id)}
-                    semDonoLabel="Fora do time"
-                  />
-                )}
-              </span>
-            </li>
-          ))}
-      </ul>
-      {/* V5: o campo de nova tarefa vem DEPOIS da lista — o que já existe é
-          lido primeiro; criar é o gesto do fim. */}
-      <form onSubmit={adicionar} className="mx-4 mb-3 mt-1 flex items-center gap-2 rounded-xl border border-border bg-background/60 px-3 py-2 focus-within:ring-2 focus-within:ring-ring">
-        <Plus className="h-3.5 w-3.5 shrink-0 text-muted-foreground/60" />
-        <input
-          value={texto}
-          onChange={(e) => setTexto(e.target.value)}
-          placeholder="Ligar para o João…"
-          aria-label="Nova tarefa do dia"
-          disabled={criar.isPending}
-          className="min-w-0 flex-1 bg-transparent text-[13px] outline-none placeholder:text-muted-foreground/50 disabled:opacity-50"
-        />
-        {texto.trim() ? (
-          <button
-            type="submit"
-            disabled={criar.isPending}
-            className="shrink-0 rounded-full bg-primary px-3 py-1 text-[11px] font-bold text-primary-foreground disabled:opacity-50"
-          >
-            {criar.isPending ? "…" : "Adicionar"}
-          </button>
-        ) : (
-          <kbd className="shrink-0 rounded-md bg-muted px-1.5 py-0.5 font-sans text-[10px] text-muted-foreground">↵</kbd>
-        )}
-      </form>
-    </ComandoCard>
-  );
+  const add=async(e:FormEvent)=>{e.preventDefault();if(!title.trim() || busy)return;try{await create.mutateAsync({title:title.trim()});setTitle('');}catch{/* mutation reports the error */}};
+  return <ComandoCard icon={ListChecks} title="Tarefas do dia" count={queue.total} tone={queue.overdue?'urgent':'default'}
+    action={isAdmin?{label:'Gerenciar',to:'/tarefas'}:undefined} isLoading={queue.isCardLoading} isError={queue.isBlockingError} onRetry={()=>void queue.refetch()} isEmpty={false}
+    notice={queue.unavailableSource && <div role="alert" className="mx-4 mb-3 flex flex-wrap items-center gap-2 rounded-lg border px-3 py-2 text-xs text-muted-foreground"><p className="min-w-0 flex-1">{queue.unavailableSource==='assigned'?'Não foi possível carregar as atividades atribuídas pelo admin. Suas tarefas pessoais continuam disponíveis.':'Não foi possível carregar suas tarefas pessoais. As atividades atribuídas continuam disponíveis.'}</p><Button variant="ghost" size="sm" onClick={()=>void queue.refetch()}>Tentar novamente</Button></div>}>
+    <div className="flex gap-1 border-b px-4 pb-3" role="group" aria-label="Período das tarefas">{([['today','Hoje'],['future','Próximas'],['history','Histórico']] as const).map(([value,label])=><Button key={value} variant={tab===value?'secondary':'ghost'} size="sm" onClick={()=>{setTab(value);setPage(0);}}>{label}</Button>)}</div>
+    {!queue.items.length?<p className="px-4 py-7 text-center text-xs text-muted-foreground">{tab==='history'?'Nenhuma execução neste histórico.':tab==='future'?'Nenhuma atividade futura.':'Nenhuma tarefa pendente. Crie a sua abaixo.'}</p>:
+      <TaskList items={queue.items} myMemberId={queue.myMemberId} timezone={timezone??'America/Sao_Paulo'} busy={busy} onSelect={setSelected}
+        onAction={(item,kind)=>kind==='complete'?setSelected(item):void action(item,kind)} onOpenDeal={openBusiness}
+        onRemove={item=>{if(item.daily_action_id)remove.mutate(item.daily_action_id);}}/>}
+    {queue.assignedTotal>100 && <div className="flex items-center justify-between border-t p-3"><Button variant="outline" size="sm" disabled={!page} onClick={()=>setPage(p=>p-1)}>Anterior</Button><span className="text-xs">Página {page+1}</span><Button variant="outline" size="sm" disabled={(page+1)*100>=queue.assignedTotal} onClick={()=>setPage(p=>p+1)}>Próxima</Button></div>}
+    <form onSubmit={add} className="m-4 flex items-center gap-2 rounded-xl border bg-background/60 px-3 py-2"><Plus className="size-4 shrink-0 text-muted-foreground"/><input aria-label="Nova tarefa do dia" className="min-w-0 flex-1 bg-transparent text-sm outline-none" placeholder="Adicionar uma tarefa sua…" value={title} onChange={e=>setTitle(e.target.value)} maxLength={300} disabled={busy}/><Button type="submit" size="sm" disabled={busy || !title.trim()}>Adicionar</Button></form>
+    {selected && <TaskDetails key={selected.id} item={selected} timezone={timezone??'America/Sao_Paulo'} canComplete={selected.assignee_id===queue.myMemberId && ['pending','in_progress'].includes(selected.status)} busy={busy}
+      recordResult={!selected.daily_action_id} onClose={()=>setSelected(null)} onComplete={result=>void action(selected,'complete',result)} onOpenDeal={selected.lead_id?()=>openBusiness(selected):undefined}
+      onReopen={selected.daily_action_id && selected.status==='completed'?()=>{reopen.mutate(selected.daily_action_id!,{onSuccess:()=>setSelected(null)});}:undefined}/>}
+  </ComandoCard>;
 }

@@ -15,6 +15,7 @@ export type ChecklistItemInsert = TablesInsert<"checklist_items">;
 export type ChecklistItemUpdate = TablesUpdate<"checklist_items">;
 
 export interface ChecklistWithCounts extends Checklist {
+  playbook_archived_at?: string | null;
   total_items: number;
   completed_items: number;
   // `pipeline_entry_id` e `deal_id` eram declarados à mão AQUI porque

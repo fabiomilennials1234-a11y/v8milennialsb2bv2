@@ -90,6 +90,7 @@ export interface ViewPermissionInput {
 export function makeCanViewRoute({ isMaster, isAdmin, featurePerms }: ViewPermissionInput) {
   return (path: string): boolean => {
     if (isMaster || isAdmin) return true;
+    if (path.split('?')[0]==='/tarefas') return false;
     const permKey =
       NAV_VIEW_PERMISSIONS[path] ??
       // Rota única de funil (SCRUM-637): qualquer `/funil/...` herda a
