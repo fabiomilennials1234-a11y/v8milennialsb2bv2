@@ -6,7 +6,8 @@ diagnose/recover CRM state through curated, audited tools. See
 
 ## Security model — RLS-inherited
 
-- Gated by an `x-mcp-secret` header (single guard, like `x-cron-secret`).
+- Gated by the gateway secret (single guard, like `x-cron-secret`), sent as `x-mcp-secret` or as
+  `Authorization: Bearer <secret>`. `x-mcp-secret` wins when both are sent.
 - The function signs in as a **dedicated ops-master** (`signInWithPassword`) and runs every query
   with that JWT → **RLS ON**, master-ghost policies grant cross-org. It **never** uses
   `service_role` for data.
@@ -141,6 +142,9 @@ supabase functions deploy torque-mcp --project-ref bcfadphgsibjzivtbjvc   # dev
   "headers": { "x-mcp-secret": "<MCP_GATEWAY_SECRET>" }
 }
 ```
+
+claude.ai custom connectors need Anthropic approval for non-standard header names, so there the
+connector uses **No sign in** plus the request header `Authorization: Bearer <MCP_GATEWAY_SECRET>`.
 
 ## Tests
 
