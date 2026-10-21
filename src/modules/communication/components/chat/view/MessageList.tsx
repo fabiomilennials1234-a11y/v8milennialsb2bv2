@@ -28,6 +28,7 @@ import { Loader2, UserPlus } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
 import { useViewport } from "@/shared/hooks/use-viewport";
+import type { MentionNames } from "@/modules/communication/lib/groupMentions";
 import { ChatEmptyState } from "@/modules/communication/components/chat/ChatEmptyState";
 import { UnreadDivider } from "@/modules/communication/components/chat/UnreadDivider";
 import { ScrollToBottomFab } from "@/modules/communication/components/chat/ScrollToBottomFab";
@@ -100,6 +101,8 @@ export interface MessageListProps {
    * dizer a qual, que é o que o vendedor precisa saber para não citar errado.
    */
   textoCitado?: (providerMessageId: string) => string | null;
+  /** `lid → nome` para as menções de grupo. Ver `useGroupMentionNames`. */
+  mentionNames?: MentionNames;
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -107,6 +110,20 @@ export interface MessageListProps {
 const VIRTUALIZE_THRESHOLD = 100;
 const DESKTOP_OVERSCAN = 3;
 const MOBILE_OVERSCAN = 5;
+
+/**
+ * Rolagem programática da lista VIRTUALIZADA: sempre instantânea, nunca suave.
+ *
+ * Durante um `scrollToIndex(..., { behavior: "smooth" })` o
+ * `@tanstack/virtual-core` (3.14) descarta a medição de todo item fora de
+ * `alvo ± max(overscan, metade da faixa visível)` — a do ref E a do
+ * ResizeObserver (`shouldMeasureDuringScroll`). O observer só avisa de novo se
+ * o tamanho mudar, e um texto não muda: o item fica com a ESTIMATIVA (80 px)
+ * enquanto estiver montado, e as bolhas seguintes sobem por cima dele. Era a
+ * metade de cima da tela ao abrir uma conversa longa (Chamado 6885e65d). O
+ * modo plain (≤100 itens) não tem virtualizer e segue suave.
+ */
+const VIRTUAL_SCROLL_BEHAVIOR = "auto" as const;
 
 /**
  * Identidade estável para "sem ligações". `calls ?? []` inline criaria um array
@@ -225,6 +242,7 @@ export function MessageList({
   onReagir,
   onResponder,
   textoCitado,
+  mentionNames,
 }: MessageListProps) {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const scrollAreaRef = useRef<HTMLDivElement | null>(null);
@@ -329,7 +347,7 @@ export function MessageList({
 
     const scrollToBottom = () => {
       if (shouldVirtualize) {
-        virtualizer.scrollToIndex(timeline.length - 1, { align: "end", behavior: "smooth" });
+        virtualizer.scrollToIndex(timeline.length - 1, { align: "end", behavior: VIRTUAL_SCROLL_BEHAVIOR });
       } else if (viewport) {
         viewport.scrollTo({ top: viewport.scrollHeight, behavior: "smooth" });
       } else {
@@ -350,7 +368,7 @@ export function MessageList({
   const handleScrollToBottom = useCallback(() => {
     const viewport = scrollAreaRef.current?.querySelector<HTMLElement>("[data-radix-scroll-area-viewport]");
     if (shouldVirtualize) {
-      virtualizer.scrollToIndex(timeline.length - 1, { align: "end", behavior: "smooth" });
+      virtualizer.scrollToIndex(timeline.length - 1, { align: "end", behavior: VIRTUAL_SCROLL_BEHAVIOR });
     } else if (viewport) {
       viewport.scrollTo({ top: viewport.scrollHeight, behavior: "smooth" });
     } else {
@@ -452,10 +470,11 @@ export function MessageList({
           onReagir={onReagir}
           onResponder={onResponder}
           textoCitado={textoCitado}
+          mentionNames={mentionNames}
         />
       </div>
     );
-  }, [timeline, firstUnreadIndex, unreadCount, mountTime, onImagePreview, onRetry, instanceId, enableActions, onReagir, onResponder, textoCitado]);
+  }, [timeline, firstUnreadIndex, unreadCount, mountTime, onImagePreview, onRetry, instanceId, enableActions, onReagir, onResponder, textoCitado, mentionNames]);
 
   return (
     // V5: a conversa corre num fundo afundado com grade de pontos (1 px a cada

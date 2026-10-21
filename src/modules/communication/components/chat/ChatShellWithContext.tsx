@@ -83,6 +83,7 @@ import {
 } from "@/modules/communication/lib/official-conversation";
 import { useSocialRealtime } from "@/modules/communication/hooks/chat/useSocialRealtime";
 import { useWhatsAppMessages } from "@/modules/communication/hooks/chat/useWhatsAppMessages";
+import { useGroupMentionNames } from "@/modules/communication/hooks/chat/useGroupMentionNames";
 import { ChatThreadUnavailable } from "@/modules/communication/components/chat/ChatThreadUnavailable";
 import { resolveThreadState } from "@/modules/communication/lib/resolveThreadState";
 import { invalidateChipInstanceIds } from "@/modules/communication/lib/chipInstanceIds";
@@ -259,6 +260,8 @@ function ChatView({
     refetch: refetchMessages,
     hasOlderMessages, loadOlderMessages, isLoadingOlder, olderError,
   } = useWhatsAppMessages(phoneNumber, instanceId);
+  // `@<LID>` citado no grupo → `@Nome` na bolha (Chamado 6885e65d).
+  const mentionNames = useGroupMentionNames(messages);
 
   useEffect(() => {
     if (hasEstablishedOutgoing(messages)) {
@@ -448,6 +451,7 @@ function ChatView({
             density={density}
             instanceId={instanceId}
             enableActions
+            mentionNames={mentionNames}
           />
         )}
       </div>
