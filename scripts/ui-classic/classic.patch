@@ -607,6 +607,235 @@ index 4229b6b0e..4179c443d 100644
  
    return useQuery({
      queryKey: ["dashboard-metrics", selectedMonth, selectedYear, effectiveFilter, organizationId, useCanonical],
+diff --git a/classic/src/modules/campaigns/components/disparo-wizard/DisparoWizard.tsx b/classic/src/modules/campaigns/components/disparo-wizard/DisparoWizard.tsx
+index 92c731901..4fe59dabe 100644
+--- a/classic/src/modules/campaigns/components/disparo-wizard/DisparoWizard.tsx
++++ b/classic/src/modules/campaigns/components/disparo-wizard/DisparoWizard.tsx
+@@ -29,6 +29,7 @@ import { StepReview } from "./StepReview";
+ import { StepMonitor } from "./StepMonitor";
+ import { instancesToNumbers } from "@/shared/disparo/disparo-numbers";
+ import type { DisparoNumber } from "./wizard-machine";
++import { buildDisparoMediaPayload } from "./disparo-media-payload";
+ import { notifyError } from "@/shared/errors";
+ 
+ /** Today as a Sao Paulo calendar date (YYYY-MM-DD) — the plan's clock-free anchor. */
+@@ -97,8 +98,14 @@ function DisparoWizardInner({ numbers, onClose, onFinish }: DisparoWizardInnerPr
+     for (const n of selected) caps[n.id] = Math.max(0, Math.floor(n.cap));
+     // Anti-ban widens the inter-send jitter; off keeps a tighter cadence.
+     const [delayMin, delayMax] = draft.antiBan ? [5000, 30000] : [1000, 4000];
+-    const imageUrl =
+-      draft.media?.type === "image" && draft.media.url ? draft.media.url : undefined;
++    // The attachment (image, PDF or Word) travels as media_* — and an image also
++    // as image_url. One still uploading refuses the release: never a text-only
++    // Disparo that silently drops the file (Chamado dac7e647).
++    const media = buildDisparoMediaPayload(draft.media);
++    if (!media.ok) {
++      toast.error(media.error);
++      return;
++    }
+ 
+     // Post-send destination: each lead is moved when ITS message is sent (per
+     // lot, over the plan's days). Validated fail-closed by blast-plan-create.
+@@ -130,7 +137,7 @@ function DisparoWizardInner({ numbers, onClose, onFinish }: DisparoWizardInnerPr
+         template: draft.template ?? null,
+         delay_min_ms: delayMin,
+         delay_max_ms: delayMax,
+-        image_url: imageUrl,
++        ...media.payload,
+         source: draft.audienceSource ?? undefined,
+         post_send_target: postSendTarget,
+       });
+diff --git a/classic/src/modules/campaigns/components/disparo-wizard/StepMessage.tsx b/classic/src/modules/campaigns/components/disparo-wizard/StepMessage.tsx
+index 2c37938d6..fdf85bc84 100644
+--- a/classic/src/modules/campaigns/components/disparo-wizard/StepMessage.tsx
++++ b/classic/src/modules/campaigns/components/disparo-wizard/StepMessage.tsx
+@@ -6,7 +6,10 @@
+  * the real `validateBlastMedia` pure guard. The right-hand preview renders the
+  * message as a real sample Lead will receive it (WhatsApp bubble), resolved by
+  * the pure `resolvePreview`; the operator cycles the sample to spot-check
+- * personalization. Video attachments surface a ban-risk note (decision Q13).
++ * personalization.
++ * Attachments: image, PDF or Word — the kinds the Disparo sends (Chamado
++ * dac7e647). Every accepted file is uploaded now and its public URL travels on
++ * the draft; audio and video are refused up front instead of being dropped.
+  */
+ import { useRef, useState } from "react";
+ import {
+@@ -20,8 +23,9 @@ import {
+ } from "lucide-react";
+ import {
+   validateBlastMedia,
++  classifyBlastMedia,
+   BLAST_MEDIA_LIMITS_MB,
+-  type BlastMediaType,
++  BLAST_MEDIA_ACCEPT,
+ } from "@/modules/communication";
+ import { Loader2 } from "lucide-react";
+ import { Textarea } from "@/components/ui/textarea";
+@@ -43,13 +47,12 @@ import { MOCK_PREVIEW_SAMPLES } from "./mock-disparo-data";
+ 
+ const VARIABLES = ["{{primeiro_nome}}", "{{nome}}", "{{empresa}}", "{{segmento}}"];
+ 
+-/** Map a File's MIME type onto a blast media kind, or null if unsupported. */
+-function mediaTypeOf(file: File): BlastMediaType | null {
+-  if (file.type.startsWith("image/")) return "image";
+-  if (file.type.startsWith("audio/")) return "audio";
+-  if (file.type.startsWith("video/")) return "video";
+-  if (file.type === "application/pdf") return "pdf";
+-  return null;
++/** What the attachment card says the file is: "imagem", or the document's
++ *  extension (PDF, DOCX, DOC). */
++function mediaKindLabel(media: { type: string; name: string }): string {
++  if (media.type === "image") return "imagem";
++  const ext = media.name.split(".").pop()?.toUpperCase();
++  return ext && ext.length <= 4 ? ext : "documento";
+ }
+ 
+ interface StepMessageProps {
+@@ -61,6 +64,9 @@ export function StepMessage({ draft, patch }: StepMessageProps) {
+   const fileRef = useRef<HTMLInputElement>(null);
+   const [sampleIdx, setSampleIdx] = useState(0);
+   const [uploading, setUploading] = useState(false);
++  // Bumped on every pick and on remove: an upload that finishes after the file
++  // was replaced or removed must not resurrect it on the draft.
++  const uploadSeq = useRef(0);
+   const sample = MOCK_PREVIEW_SAMPLES[sampleIdx % MOCK_PREVIEW_SAMPLES.length];
+ 
+   const onPickFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+@@ -68,46 +74,55 @@ export function StepMessage({ draft, patch }: StepMessageProps) {
+     if (fileRef.current) fileRef.current.value = "";
+     if (!file) return;
+ 
+-    const type = mediaTypeOf(file);
+-    if (!type) {
+-      patch({ media: null, mediaError: "Tipo de mídia não suportado." });
++    const seq = ++uploadSeq.current;
++    setUploading(false);
++    const kind = classifyBlastMedia(file);
++    if (!kind.ok) {
++      patch({ media: null, mediaError: kind.error });
+       return;
+     }
++    const { type, contentType } = kind;
+     const result = validateBlastMedia(type, file.size);
+     if (!result.ok) {
+       patch({ media: null, mediaError: result.error });
+       return;
+     }
+ 
+-    // The backend dispatch (blast-plan-create) sends an `image_url`, so images
+-    // are uploaded to storage now and the public URL travels on the draft. Other
+-    // media kinds keep their metadata (their transport lands with #901 backend).
+-    if (type !== "image") {
+-      patch({ media: { type, sizeBytes: file.size, name: file.name, url: null }, mediaError: null });
+-      return;
+-    }
+-
++    // Every supported attachment (image, PDF, Word) is uploaded now and its
++    // public URL travels on the draft — blast-plan-create sends it as media_*.
++    // Until the URL lands the Mensagem step holds (wizard-machine), so a file
++    // can never be dropped from the Disparo in silence.
+     setUploading(true);
+     patch({ media: { type, sizeBytes: file.size, name: file.name, url: null }, mediaError: null });
+     try {
++      // Same path as before: `disparo/` is a first-segment prefix the bucket
++      // policy admits; the name is ASCII-only (an accent breaks the Storage key).
+       const path = `disparo/${crypto.randomUUID()}-${file.name.replace(/[^\w.-]/g, "_")}`;
+       const { error } = await supabase.storage.from("media").upload(path, file, {
+-        contentType: file.type,
++        contentType,
+         upsert: false,
+       });
+       if (error) throw error;
++      if (seq !== uploadSeq.current) return;
+       const { data } = supabase.storage.from("media").getPublicUrl(path);
+       patch({
+         media: { type, sizeBytes: file.size, name: file.name, url: data.publicUrl },
+         mediaError: null,
+       });
+     } catch (err) {
+-      patch({ media: null, mediaError: (err as Error).message ?? "Falha ao enviar a imagem." });
++      if (seq !== uploadSeq.current) return;
++      patch({ media: null, mediaError: (err as Error).message || "Falha ao enviar o anexo." });
+     } finally {
+-      setUploading(false);
++      if (seq === uploadSeq.current) setUploading(false);
+     }
+   };
+ 
++  const removeMedia = () => {
++    uploadSeq.current += 1;
++    setUploading(false);
++    patch({ media: null, mediaError: null });
++  };
++
+   const insertVar = (token: string) =>
+     patch({
+       message: `${draft.message}${draft.message.endsWith(" ") || draft.message === "" ? "" : " "}${token} `,
+@@ -164,7 +179,7 @@ export function StepMessage({ draft, patch }: StepMessageProps) {
+             <input
+               ref={fileRef}
+               type="file"
+-              accept="image/*,audio/*,video/*,application/pdf"
++              accept={BLAST_MEDIA_ACCEPT}
+               className="hidden"
+               onChange={onPickFile}
+             />
+@@ -176,7 +191,7 @@ export function StepMessage({ draft, patch }: StepMessageProps) {
+                 <div className="min-w-0 flex-1">
+                   <p className="truncate text-sm font-medium text-foreground">{draft.media.name}</p>
+                   <p className="flex items-center gap-1.5 text-[11px] uppercase tracking-wide text-muted-foreground">
+-                    {draft.media.type} · {(draft.media.sizeBytes / (1024 * 1024)).toFixed(1)} MB
++                    {mediaKindLabel(draft.media)} · {(draft.media.sizeBytes / (1024 * 1024)).toFixed(1)} MB
+                     {uploading && (
+                       <span className="flex items-center gap-1 normal-case text-primary">
+                         <Loader2 className="h-3 w-3 animate-spin" /> enviando…
+@@ -186,7 +201,8 @@ export function StepMessage({ draft, patch }: StepMessageProps) {
+                 </div>
+                 <button
+                   type="button"
+-                  onClick={() => patch({ media: null, mediaError: null })}
++                  onClick={removeMedia}
++                  aria-label="Remover anexo"
+                   className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                 >
+                   <X className="h-4 w-4" />
+@@ -199,7 +215,7 @@ export function StepMessage({ draft, patch }: StepMessageProps) {
+                 className="flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-border/70 py-3 text-sm text-muted-foreground transition-colors hover:border-primary/40 hover:text-foreground"
+               >
+                 <Paperclip className="h-4 w-4" />
+-                Anexar imagem, áudio, vídeo ou PDF
++                Anexar imagem, PDF ou Word
+               </button>
+             )}
+ 
+@@ -208,15 +224,10 @@ export function StepMessage({ draft, patch }: StepMessageProps) {
+                 <AlertTriangle className="h-3.5 w-3.5" />
+                 {draft.mediaError}
+               </p>
+-            ) : draft.media?.type === "video" ? (
+-              <p className="flex items-center gap-1.5 text-xs text-amber-500">
+-                <AlertTriangle className="h-3.5 w-3.5" />
+-                Vídeo em massa aumenta o risco de bloqueio — prefira imagem ou link quando der.
+-              </p>
+             ) : (
+               <p className="text-[11px] text-muted-foreground/70">
+-                Limites: imagem {BLAST_MEDIA_LIMITS_MB.image} MB · áudio {BLAST_MEDIA_LIMITS_MB.audio} MB ·
+-                vídeo {BLAST_MEDIA_LIMITS_MB.video} MB · PDF {BLAST_MEDIA_LIMITS_MB.pdf} MB
++                Limites: imagem {BLAST_MEDIA_LIMITS_MB.image} MB · PDF ou Word {BLAST_MEDIA_LIMITS_MB.document} MB.
++                A mensagem vai como legenda do arquivo.
+               </p>
+             )}
+           </div>
+@@ -265,7 +276,7 @@ export function StepMessage({ draft, patch }: StepMessageProps) {
+                 {draft.media && (
+                   <div className="mb-1.5 flex items-center gap-1.5 rounded-md bg-black/20 px-2 py-1 text-[11px] text-white/80">
+                     <Paperclip className="h-3 w-3" />
+-                    {draft.media.type}
++                    {mediaKindLabel(draft.media)}
+                   </div>
+                 )}
+                 <p className="whitespace-pre-wrap break-words leading-snug">
 diff --git a/classic/src/modules/campaigns/components/disparo-wizard/StepMonitor.tsx b/classic/src/modules/campaigns/components/disparo-wizard/StepMonitor.tsx
 index b58bb8f1f..fb30768ad 100644
 --- a/classic/src/modules/campaigns/components/disparo-wizard/StepMonitor.tsx
@@ -642,6 +871,127 @@ index b58bb8f1f..fb30768ad 100644
    const { data: plans } = useBlastPlans();
    const plan = useMemo(() => plans?.find((p) => p.id === planId) ?? null, [plans, planId]);
    const { data: progress } = useBlastPlanProgress(planId);
+diff --git a/classic/src/modules/campaigns/components/disparo-wizard/disparo-media-payload.ts b/classic/src/modules/campaigns/components/disparo-wizard/disparo-media-payload.ts
+new file mode 100644
+index 000000000..f4d139e09
+--- /dev/null
++++ b/classic/src/modules/campaigns/components/disparo-wizard/disparo-media-payload.ts
+@@ -0,0 +1,60 @@
++/**
++ * The attachment part of the blast-plan-create body (Chamado dac7e647).
++ *
++ * Every supported attachment travels as media_url / media_type / media_name. An
++ * image ALSO keeps `image_url`: a server still on the previous edge reads only
++ * that field, so images keep working whatever order the deploy lands in.
++ *
++ * An attachment without a URL (upload still running, or never finished) refuses
++ * the release: sending the Disparo as text-only would drop the file in silence —
++ * the exact bug this Chamado is about.
++ */
++import type { BlastMediaType } from "@/modules/communication";
++import type { DisparoMedia } from "./wizard-machine";
++
++/** Same ceiling blast-plan-create enforces on media_name. */
++export const DISPARO_MEDIA_NAME_MAX = 255;
++
++export const ANEXO_PENDENTE = "Aguarde o anexo terminar de enviar.";
++
++export interface DisparoMediaPayload {
++  image_url?: string;
++  media_url?: string;
++  media_type?: BlastMediaType;
++  media_name?: string;
++}
++
++export type DisparoMediaPayloadResult =
++  | { ok: true; payload: DisparoMediaPayload }
++  | { ok: false; error: string };
++
++export function buildDisparoMediaPayload(media: DisparoMedia | null): DisparoMediaPayloadResult {
++  if (!media) return { ok: true, payload: {} };
++  if (!media.url) return { ok: false, error: ANEXO_PENDENTE };
++
++  const payload: DisparoMediaPayload = {
++    media_url: media.url,
++    media_type: media.type,
++    media_name: fitFileName(media.name),
++  };
++  return {
++    ok: true,
++    payload: media.type === "image" ? { image_url: media.url, ...payload } : payload,
++  };
++}
++
++/** Printable, trimmed, at most 255 characters — keeping the extension, which is
++ *  how WhatsApp on the lead's phone decides what opens the file. */
++function fitFileName(name: string): string {
++  const printable = Array.from(name)
++    .filter((ch) => {
++      const code = ch.codePointAt(0) ?? 0;
++      return code > 0x1f && code !== 0x7f;
++    })
++    .join("")
++    .trim();
++  if (printable.length <= DISPARO_MEDIA_NAME_MAX) return printable;
++  const dot = printable.lastIndexOf(".");
++  const ext = dot > 0 && printable.length - dot <= 10 ? printable.slice(dot) : "";
++  return printable.slice(0, DISPARO_MEDIA_NAME_MAX - ext.length) + ext;
++}
+diff --git a/classic/src/modules/campaigns/components/disparo-wizard/wizard-machine.ts b/classic/src/modules/campaigns/components/disparo-wizard/wizard-machine.ts
+index 8e8df76d1..de874161b 100644
+--- a/classic/src/modules/campaigns/components/disparo-wizard/wizard-machine.ts
++++ b/classic/src/modules/campaigns/components/disparo-wizard/wizard-machine.ts
+@@ -19,6 +19,7 @@ import {
+   type AudienceSelection,
+ } from "./audience-resolve";
+ import { CAP_RECOMMENDED } from "@/shared/disparo/speed-safety";
++import { ANEXO_PENDENTE } from "./disparo-media-payload";
+ 
+ export type DisparoStepId =
+   | "audience"
+@@ -79,10 +80,12 @@ export type { TemplateEscolhido } from "@/shared/disparo/template-escolhido";
+ import type { TemplateEscolhido } from "@/shared/disparo/template-escolhido";
+ 
+ export interface DisparoMedia {
++  /** "image" or "document" (PDF/Word) — the two kinds the Disparo sends. */
+   type: BlastMediaType;
+   sizeBytes: number;
+   name: string;
+-  /** Public storage URL once uploaded (#910 dispatch); null while pending. */
++  /** Public storage URL once uploaded; null while the upload runs. A media
++   *  without URL holds the Mensagem step (it would otherwise go out as text). */
+   url?: string | null;
+ }
+ 
+@@ -209,6 +212,10 @@ export function validateStep(
+         return { ok: false, reason: "Escreva a mensagem." };
+       if (draft.mediaError)
+         return { ok: false, reason: draft.mediaError };
++      // A file still uploading has no URL yet: advancing would release a
++      // Disparo that drops it and goes out as text, with nobody told.
++      if (draft.media && !draft.media.url)
++        return { ok: false, reason: ANEXO_PENDENTE };
+       return { ok: true, reason: null };
+     }
+     case "postsend":
+diff --git a/classic/src/modules/campaigns/hooks/useBlastPlans.ts b/classic/src/modules/campaigns/hooks/useBlastPlans.ts
+index efb596b75..22ea276eb 100644
+--- a/classic/src/modules/campaigns/hooks/useBlastPlans.ts
++++ b/classic/src/modules/campaigns/hooks/useBlastPlans.ts
+@@ -76,7 +76,13 @@ export interface CreateBlastPlanInput {
+   template?: TemplateEscolhido | null;
+   delay_min_ms?: number;
+   delay_max_ms?: number;
++  /** Legacy image field — still sent for images (older edge reads only this). */
+   image_url?: string;
++  /** The attachment (Chamado dac7e647): public URL in the `media` bucket, its
++   *  kind (image | document = PDF/Word) and the file name the lead sees. */
++  media_url?: string;
++  media_type?: "image" | "document";
++  media_name?: string;
+   exclude_blasted_within_days?: number;
+   only_non_responders?: boolean;
+   /** Time-of-day (HH:MM) the daily releaser fires; defaults server-side to 09:00. */
 diff --git a/classic/src/modules/campaigns/hooks/useMassSendJobs.ts b/classic/src/modules/campaigns/hooks/useMassSendJobs.ts
 index e8ba993f8..05c4521c3 100644
 --- a/classic/src/modules/campaigns/hooks/useMassSendJobs.ts
@@ -3113,6 +3463,115 @@ index df75f5544..234de550f 100644
   */
  
  import { useEffect, useRef } from "react";
+diff --git a/classic/src/modules/communication/index.ts b/classic/src/modules/communication/index.ts
+index 76e2477a7..0422e2f9f 100644
+--- a/classic/src/modules/communication/index.ts
++++ b/classic/src/modules/communication/index.ts
+@@ -105,9 +105,13 @@ export {
+ // ── Lib: blast media guard (consumido por campaigns/Disparos, #904) ────────
+ export {
+   validateBlastMedia,
++  classifyBlastMedia,
+   BLAST_MEDIA_LIMITS_MB,
++  BLAST_MEDIA_ACCEPT,
++  BLAST_MEDIA_UNSUPPORTED,
+   type BlastMediaType,
+   type BlastMediaValidation,
++  type BlastMediaClassification,
+ } from "./lib/blast-media-validator";
+ 
+ // ── Hooks: WhatsApp — chat shell barrel (re-exports principais) ───────────
+diff --git a/classic/src/modules/communication/lib/blast-media-validator.ts b/classic/src/modules/communication/lib/blast-media-validator.ts
+index d87f77d34..d40c2df63 100644
+--- a/classic/src/modules/communication/lib/blast-media-validator.ts
++++ b/classic/src/modules/communication/lib/blast-media-validator.ts
+@@ -1,23 +1,70 @@
+ /**
+- * blast-media-validator — pure size/type guard for blast media (PRD #900, #903).
++ * blast-media-validator — pure kind/size guard for blast media (PRD #900, #903).
+  *
+  * A blast carries at most one media attachment (v1). WhatsApp/Uazapi impose
+  * practical size ceilings per kind; oversized files must be blocked at upload
+  * with a clear message rather than failing mid-blast. This module is the pure,
+- * IO-free decision: given a media kind and a byte size, accept or reject with
+- * the kind's limit so the UI can say "máx N MB".
++ * IO-free decision: which kind a file is (or that the Disparo cannot carry it),
++ * and whether its size fits that kind's limit so the UI can say "máx N MB".
++ *
++ * What the Disparo carries (Chamado dac7e647): an image, or a document — PDF or
++ * Word. Audio and video are refused up front: the blast backend does not send
++ * them, and accepting them on screen would drop them in silence.
+  */
+ 
+-export type BlastMediaType = "image" | "audio" | "video" | "pdf";
++export type BlastMediaType = "image" | "document";
+ 
+ /** Per-type upload ceilings in megabytes. */
+ export const BLAST_MEDIA_LIMITS_MB: Record<BlastMediaType, number> = {
+   image: 5,
+-  audio: 16,
+-  video: 16,
+-  pdf: 20,
++  document: 20,
+ };
+ 
++/** Shown for anything the Disparo cannot send (audio, video, spreadsheet…). */
++export const BLAST_MEDIA_UNSUPPORTED = "Por enquanto o disparo envia imagem, PDF ou Word.";
++
++const DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
++
++/** Document extensions → the MIME the upload declares (the bucket allowlist
++ *  matches on it, and some browsers report no MIME for Word files). */
++const DOCUMENT_MIME_BY_EXTENSION: Record<string, string> = {
++  pdf: "application/pdf",
++  doc: "application/msword",
++  docx: DOCX_MIME,
++};
++const DOCUMENT_MIMES = new Set(Object.values(DOCUMENT_MIME_BY_EXTENSION));
++
++/** The file picker's `accept`: images, PDF and Word (extensions + MIMEs). */
++export const BLAST_MEDIA_ACCEPT = [
++  "image/*",
++  ".pdf",
++  ".doc",
++  ".docx",
++  ...DOCUMENT_MIMES,
++].join(",");
++
++export type BlastMediaClassification =
++  | { ok: true; type: BlastMediaType; contentType: string }
++  | { ok: false; error: string };
++
++/**
++ * Which kind of Disparo attachment a file is, and the content type to upload it
++ * with. MIME first; the extension decides when the browser reports none (or a
++ * generic octet-stream), which happens with Word files on machines without Office.
++ */
++export function classifyBlastMedia(file: { name: string; type: string }): BlastMediaClassification {
++  const mime = (file.type || "").toLowerCase();
++  if (mime.startsWith("image/")) return { ok: true, type: "image", contentType: mime };
++  if (DOCUMENT_MIMES.has(mime)) return { ok: true, type: "document", contentType: mime };
++
++  if (mime === "" || mime === "application/octet-stream") {
++    const ext = file.name.split(".").pop()?.toLowerCase() ?? "";
++    const byExtension = DOCUMENT_MIME_BY_EXTENSION[ext];
++    if (byExtension) return { ok: true, type: "document", contentType: byExtension };
++  }
++  return { ok: false, error: BLAST_MEDIA_UNSUPPORTED };
++}
++
+ export type BlastMediaValidation =
+   | { ok: true }
+   | { ok: false; error: string; maxMb: number };
+@@ -28,7 +75,7 @@ export function validateBlastMedia(
+ ): BlastMediaValidation {
+   const maxMb = BLAST_MEDIA_LIMITS_MB[type];
+   if (maxMb === undefined) {
+-    return { ok: false, error: "Tipo de mídia não suportado.", maxMb: 0 };
++    return { ok: false, error: BLAST_MEDIA_UNSUPPORTED, maxMb: 0 };
+   }
+   if (!Number.isFinite(sizeBytes) || sizeBytes <= 0) {
+     return { ok: false, error: "Arquivo vazio ou inválido.", maxMb };
 diff --git a/classic/src/modules/communication/lib/documentFileName.ts b/classic/src/modules/communication/lib/documentFileName.ts
 new file mode 100644
 index 000000000..ffaa52181
