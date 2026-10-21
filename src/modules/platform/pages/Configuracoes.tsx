@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, lazy, Suspense, type ReactNode } from "react";
 import { useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
-import { usePipelineDisplayConfig } from "@/modules/pipelines";
+import { canEditLossReasons, usePipelineDisplayConfig } from "@/modules/pipelines";
 import { NOME_DE_FABRICA } from "@/contracts/pipe";
 import { useTheme } from "next-themes";
 import { motion } from "framer-motion";
@@ -84,6 +84,9 @@ import { useSupportAvailable } from "../components/support/useSupportAvailable";
 import { notifyError } from "@/shared/errors";
 
 const BillingSettings = lazy(() => import("@/modules/billing").then(m => ({ default: m.BillingSettings })));
+const LossReasonSettings = lazy(() =>
+  import("../components/settings/LossReasonSettings").then((m) => ({ default: m.LossReasonSettings }))
+);
 
 // Lazy imports — cada tab carrega só quando ativada.
 // Bundle inicial cai de ~948KB pra ~150KB.
@@ -793,7 +796,7 @@ function ComoEstaConfigurado() {
 export default function Configuracoes() {
   const { openNewTicket } = useSupportPanel();
   const supportAvailable = useSupportAvailable();
-  const { orgType } = useOrganization();
+  const { orgType, organizationId } = useOrganization();
   const { isAdmin } = useIdentity();
   const { tab: tabParam } = useParams<{ tab?: string }>();
   const [searchParams] = useSearchParams();
@@ -949,6 +952,13 @@ export default function Configuracoes() {
               <SecaoDeConfiguracao id="general" titulo="Organização" oculto>
                 <GeneralSettings />
               </SecaoDeConfiguracao>
+              {canEditLossReasons(organizationId, isAdmin) && (
+                <SecaoDeConfiguracao id="motivos-perda" titulo="Motivos de perda" oculto>
+                  <Suspense fallback={<TabFallback label="motivos de perda" />}>
+                    <LossReasonSettings />
+                  </Suspense>
+                </SecaoDeConfiguracao>
+              )}
               <SecaoDeConfiguracao id="sla" titulo="SLA de atendimento" oculto>
                 <Suspense fallback={<TabFallback label="SLA" />}>
                   <SlaConfigPanel />

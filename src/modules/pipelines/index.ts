@@ -162,7 +162,9 @@ export {
   usePipeDistributionRule,
   useSavePipeDistribution,
   useLossReasons,
+  useRenameLossReason,
 } from "./hooks/config";
+export { canEditLossReasons, LOSS_REASON_NAME_MAX_LENGTH } from "./lib/loss-reason-settings";
 export type {
   PipelineDisplayConfig,
   SystemPipeType,
