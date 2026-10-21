@@ -40,6 +40,12 @@ import { isInteractiveResponseType } from "@/modules/communication/lib/interacti
 import { UazapiMenuBubble } from "./bubbles/UazapiMenuBubble";
 import { readUazapiMenu, type UazapiMenuFields } from "@/modules/communication/lib/uazapiMenuDisplay";
 import { readDocumentFileName, type DocumentFileNameFields } from "@/modules/communication/lib/documentFileName";
+import {
+  readMentionedJids,
+  splitMentions,
+  type GroupMentionFields,
+  type MentionNames,
+} from "@/modules/communication/lib/groupMentions";
 import { readUazapiButtons, type UazapiButtonsFields } from "../../lib/uazapiButtonsDisplay";
 import { UazapiButtonsBubble } from "./bubbles/UazapiButtonsBubble";
 import { InteractiveResponseBubble } from "./bubbles/InteractiveResponseBubble";
@@ -138,6 +144,45 @@ export function MessageStatusIcon({ status, onInk = false }: { status: string; o
 }
 
 // ---------------------------------------------------------------------------
+// MessageText — texto/legenda com menção de grupo (Chamado 6885e65d)
+// ---------------------------------------------------------------------------
+
+const NO_MENTION_NAMES: MentionNames = new Map();
+
+/**
+ * O texto da bolha, com `@<LID>` citado trocado por `@Nome` quando o nome é
+ * conhecido (ver `groupMentions.ts`). Sem citação, devolve o texto cru — o
+ * caminho de sempre, sem custo.
+ */
+function MessageText({
+  content,
+  mentionedJids,
+  names,
+  mentionClassName,
+}: {
+  content: string;
+  mentionedJids: readonly string[];
+  names: MentionNames;
+  mentionClassName: string;
+}) {
+  const segments = splitMentions(content, mentionedJids, names);
+  if (segments.length === 1 && segments[0].kind === "text") return <>{content}</>;
+  return (
+    <>
+      {segments.map((seg, i) =>
+        seg.kind === "text" ? (
+          seg.text
+        ) : (
+          <span key={i} data-wa-mention={seg.jid} className={mentionClassName}>
+            {seg.name ? `@${seg.name}` : seg.raw}
+          </span>
+        ),
+      )}
+    </>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // MessageBubble
 // ---------------------------------------------------------------------------
 
@@ -154,6 +199,7 @@ export function MessageBubble({
   onReagir,
   onResponder,
   textoCitado,
+  mentionNames = NO_MENTION_NAMES,
 }: {
   message: WhatsAppMessage | FailedMessage;
   onImagePreview: (url: string) => void;
@@ -170,6 +216,8 @@ export function MessageBubble({
   onReagir?: (mensagem: { id: string; providerMessageId: string | null }, emoji: string) => void;
   onResponder?: (mensagem: { id: string; providerMessageId: string | null; texto: string | null }) => void;
   textoCitado?: (providerMessageId: string) => string | null;
+  /** `lid → nome` dos participantes do grupo. Ver `useGroupMentionNames`. */
+  mentionNames?: MentionNames;
 }) {
   const isOutgoing = message.direction === "outgoing";
   const isFailed = message.status === "failed";
@@ -481,7 +529,15 @@ export function MessageBubble({
                 "text-sm whitespace-pre-wrap break-words",
                 hasMedia && "mt-2"
               )}>
-                {message.content}
+                <MessageText
+                  content={message.content}
+                  mentionedJids={readMentionedJids(message as GroupMentionFields)}
+                  names={mentionNames}
+                  // O realce que a bolha já usa: o azul `insights` (link de
+                  // documento, tique de lida — este também sobre a tinta, que
+                  // roda no escopo `dark`); sobre o ouro, a tinta do ouro.
+                  mentionClassName={cn("font-semibold", isAiOutgoing ? "text-primary-foreground" : "text-insights")}
+                />
               </p>
             )}
 

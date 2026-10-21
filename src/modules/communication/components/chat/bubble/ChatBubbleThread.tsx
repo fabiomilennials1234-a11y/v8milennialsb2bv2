@@ -9,6 +9,8 @@ import { useQueryClient } from "@tanstack/react-query";
 import { MessageList } from "@/modules/communication/components/chat/view/MessageList";
 import { ImagePreviewModal } from "@/modules/communication/components/chat/media/ImagePreviewModal";
 import { useWhatsAppMessages } from "@/modules/communication/hooks/chat/useWhatsAppMessages";
+import { useGroupMentionNames } from "@/modules/communication/hooks/chat/useGroupMentionNames";
+import type { WhatsAppMessage } from "@/modules/communication/hooks/chat/types";
 import { useAutoReadReceipt } from "@/modules/communication/hooks/chat/useAutoReadReceipt";
 import { useFailedMessages, useRetryMessage } from "@/modules/communication/hooks/chat/useWhatsAppSend";
 import { useConversationCalls } from "@/modules/communication/hooks/chat/useConversationCalls";
@@ -23,6 +25,9 @@ import { resolveEffectiveLead } from "@/modules/communication/lib/resolveEffecti
 import { ChatComposerShell } from "@/modules/communication/components/chat/composer/ChatComposerShell";
 import { InstanceOwnerModal } from "@/modules/communication/components/chat/admin/InstanceOwnerModal";
 import { useLeadWriteInstance } from "@/modules/leads";
+
+/** Identidade estável enquanto a thread carrega — `?? []` inline mudaria a cada render. */
+const NO_MESSAGES: WhatsAppMessage[] = [];
 
 interface ChatBubbleThreadProps {
   phoneNumber: string;
@@ -40,6 +45,7 @@ export function ChatBubbleThread({
   onMarkAsRead,
 }: ChatBubbleThreadProps) {
   const messagesQuery = useWhatsAppMessages(phoneNumber, instanceId);
+  const mentionNames = useGroupMentionNames(messagesQuery.data ?? NO_MESSAGES);
   const failedMessages = useFailedMessages(phoneNumber, instanceId);
   // A bolha não recebe o contato; o tipo da conversa vem das próprias linhas.
   const isGroup = messagesQuery.data?.some((m) => m.is_group === true) ?? false;
@@ -111,6 +117,7 @@ export function ChatBubbleThread({
         density="compact"
         instanceId={instanceId}
         enableActions={false}
+        mentionNames={mentionNames}
         onImagePreview={(url) => setImagePreview(url)}
         onRetry={(failed) => retryMessage(failed)}
         onOpenTemplates={() => {

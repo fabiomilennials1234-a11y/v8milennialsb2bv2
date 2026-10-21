@@ -28,6 +28,7 @@ import { Loader2, UserPlus } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
 import { useViewport } from "@/shared/hooks/use-viewport";
+import type { MentionNames } from "@/modules/communication/lib/groupMentions";
 import { ChatEmptyState } from "@/modules/communication/components/chat/ChatEmptyState";
 import { UnreadDivider } from "@/modules/communication/components/chat/UnreadDivider";
 import { ScrollToBottomFab } from "@/modules/communication/components/chat/ScrollToBottomFab";
@@ -100,6 +101,8 @@ export interface MessageListProps {
    * dizer a qual, que é o que o vendedor precisa saber para não citar errado.
    */
   textoCitado?: (providerMessageId: string) => string | null;
+  /** `lid → nome` para as menções de grupo. Ver `useGroupMentionNames`. */
+  mentionNames?: MentionNames;
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -239,6 +242,7 @@ export function MessageList({
   onReagir,
   onResponder,
   textoCitado,
+  mentionNames,
 }: MessageListProps) {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const scrollAreaRef = useRef<HTMLDivElement | null>(null);
@@ -466,10 +470,11 @@ export function MessageList({
           onReagir={onReagir}
           onResponder={onResponder}
           textoCitado={textoCitado}
+          mentionNames={mentionNames}
         />
       </div>
     );
-  }, [timeline, firstUnreadIndex, unreadCount, mountTime, onImagePreview, onRetry, instanceId, enableActions, onReagir, onResponder, textoCitado]);
+  }, [timeline, firstUnreadIndex, unreadCount, mountTime, onImagePreview, onRetry, instanceId, enableActions, onReagir, onResponder, textoCitado, mentionNames]);
 
   return (
     // V5: a conversa corre num fundo afundado com grade de pontos (1 px a cada
