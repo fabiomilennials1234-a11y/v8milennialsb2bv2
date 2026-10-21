@@ -27,7 +27,7 @@ import {
   type EventoDeAviso,
 } from "../lib/aviso-stream";
 import { conversaAberta } from "../lib/conversa-aberta";
-import { decidirEntrega, type Entrega } from "../lib/decisao-de-entrega";
+import { chaveDeSom, decidirEntrega, type Entrega } from "../lib/decisao-de-entrega";
 import { motorDeSom } from "../lib/motor-de-som";
 import { mostrarCartao, reiniciarCartoes } from "../lib/cartoes-store";
 import { intervaloDaRedeDeSeguranca } from "../lib/rede-de-seguranca-de-avisos";
@@ -66,7 +66,7 @@ export function useAvisos({ entregar = false } = {}): UseAvisosResult {
   const { preferencias } = usePreferenciasDeAviso();
 
   /**
-   * Último som por chave de agrupamento. Vive num ref, não em estado: mudar
+   * Último som por chave de som (`chaveDeSom`). Vive num ref, não em estado: mudar
    * isto não pode repintar o sino, e ele não sobrevive ao recarregar de
    * propósito — quem acabou de abrir a aba merece ser avisado.
    */
@@ -110,7 +110,8 @@ export function useAvisos({ entregar = false } = {}): UseAvisosResult {
     });
     if (decisao.som) {
       void motorDeSom.tocar(decisao.som, preferenciasRef.current.volume);
-      if (aviso.group_key) ultimoSomPorChave.current[aviso.group_key] = agora;
+      const chave = chaveDeSom(aviso);
+      if (chave) ultimoSomPorChave.current[chave] = agora;
     }
     if (decisao.cartao) mostrarCartao(aviso, agora, abaVisivel);
   }, [entregar, habilitado, recebidos]);
