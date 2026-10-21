@@ -127,7 +127,7 @@ describe("collectMentionedJids", () => {
       collectMentionedJids([
         { uazapi_mentioned_jids: [ANA] },
         { raw_payload: { content: { contextInfo: { mentionedJID: [ANA, BETO] } } } },
-        { content: "sem menção" },
+        { push_name: "Sem Menção", uazapi_mentioned_jids: null },
       ]),
     ).toEqual([ANA, BETO]);
   });
