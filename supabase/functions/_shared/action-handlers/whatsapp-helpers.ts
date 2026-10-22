@@ -341,6 +341,12 @@ export type OutboundMessage = {
   leadId?: string | null;
   /** Prefixo do id sintético de último recurso. Default `wf`. */
   fallbackIdPrefix?: string;
+  /**
+   * Quem mandou, para autoria no chat. Default `workflow`. A régua da cobrança
+   * grava `cobranca`: é o que separa o envio dela da mensagem humana no gatilho
+   * `trg_cobranca_registrar_mensagem` (20271213000000_cobranca_regua.sql).
+   */
+  sentSource?: "workflow" | "cobranca";
 };
 
 /**
@@ -425,7 +431,7 @@ export async function persistOutboundMessage(
     timestamp: new Date().toISOString(),
     status: msg.providerStatus === "queued" ? "pending" : msg.providerStatus ?? "sent",
     sent_by_ai: true,
-    sent_source: "workflow",
+    sent_source: msg.sentSource ?? "workflow",
   };
   // Coluna ausente do payload fica de fora do UPDATE do upsert. Omitir preserva
   // o que o eco já tiver gravado ali, em vez de sobrescrever com null.
@@ -439,7 +445,7 @@ export async function persistOutboundMessage(
       .upsert(row, { onConflict: "message_id,instance_id", ignoreDuplicates: true });
     if (!error) {
       const { error: metadataError } = await supabase.from("whatsapp_messages").update({
-        sent_by_ai: true, sent_source: "workflow", ...(msg.leadId ? { lead_id: msg.leadId } : {}),
+        sent_by_ai: true, sent_source: msg.sentSource ?? "workflow", ...(msg.leadId ? { lead_id: msg.leadId } : {}),
       }).eq("organization_id", msg.organizationId).eq("instance_id", msg.instanceId).eq("message_id", messageId);
       if (metadataError) console.error("[whatsapp-helpers] sender metadata failed", { code: metadataError.code });
     }

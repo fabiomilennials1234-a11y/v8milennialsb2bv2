@@ -6,6 +6,7 @@
  * Torque não negocia (decisão do CTO, 21/10) — guarda o que a equipe combinou.
  */
 import {
+  AlertTriangle,
   Archive,
   BellOff,
   CalendarClock,
@@ -21,6 +22,7 @@ import {
   Plus,
   Receipt,
   Scale,
+  Send,
   StickyNote,
   Users,
   Wallet,
@@ -28,6 +30,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -51,6 +54,7 @@ import { recusaDaCobranca } from "../lib/erros";
 import { ROTULO_CANAL, ROTULO_DESFECHO, ROTULO_ORIGEM, ROTULO_RESULTADO, plural, reais } from "../lib/formato";
 import type { CanalDeContato, Etapa, EventoDoCaso, ResultadoDoContato, TipoDeCompromisso } from "../lib/tipos";
 import { useFichaDoInadimplente, type FichaDoInadimplente } from "../hooks/useCobrancaDados";
+import { useRegua } from "../hooks/useRegua";
 import {
   useArquivarInadimplente,
   useCancelarTitulo,
@@ -121,6 +125,9 @@ function ConteudoDaFicha({
     | { tipo: "quebrar" }
   >(null);
   const naoContatar = useNaoContatar();
+  const navigate = useNavigate();
+  // O chat abre já no número da cobrança: é onde a conversa com o devedor mora.
+  const numeroDaCobranca = useRegua().data?.numeros.find((n) => n.reservadoPara === "collections") ?? null;
   const arquivar = useArquivarInadimplente();
   const cancelarTitulo = useCancelarTitulo();
   const encerrar = useEncerrarCompromisso();
@@ -213,6 +220,20 @@ function ConteudoDaFicha({
             <p className="truncate font-semibold">{r.telefone ? formatarTelefone(r.telefone) : "Sem telefone"}</p>
             <p className="truncate text-muted-foreground">{r.email ?? "Sem e-mail"}</p>
           </div>
+          {r.telefone && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 rounded-full"
+              onClick={() => {
+                const params = new URLSearchParams({ phone: (r.telefone ?? "").replace(/\D/g, "") });
+                if (numeroDaCobranca) params.set("instance", numeroDaCobranca.id);
+                navigate(`/chat-whatsapp?${params.toString()}`);
+              }}
+            >
+              <MessageCircle /> Conversa
+            </Button>
+          )}
           {r.telefone && (
             <Button
               variant="ghost"
@@ -522,6 +543,9 @@ const ICONE_DO_EVENTO: Record<string, LucideIcon> = {
   acordo_registrado: Handshake,
   contato_registrado: Phone,
   nao_contatar_alterado: BellOff,
+  mensagem_enviada: Send,
+  mensagem_recebida: MessageCircle,
+  envio_falhou: AlertTriangle,
   inadimplente_arquivado: Archive,
 };
 
@@ -544,7 +568,11 @@ function textoDoEvento(e: EventoDoCaso, nomeDe: (id: string | null) => string, e
     case "caso_aberto":
       return "Caso aberto no Fluxo de Cobrança";
     case "etapa_alterada":
-      return `${quem} moveu para ${etapaNome(d.para)}`;
+      return d.origem === "regua"
+        ? d.motivo === "compromisso_quebrado"
+          ? `Régua devolveu para ${etapaNome(d.para)} (compromisso quebrado)`
+          : `Régua moveu para ${etapaNome(d.para)}${d.dias ? ` (${d.dias} dias de atraso)` : ""}`
+        : `${quem} moveu para ${etapaNome(d.para)}`;
     case "responsavel_alterado":
       return `${quem} trocou o responsável`;
     case "caso_encerrado":
@@ -554,13 +582,27 @@ function textoDoEvento(e: EventoDoCaso, nomeDe: (id: string | null) => string, e
     case "acordo_registrado":
       return `${quem} registrou acordo · ${d.parcelas}x, ${reais(Number(d.total ?? 0))}`;
     case "compromisso_encerrado":
+      if (d.origem === "regua") return "Compromisso quebrado: parcela vencida sem pagamento";
       return `Compromisso ${d.status === "quebrado" ? "quebrado" : d.status === "cumprido" ? "cumprido" : "cancelado"}`;
     case "pagamento_registrado":
       return `${quem} registrou pagamento · ${reais(Number(d.valor ?? 0))}`;
     case "contato_registrado":
       return `${quem}: ${ROTULO_CANAL[d.canal as CanalDeContato] ?? "contato"} · ${ROTULO_RESULTADO[d.resultado as ResultadoDoContato] ?? ""}`;
     case "nao_contatar_alterado":
+      if (d.origem === "resposta") return "Pediu para não receber mais mensagens";
       return d.valor ? `${quem} marcou "não contatar"` : `${quem} liberou mensagens`;
+    case "mensagem_enviada":
+      return d.origem === "regua"
+        ? `Régua enviou a mensagem de ${d.gatilho === "lembrete_compromisso" ? "lembrete" : `${d.dias} dias de atraso`}`
+        : "Equipe enviou pelo WhatsApp";
+    case "mensagem_recebida":
+      return "Devedor respondeu pelo WhatsApp";
+    case "envio_falhou":
+      return d.motivo === "sem_whatsapp"
+        ? "Mensagem da régua não saiu: o número não tem WhatsApp"
+        : d.motivo === "resultado_incerto"
+          ? "Mensagem da régua com resultado incerto (pode ter saído)"
+          : "Mensagem da régua não saiu";
     default:
       return e.tipo;
   }
@@ -581,7 +623,12 @@ function Linha({ eventos, etapas: lista }: { eventos: EventoDoCaso[]; etapas: Et
           (e.tipo === "contato_registrado" ? ICONE_DO_CANAL[e.dados.canal as CanalDeContato] : undefined) ??
           ICONE_DO_EVENTO[e.tipo] ??
           History;
-        const nota = typeof e.dados.nota === "string" ? e.dados.nota : null;
+        const nota =
+          typeof e.dados.nota === "string"
+            ? e.dados.nota
+            : (e.tipo === "mensagem_enviada" || e.tipo === "mensagem_recebida") && typeof e.dados.texto === "string" && e.dados.texto
+              ? e.dados.texto
+              : null;
         return (
           <li key={e.id} className="grid grid-cols-[26px_1fr_auto] gap-2.5 py-1.5">
             <span className="grid size-[26px] place-items-center rounded-[9px] bg-card text-muted-foreground shadow-relevo">

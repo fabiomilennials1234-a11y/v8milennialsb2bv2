@@ -49,6 +49,7 @@ import {
 } from "@/modules/communication/lib/inboxFilter";
 import type { InboxFilterGate } from "@/modules/communication/lib/inboxEnrichment";
 import type { FunnelOption } from "@/modules/communication/hooks/chat/useInboxFunnelOptions";
+import { useNumerosDaCobranca } from "@/modules/communication/hooks/chat/useNumerosDaCobranca";
 import { Checkbox } from "@/components/ui/checkbox";
 import { RIOFIX_ORG_ID } from "@/modules/communication/lib/negocioNoChat";
 import { useConversationSelection } from "@/modules/communication/hooks/chat/useConversationSelection";
@@ -228,6 +229,10 @@ export function ConversationList({
   const { isMobile } = useViewport();
   const nomeDoLeadPrimeiro = useNomeDoLeadPrimeiro();
   const nomeCodContato = useNomeCodContatoLead();
+  // Números da cobrança (ADR-0040): uma consulta para a lista toda; a linha só
+  // recebe o booleano. A conversa ali nunca vira lead, e o selo diz por quê.
+  const numerosDaCobranca = useNumerosDaCobranca();
+  const daCobranca = (c: InboxContact) => "instance_id" in c && numerosDaCobranca.has(c.instance_id ?? "");
   const [mobileFilter, setMobileFilter] = useState<MobileChatFilter>("all");
 
   // A caixa que o header MOBILE nomeia. Com várias marcadas é a primeira da
@@ -747,6 +752,7 @@ export function ConversationList({
                     tambemEm={metaPorLinha?.get(contactKey(contact))?.tambemEm}
                     responsavel={resolveResponsavel?.(contact)}
                     variasCaixas={modoUnificado}
+                    daCobranca={daCobranca(contact)}
                   />)}
                 </div>
               );
@@ -767,6 +773,7 @@ export function ConversationList({
                   caixa={metaPorLinha?.get(contactKey(contact))?.caixa}
                   responsavel={resolveResponsavel?.(contact)}
                   variasCaixas={modoUnificado}
+                    daCobranca={daCobranca(contact)}
                 />
               ) : (
                 <ConversationListItem
@@ -791,6 +798,7 @@ export function ConversationList({
                   tambemEm={metaPorLinha?.get(contactKey(contact))?.tambemEm}
                   responsavel={resolveResponsavel?.(contact)}
                   variasCaixas={modoUnificado}
+                    daCobranca={daCobranca(contact)}
                 />
               ))}
               </div>

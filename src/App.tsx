@@ -49,6 +49,7 @@ const Leads = lazy(() => lazyRetry(() => import("@/modules/leads/pages/Leads")))
 const Carteira = lazy(() => lazyRetry(() => import("@/modules/leads/pages/Carteira")));
 const CobrancaInadimplentes = lazy(() => lazyRetry(() => import("@/modules/cobranca/pages/Inadimplentes")));
 const CobrancaFluxo = lazy(() => lazyRetry(() => import("@/modules/cobranca/pages/FluxoDeCobranca")));
+const CobrancaRegua = lazy(() => lazyRetry(() => import("@/modules/cobranca/pages/Regua")));
 
 const TrashPage = lazy(() => lazyRetry(() => import("@/modules/leads/pages/Trash")));
 const Duplicates = lazy(() => lazyRetry(() => import("@/modules/leads/pages/Duplicates")));
@@ -525,6 +526,20 @@ function AppRoutes() {
               <CobrancaRoute>
                 <PermissionProtectedRoute featureKey="cobranca.view">
                   <CobrancaFluxo />
+                </PermissionProtectedRoute>
+              </CobrancaRoute>
+            </LayoutWrapper>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/cobranca/regua"
+        element={
+          <ProtectedRoute>
+            <LayoutWrapper>
+              <CobrancaRoute>
+                <PermissionProtectedRoute featureKey="cobranca.view">
+                  <CobrancaRegua />
                 </PermissionProtectedRoute>
               </CobrancaRoute>
             </LayoutWrapper>

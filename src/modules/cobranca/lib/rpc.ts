@@ -40,6 +40,15 @@ export interface FuncoesDaCobranca {
   };
   cobranca_titulo_cancelar: { Args: { p_titulo: string; p_motivo: string }; Returns: string };
   cobranca_titulo_incluir: { Args: { p_inadimplente: string; p_dados: Json }; Returns: string };
+  // Régua (entrega 2, 20271213000000_cobranca_regua.sql)
+  cobranca_regua_garantir: { Args: { p_org: string }; Returns: undefined };
+  cobranca_regua_salvar: { Args: { p_org: string; p_dados: Json }; Returns: undefined };
+  cobranca_regua_ativar: { Args: { p_org: string; p_ativa: boolean }; Returns: undefined };
+  cobranca_regua_definir_numero: { Args: { p_org: string; p_instancia: string | null }; Returns: undefined };
+  cobranca_regua_passo_salvar: { Args: { p_org: string; p_id: string | null; p_dados: Json }; Returns: string };
+  cobranca_regua_passo_remover: { Args: { p_id: string }; Returns: undefined };
+  cobranca_regua_cancelar_envio: { Args: { p_envio: string }; Returns: undefined };
+  cobranca_regua_previa: { Args: { p_org: string; p_agora?: string }; Returns: Json };
 }
 
 export type FuncaoDaCobranca = keyof FuncoesDaCobranca;

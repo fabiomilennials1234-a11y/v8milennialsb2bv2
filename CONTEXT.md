@@ -106,7 +106,15 @@ A separate sector of the Organization, with its own people, records and numbers 
 
 - **Registrar pagamento**: The manual payment entry for debts that did not come from the ERP. Allocated oldest-due-first across the Caso's open Títulos (FIFO). ERP Títulos are settled only by the ERP.
 
-- **Régua (Dunning Cadence)**: The automatic sequence of notices by days past due (default D+1, D+3, D+7, D+15, D+30), only in the Organization's business hours, from a WhatsApp number exclusive to collections, paused in Etapas that pause it and for Inadimplentes marked Não contatar. Delivery 2 — not in the first delivery. Distinct from a **Workflow** (whose subject is always a Lead) and from a **Copilot Follow-up**.
+- **Régua (Dunning Cadence)**: The automatic sequence of notices by days past due (default D+1, D+3, D+7, D+15, D+30), only in the Organization's business hours, from the **Número da cobrança**, paused in Etapas that pause it, while there is an active Compromisso, for a few days after the debtor replies, and for Inadimplentes marked Não contatar. Born **off**; a person turns it on after seeing the preview. Distinct from a **Workflow** (whose subject is always a Lead) and from a **Copilot Follow-up**.
+
+- **Passo da Régua (Cadence Step)**: What the Régua does on a given day: **atraso** (D+N after the oldest open due date — send a message, move the Caso forward to an Etapa, or both) or **lembrete** (D-N before a Promessa date or Acordo installment). A Caso that enters late gets only the step of the day it is at, never the whole cadence.
+
+- **Envio da Régua (Cadence Send)**: One message the Régua sends — at most once per Caso, step and anchor date. Ends `enviado`, `falhou`, `pulado` (skipped with a reason) or `cancelado`. An interrupted send is recorded as uncertain and **never re-sent**: in collections, missing a message is better than sending it twice.
+
+- **Número da cobrança (Collections Number)**: The WhatsApp number reserved for collections (`whatsapp_instances.reserved_for`, ADR-0041). Replies there never become Leads nor wake the Copilot; sales automation never goes out through it; it has no sales owner and no Copilot. In the chat its conversations carry the "Cobrança" badge.
+
+- **Compromisso quebrado (Broken Commitment)**: An Acordo or Promessa whose due installments (one day of tolerance) exceed what was paid since it was made. The Régua marks it broken and returns the Caso to its configured Etapa.
 
 ## Team & Organization
 

@@ -44,7 +44,7 @@ import {
 } from "../hooks/useCobrancaMutacoes";
 import { CampoDeReais } from "./atomos";
 
-function Campo({
+export function Campo({
   id,
   rotulo,
   erro,

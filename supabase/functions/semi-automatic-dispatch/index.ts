@@ -184,6 +184,8 @@ async function processBatch(
       .from("whatsapp_instances")
       .select("id, instance_name")
       .eq("id", campaignInstanceId)
+      // Número reservado (cobrança, ADR-0040) não serve a automação comercial.
+      .is("reserved_for", null)
       .single();
     whatsappInstance = inst ? { id: inst.id, instance_name: inst.instance_name } : null;
   }
@@ -196,6 +198,7 @@ async function processBatch(
       // Meta isolation (cert Rule 2): never auto-pick a Meta number for a legacy send.
       .in("provider", ["uazapi", "evolution"])
       .or("status.eq.open,status.eq.connected")
+      .is("reserved_for", null)
       .limit(1);
     whatsappInstance = instList?.[0] ?? null;
   }

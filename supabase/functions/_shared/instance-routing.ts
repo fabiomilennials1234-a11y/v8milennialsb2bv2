@@ -631,7 +631,8 @@ async function resolveByResponsibleAccess(
     .select("*")
     .eq("organization_id", organizationId)
     .in("provider", providers)
-    .in("id", ids);
+    .in("id", ids)
+    .is("reserved_for", null);
 
   const list = (candidates as RoutedInstance[] | null) ?? [];
   return list.length === 1 ? list[0] : null;
@@ -669,6 +670,9 @@ async function loadInstance(
     .eq("id", instanceId)
     .eq("organization_id", organizationId)
     .in("provider", providers)
+    // Nem fixado no nó, nem herdado da conversa: automação comercial não sai
+    // pelo número da cobrança (ADR-0040). A thread do devedor fica lá.
+    .is("reserved_for", null)
     .maybeSingle();
   return (data as RoutedInstance) ?? null;
 }
@@ -684,7 +688,9 @@ async function listRoutable(
     .select("*")
     .eq("organization_id", organizationId)
     .in("provider", providers)
-    .in("status", CONNECTED);
+    .in("status", CONNECTED)
+    // Número reservado (cobrança, ADR-0040) nunca é escolhido por fallback.
+    .is("reserved_for", null);
   return ((data as RoutedInstance[]) ?? []).filter(
     (i) => isInstanceLive(i) && providers.includes(String(i.provider)),
   );

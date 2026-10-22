@@ -95,7 +95,9 @@ async function resolveInstance(supabase: Supa, orgId: string): Promise<{ id: str
     .select("id, instance_name, status")
     .eq("organization_id", orgId)
     // Meta isolation (cert Rule 2): never auto-pick a Meta number for a legacy send.
-    .in("provider", ["uazapi", "evolution"]);
+    .in("provider", ["uazapi", "evolution"])
+    // Número reservado (cobrança, ADR-0040) nunca é escolhido por fallback.
+    .is("reserved_for", null);
   if (!insts?.length) return { id: null, name: null };
   const live = insts.find((i: Record<string, string>) => i.status === "open" || i.status === "connected");
   const chosen = live ?? insts[0];
