@@ -3616,9 +3616,12 @@ export type Database = {
       }
       cobranca_etapas: {
         Row: {
+          automacao_ativa: boolean
           cor: string
           created_at: string
+          entrada_dias: number | null
           id: string
+          mensagem: string | null
           nome: string
           organization_id: string
           papel: string
@@ -3627,9 +3630,12 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          automacao_ativa?: boolean
           cor?: string
           created_at?: string
+          entrada_dias?: number | null
           id?: string
+          mensagem?: string | null
           nome: string
           organization_id: string
           papel?: string
@@ -3638,9 +3644,12 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          automacao_ativa?: boolean
           cor?: string
           created_at?: string
+          entrada_dias?: number | null
           id?: string
+          mensagem?: string | null
           nome?: string
           organization_id?: string
           papel?: string
@@ -3835,8 +3844,10 @@ export type Database = {
           agendado_para: string
           caso_id: string
           created_at: string
+          criado_por: string | null
           dias: number
           enviado_em: string | null
+          etapa_id: string | null
           gatilho: string
           id: string
           inadimplente_id: string
@@ -3857,8 +3868,10 @@ export type Database = {
           agendado_para?: string
           caso_id: string
           created_at?: string
+          criado_por?: string | null
           dias: number
           enviado_em?: string | null
+          etapa_id?: string | null
           gatilho: string
           id?: string
           inadimplente_id: string
@@ -3879,8 +3892,10 @@ export type Database = {
           agendado_para?: string
           caso_id?: string
           created_at?: string
+          criado_por?: string | null
           dias?: number
           enviado_em?: string | null
+          etapa_id?: string | null
           gatilho?: string
           id?: string
           inadimplente_id?: string

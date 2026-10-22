@@ -6,7 +6,8 @@ import { reaisCompacto, iniciais } from "./formato";
 import { camposFaltando, detectarColunas, lerData, lerValor, montarLinhas } from "./planilha";
 import { gerarParcelas, maisMeses } from "./parcelas";
 import { proximaAcao } from "./proxima-acao";
-import { parseImportacao, parseMetricas, parseResumo, type InadimplenteResumo } from "./tipos";
+import { marcaDoPasso, parseEnvio, parsePreviaDoEnvio, rotuloDaEntrada, tipoDaColuna } from "./regua";
+import { parseEtapa, parseImportacao, parseMetricas, parseResumo, type InadimplenteResumo } from "./tipos";
 
 const HOJE = new Date(2026, 9, 21, 15, 0); // 21/10/2026, hora local
 
@@ -191,5 +192,46 @@ describe("próxima ação", () => {
     expect(proximaAcao({ ...base, ultimoContatoEm: new Date(2026, 9, 10).toISOString() }, HOJE).texto).toBe("Sem contato há 11 dias");
     expect(proximaAcao({ ...base, naoContatar: true }, HOJE).icone).toBe("nao_contatar");
     expect(proximaAcao({ ...base, casoId: null, ultimoDesfecho: "recuperado" }, HOJE).texto).toBe("Recuperado");
+  });
+});
+
+describe("colunas da régua", () => {
+  it("parseEtapa lê a automação da coluna e tolera banco sem as colunas novas", () => {
+    expect(
+      parseEtapa({ id: "e1", nome: "7 dias de atraso", posicao: 4, papel: "aberta", cor: "#818cf8", pausa_regua: false, entrada_dias: 7, mensagem: "Oi", automacao_ativa: false }),
+    ).toMatchObject({ entradaDias: 7, mensagem: "Oi", automacaoAtiva: false });
+    expect(parseEtapa({ id: "e2", nome: "Vencido", posicao: 1, papel: "aberta", cor: "#7cc3f8", pausa_regua: false })).toMatchObject({
+      entradaDias: null,
+      mensagem: null,
+      automacaoAtiva: true,
+    });
+  });
+
+  it("tipo da coluna: dias, pausa (mesmo com dias, como o Jurídico) e entrada", () => {
+    expect(tipoDaColuna({ pausaRegua: false, entradaDias: 7 })).toBe("dias");
+    expect(tipoDaColuna({ pausaRegua: true, entradaDias: 60 })).toBe("pausa");
+    expect(tipoDaColuna({ pausaRegua: true, entradaDias: null })).toBe("pausa");
+    expect(tipoDaColuna({ pausaRegua: false, entradaDias: null })).toBe("entrada");
+  });
+
+  it("marca do envio distingue entrada automática, lembrete e movimento à mão", () => {
+    expect(marcaDoPasso({ gatilho: "atraso", dias: 15 })).toBe("D+15");
+    expect(marcaDoPasso({ gatilho: "lembrete_compromisso", dias: 0 })).toBe("D0");
+    expect(marcaDoPasso({ gatilho: "entrada_manual", dias: 7 })).toBe("Manual");
+    expect(rotuloDaEntrada(1)).toBe("Entra com 1 dia de atraso");
+    expect(parseEnvio({ id: "x", caso_id: "c", inadimplente_id: "i", etapa_id: "e", gatilho: "entrada_manual", dias: 0, status: "pendente", agendado_para: "2026-10-22T12:00:00Z", updated_at: "2026-10-22T12:00:00Z" })).toMatchObject({
+      gatilho: "entrada_manual",
+      etapaId: "e",
+    });
+    expect(parseEnvio({ id: "x", caso_id: "c", inadimplente_id: "i", gatilho: "coisa_nova", dias: 1, status: "pendente", agendado_para: "", updated_at: "" }).gatilho).toBe("atraso");
+  });
+
+  it("prévia do envio à mão: bloqueio, janela e teto", () => {
+    expect(
+      parsePreviaDoEnvio({ mensagem: "Oi {primeiro_nome}", variaveis: { primeiro_nome: "Ana" }, bloqueio: null, na_janela: true, proxima_janela: "2026-10-22T12:00:00Z", teto_atingido: false }),
+    ).toEqual({ mensagem: "Oi {primeiro_nome}", variaveis: { primeiro_nome: "Ana" }, bloqueio: null, naJanela: true, proximaJanela: "2026-10-22T12:00:00Z", tetoAtingido: false });
+    expect(parsePreviaDoEnvio({ mensagem: null })).toMatchObject({ mensagem: null, bloqueio: null, naJanela: false, tetoAtingido: false });
+    expect(parsePreviaDoEnvio({ mensagem: "x", bloqueio: "nao_contatar" }).bloqueio).toBe("nao_contatar");
+    expect(parsePreviaDoEnvio(null).mensagem).toBeNull();
   });
 });

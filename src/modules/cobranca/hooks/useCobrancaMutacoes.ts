@@ -5,6 +5,7 @@ import { useOrganization } from "@/modules/identity";
 
 import { normalizarTelefone, soDigitos } from "../lib/documento";
 import type { LinhaParaImportar } from "../lib/planilha";
+import type { ResultadoDoEnvioManual } from "../lib/regua";
 import {
   type CanalDeContato,
   type ResultadoDaImportacao,
@@ -132,16 +133,28 @@ export function useImportarPlanilha() {
   });
 }
 
+export interface MovimentoDoCaso {
+  casoId: string;
+  etapaId: string;
+  posicao?: number;
+  /** "Mover e enviar": a mensagem da coluna entra na fila da régua. */
+  enviar?: boolean;
+}
+
+/** Move o caso; com `enviar`, devolve o que houve com a mensagem (fila, bloqueio). */
 export function useMoverCaso() {
   const invalidar = useInvalidarCobranca();
   return useMutation({
-    mutationFn: async ({ casoId, etapaId, posicao }: { casoId: string; etapaId: string; posicao?: number }) => {
-      const { error } = await rpcCobranca("cobranca_caso_mover", {
+    mutationFn: async ({ casoId, etapaId, posicao, enviar = false }: MovimentoDoCaso): Promise<ResultadoDoEnvioManual> => {
+      const { data, error } = await rpcCobranca("cobranca_caso_mover", {
         p_caso: casoId,
         p_etapa: etapaId,
         p_posicao: posicao,
+        p_enviar: enviar,
       });
       if (error) throw error;
+      const envio = (data as { envio?: unknown } | null)?.envio;
+      return typeof envio === "string" ? (envio as ResultadoDoEnvioManual) : null;
     },
     onSettled: invalidar,
   });

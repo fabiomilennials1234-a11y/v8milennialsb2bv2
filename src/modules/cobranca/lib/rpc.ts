@@ -17,7 +17,12 @@ import { supabase } from "@/integrations/supabase/client";
 import type { Json } from "@/integrations/supabase/types";
 
 export interface FuncoesDaCobranca {
-  cobranca_caso_mover: { Args: { p_caso: string; p_etapa: string; p_posicao?: number }; Returns: string };
+  // Devolve { caso_id, envio } — envio diz o que houve com "Mover e enviar" (20271214000000).
+  cobranca_caso_mover: {
+    Args: { p_caso: string; p_etapa: string; p_posicao?: number; p_enviar?: boolean };
+    Returns: Json;
+  };
+  cobranca_caso_previa_envio: { Args: { p_caso: string; p_etapa: string; p_agora?: string }; Returns: Json };
   cobranca_casos_atribuir: { Args: { p_org: string; p_casos: string[]; p_responsavel: string | null }; Returns: number };
   cobranca_compromisso_encerrar: { Args: { p_compromisso: string; p_status: string }; Returns: string };
   cobranca_compromisso_registrar: {
@@ -49,6 +54,9 @@ export interface FuncoesDaCobranca {
   cobranca_regua_passo_remover: { Args: { p_id: string }; Returns: undefined };
   cobranca_regua_cancelar_envio: { Args: { p_envio: string }; Returns: undefined };
   cobranca_regua_previa: { Args: { p_org: string; p_agora?: string }; Returns: Json };
+  // Colunas do fluxo com automação (20271214000000_cobranca_colunas_da_regua.sql)
+  cobranca_coluna_salvar: { Args: { p_org: string; p_etapa: string | null; p_dados: Json }; Returns: string };
+  cobranca_coluna_remover: { Args: { p_etapa: string }; Returns: undefined };
 }
 
 export type FuncaoDaCobranca = keyof FuncoesDaCobranca;

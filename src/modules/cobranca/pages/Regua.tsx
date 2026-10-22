@@ -1,6 +1,7 @@
 /**
- * Régua de cobrança (entrega 2, ADR-0040): o que o Torque manda sozinho,
- * quando e para quem — pelo número exclusivo da cobrança.
+ * Régua de cobrança (ADR-0040): o que o Torque manda sozinho, quando e para
+ * quem — pelo número exclusivo da cobrança. A régua de atraso são as COLUNAS
+ * do Fluxo (entram sozinhas por dias de atraso); o resto são lembretes.
  *
  * Nasce desligada. Ligar mostra antes quantas mensagens sairiam e por qual
  * número; desligar esvazia a fila (religar replaneja do zero, sem rajada).
@@ -27,11 +28,13 @@ import { cn } from "@/lib/utils";
 import { formatarTelefone } from "../lib/documento";
 import { recusaDaCobranca } from "../lib/erros";
 import { plural } from "../lib/formato";
+import { quandoAbre } from "../lib/regua";
 import { useEtapas } from "../hooks/useCobrancaDados";
 import { useCobrancaAcesso } from "../hooks/useCobrancaAcesso";
 import { useAtivarRegua, useEnviosDaRegua, usePreviaDaRegua, useRegua } from "../hooks/useRegua";
 import { CobrancaTabs } from "../components/CobrancaTabs";
 import { AjustesDaRegua, NumeroDaCobranca } from "../components/regua/AjustesDaRegua";
+import { ColunasDaRegua } from "../components/regua/ColunasDaRegua";
 import { HojeNaRegua } from "../components/regua/HojeNaRegua";
 import { PassosDaRegua } from "../components/regua/PassosDaRegua";
 
@@ -43,11 +46,6 @@ function Celula({ rotulo, valor, nota }: { rotulo: string; valor: ReactNode; not
       <div className="mt-0.5 text-[11.5px] text-tinta-muted sm:truncate">{nota}</div>
     </div>
   );
-}
-
-function quandoAbre(iso: string | null): string {
-  if (!iso) return "sem janela configurada";
-  return new Date(iso).toLocaleString("pt-BR", { weekday: "long", hour: "2-digit", minute: "2-digit" });
 }
 
 export default function Regua() {
@@ -64,7 +62,10 @@ export default function Regua() {
   const numero = regua.data?.numeros.find((n) => n.reservadoPara === "collections") ?? null;
   const p = previa.data;
   const vaoSair = p?.candidatos.filter((c) => c.status === "pendente").length ?? 0;
-  const pronta = !!numero?.conectado && (regua.data?.passos.some((x) => x.ativo && x.mensagem) ?? false);
+  const temMensagem =
+    etapas.some((e) => e.papel === "aberta" && e.automacaoAtiva && !!e.mensagem) ||
+    (regua.data?.passos.some((x) => x.ativo && x.mensagem) ?? false);
+  const pronta = !!numero?.conectado && temMensagem;
 
   const alternar = (ligar: boolean) => {
     if (ligar) return setConfirmarLigar(true);
@@ -149,9 +150,14 @@ export default function Regua() {
 
           <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)]">
             <div className="min-w-0 space-y-4">
+              <ColunasDaRegua
+                etapas={etapas}
+                comoPagar={cfg.comoPagar}
+                empresa={regua.data?.empresa ?? undefined}
+                podeEditar={podeEditar}
+              />
               <PassosDaRegua
                 passos={regua.data?.passos ?? []}
-                etapas={etapas}
                 comoPagar={cfg.comoPagar}
                 empresa={regua.data?.empresa ?? undefined}
                 podeEditar={podeEditar}
@@ -178,7 +184,7 @@ export default function Regua() {
             <DialogDescription>
               {pronta
                 ? `A partir da próxima rodada, mensagens saem sozinhas pelo número “${numero?.nome ?? ""}”, só no horário configurado e até ${cfg?.tetoDiario ?? 0} por dia.`
-                : "Falta o número da cobrança conectado ou um passo com mensagem ligado."}
+                : "Falta o número da cobrança conectado ou uma coluna (ou lembrete) com mensagem ligada."}
             </DialogDescription>
           </DialogHeader>
           {pronta && p && (

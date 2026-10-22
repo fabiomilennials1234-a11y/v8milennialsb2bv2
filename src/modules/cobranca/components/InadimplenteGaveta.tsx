@@ -592,9 +592,10 @@ function textoDoEvento(e: EventoDoCaso, nomeDe: (id: string | null) => string, e
       if (d.origem === "resposta") return "Pediu para não receber mais mensagens";
       return d.valor ? `${quem} marcou "não contatar"` : `${quem} liberou mensagens`;
     case "mensagem_enviada":
-      return d.origem === "regua"
-        ? `Régua enviou a mensagem de ${d.gatilho === "lembrete_compromisso" ? "lembrete" : `${d.dias} dias de atraso`}`
-        : "Equipe enviou pelo WhatsApp";
+      if (d.origem !== "regua") return "Equipe enviou pelo WhatsApp";
+      if (d.gatilho === "lembrete_compromisso") return "Régua enviou o lembrete da promessa/parcela";
+      if (d.gatilho === "entrada_manual") return `${nomeDe(typeof d.autor === "string" ? d.autor : null)} moveu para ${etapaNome(d.etapa_id)} e enviou a mensagem da coluna`;
+      return d.etapa_id ? `Régua enviou a mensagem de ${etapaNome(d.etapa_id)}` : `Régua enviou a mensagem de ${d.dias} dias de atraso`;
     case "mensagem_recebida":
       return "Devedor respondeu pelo WhatsApp";
     case "envio_falhou":

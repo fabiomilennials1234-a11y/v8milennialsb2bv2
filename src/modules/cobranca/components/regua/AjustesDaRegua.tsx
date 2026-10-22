@@ -258,7 +258,7 @@ export function AjustesDaRegua({ config, etapas, podeEditar }: { config: Configu
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value={SEM}>Não mover</SelectItem>
+                  <SelectItem value={SEM}>Coluna do atraso (automático)</SelectItem>
                   {etapasAbertas.map((e) => (
                     <SelectItem key={e.id} value={e.id}>
                       {e.nome}

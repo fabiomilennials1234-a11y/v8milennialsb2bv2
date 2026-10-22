@@ -20,6 +20,12 @@ export interface Etapa {
   papel: PapelDaEtapa;
   cor: string;
   pausaRegua: boolean;
+  /** O caso entra sozinho com N dias de atraso (só para a frente). null = coluna de fase. */
+  entradaDias: number | null;
+  /** Sai quando o caso entra: pela régua, ou à mão com "Mover e enviar". */
+  mensagem: string | null;
+  /** Liga/desliga a entrada automática (e a mensagem dela). Não afeta o envio à mão. */
+  automacaoAtiva: boolean;
 }
 
 export interface InadimplenteResumo {
@@ -123,6 +129,9 @@ export function parseEtapa(r: Linha): Etapa {
     papel: r.papel as PapelDaEtapa,
     cor: String(r.cor),
     pausaRegua: r.pausa_regua === true,
+    entradaDias: numOuNulo(r.entrada_dias),
+    mensagem: str(r.mensagem),
+    automacaoAtiva: r.automacao_ativa !== false,
   };
 }
 
