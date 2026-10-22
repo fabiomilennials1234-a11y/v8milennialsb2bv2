@@ -88,6 +88,26 @@ Canonical terms used across the system. No implementation details here — this 
 
 - **Order**: A purchase record linked to a Carteira client. Has items, approval workflow, and ERP sync capability.
 
+## Cobrança (Collections)
+
+A separate sector of the Organization, with its own people, records and numbers (ADR-0040). Behind the `cobranca` flag on `organizations.feature_flags`.
+
+- **Inadimplente (Debtor)**: A person or company that owes the Organization money past due. **Not a Lead and never linked to one** — collections and sales are separate sectors, and the same company can be a sales Lead and an Inadimplente at the same time without either knowing. Identified by CPF/CNPJ when there is one, otherwise by phone. Enters by ERP sync, spreadsheet import or manual registration (its **origem**). Can be marked **Não contatar** (asked not to receive messages): the Régua skips it, a person can still call.
+
+- **Título (Receivable)**: One amount owed with a due date. Its **saldo** is the value minus what was paid on it. From the ERP the value is the ERP's; from a spreadsheet or by hand it is the value informed — the Torque never computes interest or fines. Status: `aberto`, `pago`, `cancelado` (contested and upheld, or entered by mistake) or `baixado` (written off when the Caso is lost).
+
+- **Caso de Cobrança (Collection Case)**: The card on the Fluxo de Cobrança — **one per Inadimplente while open**, aggregating all of its open Títulos. Opens when the Inadimplente first has saldo; closes in a **Desfecho**. A new debt after a closed Caso opens a new one. Distinct from a **Negócio**: a Negócio is a sale moving toward won/lost, a Caso is a debt moving toward recovered.
+
+- **Etapa de Cobrança**: A column of the Fluxo de Cobrança. Seeded: Vencido → Em cobrança → Em negociação → Promessa ou acordo → Cobrança intensiva → Jurídico, plus the three Desfecho columns. Its `papel` (`aberta`, `recuperado`, `perdido`, `cancelado`) carries the behaviour, never its name. Not a Pipeline Stage and not in any Pipeline.
+
+- **Desfecho (Outcome)**: How a Caso ends. **Recuperado** — saldo reached zero (by ERP reconciliation or **Registrar pagamento**), in any Etapa. **Perdido** — written off; the open Títulos become `baixado`. **Cancelado** — contested and upheld, or registered by mistake; the open Títulos become `cancelado`.
+
+- **Compromisso (Commitment)**: What the debtor agreed to pay and when, registered by a person. A **Promessa** has one date; an **Acordo** has installments. One active per Caso — a new one replaces it (renegotiation). Ends `cumprido`, `quebrado` or `cancelado`. The Torque has no approval limit (alçada): it records the commitment a person negotiated, it does not negotiate.
+
+- **Registrar pagamento**: The manual payment entry for debts that did not come from the ERP. Allocated oldest-due-first across the Caso's open Títulos (FIFO). ERP Títulos are settled only by the ERP.
+
+- **Régua (Dunning Cadence)**: The automatic sequence of notices by days past due (default D+1, D+3, D+7, D+15, D+30), only in the Organization's business hours, from a WhatsApp number exclusive to collections, paused in Etapas that pause it and for Inadimplentes marked Não contatar. Delivery 2 — not in the first delivery. Distinct from a **Workflow** (whose subject is always a Lead) and from a **Copilot Follow-up**.
+
 ## Team & Organization
 
 - **Organization (Org)**: A tenant. All data is scoped by `organization_id`. Represents a customer company using Torque CRM.

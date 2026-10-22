@@ -21,6 +21,7 @@ import {
   Fuel,
   Gauge,
   GitBranch,
+  HandCoins,
   ListChecks,
   MoreHorizontal,
   Package,
@@ -51,8 +52,12 @@ export interface NavNode {
   path: string;
   /** Item só aparece para master. */
   masterOnly?: boolean;
-  /** Gate de runtime resolvido pelo hook (ex.: páginas Meta conectadas). */
-  gate?: "meta_pages_connected";
+  /**
+   * Gate de runtime resolvido pelo hook: páginas Meta conectadas, ou a flag de
+   * piloto da org (`organizations.feature_flags`) para áreas que não existem
+   * fora dela — sem cadeado, sem upsell: o item simplesmente não aparece.
+   */
+  gate?: "meta_pages_connected" | "cobranca";
   /** Cor própria do item. Nenhum item usa hoje — funil não tem mais classe. */
   color?: string;
   /**
@@ -123,6 +128,9 @@ export const SIDEBAR_PRIMARY: NavNode[] = [
   { label: "Funis", icon: GitBranch, path: "/funis", children: [] },
   { label: "Leads", icon: Fuel, path: "/leads" },
   { label: "Carteira", icon: Wallet, path: "/carteira" },
+  // Cobrança (ADR-0040): setor à parte, piloto só na TorqueCRM. O gate é a
+  // flag da org; a permissão `cobranca.view` vem em NAV_VIEW_PERMISSIONS.
+  { label: "Cobrança", icon: HandCoins, path: "/cobranca", gate: "cobranca" },
   { label: "Turbo", icon: Zap, path: "/turbo", children: TURBO_CHILDREN, expandOnly: true },
 ];
 
@@ -278,6 +286,8 @@ export const NAV_VIEW_PERMISSIONS: Record<string, string> = {
   "/leads": "leads.view",
   // Ex-aba Clientes de /leads (CTO 2026-10-16): mesma permissão da tela-mãe.
   "/carteira": "leads.view",
+  // Setor separado: chave própria, default false para membro (ADR-0040).
+  "/cobranca": "cobranca.view",
   "/checklists": "checklists.view",
   "/templates": "message_templates.view",
   "/duplicatas": "leads.view",

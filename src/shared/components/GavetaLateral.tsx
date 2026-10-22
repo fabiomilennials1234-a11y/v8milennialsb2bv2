@@ -5,7 +5,9 @@ import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
 
 /**
- * A gaveta do V5 — a casca da ficha do lead E do painel do Negócio.
+ * A gaveta do V5 — a casca da ficha do lead, do painel do Negócio e da ficha do
+ * inadimplente (cobrança). Mora em `shared` desde que a cobrança passou a usá-la:
+ * é casca de layout, não conhece lead.
  *
  * No mockup não existem dois painéis: o cartão do funil e a linha da lista
  * abrem a MESMA gaveta à direita (560 px, flutuando 12 px da borda, raio 28,

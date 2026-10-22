@@ -64,12 +64,26 @@ describe("filterByMaster", () => {
 });
 
 describe("filterByGate", () => {
-  const gates = { metaPagesConnected: false };
+  const gates = { metaPagesConnected: false, cobranca: false };
 
   it("respeita o gate de páginas Meta conectadas", () => {
     const items = [node("/dashboard"), node("/atendimento/meta", { gate: "meta_pages_connected" })];
     expect(filterByGate(items, gates).map((i) => i.path)).toEqual(["/dashboard"]);
     expect(filterByGate(items, { ...gates, metaPagesConnected: true })).toHaveLength(2);
+  });
+
+  // ADR-0040: piloto interno. Sem a flag a porta some (não é cadeado de plano).
+  it("Cobrança só aparece com a flag da org", () => {
+    const semFlag = filterByGate(SIDEBAR_PRIMARY, gates);
+    const comFlag = filterByGate(SIDEBAR_PRIMARY, { ...gates, cobranca: true });
+    expect(semFlag.some((i) => i.path === "/cobranca")).toBe(false);
+    expect(comFlag.some((i) => i.path === "/cobranca")).toBe(true);
+  });
+
+  it("Cobrança exige a permissão própria cobranca.view (setor separado)", () => {
+    expect(NAV_VIEW_PERMISSIONS["/cobranca"]).toBe("cobranca.view");
+    const membroSemChave = makeCanViewRoute({ isMaster: false, isAdmin: false, featurePerms: { "cobranca.view": false } });
+    expect(membroSemChave("/cobranca")).toBe(false);
   });
 });
 
@@ -113,8 +127,9 @@ describe("inventário da navegação", () => {
     expect(itensPitstop.some((item) => item.path === "/metricas")).toBe(false);
   });
 
-  it("a lateral tem oito portas (Carteira entrou em 2026-10-16)", () => {
-    expect(SIDEBAR_PRIMARY).toHaveLength(8);
+  it("a lateral tem nove portas (Carteira entrou em 2026-10-16, Cobrança em 2026-10-21 atrás de flag)", () => {
+    expect(SIDEBAR_PRIMARY).toHaveLength(9);
+    expect(SIDEBAR_PRIMARY.find((i) => i.path === "/cobranca")?.gate).toBe("cobranca");
   });
 
   // SCRUM-430. As duas travas de Métricas são independentes e ambas precisam
@@ -257,7 +272,7 @@ describe("native metrics navigation", () => {
   it.each([false, true])("shows metrics to a regular member (outbound=%s)", (outbound) => {
     const visible = filterByGate(
       filterByMaster(filterByOutbound(SIDEBAR_PRIMARY, outbound), false),
-      { metaPagesConnected: false },
+      { metaPagesConnected: false, cobranca: false },
     );
     expect(visible.some((item) => item.path === "/metricas")).toBe(true);
   });
