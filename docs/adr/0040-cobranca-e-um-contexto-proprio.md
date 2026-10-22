@@ -37,7 +37,7 @@ Três caminhos do produto pareciam servir e não servem:
 
 **5. Escrita só por RPC SECURITY DEFINER; leitura pela RLS** contra `private.cobranca_orgs_visiveis()` (avaliada uma vez por consulta). O histórico (`cobranca_eventos`) é append-only.
 
-**6. A régua (entrega 2) tem motor próprio** — cron + `_shared/whatsapp-dispatch.ts` numa instância exclusiva da cobrança —, não o motor de `workflows`. As "automações da etapa" do Fluxo são configuração de régua por etapa, não DAGs de workflow.
+**6. A régua (entrega 2) tem motor próprio** — cron + `_shared/whatsapp-dispatch.ts` numa instância exclusiva da cobrança —, não o motor de `workflows`. As "automações da etapa" do Fluxo são configuração de régua por etapa, não DAGs de workflow. Entregue em `20271213000000_cobranca_regua.sql`; o isolamento do número exclusivo está no ADR-0041.
 
 ## Consequences
 

@@ -137,6 +137,7 @@ import type {
   SocialContact,
 } from "@/modules/communication/hooks/chat/types";
 import type { DensityMode } from "@/modules/communication/hooks/chat/useChatDensity";
+import { useNumerosDaCobranca } from "@/modules/communication/hooks/chat/useNumerosDaCobranca";
 
 // ─── Tipos internos ──────────────────────────────────────────────────────────
 
@@ -239,6 +240,8 @@ function ChatView({
   // `chat_nome_cod_contato_lead` (Chamado 82c50502): "Cód - Contato - Lead",
   // a mesma função da lista e do painel. Vence `chat_nome_do_lead`.
   const nomeCodContato = useNomeCodContatoLead();
+  // Número da cobrança (ADR-0040): o cabeçalho troca "Sem lead" pelo selo.
+  const numerosDaCobranca = useNumerosDaCobranca();
   const { data: fontesDoContato } = useContatoDaConversa(
     effectiveLeadId,
     phoneNumber,
@@ -378,6 +381,7 @@ function ChatView({
           leadId={effectiveLeadId ?? undefined}
           instanceId={instanceId ?? undefined}
           instanceName={instanceName}
+          daCobranca={numerosDaCobranca.has(instanceId ?? "")}
           szChatSession={null}
           organizationId={organizationId}
           onBack={onBack}

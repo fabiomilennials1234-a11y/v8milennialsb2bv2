@@ -156,6 +156,13 @@ describe("ChatHeader — as ações moram num grupo que não encolhe", () => {
     expect(screen.getByRole("button", { name: "Criar lead" })).toBeInTheDocument();
   });
 
+  it("número da cobrança: selo no lugar de 'Sem lead' e sem 'Criar lead'", () => {
+    montar({ hasLead: false, leadId: undefined, daCobranca: true });
+    expect(screen.getByTitle(/número da cobrança/)).toHaveTextContent("Cobrança");
+    expect(screen.queryByText("Sem lead")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Criar lead" })).not.toBeInTheDocument();
+  });
+
   it("a legenda traz a caixa ao lado do telefone", () => {
     montar();
     expect(screen.getByText("Comercial")).toBeInTheDocument();

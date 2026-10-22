@@ -156,7 +156,7 @@ export function parsePrevia(raw: unknown): PreviaDaRegua {
 export const VARIAVEIS_DA_REGUA: { chave: string; rotulo: string; exemplo: unknown; soLembrete?: boolean }[] = [
   { chave: "primeiro_nome", rotulo: "Primeiro nome", exemplo: "Joana" },
   { chave: "nome", rotulo: "Nome completo", exemplo: "Joana Prates" },
-  { chave: "empresa", rotulo: "Sua empresa", exemplo: "TorqueCRM" },
+  { chave: "empresa", rotulo: "Sua empresa", exemplo: "Sua Empresa" },
   { chave: "valor", rotulo: "Valor em aberto", exemplo: 1840.5 },
   { chave: "vencimento", rotulo: "Vencimento mais antigo", exemplo: "2026-10-05" },
   { chave: "dias_atraso", rotulo: "Dias de atraso", exemplo: 16 },
@@ -175,7 +175,7 @@ export function formatarVariavel(chave: string, valor: unknown): string {
   if (DINHEIRO.has(chave)) {
     const n = typeof valor === "number" ? valor : Number(valor);
     return Number.isFinite(n)
-      ? n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }).replace(/ /g, " ")
+      ? n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }).replace(/\u00a0/g, " ")
       : "";
   }
   if (DATA.has(chave)) {

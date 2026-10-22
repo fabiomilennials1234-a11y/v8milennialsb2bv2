@@ -9,7 +9,7 @@
  * gradiente do contato e a selecionada em ouro. O celular segue lista →
  * conversa; só a linha muda de forma.
  */
-import { Bot } from "lucide-react";
+import { Bot, HandCoins } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import {
@@ -44,6 +44,8 @@ export interface MobileConversationRowProps {
   responsavel?: ResponsavelDaLinha | null;
   /** Mais de uma caixa marcada: a bolinha ganha a cor da caixa. */
   variasCaixas?: boolean;
+  /** Conversa no número da cobrança (ADR-0040): selo "Cobrança". */
+  daCobranca?: boolean;
 }
 
 // ─── Component ───────────────────────────────────────────────────────────────
@@ -59,6 +61,7 @@ export function MobileConversationRow({
   caixa,
   responsavel,
   variasCaixas,
+  daCobranca = false,
 }: MobileConversationRowProps) {
   const nomeDoLeadPrimeiro = useNomeDoLeadPrimeiro();
   const nomeCodContato = useNomeCodContatoLead();
@@ -155,6 +158,15 @@ export function MobileConversationRow({
             >
               <Bot className="h-2.5 w-2.5" aria-hidden />
               IA
+            </span>
+          )}
+          {daCobranca && (
+            <span
+              className="inline-flex shrink-0 items-center gap-0.5 rounded-md bg-muted px-1 py-px text-[10px] font-bold leading-none text-foreground group-data-[selected=true]/linha:bg-primary-foreground/10 group-data-[selected=true]/linha:text-primary-foreground"
+              title="Conversa no número da cobrança"
+            >
+              <HandCoins className="h-2.5 w-2.5" aria-hidden />
+              Cobrança
             </span>
           )}
           <time

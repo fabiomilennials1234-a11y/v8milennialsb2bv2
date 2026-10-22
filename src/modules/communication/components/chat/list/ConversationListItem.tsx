@@ -16,6 +16,7 @@ import {
   Bot,
   Zap,
   Link2,
+  HandCoins,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -304,6 +305,11 @@ export interface ConversationListItemProps {
    * seletor; com várias é o que diz de qual número a conversa corre.
    */
   variasCaixas?: boolean;
+  /**
+   * Conversa no número da cobrança (ADR-0040): selo "Cobrança" e sem o ponto de
+   * "novo" — ali a conversa nunca vira lead. Vem da lista (`useNumerosDaCobranca`).
+   */
+  daCobranca?: boolean;
 }
 
 /**
@@ -380,6 +386,7 @@ export function ConversationListItem({
   tambemEm,
   responsavel,
   variasCaixas,
+  daCobranca = false,
 }: ConversationListItemProps) {
   const nomeDoLeadPrimeiro = useNomeDoLeadPrimeiro();
   const nomeCodContato = useNomeCodContatoLead();
@@ -462,8 +469,17 @@ export function ConversationListItem({
             <span className="min-w-0 truncate text-sm font-bold">{displayName}</span>
             {/* "Sem lead ainda" é informação onde o vínculo é possível. O ponto
                 some assim que alguém vincula, nos dois canais. */}
-            {!contact.lead_id && (
+            {!contact.lead_id && !daCobranca && (
               <span className="h-2 w-2 shrink-0 rounded-full bg-primary/70 group-data-[selected=true]/linha:bg-primary-foreground/60" title="Novo" />
+            )}
+            {daCobranca && (
+              <span
+                className="inline-flex shrink-0 items-center gap-0.5 rounded-md bg-muted px-1 py-px text-[10px] font-bold leading-none text-foreground group-data-[selected=true]/linha:bg-primary-foreground/10 group-data-[selected=true]/linha:text-primary-foreground"
+                title="Conversa no número da cobrança: não vira lead e não aciona copilot"
+              >
+                <HandCoins className="h-2.5 w-2.5" aria-hidden />
+                Cobrança
+              </span>
             )}
             {ultimaDaIa && (
               <span

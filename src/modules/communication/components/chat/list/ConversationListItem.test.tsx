@@ -96,6 +96,12 @@ describe("ConversationListItem — linha de três andares (V5)", () => {
     expect(screen.getByTitle("A última mensagem foi do Copilot")).toHaveTextContent("IA");
   });
 
+  it("número da cobrança: selo 'Cobrança' e sem o ponto de 'novo' (ali nunca vira lead)", () => {
+    render(<ConversationListItem {...baseProps({ contact: contact({ lead_id: null }) })} daCobranca />);
+    expect(screen.getByTitle(/número da cobrança/)).toHaveTextContent("Cobrança");
+    expect(screen.queryByTitle("Novo")).not.toBeInTheDocument();
+  });
+
   it("mensagem manual de saída continua prefixada com 'Você:'", () => {
     render(<ConversationListItem {...baseProps({ contact: contact({ last_message_direction: "outgoing" }) })} />);
     expect(screen.getByText("Você:")).toBeInTheDocument();

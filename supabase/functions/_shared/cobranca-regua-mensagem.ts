@@ -24,7 +24,7 @@ const DINHEIRO = new Set(["valor", "parcela_valor"]);
 const DATA = new Set(["vencimento", "parcela_vencimento"]);
 
 function reais(n: number): string {
-  return n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }).replace(/ /g, " ");
+  return n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }).replace(/\u00a0/g, " ");
 }
 
 function dataBr(iso: string): string {

@@ -3782,6 +3782,159 @@ export type Database = {
         }
         Relationships: []
       }
+      cobranca_regua: {
+        Row: {
+          ativa: boolean
+          como_pagar: string | null
+          etapa_apos_quebra_id: string | null
+          intervalo_max_segundos: number
+          intervalo_min_segundos: number
+          intervalo_minimo_dias: number
+          janela: Json
+          organization_id: string
+          pausa_apos_resposta_dias: number
+          proximo_envio_apos: string | null
+          teto_diario: number
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          ativa?: boolean
+          como_pagar?: string | null
+          etapa_apos_quebra_id?: string | null
+          intervalo_max_segundos?: number
+          intervalo_min_segundos?: number
+          intervalo_minimo_dias?: number
+          janela?: Json
+          organization_id: string
+          pausa_apos_resposta_dias?: number
+          proximo_envio_apos?: string | null
+          teto_diario?: number
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          ativa?: boolean
+          como_pagar?: string | null
+          etapa_apos_quebra_id?: string | null
+          intervalo_max_segundos?: number
+          intervalo_min_segundos?: number
+          intervalo_minimo_dias?: number
+          janela?: Json
+          organization_id?: string
+          pausa_apos_resposta_dias?: number
+          proximo_envio_apos?: string | null
+          teto_diario?: number
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: []
+      }
+      cobranca_regua_envios: {
+        Row: {
+          agendado_para: string
+          caso_id: string
+          created_at: string
+          dias: number
+          enviado_em: string | null
+          gatilho: string
+          id: string
+          inadimplente_id: string
+          lease_ate: string | null
+          motivo: string | null
+          organization_id: string
+          passo_id: string | null
+          provider_message_id: string | null
+          referencia: string
+          status: string
+          telefone: string | null
+          tentativas: number
+          texto: string | null
+          ultimo_erro: string | null
+          updated_at: string
+        }
+        Insert: {
+          agendado_para?: string
+          caso_id: string
+          created_at?: string
+          dias: number
+          enviado_em?: string | null
+          gatilho: string
+          id?: string
+          inadimplente_id: string
+          lease_ate?: string | null
+          motivo?: string | null
+          organization_id: string
+          passo_id?: string | null
+          provider_message_id?: string | null
+          referencia: string
+          status: string
+          telefone?: string | null
+          tentativas?: number
+          texto?: string | null
+          ultimo_erro?: string | null
+          updated_at?: string
+        }
+        Update: {
+          agendado_para?: string
+          caso_id?: string
+          created_at?: string
+          dias?: number
+          enviado_em?: string | null
+          gatilho?: string
+          id?: string
+          inadimplente_id?: string
+          lease_ate?: string | null
+          motivo?: string | null
+          organization_id?: string
+          passo_id?: string | null
+          provider_message_id?: string | null
+          referencia?: string
+          status?: string
+          telefone?: string | null
+          tentativas?: number
+          texto?: string | null
+          ultimo_erro?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      cobranca_regua_passos: {
+        Row: {
+          ativo: boolean
+          created_at: string
+          dias: number
+          gatilho: string
+          id: string
+          mensagem: string | null
+          mover_para_etapa_id: string | null
+          organization_id: string
+          updated_at: string
+        }
+        Insert: {
+          ativo?: boolean
+          created_at?: string
+          dias: number
+          gatilho: string
+          id?: string
+          mensagem?: string | null
+          mover_para_etapa_id?: string | null
+          organization_id: string
+          updated_at?: string
+        }
+        Update: {
+          ativo?: boolean
+          created_at?: string
+          dias?: number
+          gatilho?: string
+          id?: string
+          mensagem?: string | null
+          mover_para_etapa_id?: string | null
+          organization_id?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       cobranca_titulos: {
         Row: {
           created_at: string
@@ -19384,6 +19537,7 @@ export type Database = {
           provider_config: Json
           qr_code: string | null
           qr_code_expires_at: string | null
+          reserved_for: string | null
           session_dead_reason: string | null
           session_dead_since: string | null
           status: string
@@ -19413,6 +19567,7 @@ export type Database = {
           provider_config?: Json
           qr_code?: string | null
           qr_code_expires_at?: string | null
+          reserved_for?: string | null
           session_dead_reason?: string | null
           session_dead_since?: string | null
           status?: string
@@ -19442,6 +19597,7 @@ export type Database = {
           provider_config?: Json
           qr_code?: string | null
           qr_code_expires_at?: string | null
+          reserved_for?: string | null
           session_dead_reason?: string | null
           session_dead_since?: string | null
           status?: string

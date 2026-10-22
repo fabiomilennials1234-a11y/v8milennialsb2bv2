@@ -14,19 +14,27 @@
  * um soluço do banco não pode silenciar o copilot da plataforma inteira. O
  * isolamento de lead continua garantido pelo gatilho no banco.
  */
-// deno-lint-ignore no-explicit-any
-type Cliente = any;
+/** O pedaço do supabase-js usado aqui — aceita o cliente real e dublês. */
+type ClienteMinimo = {
+  from: (tabela: string) => {
+    select: (colunas: string) => {
+      eq: (coluna: string, valor: string) => {
+        maybeSingle: () => PromiseLike<{ data: { reserved_for?: string | null } | null; error: unknown }>;
+      };
+    };
+  };
+};
 
 const TTL_MS = 60_000;
 const cache = new Map<string, { setor: string | null; ate: number }>();
 
-export async function setorDoNumero(supabase: Cliente, instanceId: string | null | undefined): Promise<string | null> {
+export async function setorDoNumero(supabase: unknown, instanceId: string | null | undefined): Promise<string | null> {
   if (!instanceId) return null;
   const agora = Date.now();
   const hit = cache.get(instanceId);
   if (hit && hit.ate > agora) return hit.setor;
   try {
-    const { data, error } = await supabase
+    const { data, error } = await (supabase as ClienteMinimo)
       .from("whatsapp_instances")
       .select("reserved_for")
       .eq("id", instanceId)

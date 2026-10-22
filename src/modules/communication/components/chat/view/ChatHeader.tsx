@@ -34,6 +34,7 @@ import {
   Mail,
   Archive,
   ArchiveRestore,
+  HandCoins,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -95,6 +96,11 @@ export interface ChatHeaderProps {
   isArchived?: boolean;
   onArchive?: () => void;
   onUnarchive?: () => void;
+  /**
+   * Conversa no número da cobrança (ADR-0040): o devedor não vira lead — selo
+   * "Cobrança" no lugar de "Sem lead", e sem "Criar lead".
+   */
+  daCobranca?: boolean;
 }
 
 // ─── Densidade ────────────────────────────────────────────────────────────────
@@ -178,6 +184,7 @@ export function ChatHeader({
   isArchived,
   onArchive,
   onUnarchive,
+  daCobranca = false,
 }: ChatHeaderProps) {
   const { data: limits } = useMessageLimits(instanceId ?? null, organizationId);
   const limitsPercent = limits?.current != null && limits?.limit != null && limits.limit > 0
@@ -232,7 +239,12 @@ export function ChatHeader({
           <div className="flex items-center gap-2 flex-nowrap min-w-0">
             <h3 className="truncate min-w-0 text-[15px] font-bold tracking-tight text-foreground">{contactName}</h3>
             <RealtimeStatusBadge organizationId={organizationId} className="shrink-0" />
-            {!hasLead && (
+            {daCobranca ? (
+              <Badge variant="soft" className="shrink-0 gap-1 text-xs" title="Conversa no número da cobrança: não vira lead e não aciona copilot">
+                <HandCoins className="h-3 w-3" aria-hidden />
+                Cobrança
+              </Badge>
+            ) : !hasLead && (
               <Badge variant="warning" className="shrink-0 text-xs">
                 Sem lead
               </Badge>
@@ -255,7 +267,7 @@ export function ChatHeader({
           densidade · ⋯. Abaixo de `lg` os rótulos viram ícone com tooltip. */}
       <div className="flex items-center gap-1.5 shrink-0">
         {/* Botão ver / criar lead */}
-        {onOpenLeadModal && <Button
+        {onOpenLeadModal && !daCobranca && <Button
           type="button"
           variant={hasLead ? "outline" : "ink"}
           size="sm"
