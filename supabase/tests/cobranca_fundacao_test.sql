@@ -1,6 +1,7 @@
 -- supabase/tests/cobranca_fundacao_test.sql
 --
--- Cobrança · entrega 1 (migration 20271212000000_cobranca_fundacao.sql).
+-- Cobrança · entrega 1 (migrations 20271212000000_cobranca_fundacao.sql e
+-- 20271212000010_cobranca_endurecer_acl.sql).
 --
 --   (GR) grants: leitura por RLS, escrita só por RPC, anon sem nada
 --   (RL) RLS: flag + cobranca.view; org vizinha e membro sem permissão não veem
@@ -114,6 +115,11 @@ SELECT ok(NOT has_function_privilege('authenticated', 'private.cobranca_exigir(u
 SELECT ok(bool_and(p.prosecdef AND p.proconfig IS NOT NULL), 'GR7: RPCs de escrita são DEFINER com search_path fixo')
   FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
  WHERE n.nspname = 'public' AND p.proname LIKE 'cobranca\_%' AND p.proname <> 'cobranca_metricas';
+-- 20271212000010: os default privileges do Supabase davam rwU nesta sequence a anon e authenticated.
+SELECT ok(NOT has_sequence_privilege('anon', 'public.cobranca_eventos_id_seq', 'USAGE')
+      AND NOT has_sequence_privilege('authenticated', 'public.cobranca_eventos_id_seq', 'USAGE')
+      AND NOT has_sequence_privilege('authenticated', 'public.cobranca_eventos_id_seq', 'UPDATE'),
+  'GR8: sequence do histórico fechada para o cliente');
 
 -- ===========================================================================
 -- (PM) RPC: flag, permissão, master

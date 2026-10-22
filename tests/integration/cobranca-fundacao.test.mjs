@@ -41,6 +41,7 @@ async function setup() {
     INSERT INTO master_users (user_id) VALUES ('${U_MASTER}');
   `);
   await db.exec(read('../../supabase/migrations/20271212000000_cobranca_fundacao.sql'));
+  await db.exec(read('../../supabase/migrations/20271212000010_cobranca_endurecer_acl.sql'));
   await db.exec(`
     INSERT INTO member_feature_permissions (team_member_id, feature_key, enabled) VALUES
       ('${TM_LIBERADO}', 'cobranca.view', true),
@@ -73,6 +74,22 @@ test('flag liga só a TorqueCRM e semeia as 9 etapas', async () => {
     assert.equal(await val(db, `SELECT count(*)::int FROM cobranca_etapas WHERE organization_id = '${OUTRA}'`), 0);
     assert.deepEqual((await db.query(`SELECT key, default_value FROM feature_permissions ORDER BY key`)).rows,
       [{ key: 'cobranca.edit', default_value: false }, { key: 'cobranca.view', default_value: false }]);
+  } finally { await db.close(); }
+});
+
+test('ACL: com os default privileges do Supabase, cliente só lê (views e sequence inclusive)', async () => {
+  const db = await setup();
+  try {
+    for (const v of ['cobranca_titulos_saldo', 'cobranca_inadimplentes_resumo']) {
+      assert.equal(await val(db, `SELECT has_table_privilege('authenticated', 'public.${v}', 'SELECT')`), true, v);
+      for (const p of ['INSERT', 'UPDATE', 'DELETE', 'TRUNCATE']) {
+        assert.equal(await val(db, `SELECT has_table_privilege('authenticated', 'public.${v}', '${p}')`), false, `${v} ${p}`);
+      }
+      assert.equal(await val(db, `SELECT has_table_privilege('anon', 'public.${v}', 'SELECT')`), false, `${v} anon`);
+    }
+    for (const r of ['anon', 'authenticated']) {
+      assert.equal(await val(db, `SELECT has_sequence_privilege('${r}', 'public.cobranca_eventos_id_seq', 'USAGE')`), false, `seq ${r}`);
+    }
   } finally { await db.close(); }
 });
 
@@ -308,6 +325,7 @@ test('rollback pareado remove tudo e desliga a flag', async () => {
     await asPostgres(db);
     // O padrão casa de verdade antes do rollback (senão o "0" abaixo provaria nada).
     assert.ok(await val(db, `SELECT count(*)::int FROM pg_class WHERE relname LIKE 'cobranca\\_%'`) >= 10);
+    await db.exec(read('../../supabase/migrations/rollback/20271212000010_cobranca_endurecer_acl.sql'));
     await db.exec(read('../../supabase/migrations/rollback/20271212000000_cobranca_fundacao.sql'));
     assert.equal(await val(db, `SELECT count(*)::int FROM pg_class WHERE relname LIKE 'cobranca\\_%'`), 0);
     assert.equal(await val(db, `SELECT count(*)::int FROM pg_proc WHERE proname LIKE 'cobranca\\_%'`), 0);
@@ -315,6 +333,7 @@ test('rollback pareado remove tudo e desliga a flag', async () => {
     assert.equal(await val(db, `SELECT count(*)::int FROM feature_permissions`), 0);
     // E a migration volta limpa por cima do rollback.
     await db.exec(read('../../supabase/migrations/20271212000000_cobranca_fundacao.sql'));
+    await db.exec(read('../../supabase/migrations/20271212000010_cobranca_endurecer_acl.sql'));
     assert.equal(await val(db, `SELECT count(*)::int FROM cobranca_etapas`), 9);
   } finally { await db.close(); }
 });

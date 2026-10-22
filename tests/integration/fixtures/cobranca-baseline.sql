@@ -104,3 +104,11 @@ BEGIN
    WHERE team_member_id = v_tm AND feature_key = p_feature_key;
   RETURN COALESCE(v_enabled, v_default, false);
 END $$;
+
+-- Default privileges do Supabase: toda relação, sequence e função NOVA em public
+-- nasce com ALL para anon e authenticated. Sem isto o PGlite aprovava ACL que o
+-- banco real reprova (views e sequence da cobrança, medido em prod em 22/10).
+-- Fica no fim: só o que a migration cria herda, como em prod.
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO anon, authenticated, service_role;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO anon, authenticated, service_role;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON FUNCTIONS TO anon, authenticated, service_role;
