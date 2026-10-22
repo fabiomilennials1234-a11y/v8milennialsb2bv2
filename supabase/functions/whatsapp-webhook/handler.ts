@@ -36,6 +36,7 @@ import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supa
 import { withErrorBoundary } from "../_shared/error-boundary.ts";
 import { withSecurityHeaders } from "../_shared/security-headers.ts";
 import { logRuntime } from "../_shared/logger.ts";
+import { setorDoNumero } from "../_shared/numero-reservado.ts";
 import { upsertPipeEntry } from "../_shared/pipeline-adapter.ts";
 import { authorFromWebhookEcho } from "../_shared/message-authorship.ts";
 import { logCopilotCancellation } from "../_shared/copilot/cancellation.ts";
@@ -200,6 +201,12 @@ export interface ReactionContext {
   isGroup: boolean;
   replaySource: string | null;
   conversationId?: string | null;
+  /**
+   * Setor dono do número que recebeu (`reserved_for`). Os chamadores do webhook
+   * já têm a instância resolvida e passam o valor — custo zero por evento.
+   * Ausente (`undefined`) = quem chamou não sabe; aí consulta-se com cache.
+   */
+  numeroReservado?: string | null;
 }
 
 // ============================================================================
@@ -218,6 +225,8 @@ type ResolvedInstance = {
    */
   phone_number: string | null;
   provider?: string | null;
+  /** Setor dono do número (`'collections'` = cobrança, ADR-0040). Vem do `resolve_uazapi_instance`. */
+  reserved_for?: string | null;
 };
 
 type InstanceResolution = { instance: ResolvedInstance; via: "instance_id" | "token" };
@@ -633,6 +642,17 @@ export async function triggerReactions(
 ): Promise<void> {
   // Groups: persist-only, no downstream reactions
   if (context.isGroup) return;
+
+  // Número da cobrança (ADR-0040): a mensagem fica no chat, mas não aciona
+  // copilot nem resolve espera de workflow comercial — o devedor conversa com
+  // gente da cobrança. O vínculo com lead já foi barrado no banco. Só importa
+  // quando há reação a disparar; eco de envio não paga nada.
+  if (context.shouldTriggerCopilot || context.shouldResolveWaitResponse) {
+    const setor = context.numeroReservado !== undefined
+      ? context.numeroReservado
+      : await setorDoNumero(supabase, persisted.instance_id);
+    if (setor) return;
+  }
 
   // 1. Resolve waiting workflow executions (fire-and-forget)
   if (context.shouldResolveWaitResponse && !persisted.button_reply_recognized) {
@@ -1407,6 +1427,7 @@ async function handleMessagesEvent(
       shouldResolveWaitResponse: ingested.normalized.direction === "incoming" && !!ingested.normalized.phone_number,
       isGroup: ingested.normalized.is_group,
       replaySource: receivedVia === "dlq_replay" ? "dlq_replay" : null,
+      numeroReservado: instance.reserved_for ?? null,
     });
     return;
   }
@@ -1444,6 +1465,7 @@ async function handleMessagesEvent(
     shouldResolveWaitResponse: normalized.direction === "incoming" && !!normalized.phone_number,
     isGroup: normalized.is_group,
     replaySource: receivedVia === "dlq_replay" ? "dlq_replay" : null,
+    numeroReservado: instance.reserved_for ?? null,
   });
 }
 

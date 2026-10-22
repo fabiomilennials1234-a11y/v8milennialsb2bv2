@@ -59,6 +59,11 @@ function makeQueryAdmin(rows: Row[]) {
         filtered = filtered.filter((r) => vals.includes(r[col]));
         return api;
       },
+      // PostgREST `is`: só `null` aqui — coluna ausente na linha conta como null.
+      is(col: string, val: null) {
+        filtered = filtered.filter((r) => (r[col] ?? null) === val);
+        return api;
+      },
       order(col: string, opts: { ascending?: boolean } = {}) {
         const asc = opts.ascending !== false;
         filtered.sort((a, b) => {

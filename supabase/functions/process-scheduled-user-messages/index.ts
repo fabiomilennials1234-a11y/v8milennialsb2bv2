@@ -234,6 +234,8 @@ Deno.serve(withErrorBoundary("process-scheduled-user-messages", async (req) => {
             // Meta isolation (cert Rule 2): never auto-pick a Meta number for a legacy send.
             .in("provider", ["uazapi", "evolution"])
             .in("status", ["connected", "open"])
+            // Número reservado (cobrança, ADR-0040) nunca é escolhido por fallback.
+            .is("reserved_for", null)
             .limit(1)
             .single();
           instance = defaultInst;

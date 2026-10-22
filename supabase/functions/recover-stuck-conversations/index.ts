@@ -89,6 +89,8 @@ Deno.serve(withErrorBoundary("recover-stuck-conversations", async (req) => {
     // Meta isolation (cert Rule 2): never auto-pick a Meta number for a legacy send.
     .in("provider", ["uazapi", "evolution"])
     .in("status", ["open", "connected"])
+    // Número reservado (cobrança, ADR-0040) nunca é escolhido por fallback.
+    .is("reserved_for", null)
     .limit(1)
     .maybeSingle();
 

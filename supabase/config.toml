@@ -477,6 +477,11 @@ verify_jwt = false
 [functions.process-blast-recipients]
 verify_jwt = false
 
+# cobranca-regua: worker da régua de cobrança (ADR-0040, entrega 2). Cron-only
+# (pg_cron → invoke_cobranca_regua → pg_net); auth x-cron-secret no handler.
+[functions.cobranca-regua]
+verify_jwt = false
+
 # blast-plan-control: pause/resume/cancel de Blast Plan (ADR-0003 / #707). JWT validado
 # no handler (getUser); SEM role gate — qualquer membro da org controla seus planos.
 [functions.blast-plan-control]
