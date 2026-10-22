@@ -828,6 +828,13 @@ BEGIN
     v_tel    := private.cobranca_so_digitos(v_linha ->> 'telefone');
     v_numero := NULLIF(btrim(v_linha ->> 'numero'), '');
 
+    -- Só ISO: o navegador converte dd/mm/aaaa. Texto cru no ::date seria lido
+    -- no DateStyle do servidor (10/11 viraria 11 de outubro) sem erro nenhum.
+    IF COALESCE(v_linha ->> 'vencimento', '') !~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$' THEN
+      v_invalidas := v_invalidas || jsonb_build_object('linha', v_idx, 'motivo', 'vencimento ausente ou ilegível');
+      CONTINUE;
+    END IF;
+
     BEGIN
       v_valor := round((v_linha ->> 'valor')::numeric, 2);
       v_venc  := (v_linha ->> 'vencimento')::date;

@@ -159,13 +159,16 @@ test('importação: dry-run não grava, reimportação é idempotente, linhas ru
       { nome: '', documento: '11111111111', valor: 10, vencimento: '2026-10-01' },
       { nome: 'Sem contato', valor: 10, vencimento: '2026-10-01' },
       { nome: 'Valor ruim', telefone: '48999993000', valor: 'abc', vencimento: '2026-10-01' },
+      // dd/mm cru não pode chegar ao ::date (o DateStyle leria 10/11 como 11 de outubro).
+      { nome: 'Data crua', telefone: '48999993001', valor: 10, vencimento: '10/11/2026' },
     ];
     const json = JSON.stringify(linhas).replace(/'/g, "''");
     const seco = await val(db, `SELECT cobranca_importar('${TORQUE}', '${json}'::jsonb, true)`);
     assert.equal(seco.inadimplentes_novos, 2);
     assert.equal(seco.titulos_novos, 3);
-    assert.equal(seco.linhas_invalidas.length, 3);
-    assert.deepEqual(seco.linhas_invalidas.map((l) => l.linha), [5, 6, 7]);
+    assert.equal(seco.linhas_invalidas.length, 4);
+    assert.deepEqual(seco.linhas_invalidas.map((l) => l.linha), [5, 6, 7, 8]);
+    assert.equal(seco.linhas_invalidas[3].motivo, 'vencimento ausente ou ilegível');
     assert.equal(await val(db, `SELECT count(*)::int FROM cobranca_inadimplentes`), 0);
 
     const real = await val(db, `SELECT cobranca_importar('${TORQUE}', '${json}'::jsonb, false)`);
