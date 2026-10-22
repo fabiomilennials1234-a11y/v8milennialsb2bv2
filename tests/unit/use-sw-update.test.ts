@@ -106,7 +106,7 @@ describe('useServiceWorkerUpdate — registration + update signal', () => {
     const addEventListener = vi.fn();
     const originalSW = Object.getOwnPropertyDescriptor(navigator, 'serviceWorker');
     Object.defineProperty(navigator, 'serviceWorker', {
-      value: { addEventListener },
+      value: { addEventListener, removeEventListener: vi.fn() },
       configurable: true,
     });
 
