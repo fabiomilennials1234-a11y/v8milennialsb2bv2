@@ -31,7 +31,7 @@ import {
   useLeadComments,
   useUpdateLeadComment,
 } from "../lead-detail/hooks/useLeadComments";
-import { GavetaLateral } from "../lead-card/GavetaLateral";
+import { GavetaLateral } from "@/shared/components/GavetaLateral";
 import { LeadCardContainer } from "../lead-card/LeadCardContainer";
 import { TelefoneDoNegocioFaixa } from "./TelefoneDoNegocio";
 import { useResolucaoDoTelefoneDoNegocio } from "../../hooks/useTelefoneDoNegocio";

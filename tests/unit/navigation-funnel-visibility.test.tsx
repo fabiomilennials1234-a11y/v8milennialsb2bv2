@@ -12,6 +12,8 @@ vi.mock("@/modules/identity", () => ({
   useOrganization: () => ({ orgType: "standard" }),
 }));
 vi.mock("@/modules/communication/hooks/chat-meta/useMetaPages", () => ({ useMetaPages: () => ({ data: { pages: [] } }) }));
+// Flag de piloto da org (Cobrança, ADR-0040) — fora do assunto deste teste.
+vi.mock("@/modules/platform/hooks/useFeatureFlag", () => ({ useFeatureFlag: () => ({ enabled: false, isLoading: false }) }));
 vi.mock("@/modules/pipelines", async () => ({
   ...await import("@/modules/pipelines/lib/pipeline-navigation"),
   usePipelines: () => ({ data: state.rows }),

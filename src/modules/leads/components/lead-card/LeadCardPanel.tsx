@@ -4,7 +4,7 @@ import { useViewport } from "@/shared/hooks/use-viewport";
 import { useOrganization } from "@/modules/identity";
 import { useLeadSheet } from "../lead-detail/hooks/useLeadSheet";
 import { useDealSheet } from "../deal-detail/deal-sheet-context";
-import { GavetaLateral } from "./GavetaLateral";
+import { GavetaLateral } from "@/shared/components/GavetaLateral";
 import { LeadCardContainer } from "./LeadCardContainer";
 import { LeadCardNewDeal } from "./LeadCardNewDeal";
 

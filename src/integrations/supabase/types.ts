@@ -3503,6 +3503,333 @@ export type Database = {
           },
         ]
       }
+      cobranca_casos: {
+        Row: {
+          aberto_em: string
+          created_at: string
+          desfecho: string | null
+          encerrado_em: string | null
+          etapa_desde: string
+          etapa_id: string
+          id: string
+          inadimplente_id: string
+          organization_id: string
+          posicao: number
+          responsavel_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          aberto_em?: string
+          created_at?: string
+          desfecho?: string | null
+          encerrado_em?: string | null
+          etapa_desde?: string
+          etapa_id: string
+          id?: string
+          inadimplente_id: string
+          organization_id: string
+          posicao?: number
+          responsavel_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          aberto_em?: string
+          created_at?: string
+          desfecho?: string | null
+          encerrado_em?: string | null
+          etapa_desde?: string
+          etapa_id?: string
+          id?: string
+          inadimplente_id?: string
+          organization_id?: string
+          posicao?: number
+          responsavel_id?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      cobranca_compromisso_parcelas: {
+        Row: {
+          compromisso_id: string
+          id: string
+          numero: number
+          organization_id: string
+          valor: number
+          vencimento: string
+        }
+        Insert: {
+          compromisso_id: string
+          id?: string
+          numero: number
+          organization_id: string
+          valor: number
+          vencimento: string
+        }
+        Update: {
+          compromisso_id?: string
+          id?: string
+          numero?: number
+          organization_id?: string
+          valor?: number
+          vencimento?: string
+        }
+        Relationships: []
+      }
+      cobranca_compromissos: {
+        Row: {
+          caso_id: string
+          created_at: string
+          criado_por: string | null
+          encerrado_em: string | null
+          id: string
+          observacao: string | null
+          organization_id: string
+          status: string
+          tipo: string
+          updated_at: string
+        }
+        Insert: {
+          caso_id: string
+          created_at?: string
+          criado_por?: string | null
+          encerrado_em?: string | null
+          id?: string
+          observacao?: string | null
+          organization_id: string
+          status?: string
+          tipo: string
+          updated_at?: string
+        }
+        Update: {
+          caso_id?: string
+          created_at?: string
+          criado_por?: string | null
+          encerrado_em?: string | null
+          id?: string
+          observacao?: string | null
+          organization_id?: string
+          status?: string
+          tipo?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      cobranca_etapas: {
+        Row: {
+          cor: string
+          created_at: string
+          id: string
+          nome: string
+          organization_id: string
+          papel: string
+          pausa_regua: boolean
+          posicao: number
+          updated_at: string
+        }
+        Insert: {
+          cor?: string
+          created_at?: string
+          id?: string
+          nome: string
+          organization_id: string
+          papel?: string
+          pausa_regua?: boolean
+          posicao: number
+          updated_at?: string
+        }
+        Update: {
+          cor?: string
+          created_at?: string
+          id?: string
+          nome?: string
+          organization_id?: string
+          papel?: string
+          pausa_regua?: boolean
+          posicao?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      cobranca_eventos: {
+        Row: {
+          autor_id: string | null
+          caso_id: string | null
+          created_at: string
+          dados: Json
+          id: number
+          inadimplente_id: string
+          organization_id: string
+          tipo: string
+        }
+        Insert: {
+          autor_id?: string | null
+          caso_id?: string | null
+          created_at?: string
+          dados?: Json
+          id?: number
+          inadimplente_id: string
+          organization_id: string
+          tipo: string
+        }
+        Update: {
+          autor_id?: string | null
+          caso_id?: string | null
+          created_at?: string
+          dados?: Json
+          id?: number
+          inadimplente_id?: string
+          organization_id?: string
+          tipo?: string
+        }
+        Relationships: []
+      }
+      cobranca_inadimplentes: {
+        Row: {
+          arquivado_em: string | null
+          cidade: string | null
+          contato_nome: string | null
+          created_at: string
+          criado_por: string | null
+          documento: string | null
+          email: string | null
+          id: string
+          nao_contatar: boolean
+          nao_contatar_em: string | null
+          nome: string
+          observacoes: string | null
+          organization_id: string
+          origem: string
+          referencia_externa: string | null
+          telefone: string | null
+          updated_at: string
+        }
+        Insert: {
+          arquivado_em?: string | null
+          cidade?: string | null
+          contato_nome?: string | null
+          created_at?: string
+          criado_por?: string | null
+          documento?: string | null
+          email?: string | null
+          id?: string
+          nao_contatar?: boolean
+          nao_contatar_em?: string | null
+          nome: string
+          observacoes?: string | null
+          organization_id: string
+          origem: string
+          referencia_externa?: string | null
+          telefone?: string | null
+          updated_at?: string
+        }
+        Update: {
+          arquivado_em?: string | null
+          cidade?: string | null
+          contato_nome?: string | null
+          created_at?: string
+          criado_por?: string | null
+          documento?: string | null
+          email?: string | null
+          id?: string
+          nao_contatar?: boolean
+          nao_contatar_em?: string | null
+          nome?: string
+          observacoes?: string | null
+          organization_id?: string
+          origem?: string
+          referencia_externa?: string | null
+          telefone?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      cobranca_pagamentos: {
+        Row: {
+          caso_id: string
+          created_at: string
+          id: string
+          lote: string
+          organization_id: string
+          origem: string
+          pago_em: string
+          registrado_por: string | null
+          titulo_id: string
+          valor: number
+        }
+        Insert: {
+          caso_id: string
+          created_at?: string
+          id?: string
+          lote: string
+          organization_id: string
+          origem?: string
+          pago_em: string
+          registrado_por?: string | null
+          titulo_id: string
+          valor: number
+        }
+        Update: {
+          caso_id?: string
+          created_at?: string
+          id?: string
+          lote?: string
+          organization_id?: string
+          origem?: string
+          pago_em?: string
+          registrado_por?: string | null
+          titulo_id?: string
+          valor?: number
+        }
+        Relationships: []
+      }
+      cobranca_titulos: {
+        Row: {
+          created_at: string
+          descricao: string | null
+          id: string
+          inadimplente_id: string
+          numero: string | null
+          organization_id: string
+          origem: string
+          pago_em: string | null
+          status: string
+          titulo_receber_id: string | null
+          updated_at: string
+          valor: number
+          vencimento: string
+        }
+        Insert: {
+          created_at?: string
+          descricao?: string | null
+          id?: string
+          inadimplente_id: string
+          numero?: string | null
+          organization_id: string
+          origem: string
+          pago_em?: string | null
+          status?: string
+          titulo_receber_id?: string | null
+          updated_at?: string
+          valor: number
+          vencimento: string
+        }
+        Update: {
+          created_at?: string
+          descricao?: string | null
+          id?: string
+          inadimplente_id?: string
+          numero?: string | null
+          organization_id?: string
+          origem?: string
+          pago_em?: string | null
+          status?: string
+          titulo_receber_id?: string | null
+          updated_at?: string
+          valor?: number
+          vencimento?: string
+        }
+        Relationships: []
+      }
       commissions: {
         Row: {
           amount: number
@@ -19814,6 +20141,61 @@ export type Database = {
       }
     }
     Views: {
+      cobranca_inadimplentes_resumo: {
+        Row: {
+          aberto_em: string | null
+          caso_id: string | null
+          cidade: string | null
+          compromisso_parcelas: number | null
+          compromisso_proxima_valor: number | null
+          compromisso_proxima_vencimento: string | null
+          compromisso_tipo: string | null
+          contato_nome: string | null
+          created_at: string | null
+          documento: string | null
+          email: string | null
+          etapa_cor: string | null
+          etapa_desde: string | null
+          etapa_id: string | null
+          etapa_nome: string | null
+          etapa_papel: string | null
+          id: string | null
+          nao_contatar: boolean | null
+          nome: string | null
+          organization_id: string | null
+          origem: string | null
+          posicao: number | null
+          responsavel_id: string | null
+          responsavel_nome: string | null
+          saldo_aberto: number | null
+          telefone: string | null
+          titulos_abertos: number | null
+          ultimo_contato_canal: string | null
+          ultimo_contato_em: string | null
+          ultimo_desfecho: string | null
+          ultimo_encerramento: string | null
+          vencimento_mais_antigo: string | null
+        }
+        Relationships: []
+      }
+      cobranca_titulos_saldo: {
+        Row: {
+          created_at: string | null
+          descricao: string | null
+          id: string | null
+          inadimplente_id: string | null
+          numero: string | null
+          organization_id: string | null
+          origem: string | null
+          pago_em: string | null
+          saldo: number | null
+          status: string | null
+          valor: number | null
+          valor_pago: number | null
+          vencimento: string | null
+        }
+        Relationships: []
+      }
       feature_flags: {
         Row: {
           category: string | null
