@@ -9,20 +9,22 @@ import { rpcCobranca } from "../lib/rpc";
 import {
   type ConfiguracaoDaRegua,
   type EnvioDaRegua,
-  type Gatilho,
   type Janela,
   type PassoDaRegua,
   type PreviaDaRegua,
+  type PreviaDoEnvio,
   parseConfiguracao,
   parseEnvio,
   parsePasso,
   parsePrevia,
+  parsePreviaDoEnvio,
 } from "../lib/regua";
 import { CHAVE_COBRANCA } from "./useCobrancaDados";
 
 /**
- * A régua de cobrança (entrega 2) na tela: configuração, passos, número da
- * cobrança, prévia e envios recentes. Leitura por RLS; escrita só por RPC.
+ * A régua de cobrança na tela: configuração, lembretes, número da cobrança,
+ * prévias e envios recentes. As colunas com automação vêm de `useEtapas`.
+ * Leitura por RLS; escrita só por RPC.
  * Mesma chave raiz `["cobranca", org]` — invalidar a raiz atualiza tudo.
  */
 
@@ -108,6 +110,28 @@ export function usePreviaDaRegua() {
       const { data, error } = await rpcCobranca("cobranca_regua_previa", { p_org: organizationId as string });
       if (error) throw error;
       return parsePrevia(data);
+    },
+  });
+}
+
+/**
+ * O que "Mover e enviar" mandaria para ESTE caso ao entrar NESTA coluna — texto,
+ * variáveis do servidor e bloqueio. Sem cache: o diálogo abre e lê o agora.
+ */
+export function usePreviaDoEnvio(casoId: string | null, etapaId: string | null) {
+  const { organizationId } = useOrganization();
+  return useQuery<PreviaDoEnvio>({
+    queryKey: [CHAVE_COBRANCA, organizationId, "regua", "previa-envio", casoId, etapaId],
+    enabled: !!organizationId && !!casoId && !!etapaId,
+    staleTime: 0,
+    gcTime: 0,
+    queryFn: async () => {
+      const { data, error } = await rpcCobranca("cobranca_caso_previa_envio", {
+        p_caso: casoId as string,
+        p_etapa: etapaId as string,
+      });
+      if (error) throw error;
+      return parsePreviaDoEnvio(data);
     },
   });
 }
@@ -225,12 +249,11 @@ export function useDefinirNumero() {
   });
 }
 
+/** Lembrete antes de promessa/parcela — o único passo que restou (atraso mora nas colunas). */
 export interface PassoEditavel {
   id: string | null;
-  gatilho: Gatilho;
   dias: number;
   mensagem: string | null;
-  moverParaEtapaId: string | null;
   ativo: boolean;
 }
 
@@ -243,10 +266,9 @@ export function useSalvarPasso() {
         p_org: organizationId as string,
         p_id: p.id,
         p_dados: {
-          gatilho: p.gatilho,
+          gatilho: "lembrete_compromisso",
           dias: p.dias,
           mensagem: p.mensagem?.trim() || null,
-          mover_para_etapa_id: p.moverParaEtapaId,
           ativo: p.ativo,
         } as Json,
       });
@@ -262,6 +284,49 @@ export function useRemoverPasso() {
   return useMutation({
     mutationFn: async (id: string) => {
       const { error } = await rpcCobranca("cobranca_regua_passo_remover", { p_id: id });
+      if (error) throw error;
+    },
+    onSuccess: invalidar,
+  });
+}
+
+export interface ColunaEditavel {
+  /** null = coluna nova de dias de atraso. */
+  id: string | null;
+  nome?: string;
+  entradaDias?: number | null;
+  mensagem?: string | null;
+  automacaoAtiva?: boolean;
+}
+
+/** Cria ou edita uma coluna do fluxo. Só manda o que mudou: o banco preserva o resto. */
+export function useSalvarColuna() {
+  const { organizationId } = useOrganization();
+  const invalidar = useInvalidar();
+  return useMutation({
+    mutationFn: async (c: ColunaEditavel): Promise<string> => {
+      const dados: Record<string, unknown> = {};
+      if (c.nome !== undefined) dados.nome = c.nome;
+      if (c.entradaDias !== undefined) dados.entrada_dias = c.entradaDias;
+      if (c.mensagem !== undefined) dados.mensagem = c.mensagem?.trim() ?? "";
+      if (c.automacaoAtiva !== undefined) dados.automacao_ativa = c.automacaoAtiva;
+      const { data, error } = await rpcCobranca("cobranca_coluna_salvar", {
+        p_org: organizationId as string,
+        p_etapa: c.id,
+        p_dados: dados as Json,
+      });
+      if (error) throw error;
+      return data as string;
+    },
+    onSuccess: invalidar,
+  });
+}
+
+export function useRemoverColuna() {
+  const invalidar = useInvalidar();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await rpcCobranca("cobranca_coluna_remover", { p_etapa: id });
       if (error) throw error;
     },
     onSuccess: invalidar,

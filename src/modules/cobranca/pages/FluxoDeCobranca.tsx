@@ -4,6 +4,9 @@
  * Parece um funil, mas não é: as etapas são da cobrança, o card é um caso (um
  * por inadimplente) e a faixa de números lê só as tabelas da cobrança. Nada
  * daqui entra em funis de venda, conversão, comissão ou Estúdio de Métricas.
+ *
+ * As colunas são a régua: "N dias de atraso" recebe o caso sozinho. Soltar um
+ * card numa coluna que manda mensagem pergunta antes ("Mover e enviar").
  */
 import { useQueryClient } from "@tanstack/react-query";
 import { Lock, Plus, Search } from "lucide-react";
@@ -30,6 +33,7 @@ import { cn } from "@/lib/utils";
 
 import { recusaDaCobranca } from "../lib/erros";
 import { plural, reaisCompacto } from "../lib/formato";
+import { ROTULO_BLOQUEIO, type ResultadoDoEnvioManual } from "../lib/regua";
 import type { Etapa, InadimplenteResumo } from "../lib/tipos";
 import { CHAVE_COBRANCA, useCasosAbertos, useCasosEncerrados, useEtapas, useMetricas } from "../hooks/useCobrancaDados";
 import { useCobrancaAcesso } from "../hooks/useCobrancaAcesso";
@@ -38,6 +42,14 @@ import { CobrancaTabs } from "../components/CobrancaTabs";
 import { ConfirmarDialog, InadimplenteDialog, PagamentoDialog } from "../components/dialogos";
 import { FluxoQuadro } from "../components/FluxoQuadro";
 import { InadimplenteGaveta } from "../components/InadimplenteGaveta";
+import { MoverEEnviarDialog } from "../components/MoverEEnviarDialog";
+
+/** O que dizer depois de "Mover e enviar", pelo que o banco devolveu. */
+function avisarEnvio(envio: ResultadoDoEnvioManual) {
+  if (envio === "na_fila") return toast.success("Card movido. A mensagem entrou na fila da régua.");
+  if (envio === "ja_enviado_hoje") return toast("Card movido. A mensagem desta coluna já foi hoje para este devedor.");
+  if (envio) return toast.warning(`Card movido, mensagem não enviada. ${ROTULO_BLOQUEIO[envio]}`);
+}
 
 function Celula({ rotulo, valor, nota }: { rotulo: string; valor: ReactNode; nota: ReactNode }) {
   return (
@@ -59,6 +71,7 @@ export default function FluxoDeCobranca() {
   const [responsavel, setResponsavel] = useState<string | null>(null);
   const [novo, setNovo] = useState(false);
   const [pendente, setPendente] = useState<null | { caso: InadimplenteResumo; destino: Etapa }>(null);
+  const [comMensagem, setComMensagem] = useState<null | { caso: InadimplenteResumo; destino: Etapa }>(null);
 
   const { data: etapas = [] } = useEtapas();
   const { data: casos = [], isLoading } = useCasosAbertos();
@@ -91,7 +104,7 @@ export default function FluxoDeCobranca() {
   }, [casos, busca, responsavel]);
 
   // Move já na tela; se o banco recusar, o refetch devolve o card ao lugar.
-  const moverOtimista = (caso: InadimplenteResumo, destino: Etapa) => {
+  const moverOtimista = (caso: InadimplenteResumo, destino: Etapa, enviar = false) => {
     const chave = [CHAVE_COBRANCA, organizationId, "quadro"];
     qc.setQueryData<InadimplenteResumo[]>(chave, (lista) =>
       (lista ?? []).map((c) =>
@@ -99,8 +112,11 @@ export default function FluxoDeCobranca() {
       ),
     );
     mover.mutate(
-      { casoId: caso.casoId as string, etapaId: destino.id },
+      { casoId: caso.casoId as string, etapaId: destino.id, enviar },
       {
+        onSuccess: (envio) => {
+          if (enviar) avisarEnvio(envio);
+        },
         onError: (err) =>
           notifyError(err, {
             fallback: "Não foi possível mover o caso.",
@@ -113,6 +129,8 @@ export default function FluxoDeCobranca() {
 
   const soltar = (caso: InadimplenteResumo, destino: Etapa) => {
     if (!podeEditar) return;
+    // Coluna que manda mensagem: pergunta antes, com a prévia.
+    if (destino.papel === "aberta" && destino.mensagem) return setComMensagem({ caso, destino });
     if (destino.papel === "aberta") return moverOtimista(caso, destino);
     // Recuperado sem saldo é só mover; com saldo, a tela pede o pagamento.
     if (destino.papel === "recuperado" && caso.saldoAberto <= 0) return moverOtimista(caso, destino);
@@ -227,6 +245,18 @@ export default function FluxoDeCobranca() {
       <InadimplenteGaveta inadimplenteId={aberto} onFechar={fecharFicha} etapas={etapas} podeEditar={podeEditar} />
       <InadimplenteDialog aberto={novo} onFechar={() => setNovo(false)} onSalvo={abrir} />
 
+      {comMensagem && (
+        <MoverEEnviarDialog
+          key={`${comMensagem.caso.casoId}:${comMensagem.destino.id}`}
+          caso={comMensagem.caso}
+          destino={comMensagem.destino}
+          onFechar={() => setComMensagem(null)}
+          onMover={(enviar) => {
+            moverOtimista(comMensagem.caso, comMensagem.destino, enviar);
+            setComMensagem(null);
+          }}
+        />
+      )}
       {/* Soltar em Recuperado: com saldo, a baixa é o pagamento (o banco recusa o mover). */}
       {pendente?.destino.papel === "recuperado" && pendente.caso.saldoAberto > 0 && (
         <PagamentoDialog aberto onFechar={() => setPendente(null)} caso={pendente.caso} />

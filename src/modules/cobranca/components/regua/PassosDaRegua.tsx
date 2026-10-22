@@ -1,10 +1,10 @@
 /**
- * Os passos da régua como linha do tempo: o que acontece em cada dia de
- * atraso, e o lembrete antes de promessa/parcela. Cada passo mostra o texto
- * como o devedor vai ler (dados de exemplo) e a mudança de etapa.
+ * Lembretes antes de promessa ou parcela (D-N). Enquanto há compromisso, as
+ * colunas de atraso não andam; só o lembrete sai. Parcela vencida e não paga
+ * quebra o compromisso e o card volta para a coluna do atraso.
  */
-import { ArrowRight, CalendarClock, MoreHorizontal, Pencil, Plus, Trash2 } from "lucide-react";
-import { useState, type ReactNode } from "react";
+import { CalendarClock, MoreHorizontal, Pencil, Plus, Trash2 } from "lucide-react";
+import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -19,50 +19,36 @@ import { notifyError } from "@/shared/errors";
 import { cn } from "@/lib/utils";
 
 import { recusaDaCobranca } from "../../lib/erros";
-import {
-  type Gatilho,
-  type PassoDaRegua,
-  marcaDoPasso,
-  renderizarMensagem,
-  rotuloDoPasso,
-  variaveisDeExemplo,
-} from "../../lib/regua";
-import type { Etapa } from "../../lib/tipos";
+import { type PassoDaRegua, marcaDoPasso, renderizarMensagem, rotuloDoPasso, variaveisDeExemplo } from "../../lib/regua";
 import { useRemoverPasso, useSalvarPasso } from "../../hooks/useRegua";
-import { EtapaPill } from "../atomos";
 import { ConfirmarDialog } from "../dialogos";
 import { PassoDialog } from "./PassoDialog";
 
 export function PassosDaRegua({
   passos,
-  etapas,
   comoPagar,
   empresa,
   podeEditar,
 }: {
   passos: PassoDaRegua[];
-  etapas: Etapa[];
   comoPagar: string | null;
   empresa?: string;
   podeEditar: boolean;
 }) {
-  const [editando, setEditando] = useState<{ passo: PassoDaRegua | null; gatilho: Gatilho } | null>(null);
+  const [editando, setEditando] = useState<{ passo: PassoDaRegua | null } | null>(null);
   const [removendo, setRemovendo] = useState<PassoDaRegua | null>(null);
   const salvar = useSalvarPasso();
   const remover = useRemoverPasso();
   const exemplo = variaveisDeExemplo(comoPagar, empresa);
-  const etapaPor = new Map(etapas.map((e) => [e.id, e]));
-
-  const atraso = passos.filter((p) => p.gatilho === "atraso").sort((a, b) => a.dias - b.dias);
   const lembretes = passos.filter((p) => p.gatilho === "lembrete_compromisso").sort((a, b) => b.dias - a.dias);
 
   const alternar = (p: PassoDaRegua, ativo: boolean) =>
     salvar.mutate(
-      { id: p.id, gatilho: p.gatilho, dias: p.dias, mensagem: p.mensagem, moverParaEtapaId: p.moverParaEtapaId, ativo },
+      { id: p.id, dias: p.dias, mensagem: p.mensagem, ativo },
       {
         onError: (err) =>
           notifyError(err, {
-            fallback: "Não foi possível alterar o passo.",
+            fallback: "Não foi possível alterar o lembrete.",
             message: recusaDaCobranca(err as { code?: string; message?: string }),
             context: { feature: "cobranca" },
           }),
@@ -70,7 +56,6 @@ export function PassosDaRegua({
     );
 
   const linha = (p: PassoDaRegua, ultimo: boolean) => {
-    const destino = p.moverParaEtapaId ? etapaPor.get(p.moverParaEtapaId) : undefined;
     const texto = p.mensagem ? renderizarMensagem(p.mensagem, exemplo) : null;
     return (
       <li key={p.id} className="relative grid grid-cols-[52px_minmax(0,1fr)] gap-3">
@@ -93,12 +78,6 @@ export function PassosDaRegua({
         >
           <div className="flex flex-wrap items-center gap-2">
             <p className="text-[13px] font-bold">{rotuloDoPasso(p)}</p>
-            {destino && (
-              <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
-                <ArrowRight className="size-3" aria-hidden />
-                <EtapaPill nome={destino.nome} cor={destino.cor} />
-              </span>
-            )}
             <span className="flex-1" />
             {podeEditar && (
               <>
@@ -109,12 +88,12 @@ export function PassosDaRegua({
                 />
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
-                    <Button variant="ghost" size="icon" className="size-8 rounded-full" aria-label="Ações do passo">
+                    <Button variant="ghost" size="icon" className="size-8 rounded-full" aria-label="Ações do lembrete">
                       <MoreHorizontal />
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end">
-                    <DropdownMenuItem onSelect={() => setEditando({ passo: p, gatilho: p.gatilho })}>
+                    <DropdownMenuItem onSelect={() => setEditando({ passo: p })}>
                       <Pencil className="mr-2 size-3.5" /> Editar
                     </DropdownMenuItem>
                     <DropdownMenuSeparator />
@@ -126,71 +105,50 @@ export function PassosDaRegua({
               </>
             )}
           </div>
-          {texto ? (
-            <p className="mt-2 line-clamp-3 whitespace-pre-line text-[12.5px] leading-relaxed text-muted-foreground">{texto}</p>
-          ) : (
-            <p className="mt-2 text-[12.5px] text-muted-foreground">Sem mensagem: só muda a etapa.</p>
-          )}
+          {texto && <p className="mt-2 line-clamp-3 whitespace-pre-line text-[12.5px] leading-relaxed text-muted-foreground">{texto}</p>}
         </div>
       </li>
     );
   };
 
-  const grupo = (titulo: string, descricao: string, lista: PassoDaRegua[], gatilho: Gatilho, icone?: ReactNode) => (
+  return (
     <section className="rounded-panel border border-border bg-sunken/60 p-4">
       <header className="mb-3 flex flex-wrap items-start gap-2">
         <div className="min-w-0 flex-1">
           <h2 className="flex items-center gap-1.5 text-sm font-extrabold tracking-[-0.01em]">
-            {icone}
-            {titulo}
+            <CalendarClock className="size-3.5 text-muted-foreground" aria-hidden />
+            Antes de promessa ou parcela
           </h2>
-          <p className="text-xs text-muted-foreground">{descricao}</p>
+          <p className="text-xs text-muted-foreground">
+            Enquanto há promessa ou acordo, as colunas de atraso param; só o lembrete sai. Parcela vencida e não paga
+            quebra o compromisso e o card volta para a coluna do atraso.
+          </p>
         </div>
         {podeEditar && (
-          <Button size="sm" variant="outline" className="rounded-full" onClick={() => setEditando({ passo: null, gatilho })}>
-            <Plus /> Passo
+          <Button size="sm" variant="outline" className="rounded-full" onClick={() => setEditando({ passo: null })}>
+            <Plus /> Lembrete
           </Button>
         )}
       </header>
-      {lista.length ? (
-        <ol>{lista.map((p, i) => linha(p, i === lista.length - 1))}</ol>
+      {lembretes.length ? (
+        <ol>{lembretes.map((p, i) => linha(p, i === lembretes.length - 1))}</ol>
       ) : (
-        <p className="py-4 text-center text-xs text-muted-foreground">Nenhum passo.</p>
-      )}
-    </section>
-  );
-
-  return (
-    <div className="space-y-4">
-      {grupo(
-        "Depois do vencimento",
-        "Conta do vencimento mais antigo em aberto. Quem entra atrasado recebe só o passo do dia em que está — nunca a régua inteira.",
-        atraso,
-        "atraso",
-      )}
-      {grupo(
-        "Antes de promessa ou parcela",
-        "Enquanto há promessa ou acordo, a régua de atraso para; só o lembrete sai. Parcela vencida e não paga quebra o compromisso.",
-        lembretes,
-        "lembrete_compromisso",
-        <CalendarClock className="size-3.5 text-muted-foreground" aria-hidden />,
+        <p className="py-4 text-center text-xs text-muted-foreground">Nenhum lembrete.</p>
       )}
 
       <PassoDialog
         aberto={!!editando}
         onFechar={() => setEditando(null)}
         passo={editando?.passo ?? null}
-        gatilhoInicial={editando?.gatilho}
-        etapas={etapas}
         comoPagar={comoPagar}
         empresa={empresa}
       />
       <ConfirmarDialog
         aberto={!!removendo}
         onFechar={() => setRemovendo(null)}
-        titulo="Remover este passo?"
+        titulo="Remover este lembrete?"
         descricao="Envios dele que ainda estão na fila são cancelados. O que já saiu fica no histórico."
-        rotuloConfirmar="Remover passo"
+        rotuloConfirmar="Remover lembrete"
         perigoso
         confirmando={remover.isPending}
         onConfirmar={() =>
@@ -199,13 +157,13 @@ export function PassosDaRegua({
             onSuccess: () => setRemovendo(null),
             onError: (err) =>
               notifyError(err, {
-                fallback: "Não foi possível remover o passo.",
+                fallback: "Não foi possível remover o lembrete.",
                 message: recusaDaCobranca(err as { code?: string; message?: string }),
                 context: { feature: "cobranca" },
               }),
           })
         }
       />
-    </div>
+    </section>
   );
 }

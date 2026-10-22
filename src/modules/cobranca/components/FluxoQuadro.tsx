@@ -6,6 +6,10 @@
  * Colunas de desfecho (Recuperado, Perdido, Cancelado) mostram os últimos 30
  * dias e recebem o arrasto, mas o desfecho tem regra: Recuperado só com saldo
  * zero — soltar ali abre "Registrar pagamento".
+ *
+ * Coluna com automação (20271214000000) mostra no cabeçalho com quantos dias de
+ * atraso o caso entra sozinho (D+N) e se manda mensagem ao entrar — soltar um
+ * card nela pergunta antes, com a prévia ("Mover e enviar" / "Só mover").
  */
 import {
   DndContext,
@@ -19,7 +23,7 @@ import {
   type DragEndEvent,
   type DragStartEvent,
 } from "@dnd-kit/core";
-import { BellOff, CircleCheck, CircleX, Ban, type LucideIcon } from "lucide-react";
+import { BellOff, CircleCheck, CircleX, Ban, MessageCircle, Pause, type LucideIcon } from "lucide-react";
 import { useState } from "react";
 
 import { cn } from "@/lib/utils";
@@ -27,6 +31,7 @@ import { cn } from "@/lib/utils";
 import { diaCurto, haQuantoTempo } from "../lib/atraso";
 import { reais, reaisCompacto } from "../lib/formato";
 import { proximaAcao } from "../lib/proxima-acao";
+import { marcaDoPasso, rotuloDaEntrada } from "../lib/regua";
 import type { Etapa, InadimplenteResumo, PapelDaEtapa } from "../lib/tipos";
 import type { CasoEncerrado } from "../hooks/useCobrancaDados";
 import { AtrasoSelo, IniciaisAvatar } from "./atomos";
@@ -116,6 +121,41 @@ function CartaoArrastavel({ r, onAbrir, podeArrastar }: { r: InadimplenteResumo;
   );
 }
 
+/** D+N, pausa e mensagem: o que a coluna faz sozinha, num relance. */
+function AutomacaoDaColuna({ etapa }: { etapa: Etapa }) {
+  if (etapa.papel !== "aberta") return null;
+  const dias = etapa.entradaDias;
+  const desligada = dias !== null && !etapa.automacaoAtiva;
+  return (
+    <span className="flex shrink-0 items-center gap-1">
+      {dias !== null && (
+        <span
+          title={desligada ? "Entrada automática desligada" : rotuloDaEntrada(dias)}
+          className={cn(
+            "inline-flex h-[18px] items-center rounded-full px-1.5 text-[10px] font-extrabold tabular-nums",
+            desligada ? "border border-dashed border-border text-muted-foreground line-through" : "bg-tinta text-tinta-foreground",
+          )}
+        >
+          {marcaDoPasso({ gatilho: "atraso", dias })}
+        </span>
+      )}
+      {etapa.pausaRegua && (
+        <span title="Pausa a régua: nada sai sozinho enquanto o caso está aqui" className="text-muted-foreground">
+          <Pause className="size-3" aria-label="Pausa a régua" />
+        </span>
+      )}
+      {etapa.mensagem && (
+        <span
+          title={dias !== null && !desligada ? "Manda mensagem quando o caso entra" : "Tem mensagem: sai quando alguém move o card para cá e escolhe enviar"}
+          className="text-primary-soft-foreground dark:text-primary"
+        >
+          <MessageCircle className="size-3" aria-label="Manda mensagem ao entrar" />
+        </span>
+      )}
+    </span>
+  );
+}
+
 function Coluna({
   etapa,
   casos,
@@ -156,8 +196,11 @@ function Coluna({
             {quantos}
           </span>
         </div>
-        <p className="mt-1 flex items-center justify-between text-[11px] text-muted-foreground">
-          <span>{desfecho ? (etapa.papel === "recuperado" ? "recebido em 30 dias" : "últimos 30 dias") : "em aberto"}</span>
+        <p className="mt-1 flex items-center justify-between gap-2 text-[11px] text-muted-foreground">
+          <span className="flex min-w-0 items-center gap-1.5">
+            <AutomacaoDaColuna etapa={etapa} />
+            <span className="truncate">{desfecho ? (etapa.papel === "recuperado" ? "recebido em 30 dias" : "últimos 30 dias") : "em aberto"}</span>
+          </span>
           {(soma > 0 || !desfecho) && <span className="font-extrabold tabular-nums text-foreground">{reaisCompacto(soma)}</span>}
         </p>
       </header>
