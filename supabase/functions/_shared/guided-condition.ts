@@ -331,7 +331,7 @@ async function evaluateGuidedConditionWithinDeadline(
         customOptionReferences.set(id, options);
       }
     }
-    else if (isGuidedOwnerField(current.field)) memberIds.add(current.memberId.toLowerCase());
+    else if (current.field === 'lead.owners') memberIds.add(current.memberId.toLowerCase());
     else if (isGuidedResponsibleField(current.field) && current.operator !== 'is_empty' && current.operator !== 'is_not_empty' && 'memberId' in current) memberIds.add(current.memberId.toLowerCase());
     else if (current.field === 'lead.origin' && current.operator !== 'is_empty' && current.operator !== 'is_not_empty') originIds.add(current.originId.toLowerCase());
     else if (current.field === 'lead.tags') tagIds.add(current.tagId.toLowerCase());

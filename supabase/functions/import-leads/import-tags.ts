@@ -13,8 +13,21 @@ export const MAX_IMPORT_TAGS = 20;
 /** Linhas por upsert em `lead_tags` — cada linha inserida dispara `trg_workflow_tag_added`. */
 const ROWS_PER_UPSERT = 500;
 
-// deno-lint-ignore no-explicit-any
-type Db = { from: (table: string) => any };
+type DbError = { message: string } | null;
+type TagLookup = {
+  select(columns: string): {
+    eq(column: string, value: string): {
+      in(column: string, values: string[]): PromiseLike<{ data: { id: string }[] | null; error: DbError }>;
+    };
+  };
+};
+type TagWriter = {
+  upsert(
+    rows: { lead_id: string; tag_id: string }[],
+    options: { onConflict: string; ignoreDuplicates: boolean },
+  ): PromiseLike<{ error: DbError }>;
+};
+type Db = { from(table: string): TagLookup | TagWriter };
 
 export type ResolvedImportTags =
   | { ok: true; tagIds: string[] }
@@ -44,8 +57,7 @@ export async function resolveImportTagIds(
     return { ok: false, error: `Escolha no máximo ${MAX_IMPORT_TAGS} etiquetas por importação` };
   }
 
-  const { data, error } = await db
-    .from("tags")
+  const { data, error } = await (db.from("tags") as TagLookup)
     .select("id")
     .eq("organization_id", organizationId)
     .in("id", tagIds);
@@ -79,8 +91,7 @@ export async function applyImportTags(
 
     // DO NOTHING no conflito: lead que já tinha a etiqueta não é tocado nem
     // re-dispara as automações de "tag adicionada".
-    const { error } = await db
-      .from("lead_tags")
+    const { error } = await (db.from("lead_tags") as TagWriter)
       .upsert(rows, { onConflict: "lead_id,tag_id", ignoreDuplicates: true });
 
     if (error) {
