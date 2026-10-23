@@ -1,4 +1,4 @@
--- 20271122000000_feature_suggestions_first_run.sql
+-- 20271122000001_feature_suggestions_first_run.sql
 --
 -- Widget de sugestões de funcionalidade, mostrado UMA vez por usuário ao abrir
 -- o Torque (cross-device: o "já vi" mora no servidor, não no localStorage).
