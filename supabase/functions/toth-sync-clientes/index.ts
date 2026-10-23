@@ -46,6 +46,7 @@ import { supabaseClientStore } from "../_shared/erp/sync/client-store.ts";
 import { cachedClientStore } from "../_shared/erp/sync/cached-client-store.ts";
 import { deferredEnrichStore } from "../_shared/erp/sync/deferred-enrich-store.ts";
 import { bulkCreateClients } from "../_shared/erp/sync/bulk-create-clients.ts";
+import { findAdoptableLeads } from "../_shared/erp/sync/adopt-existing-leads.ts";
 import { upsertCanonicalClient, type ErpSyncMode } from "../_shared/erp/sync/upsert-client.ts";
 import {
   syncLeadPhonesFromErp,
@@ -382,7 +383,7 @@ Deno.serve(
         : MAX_ENRICH_PER_RUN;
 
     const seenIds = new Set<string>();
-    const stats = { pages: 0, rows: 0, created: 0, enriched: 0, skipped: 0, failed: 0 };
+    const stats = { pages: 0, rows: 0, created: 0, adopted: 0, enriched: 0, skipped: 0, failed: 0 };
     const recorte = { ativo: cafeJurereScope, situacao: 0, representante: 0, elegiveis: 0, por_situacao: {} as Record<string, number> };
     /** Quantos o filtro de empresa deixou de fora, e de quem eram. */
     const foraDoFiltro = { total: 0, sem_empresa: 0, por_empresa: {} as Record<string, number> };
@@ -730,6 +731,14 @@ Deno.serve(
         if (rows.length < 1000) break;
       }
 
+      // Lead que já existe (planilha, cadastro manual) com o mesmo telefone e
+      // nome compatível é ADOTADO em vez de duplicado — ver adopt-existing-leads.
+      const adopt = await findAdoptableLeads(admin, {
+        organizationId,
+        clients: toCreate,
+        normalizePhone: normalizePhoneForSearch,
+      });
+
       const bulk = await bulkCreateClients(admin, {
         organizationId,
         source: TOTH_PROVIDER_ID,
@@ -737,8 +746,10 @@ Deno.serve(
         usedPhones,
         normalizePhone: normalizePhoneForSearch,
         ownerMap,
+        adopt,
       });
       stats.created = bulk.created;
+      stats.adopted = bulk.adopted;
       phoneQueue.push(...bulk.leadPhones);
       stats.failed += bulk.failed;
       for (const e of bulk.errors) {
