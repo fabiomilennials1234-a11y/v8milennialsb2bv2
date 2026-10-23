@@ -12,7 +12,7 @@ export function metaPrivacyEndpoint(kind: PrivacyKind) {
     if (!supabaseUrl || !serviceKey || !secret || !appId) {
       return new Response(JSON.stringify({ error: "not_configured" }), { status: 503, headers: withSecurityHeaders({ "Cache-Control": "no-store" }) });
     }
-    const client = createClient(supabaseUrl, serviceKey, { auth: { persistSession: false } });
+    const client = createClient(supabaseUrl, serviceKey, { auth: { persistSession: false, autoRefreshToken: false } });
     const handler = createMetaPrivacyHandler({
       kind, appId, secret, callbackUrl: `${supabaseUrl}/functions/v1/meta-data-deletion`,
       store: {

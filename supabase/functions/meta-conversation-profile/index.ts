@@ -1,6 +1,8 @@
+import { storedMetaToken } from "../_shared/meta-token-crypto.ts";
 // supabase/functions/meta-conversation-profile/index.ts
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { metaGraphFetch } from "../_shared/meta-graph-request.ts";
 import { getCorsHeaders } from "../_shared/cors.ts";
 import { withSecurityHeaders } from "../_shared/security-headers.ts";
 import { withErrorBoundary } from "../_shared/error-boundary.ts";
@@ -19,13 +21,14 @@ interface ProfileFetchResult {
 
 async function fetchGraphProfile(
   externalUserId: string,
-  pageAccessToken: string
+  pageAccessToken: string,
+  appId: string | null
 ): Promise<ProfileFetchResult> {
   const url = `https://graph.facebook.com/${GRAPH_API_VERSION}/${externalUserId}?fields=name,profile_pic`;
-  const res = await fetch(url, {
+  const res = await metaGraphFetch(url, {
     headers: { Authorization: `Bearer ${pageAccessToken}` },
     signal: AbortSignal.timeout(8000),
-  });
+  }, appId);
   if (!res.ok) {
     return { external_username: null, profile_pic_url: null };
   }
@@ -44,7 +47,7 @@ Deno.serve(withErrorBoundary("meta-conversation-profile", async (req) => {
     return new Response(null, { status: 204, headers: corsHeaders });
   }
 
-  let body: { conversationId?: string };
+  let body: { conversationId?: string; organization_id?: string };
   try {
     body = await req.json();
   } catch {
@@ -58,14 +61,14 @@ Deno.serve(withErrorBoundary("meta-conversation-profile", async (req) => {
 
   let auth;
   try {
-    auth = await requireAuth(req, { body });
+    auth = await requireAuth(req, { body, requireOrganization: true });
   } catch (e) {
     if (e instanceof AuthError) return authErrorResponse(e, corsHeaders);
     throw e;
   }
 
   const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
-    auth: { persistSession: false },
+    auth: { persistSession: false, autoRefreshToken: false },
   });
 
   const { data: conv, error: convErr } = await supabase
@@ -100,8 +103,10 @@ Deno.serve(withErrorBoundary("meta-conversation-profile", async (req) => {
 
   const { data: page } = await supabase
     .from("meta_pages")
-    .select("page_access_token")
+    .select("page_id,page_access_token,meta_connections!inner(app_id,status)")
     .eq("id", conv.meta_page_id)
+    .eq("is_active", true)
+    .eq("meta_connections.status", "connected")
     .eq("organization_id", auth.organizationId)
     .single();
 
@@ -121,7 +126,9 @@ Deno.serve(withErrorBoundary("meta-conversation-profile", async (req) => {
     );
   }
 
-  const profile = await fetchGraphProfile(conv.external_user_id, page.page_access_token);
+  const binding = Array.isArray(page.meta_connections) ? page.meta_connections[0] : page.meta_connections;
+  const pageToken = await storedMetaToken(page.page_access_token, binding.app_id, auth.organizationId, `page:${page.page_id}`);
+  const profile = await fetchGraphProfile(conv.external_user_id, pageToken, binding.app_id);
 
   if (profile.external_username === null && profile.profile_pic_url === null) {
     await logRuntime({

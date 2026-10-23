@@ -1,199 +1,59 @@
-import { withErrorBoundary } from '../_shared/error-boundary.ts';
-import { withSecurityHeaders } from "../_shared/security-headers.ts";
-/**
- * meta-oauth-callback
- *
- * Endpoint publico (GET) para onde o Meta redireciona apos o usuario autorizar.
- * Troca o code por tokens, lista paginas/contas Instagram, subscreve webhooks,
- * e redireciona o usuario para /configuracoes?meta=connected.
- *
- * URL: ${SUPABASE_URL}/functions/v1/meta-oauth-callback?code=...&state=...
- */
-
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { logRuntime } from "../_shared/logger.ts";
-import {
-  exchangeCodeForToken,
-  exchangeForLongLivedToken,
-  getMe,
-  listPages,
-  subscribePageWebhook,
-  acceptLeadgenTos,
-} from "../_shared/meta-api.ts";
+import { withErrorBoundary } from "../_shared/error-boundary.ts";
+import { withSecurityHeaders } from "../_shared/security-headers.ts";
 import { verifyMetaState } from "../_shared/meta-oauth-state.ts";
+import { metaBusinessConfig, exchangeBusinessCode, inspectBusinessToken, validateBusinessToken } from "../_shared/meta-business.ts";
+import { listBusinessAdAccounts } from "../_shared/meta-ad-assets.ts";
+import { encryptMetaToken } from "../_shared/meta-token-crypto.ts";
+import { getMe, listPages, subscribePageWebhook } from "../_shared/meta-api.ts";
 
-const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
-const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-const APP_URL = Deno.env.get("APP_URL") ?? "http://localhost:5173";
-
-Deno.serve(withErrorBoundary('meta-oauth-callback', async (req) => {
+Deno.serve(withErrorBoundary("meta-oauth-callback", async (req) => {
+  const appUrl = new URL(Deno.env.get("APP_URL") ?? "https://torquecrm.com.br");
+  const redirect = (params: Record<string, string>) => {
+    const target = new URL("/configuracoes", appUrl);
+    target.search = new URLSearchParams({ tab: "integracoes", ...params }).toString();
+    return new Response(null, { status: 302, headers: withSecurityHeaders({ Location: target.toString(), "Cache-Control": "no-store", "Referrer-Policy": "no-referrer" }) });
+  };
+  if (req.method !== "GET") return new Response(null, { status: 405 });
   try {
+    if (Deno.env.get("META_CRM_OAUTH_ENABLED") !== "true") return redirect({ meta: "error", reason: "integracao_indisponivel" });
+    const config = metaBusinessConfig();
     const url = new URL(req.url);
+    const state = await verifyMetaState(url.searchParams.get("state") ?? "", config.secret);
+    if (!state || state.appId !== config.appId || state.configId !== config.configId || typeof state.nonce !== "string" || !["facebook", "instagram"].includes(state.connectionType ?? "")) return redirect({ meta: "error", reason: "state_invalido" });
+    const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!, { auth: { persistSession: false, autoRefreshToken: false } });
+    const { data: consumed, error } = await supabase.rpc("meta_consume_oauth_nonce", { p_nonce: state.nonce, p_user_id: state.userId, p_organization_id: state.orgId, p_app_id: config.appId, p_connection_type: state.connectionType });
+    if (error || consumed !== true) return redirect({ meta: "error", reason: "state_invalido" });
+    if (url.searchParams.has("error")) return redirect({ meta: "error", reason: "autorizacao_recusada" });
     const code = url.searchParams.get("code");
-    const state = url.searchParams.get("state");
-    const errParam = url.searchParams.get("error");
-
-    const redirect = (params: Record<string, string>) => {
-      const p = new URLSearchParams(params);
-      return Response.redirect(`${APP_URL}/configuracoes?${p}`, 302);
-    };
-
-    // -- Erro retornado pelo Meta -------------------------------------------
-    if (errParam) {
-      console.error("[meta-oauth-callback] Meta returned error:", errParam);
-      return redirect({ meta: "error", reason: errParam });
-    }
-
-    if (!code) {
-      return redirect({ meta: "error", reason: "codigo_ausente" });
-    }
-
-    // -- Verifica state HMAC-assinado (userId + orgId + connectionType) ------
-    // SECURITY (hotfix): o state é emitido por `meta-oauth-start` e assinado com
-    // META_APP_SECRET; orgId vem da membership validada, não de input do cliente.
-    // NUNCA confiar em state não-verificado — um state forjado com orgId de outra
-    // org era tenant-binding forgery (write via service_role abaixo).
-    let userId: string | undefined;
-    let orgId: string | undefined;
-    let connectionType: "facebook" | "instagram" = "facebook";
-
-    const stateSecret = Deno.env.get("META_APP_SECRET");
-    const verified = state && stateSecret ? await verifyMetaState(state, stateSecret) : null;
-    if (verified) {
-      userId = verified.userId;
-      orgId = verified.orgId;
-      connectionType = verified.connectionType === "instagram" ? "instagram" : "facebook";
-    }
-
-    if (!userId || !orgId) {
-      console.warn("[meta-oauth-callback] invalid/expired/unsigned state rejected");
-      return redirect({ meta: "error", reason: "state_invalido" });
-    }
-
-    const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
-      auth: { persistSession: false },
-    });
-
-    // -- Troca code por short-lived token -----------------------------------
-    console.log("[meta-oauth-callback] Exchanging code for token...");
-    const shortLived = await exchangeCodeForToken(code);
-
-    // -- Troca por long-lived token (~60 dias) ------------------------------
-    console.log("[meta-oauth-callback] Exchanging for long-lived token...");
-    const longLived = await exchangeForLongLivedToken(shortLived.access_token);
-
-    // Default: 60 dias se nao especificado
-    const expiresInSeconds = longLived.expires_in || 60 * 24 * 3600;
-    const tokenExpiresAt = new Date(Date.now() + expiresInSeconds * 1000).toISOString();
-
-    // -- Busca dados do usuario Meta ----------------------------------------
-    console.log("[meta-oauth-callback] Fetching user info...");
-    const metaUser = await getMe(longLived.access_token);
-
-    // -- Salva conexao Meta -------------------------------------------------
-    const { data: connection, error: connError } = await supabase
-      .from("meta_connections")
-      .upsert(
-        {
-          organization_id: orgId,
-          user_id: userId,
-          facebook_user_id: metaUser.id,
-          facebook_user_name: metaUser.name,
-          access_token: longLived.access_token,
-          token_expires_at: tokenExpiresAt,
-          status: "connected",
-          connected_at: new Date().toISOString(),
-          connection_type: connectionType,
-        },
-        { onConflict: "organization_id,facebook_user_id,connection_type" }
-      )
-      .select("id")
-      .single();
-
-    if (connError) {
-      console.error("[meta-oauth-callback] Error saving connection:", connError);
-      return redirect({ meta: "error", reason: "erro_ao_salvar_conexao" });
-    }
-
-    // -- Lista paginas e contas Instagram -----------------------------------
-    console.log("[meta-oauth-callback] Listing pages...");
-    const pages = await listPages(longLived.access_token);
-
-    let pagesConnected = 0;
-    let igAccountsConnected = 0;
-
+    if (!code) return redirect({ meta: "error", reason: "codigo_ausente" });
+    // A configuration-issued system token is used as issued, never exchanged as a user token.
+    const token = await exchangeBusinessCode(code, config);
+    const inspection = await inspectBusinessToken(token, config);
+    const { subjectId, expiresAt } = validateBusinessToken(inspection, config.appId);
+    const me = await getMe(token, config.appId);
+    if (me.id !== subjectId) throw new Error("meta_subject_mismatch");
+    const granted = new Set(inspection.scopes ?? []);
+    const pages = (granted.has("pages_show_list") ? await listPages(token, config.appId, subjectId) : []).filter((page) => state.connectionType !== "instagram" || page.instagram_business_account?.id);
+    const adAccounts = granted.has("ads_read") || granted.has("ads_management") ? await listBusinessAdAccounts(token, config.appId, subjectId) : [];
+    if (state.connectionType === "instagram" && !pages.length) return redirect({ meta: "error", reason: "nenhuma_pagina_autorizada" });
+    if (!pages.length && !adAccounts.length) return redirect({ meta: "error", reason: "nenhuma_pagina_autorizada" });
     for (const page of pages) {
-      // Para conexão Facebook: salvar todas as páginas
-      // Para conexão Instagram: salvar apenas páginas que têm conta Instagram
-      if (connectionType === "instagram" && !page.instagram_business_account?.id) {
-        continue;
-      }
-
-      // Subscreve webhook
-      const subscribed = await subscribePageWebhook(page.id, page.access_token);
-
-      // Aceita TOS de Lead Ads automaticamente
-      await acceptLeadgenTos(page.id, page.access_token);
-
-      // Salva pagina
-      const { error: pageError } = await supabase
-        .from("meta_pages")
-        .upsert(
-          {
-            meta_connection_id: connection.id,
-            organization_id: orgId,
-            page_id: page.id,
-            page_name: page.name,
-            page_access_token: page.access_token,
-            instagram_account_id: page.instagram_business_account?.id || null,
-            instagram_username: page.instagram_username || null,
-            is_active: true,
-            webhook_subscribed: subscribed,
-          },
-          { onConflict: "organization_id,page_id" }
-        );
-
-      if (pageError) {
-        console.error(`[meta-oauth-callback] Error saving page ${page.id}:`, pageError);
-        continue;
-      }
-
-      pagesConnected++;
-      if (page.instagram_business_account?.id) {
-        igAccountsConnected++;
-      }
+      if (!await subscribePageWebhook(page.id, page.access_token, config.appId)) throw new Error("meta_subscription_failed");
     }
-
-    console.log(
-      `[meta-oauth-callback] Connected (${connectionType}): ${pagesConnected} pages, ${igAccountsConnected} IG accounts`
-    );
-
-    await logRuntime({
-      organizationId: orgId,
-      module: "permission",
-      action: "meta_callback",
-      status: "success",
-      payloadSnapshot: { connectionType, pagesConnected, igAccountsConnected },
+    const encryptedToken = await encryptMetaToken(token, { appId: config.appId, organizationId: state.orgId, asset: `connection:${subjectId}` });
+    const encryptedPages = await Promise.all(pages.map(async (page) => ({ id: page.id, name: page.name, access_token: await encryptMetaToken(page.access_token, { appId: config.appId, organizationId: state.orgId, asset: `page:${page.id}` }), instagram_account_id: page.instagram_business_account?.id ?? null, instagram_username: page.instagram_username ?? null })));
+    // One transaction: rechecks current admin authority, saves tokens, deactivates removed assets.
+    const { error: saveError } = await supabase.rpc("meta_save_business_connection", {
+      p_user_id: state.userId, p_org_id: state.orgId, p_app_id: config.appId, p_subject: subjectId, p_name: me.name,
+      p_type: state.connectionType, p_token: encryptedToken, p_expires: expiresAt,
+      p_ad_accounts: adAccounts,
+      p_pages: encryptedPages,
     });
-
-    return redirect({
-      meta: "connected",
-      connectionType,
-      pages: String(pagesConnected),
-      instagram: String(igAccountsConnected),
-    });
-  } catch (err) {
-    console.error("[meta-oauth-callback] Unexpected error:", err);
-    await logRuntime({
-      module: "permission",
-      action: "meta_callback",
-      status: "error",
-      errorMessage: err instanceof Error ? err.message : String(err),
-    });
-    const fallbackUrl = Deno.env.get("APP_URL") ?? "http://localhost:5173";
-    return Response.redirect(
-      `${fallbackUrl}/configuracoes?meta=error&reason=erro_interno`,
-      302
-    );
+    if (saveError) throw new Error("meta_connection_save_failed");
+    return redirect({ meta: "connected", connectionType: state.connectionType!, pages: String(pages.length), instagram: String(pages.filter((page) => page.instagram_business_account?.id).length) });
+  } catch {
+    // Neither Graph errors nor SDK diagnostics may contain tokens in runtime logs or redirects.
+    return redirect({ meta: "error", reason: "erro_na_integracao" });
   }
 }));

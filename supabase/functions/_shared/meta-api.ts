@@ -4,6 +4,7 @@
  */
 
 import { createHmac } from "https://deno.land/std@0.177.0/node/crypto.ts";
+import { metaGraphFetch } from "./meta-graph-request.ts";
 import { timingSafeCompare } from "./auth.ts";
 
 const GRAPH_API_VERSION = "v21.0";
@@ -25,6 +26,7 @@ export interface MetaPage {
   access_token: string;
   instagram_business_account?: {
     id: string;
+    username?: string;
   };
 }
 
@@ -140,12 +142,12 @@ export async function exchangeForLongLivedToken(shortLivedToken: string): Promis
 /**
  * Get authenticated Facebook user info
  */
-export async function getMe(accessToken: string): Promise<MetaUser> {
-  const res = await fetch(`${GRAPH_API_BASE}/me?fields=id,name&access_token=${accessToken}`);
+export async function getMe(accessToken: string, appId?: string | null): Promise<MetaUser> {
+  const res = await metaGraphFetch(`${GRAPH_API_BASE}/me?fields=id,name&access_token=${encodeURIComponent(accessToken)}`, undefined, appId);
   const data = await res.json();
 
   if (data.error) {
-    throw new Error(`Meta getMe error: ${data.error.message}`);
+    throw new Error(appId !== undefined ? "meta_graph_request_failed" : `Meta getMe error: ${data.error.message}`);
   }
 
   return data as MetaUser;
@@ -154,27 +156,33 @@ export async function getMe(accessToken: string): Promise<MetaUser> {
 /**
  * List all pages the user manages, with page access tokens and Instagram accounts
  */
-export async function listPages(userAccessToken: string): Promise<MetaPageWithInstagram[]> {
+export async function listPages(userAccessToken: string, appId?: string | null, systemUserId?: string): Promise<MetaPageWithInstagram[]> {
   const pages: MetaPageWithInstagram[] = [];
+  if (appId && !/^\d+$/.test(systemUserId ?? "")) throw new Error("invalid_system_user_subject");
+  const edge = appId ? `${systemUserId}/assigned_pages` : "me/accounts";
   let url: string | null =
-    `${GRAPH_API_BASE}/me/accounts?fields=id,name,access_token,instagram_business_account&limit=100&access_token=${userAccessToken}`;
+    `${GRAPH_API_BASE}/${edge}?fields=${appId ? "id,name,access_token,instagram_business_account{id,username}" : "id,name,access_token,instagram_business_account"}&limit=100&access_token=${encodeURIComponent(userAccessToken)}`;
 
+  const visited = new Set<string>();
   while (url) {
-    const res = await fetch(url);
+    if (visited.has(url) || visited.size >= 100) throw new Error("meta_pagination_limit");
+    visited.add(url);
+    const res = await metaGraphFetch(url, undefined, appId);
     const data: GraphCollection<MetaPage> = await res.json();
 
     if (data.error) {
-      throw new Error(`Meta listPages error: ${data.error.message}`);
+      throw new Error(appId !== undefined ? "meta_graph_request_failed" : `Meta listPages error: ${data.error.message}`);
     }
 
     for (const page of data.data || []) {
       const pageWithIg: MetaPageWithInstagram = { ...page };
 
-      // If page has Instagram Business account, fetch username
-      if (page.instagram_business_account?.id) {
+      if (page.instagram_business_account?.username) pageWithIg.instagram_username = page.instagram_business_account.username;
+      // Legacy compatibility only; CRM requests username inline, avoiding one request per page.
+      if (!appId && page.instagram_business_account?.id) {
         try {
-          const igRes = await fetch(
-            `${GRAPH_API_BASE}/${page.instagram_business_account.id}?fields=username&access_token=${page.access_token}`
+          const igRes = await metaGraphFetch(
+            `${GRAPH_API_BASE}/${page.instagram_business_account.id}?fields=username&access_token=${encodeURIComponent(page.access_token)}`, undefined, appId
           );
           const igData = await igRes.json();
           if (igData.username) {
@@ -201,23 +209,23 @@ export async function listPages(userAccessToken: string): Promise<MetaPageWithIn
 /**
  * Subscribe a page to receive webhook events (messages, leadgen)
  */
-export async function subscribePageWebhook(pageId: string, pageAccessToken: string): Promise<boolean> {
-  const res = await fetch(
+export async function subscribePageWebhook(pageId: string, pageAccessToken: string, appId?: string | null): Promise<boolean> {
+  const res = await metaGraphFetch(
     `${GRAPH_API_BASE}/${pageId}/subscribed_apps`,
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        subscribed_fields: ["messages", "messaging_postbacks", "feed", "leadgen"],
+        subscribed_fields: appId ? ["messages", "messaging_postbacks", "leadgen"] : ["messages", "messaging_postbacks", "feed", "leadgen"],
         access_token: pageAccessToken,
       }),
-    }
+    }, appId
   );
 
   const data = await res.json();
 
   if (data.error) {
-    console.error(`[META-API] Subscribe webhook error for page ${pageId}:`, data.error);
+    console.error("[META-API] Webhook subscription rejected");
     return false;
   }
 
@@ -227,10 +235,10 @@ export async function subscribePageWebhook(pageId: string, pageAccessToken: stri
 /**
  * Unsubscribe a page from webhook events
  */
-export async function unsubscribePageWebhook(pageId: string, pageAccessToken: string): Promise<boolean> {
-  const res = await fetch(
-    `${GRAPH_API_BASE}/${pageId}/subscribed_apps?access_token=${pageAccessToken}`,
-    { method: "DELETE" }
+export async function unsubscribePageWebhook(pageId: string, pageAccessToken: string, appId?: string | null): Promise<boolean> {
+  const res = await metaGraphFetch(
+    `${GRAPH_API_BASE}/${pageId}/subscribed_apps?access_token=${encodeURIComponent(pageAccessToken)}`,
+    { method: "DELETE" }, appId
   );
 
   const data = await res.json();
@@ -250,7 +258,8 @@ export async function sendMessage(
   text: string,
   channel: "messenger" | "instagram",
   pageId?: string,
-  igAccountId?: string
+  igAccountId?: string,
+  appId?: string | null
 ): Promise<{ message_id: string; recipient_id: string }> {
   // Messenger uses page_id, Instagram uses ig_account_id
   const senderId = channel === "instagram" ? igAccountId : pageId;
@@ -268,19 +277,19 @@ export async function sendMessage(
     messaging_type: "RESPONSE",
   };
 
-  const res = await fetch(endpoint, {
+  const res = await metaGraphFetch(endpoint, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       Authorization: `Bearer ${pageAccessToken}`,
     },
     body: JSON.stringify(payload),
-  });
+  }, appId);
 
   const data = await res.json();
 
   if (data.error) {
-    throw new Error(`Meta sendMessage error: ${data.error.message} (code: ${data.error.code})`);
+    throw new Error(appId !== undefined ? "meta_graph_request_failed" : `Meta sendMessage error: ${data.error.message} (code: ${data.error.code})`);
   }
 
   return data;
@@ -296,7 +305,8 @@ export async function sendMediaMessage(
   mediaType: "image" | "video" | "audio" | "file",
   channel: "messenger" | "instagram",
   pageId?: string,
-  igAccountId?: string
+  igAccountId?: string,
+  appId?: string | null
 ): Promise<{ message_id: string; recipient_id: string }> {
   const senderId = channel === "instagram" ? igAccountId : pageId;
   if (!senderId) {
@@ -314,19 +324,19 @@ export async function sendMediaMessage(
     messaging_type: "RESPONSE",
   };
 
-  const res = await fetch(`${GRAPH_API_BASE}/${senderId}/messages`, {
+  const res = await metaGraphFetch(`${GRAPH_API_BASE}/${senderId}/messages`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       Authorization: `Bearer ${pageAccessToken}`,
     },
     body: JSON.stringify(payload),
-  });
+  }, appId);
 
   const data = await res.json();
 
   if (data.error) {
-    throw new Error(`Meta sendMedia error: ${data.error.message}`);
+    throw new Error(appId !== undefined ? "meta_graph_request_failed" : `Meta sendMedia error: ${data.error.message}`);
   }
 
   return data;
@@ -342,16 +352,17 @@ export async function sendMediaMessage(
  */
 export async function acceptLeadgenTos(
   pageId: string,
-  pageAccessToken: string
+  pageAccessToken: string,
+  appId?: string | null
 ): Promise<boolean> {
   try {
-    const res = await fetch(
+    const res = await metaGraphFetch(
       `${GRAPH_API_BASE}/${pageId}/leadgen_tos`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ access_token: pageAccessToken }),
-      }
+      }, appId
     );
     const data = await res.json();
     if (data.error) {
@@ -374,16 +385,17 @@ export async function acceptLeadgenTos(
  */
 export async function getLeadgenData(
   leadgenId: string,
-  pageAccessToken: string
+  pageAccessToken: string,
+  appId?: string | null
 ): Promise<MetaLeadgenData> {
-  const res = await fetch(
-    `${GRAPH_API_BASE}/${leadgenId}?access_token=${pageAccessToken}`
+  const res = await metaGraphFetch(
+    `${GRAPH_API_BASE}/${leadgenId}?access_token=${encodeURIComponent(pageAccessToken)}`, undefined, appId
   );
 
   const data = await res.json();
 
   if (data.error) {
-    throw new Error(`Meta getLeadgenData error: ${data.error.message}`);
+    throw new Error(appId !== undefined ? "meta_graph_request_failed" : `Meta getLeadgenData error: ${data.error.message}`);
   }
 
   return data as MetaLeadgenData;
@@ -395,15 +407,16 @@ export async function getLeadgenData(
  */
 export async function listLeadForms(
   pageId: string,
-  pageAccessToken: string
+  pageAccessToken: string,
+  appId?: string | null
 ): Promise<{
   forms: Array<{ id: string; name: string; status: string }>;
   tos_not_accepted?: boolean;
   tos_accept_url?: string;
 }> {
   // Check if page has accepted Lead Ads TOS
-  const tosRes = await fetch(
-    `${GRAPH_API_BASE}/${pageId}?fields=leadgen_tos_accepted&access_token=${pageAccessToken}`
+  const tosRes = await metaGraphFetch(
+    `${GRAPH_API_BASE}/${pageId}?fields=leadgen_tos_accepted&access_token=${encodeURIComponent(pageAccessToken)}`, undefined, appId
   );
   const tosData = await tosRes.json();
 
@@ -418,14 +431,17 @@ export async function listLeadForms(
   // Paginate through all lead forms
   const forms: Array<{ id: string; name: string; status: string }> = [];
   let formsUrl: string | null =
-    `${GRAPH_API_BASE}/${pageId}/leadgen_forms?fields=id,name,status&limit=100&access_token=${pageAccessToken}`;
+    `${GRAPH_API_BASE}/${pageId}/leadgen_forms?fields=id,name,status&limit=100&access_token=${encodeURIComponent(pageAccessToken)}`;
 
+  const visited = new Set<string>();
   while (formsUrl) {
-    const res = await fetch(formsUrl);
+    if (visited.has(formsUrl) || visited.size >= 100) throw new Error("meta_pagination_limit");
+    visited.add(formsUrl);
+    const res = await metaGraphFetch(formsUrl, undefined, appId);
     const data: GraphCollection<{ id: string; name: string; status: string }> = await res.json();
 
     if (data.error) {
-      throw new Error(`Meta listLeadForms error: ${data.error.message}`);
+      throw new Error(appId !== undefined ? "meta_graph_request_failed" : `Meta listLeadForms error: ${data.error.message}`);
     }
 
     if (data.data) {
@@ -443,16 +459,17 @@ export async function listLeadForms(
  */
 export async function getLeadFormFields(
   formId: string,
-  pageAccessToken: string
+  pageAccessToken: string,
+  appId?: string | null
 ): Promise<Array<{ key: string; label: string; type: string }>> {
-  const res = await fetch(
-    `${GRAPH_API_BASE}/${formId}?fields=questions&access_token=${pageAccessToken}`
+  const res = await metaGraphFetch(
+    `${GRAPH_API_BASE}/${formId}?fields=questions&access_token=${encodeURIComponent(pageAccessToken)}`, undefined, appId
   );
 
   const data = await res.json();
 
   if (data.error) {
-    throw new Error(`Meta getLeadFormFields error: ${data.error.message}`);
+    throw new Error(appId !== undefined ? "meta_graph_request_failed" : `Meta getLeadFormFields error: ${data.error.message}`);
   }
 
   return (data.questions || []).map((q: { key: string; label: string; type: string }) => ({
@@ -471,9 +488,10 @@ export async function getLeadFormFields(
  */
 export function verifyWebhookSignature(
   payload: string,
-  signature: string | null
+  signature: string | null,
+  signingSecret?: string
 ): boolean {
-  const appSecret = Deno.env.get("META_APP_SECRET");
+  const appSecret = signingSecret ?? Deno.env.get("META_APP_SECRET");
 
   if (!appSecret) {
     console.error("[META-API] META_APP_SECRET not configured");

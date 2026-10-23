@@ -368,3 +368,10 @@ describe("Type exports", () => {
     expect(m.messaging_type).toBe("RESPONSE");
   });
 });
+
+
+it("preserves the exact opaque token in Bearer headers", async () => {
+  mockFetch.mockResolvedValueOnce({ json: async () => ({ message_id: "mid", recipient_id: "person" }) });
+  await sendMessage("opaque+/=token", "person", "hello", "messenger", "page");
+  expect(mockFetch.mock.calls[0][1].headers.Authorization).toBe("Bearer opaque+/=token");
+});

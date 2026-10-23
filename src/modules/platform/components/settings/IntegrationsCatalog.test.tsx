@@ -91,6 +91,8 @@ vi.mock("@/modules/communication", () => ({
   VoicePairingDialog: () => null,
 }));
 
+vi.mock("./MetaSettings", () => ({ FacebookSettings: () => <div>Painel Meta conectado</div> }));
+
 import IntegrationsCatalog from "./IntegrationsCatalog";
 
 function render() {
@@ -103,6 +105,7 @@ function render() {
 }
 
 beforeEach(() => {
+  window.history.replaceState({}, "", "/");
   voiceCallsEnabled = false;
   voipSessionsData = [
     { tcSessionId: "tc-1", name: "Comercial", jid: "5548...", status: "open", whatsappInstanceId: "i-1" },
@@ -116,20 +119,16 @@ describe("IntegrationsCatalog — gate por feature", () => {
     // ElevenLabs não têm featureKey nenhum, então o gate não se aplica.
     render();
     expect(screen.getByText("WhatsApp Business")).toBeInTheDocument();
-    expect(screen.getByText("Facebook")).toBeInTheDocument();
+    expect(screen.getByText("Meta — Facebook e Instagram")).toBeInTheDocument();
     expect(screen.getByText("Google Calendar")).toBeInTheDocument();
     expect(screen.getByText("TinyERP")).toBeInTheDocument();
     expect(screen.getByText("Omie")).toBeInTheDocument();
     expect(screen.getByText("ElevenLabs")).toBeInTheDocument();
   });
 
-  // O card "Instagram" do caminho Graph foi REMOVIDO (decisão do CTO, 14/08/2026):
-  // ele levava ao OAuth do nosso app Meta, que não tem App Review, e a Meta
-  // respondia "esse app não está disponível". Instagram tem UMA porta agora, e ela
-  // é gated por `notificame_instagram` — com a org sem features, não aparece
-  // nenhuma. Este caso trava a remoção: sem ele, o card legado volta por descuido
-  // num merge e ninguém percebe até um cliente clicar e cair na tela de erro.
-  it("o Instagram do Graph não tem mais porta de entrada", () => {
+  // A autorização Meta unificada não recria um segundo cartão Instagram sem gate.
+  // A integração do parceiro continua independente e respeita seu rollout.
+  it("não duplica cartões Instagram fora do rollout do parceiro", () => {
     render();
     expect(screen.queryByText("Instagram")).not.toBeInTheDocument();
     expect(screen.queryByText("Instagram (oficial)")).not.toBeInTheDocument();
@@ -178,4 +177,12 @@ describe("IntegrationsCatalog — gate por feature", () => {
     expect(screen.getByText("TorqueCalls")).toBeInTheDocument();
     expect(screen.getByText(/0\/8 conectadas/)).toBeInTheDocument();
   });
+});
+
+
+it("opens the Meta panel after OAuth so the callback and selected assets are visible", () => {
+  window.history.replaceState({}, "", "/configuracoes/integracoes?meta=connected");
+  render();
+  expect(screen.getByRole("dialog")).toBeInTheDocument();
+  expect(screen.getByText("Painel Meta conectado")).toBeInTheDocument();
 });

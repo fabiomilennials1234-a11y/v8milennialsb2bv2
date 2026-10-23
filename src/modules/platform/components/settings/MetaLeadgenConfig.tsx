@@ -108,8 +108,9 @@ interface PageFormsResult {
 
 /** Busca formularios de uma pagina via Edge Function */
 function usePageForms(pageId: string, enabled: boolean) {
+  const { organizationId } = useOrganization();
   return useQuery({
-    queryKey: ["meta_lead_forms", pageId],
+    queryKey: ["meta_lead_forms", organizationId, pageId],
     queryFn: async (): Promise<PageFormsResult> => {
       const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
       const { data: session } = await supabase.auth.getSession();
@@ -123,7 +124,7 @@ function usePageForms(pageId: string, enabled: boolean) {
             "Content-Type": "application/json",
             Authorization: `Bearer ${token}`,
           },
-          body: JSON.stringify({ pageId }),
+          body: JSON.stringify({ pageId, organization_id: organizationId }),
         }
       );
 
@@ -148,8 +149,9 @@ function usePageForms(pageId: string, enabled: boolean) {
 
 /** Busca campos de um formulario especifico via Edge Function */
 function useFormFields(pageId: string, formId: string | null, enabled: boolean) {
+  const { organizationId } = useOrganization();
   return useQuery({
-    queryKey: ["meta_form_fields", pageId, formId],
+    queryKey: ["meta_form_fields", organizationId, pageId, formId],
     queryFn: async (): Promise<MetaFormField[]> => {
       if (!formId) return [];
       const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
@@ -164,7 +166,7 @@ function useFormFields(pageId: string, formId: string | null, enabled: boolean) 
             "Content-Type": "application/json",
             Authorization: `Bearer ${token}`,
           },
-          body: JSON.stringify({ pageId, formId }),
+          body: JSON.stringify({ pageId, formId, organization_id: organizationId }),
         }
       );
 

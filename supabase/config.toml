@@ -624,3 +624,9 @@ verify_jwt = false
 
 [functions.meta-deauthorize]
 verify_jwt = false
+
+[functions.meta-disconnect]
+verify_jwt = false
+
+[functions.meta-ad-insights]
+verify_jwt = false

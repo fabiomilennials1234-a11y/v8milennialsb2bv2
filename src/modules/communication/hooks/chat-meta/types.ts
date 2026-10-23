@@ -7,7 +7,7 @@ import type { Tables, TablesInsert, TablesUpdate } from "@/integrations/supabase
 
 export type MetaChannel = "messenger" | "instagram";
 
-export type MetaPage = Tables<"meta_pages">;
+export type MetaPage = Omit<Tables<"meta_pages">, "page_access_token">;
 export type MetaConversation = Tables<"meta_conversations">;
 export type MetaConversationInsert = TablesInsert<"meta_conversations">;
 export type MetaConversationUpdate = TablesUpdate<"meta_conversations">;
