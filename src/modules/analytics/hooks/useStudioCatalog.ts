@@ -2,6 +2,7 @@ import { useMemo } from "react";
 import {
   ENGINE_METRICS,
   UNIDADE_DA_MEDIDA,
+  arvoreComparaPeriodoAnterior,
   filtrarPeloCatalogo,
   type EngineMetric,
 } from "@/modules/analytics/lib/metrics-studio-engine-map";
@@ -48,6 +49,7 @@ export function comoEngineMetric(def: MetricCustomDefinition): EngineMetric {
     // seletor de corte, sem gráfico de série — mesma regra da razão.
     cortes: ["total"],
     formatId: def.format_id,
+    comparaPeriodoAnterior: arvoreComparaPeriodoAnterior(def.tree),
   };
 }
 

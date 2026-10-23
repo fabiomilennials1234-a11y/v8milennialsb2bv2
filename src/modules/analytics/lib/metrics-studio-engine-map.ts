@@ -85,6 +85,8 @@ export interface EngineMetric {
   cortes: MetricRecorte[];
   formatId: MetricFormatId;
   filtrosFixos?: MetricFilters;
+  /** False para fotografias atuais, que não têm um valor histórico comparável. */
+  comparaPeriodoAnterior?: boolean;
 }
 
 /**
@@ -98,6 +100,8 @@ export const COMPATIBILIDADE: Record<string, MetricRecorte[]> = {
   receita: ["total", "closer", "sdr", "origem", "tag", "stream", "pipeline", "tempo"],
   num_vendas: ["total", "closer", "sdr", "origem", "tag", "stream", "pipeline", "tempo"],
   leads_criados: ["total", "origem", "produto", "tag", "tempo"],
+  base_leads_atuais: ["total"],
+  base_clientes_atuais: ["total"],
   reunioes_marcadas: ["total", "sdr", "origem", "tag", "tempo"],
   reunioes_realizadas: ["total", "sdr", "origem", "tag", "tempo"],
   leads_na_etapa: ["total", "pipeline", "etapa"],
@@ -156,6 +160,8 @@ export const FORMATO_DA_MEDIDA: Record<string, MetricFormatId> = {
   receita: "currency_brl",
   num_vendas: "integer",
   leads_criados: "integer",
+  base_leads_atuais: "integer",
+  base_clientes_atuais: "integer",
   reunioes_marcadas: "integer",
   reunioes_realizadas: "integer",
   leads_na_etapa: "integer",
@@ -192,6 +198,8 @@ export const UNIDADE_DA_MEDIDA: Record<string, MetricUnit> = {
   receita: "currency",
   num_vendas: "count",
   leads_criados: "count",
+  base_leads_atuais: "count",
+  base_clientes_atuais: "count",
   reunioes_marcadas: "count",
   reunioes_realizadas: "count",
   leads_na_etapa: "count",
@@ -230,6 +238,22 @@ export const UNIDADE_DA_MEDIDA: Record<string, MetricUnit> = {
  *   - as demais do inventário → vivem em hook legado (SCRUM-311 as porta)
  */
 export const ENGINE_METRICS: EngineMetric[] = [
+  {
+    id: "base_leads_atuais",
+    label: "Leads — base atual",
+    measureRef: { kind: "leaf", id: "base_leads_atuais" },
+    cortes: ["total"],
+    formatId: "integer",
+    comparaPeriodoAnterior: false,
+  },
+  {
+    id: "base_clientes_atuais",
+    label: "Clientes — base atual",
+    measureRef: { kind: "leaf", id: "base_clientes_atuais" },
+    cortes: ["total"],
+    formatId: "integer",
+    comparaPeriodoAnterior: false,
+  },
   {
     id: "receita",
     label: "Faturamento",
@@ -598,6 +622,11 @@ function folhasDaArvore(node: MetricTreeNode): string[] {
   if (node.type === "measure") return [node.id];
   if (node.type === "op") return [...folhasDaArvore(node.left), ...folhasDaArvore(node.right)];
   return []; // literal
+}
+
+/** Até uma composição mista deixa de representar história se usa a base atual. */
+export function arvoreComparaPeriodoAnterior(node: MetricTreeNode): boolean {
+  return folhasDaArvore(node).every((id) => ENGINE_BY_ID.get(id)?.comparaPeriodoAnterior !== false);
 }
 
 /**
