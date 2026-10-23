@@ -39,12 +39,13 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
-import { useUpdateLead } from "@/modules/leads";
+import { useLeadOwners, useLeadOwnersEnabled, useUpdateLead } from "@/modules/leads";
 import { useOrganization, useResponsibleMembers } from "@/modules/identity";
 import { useTags } from "@/modules/leads/hooks/useTags";
 import { LeadCustomFields } from "@/modules/leads";
 import { AddCustomFieldPopover } from "@/modules/leads";
 import {
+  CoOwnersSlot,
   ResponsibleSlot,
   QualificationSlot,
   type QualificationTier,
@@ -279,6 +280,10 @@ function LinhaDeSlot({
 function ResponsaveisBlock({ lead }: { lead: LeadShape }) {
   const responsibleMembers = useResponsibleMembers();
   const leadId = lead.id ?? null;
+  // N donos por lead (Chamado 793f4b05): só a org com a flag lê `lead_owners`.
+  const donosMultiplos = useLeadOwnersEnabled();
+  const { data: donos } = useLeadOwners(leadId, donosMultiplos);
+  const coDonos = (donos ?? []).filter((d) => d.papeis.length === 1 && d.papeis[0] === "co");
   if (!leadId) return null;
 
   return (
@@ -310,6 +315,15 @@ function ResponsaveisBlock({ lead }: { lead: LeadShape }) {
             expectedUpdatedAt={lead.updated_at ?? null}
           />
         </LinhaDeSlot>
+        {donosMultiplos && (
+          <LinhaDeSlot
+            rotulo="Co-donos"
+            valor={coDonos.length > 0 ? coDonos.map((d) => d.name).join(", ") : null}
+            vazio="Nenhum co-dono"
+          >
+            <CoOwnersSlot leadId={leadId} />
+          </LinhaDeSlot>
+        )}
       </div>
     </Secao>
   );

@@ -19,6 +19,7 @@ import { PipeOpsProvider } from "@/modules/pipelines";
 import { LossReasonGateProvider } from "@/modules/leads/loss-reason-gate";
 import { ProtectedRoute } from "@/modules/identity/auth";
 import { PermissionProtectedRoute } from "@/modules/identity/permissions";
+import { CobrancaRoute } from "@/modules/cobranca";
 import { MainLayout } from "@/modules/platform/components/layout/MainLayout";
 import { TorqueIntro } from "@/modules/platform/components/layout/TorqueIntro";
 import { useAutoAdminAssignment } from "@/modules/identity/hooks/useAutoAdminAssignment";
@@ -46,9 +47,13 @@ const Equipe = lazy(() => lazyRetry(() => import("@/modules/identity/org-team/pa
 const Comissoes = lazy(() => lazyRetry(() => import("@/modules/engagement/pages/Comissoes")));
 const Leads = lazy(() => lazyRetry(() => import("@/modules/leads/pages/Leads")));
 const Carteira = lazy(() => lazyRetry(() => import("@/modules/leads/pages/Carteira")));
+const CobrancaInadimplentes = lazy(() => lazyRetry(() => import("@/modules/cobranca/pages/Inadimplentes")));
+const CobrancaFluxo = lazy(() => lazyRetry(() => import("@/modules/cobranca/pages/FluxoDeCobranca")));
+const CobrancaRegua = lazy(() => lazyRetry(() => import("@/modules/cobranca/pages/Regua")));
 
 const TrashPage = lazy(() => lazyRetry(() => import("@/modules/leads/pages/Trash")));
 const Duplicates = lazy(() => lazyRetry(() => import("@/modules/leads/pages/Duplicates")));
+const Contatos = lazy(() => lazyRetry(() => import("@/modules/leads/pages/Contatos")));
 const Configuracoes = lazy(() => lazyRetry(() => import("@/modules/platform/pages/Configuracoes")));
 const TVDashboard = lazy(() => lazyRetry(() => import("@/modules/analytics/pages/TVDashboard")));
 const TvRenderersDemo = lazy(() => lazyRetry(() => import("@/modules/analytics/pages/TvRenderersDemo")));
@@ -495,6 +500,52 @@ function AppRoutes() {
           </ProtectedRoute>
         }
       />
+      {/* Cobrança (ADR-0040) — piloto atrás da flag `organizations.feature_flags.cobranca`
+          (só TorqueCRM). Sem a flag, `CobrancaRoute` devolve ao Comando — não é
+          upsell, é área interna. Dentro, a permissão própria `cobranca.view`. */}
+      <Route path="/cobranca" element={<Navigate to="/cobranca/inadimplentes" replace />} />
+      <Route
+        path="/cobranca/inadimplentes"
+        element={
+          <ProtectedRoute>
+            <LayoutWrapper>
+              <CobrancaRoute>
+                <PermissionProtectedRoute featureKey="cobranca.view">
+                  <CobrancaInadimplentes />
+                </PermissionProtectedRoute>
+              </CobrancaRoute>
+            </LayoutWrapper>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/cobranca/fluxo"
+        element={
+          <ProtectedRoute>
+            <LayoutWrapper>
+              <CobrancaRoute>
+                <PermissionProtectedRoute featureKey="cobranca.view">
+                  <CobrancaFluxo />
+                </PermissionProtectedRoute>
+              </CobrancaRoute>
+            </LayoutWrapper>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/cobranca/regua"
+        element={
+          <ProtectedRoute>
+            <LayoutWrapper>
+              <CobrancaRoute>
+                <PermissionProtectedRoute featureKey="cobranca.view">
+                  <CobrancaRegua />
+                </PermissionProtectedRoute>
+              </CobrancaRoute>
+            </LayoutWrapper>
+          </ProtectedRoute>
+        }
+      />
       <Route
         path="/lixeira"
         element={
@@ -502,6 +553,20 @@ function AppRoutes() {
             <LayoutWrapper><FeatureRoute feature="leads">
               <PermissionProtectedRoute featureKey="leads.view">
                 <TrashPage />
+              </PermissionProtectedRoute>
+            </FeatureRoute></LayoutWrapper>
+          </ProtectedRoute>
+        }
+      />
+      {/* Contatos (Chamado 33c5fd52 · PR6): mesmas guardas de /leads — permissão
+          `leads.view` + feature `leads`; nenhuma chave de nav nova. */}
+      <Route
+        path="/contatos"
+        element={
+          <ProtectedRoute>
+            <LayoutWrapper><FeatureRoute feature="leads">
+              <PermissionProtectedRoute featureKey="leads.view">
+                <Contatos />
               </PermissionProtectedRoute>
             </FeatureRoute></LayoutWrapper>
           </ProtectedRoute>

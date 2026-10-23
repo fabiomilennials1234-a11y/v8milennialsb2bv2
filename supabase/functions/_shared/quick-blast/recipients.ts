@@ -7,6 +7,7 @@
 import { normalizeBrazilianPhone } from "../whatsapp-dispatch.ts";
 import { resolveBlastMessage } from "./message-resolver.ts";
 import { personalizationName, personalizationFirstName } from "../lead-name.ts";
+import type { BlastMedia } from "./blast-media.ts";
 
 export interface BlastLead {
   id: string;
@@ -20,11 +21,15 @@ export interface BlastRecipient {
   number: string;
   // Uazapi /sender/advanced requires a `type` on EVERY item — an item without
   // one is silently rejected (count=0 → empty campaign). "text" for plain text,
-  // "image" for media blasts.
-  type: "text" | "image";
+  // "image" / "document" (PDF, Word) for media blasts.
+  type: "text" | "image" | "document";
   text?: string;
   leadId: string;
   file?: string;
+  /** File name the lead sees — document items only (Uazapi `docName`). */
+  docName?: string;
+  /** Resolved message of a media item. runUazapiSenderJob moves it into `text`,
+   *  the field the Uazapi spec names for the media caption. */
   caption?: string;
 }
 
@@ -35,8 +40,18 @@ export interface BuildRecipientsResult {
 
 export function buildRecipients(
   leads: BlastLead[],
-  opts: { template: string; cap: number; rng?: () => number; imageUrl?: string },
+  opts: {
+    template: string;
+    cap: number;
+    rng?: () => number;
+    /** Legacy image-only attachment. `media` wins when both are given. */
+    imageUrl?: string;
+    /** The Disparo attachment — image or document (Chamado dac7e647). */
+    media?: BlastMedia | null;
+  },
 ): BuildRecipientsResult {
+  const media: BlastMedia | null =
+    opts.media ?? (opts.imageUrl ? { type: "image", url: opts.imageUrl, name: null } : null);
   const skipped = { noPhone: 0, duplicates: 0, overCap: 0 };
   const recipients: BlastRecipient[] = [];
   const seen = new Set<string>();
@@ -57,9 +72,19 @@ export function buildRecipients(
       continue;
     }
     const text = resolveBlastMessage(opts.template, leadVars(lead), opts.rng);
-    if (opts.imageUrl) {
+    if (media?.type === "document") {
+      // Document blast (PDF/Word): file + docName, resolved text as the caption.
+      recipients.push({
+        number,
+        leadId: lead.id,
+        type: "document",
+        file: media.url,
+        docName: media.name ?? fileNameFromUrl(media.url),
+        caption: text,
+      });
+    } else if (media) {
       // Image blast: resolved text becomes the caption (Uazapi media shape).
-      recipients.push({ number, leadId: lead.id, type: "image", file: opts.imageUrl, caption: text });
+      recipients.push({ number, leadId: lead.id, type: "image", file: media.url, caption: text });
     } else {
       // Text blast: `type:"text"` is mandatory — Uazapi rejects items without it.
       recipients.push({ number, leadId: lead.id, type: "text", text });
@@ -67,6 +92,16 @@ export function buildRecipients(
   }
 
   return { recipients, skipped };
+}
+
+/** Last path segment — fallback only, for a document persisted without a name. */
+function fileNameFromUrl(url: string): string {
+  try {
+    const last = new URL(url).pathname.split("/").pop() ?? "";
+    return decodeURIComponent(last) || "documento";
+  } catch {
+    return "documento";
+  }
 }
 
 function leadVars(lead: BlastLead): Record<string, string | number | null | undefined> {

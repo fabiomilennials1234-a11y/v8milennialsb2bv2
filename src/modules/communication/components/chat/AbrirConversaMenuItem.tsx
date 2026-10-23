@@ -18,6 +18,7 @@ import { Loader2 } from "lucide-react";
 import { formatPhoneForWhatsApp } from "@/modules/communication/lib/whatsapp";
 import { useConversasDoLead } from "@/modules/communication/hooks/chat/useConversasDoLead";
 import { useWhatsAppInstancesForUser } from "@/modules/communication/hooks/chat/useWhatsAppInstances";
+import { useCaixasDeQuemAtende } from "@/modules/communication/hooks/chat/useCaixasDeQuemAtende";
 import { usePreferredInstance } from "@/modules/communication/hooks/usePreferredInstance";
 import { decidirAberturaConversa } from "@/modules/communication/lib/decidirAberturaConversa";
 import { SeletorConversaDoLead } from "@/modules/communication/components/chat/SeletorConversaDoLead";
@@ -36,6 +37,7 @@ export function AbrirConversaMenuItem({ leadId, phone, children }: AbrirConversa
   const { data: caixas = [], isLoading } = useConversasDoLead(aberto ? telefone : null);
   const { data: instancias = [] } = useWhatsAppInstancesForUser({ enabled: aberto });
   const { preferredInstanceId } = usePreferredInstance(instancias);
+  const { minhasInstanceIds, doResponsavelInstanceIds } = useCaixasDeQuemAtende(leadId, aberto);
 
   const irParaConversa = useCallback(
     (instanceId: string) => {
@@ -90,6 +92,8 @@ export function AbrirConversaMenuItem({ leadId, phone, children }: AbrirConversa
                 caixas={caixas}
                 instanceIdsComEscrita={instancias.map((i) => i.id)}
                 preferredInstanceId={preferredInstanceId}
+            minhasInstanceIds={minhasInstanceIds}
+            doResponsavelInstanceIds={doResponsavelInstanceIds}
                 onEscolher={irParaConversa}
               />
             )}

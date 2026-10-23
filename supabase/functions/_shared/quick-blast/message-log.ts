@@ -31,7 +31,14 @@ export function buildBlastLogRows(opts: {
       source: "quick_blast",
       sender_job_id: opts.senderJobId,
     };
-    if (r.file) metadata.image_url = r.file;
+    if (r.file) {
+      const mediaType = r.type === "document" ? "document" : "image";
+      metadata.media_url = r.file;
+      metadata.media_type = mediaType;
+      // Legacy readers look for image_url — kept for images, never for documents.
+      if (mediaType === "image") metadata.image_url = r.file;
+      if (r.docName) metadata.media_name = r.docName;
+    }
     rows.push({
       organization_id: opts.orgId,
       lead_id: r.leadId,

@@ -12,6 +12,7 @@ import { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { upsertPipeEntry, resolveActiveStageKey } from "./pipeline-adapter.ts";
 import type { PipeSlug } from "./pipeline-adapter.ts";
 import { buildPlaceholderLeadName } from "./lead-name.ts";
+import { resolveLeadByPhone } from "./lead-by-phone.ts";
 
 /**
  * Result from getOrCreateLead operation
@@ -98,49 +99,41 @@ export function normalizeEmail(email: string | null | undefined): string | null 
   return email.toLowerCase().trim();
 }
 
+const LEAD_ROW_COLUMNS = "id, name, phone, email, organization_id, normalized_phone, ai_disabled";
+
 /**
- * Lead dono de um telefone SECUNDÁRIO (Chamado 82c50502).
+ * Lead dono de um NÚMERO, principal (`leads.normalized_phone`) ou secundário
+ * (`lead_phones`, Chamado 82c50502).
  *
- * O lead pode ter vários telefones em `lead_phones`; `leads.normalized_phone` é
- * só o principal. Sem esta busca, mensagem ou formulário vindos do celular do
- * "José Luiz - Compras" criavam um lead novo — duplicata do cliente.
- *
- * Mesmo número em dois leads (o ERP tem isso): fica o telefone atualizado por
- * último, que é a mesma regra determinística do gatilho de mensagens.
+ * Número em 2+ leads vivos (Chamados 99067f13, 33c5fd52): vale o lead com
+ * negócio aberto; sem ele, NENHUM lead — nunca "o mais novo". A regra mora em
+ * `resolveLeadByPhone`, que não depende da ordem das linhas.
  */
-async function findLeadBySecondaryPhone(
+async function findLeadByPhone(
   supabase: SupabaseClient,
   organizationId: string,
   normalizedPhone: string,
-): Promise<GetOrCreateLeadResult["lead"] | null> {
-  const { data: phoneRows, error } = await supabase
-    .from("lead_phones")
-    .select("lead_id")
-    .eq("organization_id", organizationId)
-    .eq("normalized_phone", normalizedPhone)
-    .is("deleted_at", null)
-    .order("updated_at", { ascending: false })
-    .limit(5);
-
-  if (error) {
-    console.error("[lead-service] Error searching lead_phones:", error);
-    return null;
+): Promise<{ lead: GetOrCreateLeadResult["lead"] | null; ambiguous: boolean }> {
+  const { leadId, candidateIds, error } = await resolveLeadByPhone(supabase, organizationId, normalizedPhone);
+  if (error) console.error("[lead-service] Error searching by phone:", error);
+  if (!leadId) {
+    const ambiguous = candidateIds.length > 1;
+    if (ambiguous) {
+      console.warn(
+        `[lead-service] Phone shared by ${candidateIds.length} live leads with no open deal: not choosing one`,
+      );
+    }
+    return { lead: null, ambiguous };
   }
-  const ids = (phoneRows ?? []).map((r: { lead_id: string }) => r.lead_id);
-  if (ids.length === 0) return null;
 
-  const { data: leads } = await supabase
+  const { data: rows } = await supabase
     .from("leads")
-    .select("id, name, phone, email, organization_id, normalized_phone, ai_disabled")
+    .select(LEAD_ROW_COLUMNS)
     .eq("organization_id", organizationId)
-    .in("id", ids)
-    .is("deleted_at", null);
-  // Respeita a ordem de `lead_phones` (mais recente primeiro).
-  for (const id of ids) {
-    const lead = (leads ?? []).find((l: { id: string }) => l.id === id);
-    if (lead) return lead;
-  }
-  return null;
+    .eq("id", leadId)
+    .is("deleted_at", null)
+    .limit(1);
+  return { lead: rows?.[0] ?? null, ambiguous: false };
 }
 
 /**
@@ -189,32 +182,15 @@ export async function getOrCreateLead(
     pushName,
   });
 
-  // 1. SEARCH BY NORMALIZED PHONE (priority)
-  // Uses limit(1) to handle duplicate leads gracefully (returns most recent)
+  // 1. SEARCH BY PHONE (priority): principal ou secundário, regra do negócio aberto
   if (normalizedPhone) {
-    const { data: phoneResults, error: phoneError } = await supabase
-      .from("leads")
-      .select("id, name, phone, email, organization_id, normalized_phone, ai_disabled")
-      .eq("organization_id", organizationId)
-      .eq("normalized_phone", normalizedPhone)
-      .order("created_at", { ascending: false })
-      .limit(1);
-
-    if (phoneError) {
-      console.error("[lead-service] Error searching by phone:", phoneError);
-    }
-
-    const leadByPhone = phoneResults?.[0] ?? null;
+    const { lead: leadByPhone, ambiguous } = await findLeadByPhone(supabase, organizationId, normalizedPhone);
+    // Número em 2+ leads vivos sem negócio aberto: a mensagem chega pelo número,
+    // sem lead. Não cria um terceiro e não cai no e-mail (Chamados 99067f13, 33c5fd52).
+    if (ambiguous) return null;
     if (leadByPhone) {
       console.log("[lead-service] Found lead by phone:", leadByPhone.id);
       return { lead: leadByPhone, created: false, source: "phone" };
-    }
-
-    // 1b. Telefone secundário do lead (lead_phones).
-    const leadBySecondary = await findLeadBySecondaryPhone(supabase, organizationId, normalizedPhone);
-    if (leadBySecondary) {
-      console.log("[lead-service] Found lead by secondary phone:", leadBySecondary.id);
-      return { lead: leadBySecondary, created: false, source: "phone" };
     }
   }
 
@@ -342,20 +318,10 @@ export async function getOrCreateLead(
 
       // Retry search - the lead was created by another process
       if (normalizedPhone) {
-        const { data: retryResults } = await supabase
-          .from("leads")
-          .select("id, name, phone, email, organization_id, normalized_phone, ai_disabled")
-          .eq("organization_id", organizationId)
-          .eq("normalized_phone", normalizedPhone)
-          .order("created_at", { ascending: false })
-          .limit(1);
-
-        if (retryResults?.[0]) {
-          console.log(
-            "[lead-service] Found lead after retry:",
-            retryResults[0].id
-          );
-          return { lead: retryResults[0], created: false, source: "phone" };
+        const { lead: retryLead } = await findLeadByPhone(supabase, organizationId, normalizedPhone);
+        if (retryLead) {
+          console.log("[lead-service] Found lead after retry:", retryLead.id);
+          return { lead: retryLead, created: false, source: "phone" };
         }
       }
 
@@ -432,22 +398,11 @@ export async function findLeadByPhoneOrEmail(
   const normalizedPhone = normalizePhoneForSearch(phone);
   const normalizedEmailValue = normalizeEmail(email);
 
-  // Search by phone first (limit(1) handles duplicates gracefully)
+  // Search by phone first (principal ou secundário; ver findLeadByPhone)
   if (normalizedPhone) {
-    const { data: phoneResults } = await supabase
-      .from("leads")
-      .select("id, name, phone, email, organization_id, normalized_phone, ai_disabled")
-      .eq("organization_id", organizationId)
-      .eq("normalized_phone", normalizedPhone)
-      .order("created_at", { ascending: false })
-      .limit(1);
-
-    if (phoneResults?.[0]) {
-      return phoneResults[0];
-    }
-
-    const leadBySecondary = await findLeadBySecondaryPhone(supabase, organizationId, normalizedPhone);
-    if (leadBySecondary) return leadBySecondary;
+    const { lead: leadByPhone, ambiguous } = await findLeadByPhone(supabase, organizationId, normalizedPhone);
+    if (ambiguous) return null;
+    if (leadByPhone) return leadByPhone;
   }
 
   // Fallback to email (limit(1) handles duplicates gracefully)

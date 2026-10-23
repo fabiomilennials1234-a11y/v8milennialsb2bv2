@@ -80,7 +80,13 @@ export interface CreateBlastPlanInput {
   template?: TemplateEscolhido | null;
   delay_min_ms?: number;
   delay_max_ms?: number;
+  /** Legacy image field — still sent for images (older edge reads only this). */
   image_url?: string;
+  /** The attachment (Chamado dac7e647): public URL in the `media` bucket, its
+   *  kind (image | document = PDF/Word) and the file name the lead sees. */
+  media_url?: string;
+  media_type?: "image" | "document";
+  media_name?: string;
   exclude_blasted_within_days?: number;
   only_non_responders?: boolean;
   /** Time-of-day (HH:MM) the daily releaser fires; defaults server-side to 09:00. */

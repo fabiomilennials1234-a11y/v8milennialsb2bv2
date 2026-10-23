@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 
-import { decidirEntrega, type ContextoDeEntrega } from "@/modules/platform/lib/decisao-de-entrega";
+import { chaveDeSom, decidirEntrega, type ContextoDeEntrega } from "@/modules/platform/lib/decisao-de-entrega";
 import { empilhar } from "@/modules/platform/lib/pilha-de-cartoes";
 import { resolverPreferencias } from "@/modules/platform/lib/preferencias-de-aviso";
 import type { Aviso } from "@/modules/platform/lib/aviso-stream";
@@ -134,35 +134,63 @@ describe("decisão de entrega", () => {
     expect(falhou).toMatchObject({ cartao: true, som: "erro" });
   });
 
-  it("rajada de dez agendamentos às 09:00 vira UM cartão ×10 e UM som — não dez", () => {
-    // O worker emite as dez na mesma chave: a primeira nasce (INSERT), as
-    // outras engordam a mesma linha (UPDATE), alguns segundos depois cada.
-    const chave = "sched_sent:2026-08-31";
+  it("rajada de dez agendamentos às 09:00 para clientes diferentes: dez avisos, UM som — não dez", () => {
+    // Chamado fb8abe55: o worker emite um aviso por cliente e dia
+    // (`sched_sent:<dia>:<cliente>`), então cada envio NASCE (INSERT) numa
+    // linha própria, alguns segundos depois do anterior. O som é contido pela
+    // raiz do dia; a chave inteira tocaria dez vezes.
     const ultimoSomPorChave: Record<string, number> = {};
-    let pilha: ReturnType<typeof empilhar>["pilha"] = [];
+    const cartoes = new Set<string>();
     let sons = 0;
 
     for (let i = 0; i < 10; i++) {
       const agora = AGORA + i * 5_000;
-      const evento = i === 0 ? "INSERT" : "UPDATE";
       const a = aviso("scheduled_message_sent", {
-        id: "aviso-agendada",
+        id: `aviso-agendada-${i}`,
         lead_id: `lead-${i}`,
-        group_key: chave,
-        event_count: i + 1,
+        group_key: `sched_sent:2026-08-31:lead-${i}`,
       });
 
-      const decisao = decidirEntrega(a, evento, contexto({ agora, ultimoSomPorChave }));
+      const decisao = decidirEntrega(a, "INSERT", contexto({ agora, ultimoSomPorChave }));
       if (decisao.som) {
         sons += 1;
-        ultimoSomPorChave[chave] = agora;
+        ultimoSomPorChave[chaveDeSom(a)!] = agora;
       }
-      if (decisao.cartao) pilha = empilhar(pilha, a, agora, true).pilha;
+      if (decisao.cartao) cartoes.add(a.group_key!);
     }
 
     expect(sons).toBe(1);
-    expect(pilha).toHaveLength(1);
-    expect(pilha[0]).toMatchObject({ tipo: "scheduled_message_sent", eventCount: 10 });
+    expect(cartoes.size).toBe(10);
+  });
+
+  it("envio agendado depois da janela de repique toca de novo, mesmo dia", () => {
+    const decisao = decidirEntrega(
+      aviso("scheduled_message_sent", { group_key: "sched_sent:2026-08-31:lead-2" }),
+      "INSERT",
+      contexto({ ultimoSomPorChave: { "sched_sent:2026-08-31": AGORA - 90_000 } }),
+    );
+
+    expect(decisao).toMatchObject({ som: "mensagem", cartao: true, motivo: "entregue" });
+  });
+
+  it("envio agendado de outro dia é outra raiz — toca", () => {
+    const decisao = decidirEntrega(
+      aviso("scheduled_message_sent", { group_key: "sched_sent:2026-09-01:lead-2" }),
+      "INSERT",
+      contexto({ ultimoSomPorChave: { "sched_sent:2026-08-31": AGORA - 10_000 } }),
+    );
+
+    expect(decisao.som).toBe("mensagem");
+  });
+
+  it("os outros tipos seguem pela chave inteira: Aviso que nasce nunca repica", () => {
+    const ctx = contexto({ ultimoSomPorChave: { "msg:lead-1": AGORA - 20_000 } });
+
+    expect(decidirEntrega(aviso("lead_message"), "INSERT", ctx).som).toBe("mensagem");
+    expect(
+      decidirEntrega(aviso("scheduled_message_failed", { group_key: "sched_fail:s1" }), "INSERT",
+        contexto({ ultimoSomPorChave: { "sched_fail:s1": AGORA - 20_000 } })).som,
+    ).toBe("erro");
   });
 
   it("falha de envio agendado fica na tela até ser dispensada; o sucesso some sozinho", () => {
@@ -183,5 +211,25 @@ describe("decisão de entrega", () => {
     expect(decisao.som).toBeNull();
     expect(decisao.motivo).toBe("tipo-sem-som");
     expect(decisao.cartao).toBe(true);
+  });
+});
+
+describe("chave de som", () => {
+  it("envio agendado: a raiz do dia, sem o cliente", () => {
+    expect(chaveDeSom({ type: "scheduled_message_sent", group_key: "sched_sent:2026-10-21:lead-1" }))
+      .toBe("sched_sent:2026-10-21");
+    expect(chaveDeSom({ type: "scheduled_message_sent", group_key: "sched_sent:2026-10-21:5548999887766" }))
+      .toBe("sched_sent:2026-10-21");
+  });
+
+  it("chave legada do worker antigo (só o dia) já é a raiz", () => {
+    expect(chaveDeSom({ type: "scheduled_message_sent", group_key: "sched_sent:2026-10-21" }))
+      .toBe("sched_sent:2026-10-21");
+  });
+
+  it("os outros tipos usam a chave inteira; sem chave, sem som registrado", () => {
+    expect(chaveDeSom({ type: "lead_message", group_key: "msg:lead-1" })).toBe("msg:lead-1");
+    expect(chaveDeSom({ type: "scheduled_message_failed", group_key: "sched_fail:s1" })).toBe("sched_fail:s1");
+    expect(chaveDeSom({ type: "lead_message", group_key: null })).toBeNull();
   });
 });

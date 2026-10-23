@@ -448,19 +448,57 @@ describe("process-scheduled-user-messages — o aviso abre a conversa", () => {
     });
   });
 
-  it("rajada: dez agendamentos do mesmo tick caem na MESMA chave — viram um aviso ×10, não dez", async () => {
+  // Chamado fb8abe55: a chave só do dia juntava a rajada das 09:00 num cartão
+  // ×9 que mostrava o último cliente e o último link. Cada cliente tem o seu.
+  it("rajada para clientes diferentes: cada cliente ganha o seu aviso — a chave leva o dia E o cliente", async () => {
     const rajada = Array.from({ length: 10 }, (_, i) => ({
       ...AGENDADA,
       id: `sched-${i}`,
+      lead_id: `lead-${i}`,
       phone_number: `1199988770${i}`,
     }));
 
     const { avisos } = await runTick({ scheduled: rajada, teamMembers: [QUEM_AGENDOU] });
 
     expect(avisos).toHaveLength(10);
-    const chaves = new Set(avisos.map((a) => a.p_group_key));
-    expect(chaves.size).toBe(1);
-    expect([...chaves][0]).toMatch(/^sched_sent:\d{4}-\d{2}-\d{2}$/);
+    const chaves = avisos.map((a) => String(a.p_group_key));
+    for (const chave of chaves) expect(chave).toMatch(/^sched_sent:\d{4}-\d{2}-\d{2}:lead-\d$/);
+    expect(chaves.map((c) => c.split(":").pop()).sort()).toEqual(
+      Array.from({ length: 10 }, (_, i) => `lead-${i}`),
+    );
+  });
+
+  it("o mesmo cliente duas vezes no dia segue num aviso só (×2)", async () => {
+    const { avisos } = await runTick({
+      scheduled: [
+        { ...AGENDADA, id: "sched-a", lead_id: "lead-1" },
+        { ...AGENDADA, id: "sched-b", lead_id: "lead-1" },
+      ],
+      teamMembers: [QUEM_AGENDOU],
+    });
+
+    expect(avisos).toHaveLength(2);
+    expect(new Set(avisos.map((a) => a.p_group_key)).size).toBe(1);
+  });
+
+  it("sem lead vinculado, o telefone só com dígitos identifica o cliente", async () => {
+    const { avisos } = await runTick({
+      scheduled: [{ ...AGENDADA, lead_id: null, phone_number: "+55 (11) 99988-7766" }],
+      teamMembers: [QUEM_AGENDOU],
+    });
+
+    expect(avisos).toHaveLength(1);
+    expect(avisos[0].p_group_key).toMatch(/^sched_sent:\d{4}-\d{2}-\d{2}:5511999887766$/);
+  });
+
+  it("sem lead e sem dígitos, a própria mensagem identifica — a chave nunca fica sem cliente", async () => {
+    const { avisos } = await runTick({
+      scheduled: [{ ...AGENDADA, id: "sched-sem-numero", lead_id: null, phone_number: "" }],
+      teamMembers: [QUEM_AGENDOU],
+    });
+
+    expect(avisos).toHaveLength(1);
+    expect(avisos[0].p_group_key).toMatch(/^sched_sent:\d{4}-\d{2}-\d{2}:sched-sem-numero$/);
   });
 
   it("falha definitiva com chip resolvido e telefone com máscara: o aviso de falha abre a conversa", async () => {

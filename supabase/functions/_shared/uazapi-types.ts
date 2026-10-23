@@ -214,12 +214,19 @@ export type UazapiNumberCheck = {
  * CONTRACT (verified live 2026-06-15): every item MUST carry `type`
  * ("text" for plain text, "image" for media). An item without `type` makes
  * Uazapi silently accept 0 messages (count=0) → empty campaign → 0 sent.
+ *
+ * "document" (Chamado dac7e647) — from the Uazapi spec (openapi-bundled.json,
+ * POST /sender/advanced, `messages[]`): `file` = URL, `docName` = file name the
+ * lead sees. The spec has NO `caption` on the item: the caption of any media
+ * goes in `text` ("Texto da mensagem … ou legenda para mídia"), which is why
+ * runUazapiSenderJob moves `caption` into `text` before the call.
  */
 export type UazapiSenderMessageItem = {
   number: string;
-  type: "text" | "image";
+  type: "text" | "image" | "document";
   text?: string;
   file?: string;
+  docName?: string;
   caption?: string;
 };
 

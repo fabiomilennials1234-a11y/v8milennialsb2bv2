@@ -69,6 +69,8 @@ const WIDE_LAYOUT_PATTERNS = [
   /^\/leads(\/|$)/,
   // Carteira: a lista + painel 360 vinham na largura de /leads (eram aba dela).
   /^\/carteira\/?$/,
+  // Cobrança: lista e kanban na largura de /leads e /funil.
+  /^\/cobranca(\/|$)/,
   /^\/custom-pipeline/,
   /^\/campanhas/,
   /^\/upsell/,

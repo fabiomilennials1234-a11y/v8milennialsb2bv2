@@ -8,16 +8,18 @@ import { registerSW } from 'virtual:pwa-register';
 const SW_UPDATE_CHECK_INTERVAL_MS = 60 * 60 * 1000;
 
 /**
- * Rede de segurança: se `skipWaiting` não resultar em `controllerchange`
- * (sem waiting worker no momento, activation travada), força o reload mesmo
- * assim para o update nunca ficar preso em waiting.
+ * Re-check a missed activation event without reloading an older worker.
+ * A busy worker can take longer than three seconds to finish its requests.
  */
 const SW_UPDATE_RELOAD_FALLBACK_MS = 3000;
+const SW_UPDATE_ACTIVATION_TIMEOUT_MS = 30_000;
 
 interface UseServiceWorkerUpdateReturn {
   /** True when a new SW version is available and pending activation. */
   needRefresh: boolean;
-  /** Aplica o waiting SW e recarrega imediatamente. */
+  isUpdating: boolean;
+  updateFailed: boolean;
+  /** Requests activation and reloads only after the update is ready. */
   updateSW: () => void;
 }
 
@@ -27,37 +29,78 @@ interface UseServiceWorkerUpdateReturn {
  */
 export function useServiceWorkerUpdate(): UseServiceWorkerUpdateReturn {
   const [needRefresh, setNeedRefresh] = useState(false);
+  const [isUpdating, setIsUpdating] = useState(false);
+  const [updateFailed, setUpdateFailed] = useState(false);
   const updateSWRef = useRef<ReturnType<typeof registerSW>>();
   const notifiedRef = useRef(false);
   const updatingRef = useRef(false);
   const requestedReloadRef = useRef<() => void>();
+  const cleanupUpdateRef = useRef<() => void>();
 
   const updateSW = useCallback(() => {
     if (updatingRef.current) return;
     updatingRef.current = true;
+    setIsUpdating(true);
+    setUpdateFailed(false);
     // O reload do build prompt roda só `if (event.isUpdate)` no evento
     // 'controlling', e workbox-window congela isUpdate no register() — página
     // que começou SEM controller ativaria o SW novo sem recarregar, ficando
-    // com bundle velho + precache purgado. Garante o reload aqui; um segundo
-    // reload é no-op durante a navegação já pendente.
-    let reloaded = false;
+    // com bundle velho + precache purgado. Garante um único reload local.
+    let finished = false;
+    const serviceWorker = 'serviceWorker' in navigator ? navigator.serviceWorker : undefined;
+    const cleanup = () => {
+      finished = true;
+      window.clearTimeout(fallbackId);
+      window.clearTimeout(timeoutId);
+      serviceWorker?.removeEventListener('controllerchange', reload);
+      requestedReloadRef.current = undefined;
+    };
     const reload = () => {
-      if (reloaded) return;
-      reloaded = true;
+      if (finished) return;
+      cleanup();
       window.location.reload();
     };
+    const fail = () => {
+      if (finished) return;
+      cleanup();
+      updatingRef.current = false;
+      setIsUpdating(false);
+      setUpdateFailed(true);
+    };
+    const reloadIfReady = async () => {
+      if (finished) return;
+      try {
+        if (!serviceWorker) { reload(); return; }
+        const registration = await serviceWorker.getRegistration();
+        if (!registration || (
+          !registration.waiting && !registration.installing &&
+          registration.active?.state === 'activated' &&
+          (!serviceWorker.controller || serviceWorker.controller === registration.active)
+        )) reload();
+      } catch {
+        // Failure to inspect the worker is not evidence that it activated.
+      }
+    };
     requestedReloadRef.current = reload;
+    cleanupUpdateRef.current = cleanup;
 
-    if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.addEventListener('controllerchange', reload, {
+    if (serviceWorker) {
+      serviceWorker.addEventListener('controllerchange', reload, {
         once: true,
       });
     }
-    // Sem waiting worker (race) ou activation travada → controllerchange nunca
-    // vem; o fallback garante que o build novo entre.
-    window.setTimeout(reload, SW_UPDATE_RELOAD_FALLBACK_MS);
+    // A blind reload here leaves registration.waiting unchanged, so the new
+    // page shows the same toast. Wait for controllerchange while it is busy.
+    const fallbackId = window.setTimeout(() => { void reloadIfReady(); }, SW_UPDATE_RELOAD_FALLBACK_MS);
+    const timeoutId = window.setTimeout(() => {
+      void reloadIfReady().finally(fail);
+    }, SW_UPDATE_ACTIVATION_TIMEOUT_MS);
 
-    updateSWRef.current?.(true);
+    try {
+      void Promise.resolve(updateSWRef.current?.(true)).catch(fail);
+    } catch {
+      fail();
+    }
   }, []);
 
   useEffect(() => {
@@ -99,8 +142,9 @@ export function useServiceWorkerUpdate(): UseServiceWorkerUpdateReturn {
 
     return () => {
       if (intervalId !== undefined) window.clearInterval(intervalId);
+      cleanupUpdateRef.current?.();
     };
   }, []);
 
-  return { needRefresh, updateSW };
+  return { needRefresh, isUpdating, updateFailed, updateSW };
 }

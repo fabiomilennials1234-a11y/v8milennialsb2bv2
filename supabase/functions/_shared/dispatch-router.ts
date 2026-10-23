@@ -98,7 +98,15 @@ export function decideDispatchRoute(
 // ============================================================================
 
 export type UazapiSenderInput = {
-  recipients: Array<{ number: string; type: "text" | "image"; text?: string; file?: string; caption?: string }>;
+  recipients: Array<{
+    number: string;
+    type: "text" | "image" | "document";
+    text?: string;
+    file?: string;
+    /** Document items only — the file name the lead sees (Uazapi `docName`). */
+    docName?: string;
+    caption?: string;
+  }>;
   delayMin?: number;
   delayMax?: number;
   scheduledFor?: string; // ISO 8601 — converted to epoch ms for Uazapi
@@ -155,6 +163,11 @@ export async function runUazapiSenderJob(
   instance: WhatsAppInstance,
   input: UazapiSenderInput
 ): Promise<{ sender_job_id: string; uazapi_sender_id: string }> {
+  // Disparo em massa nunca sai pelo número da cobrança (ADR-0040), mesmo que
+  // alguém o tenha escolhido no wizard: lá o devedor recebe só a régua.
+  if (instance.reserved_for) {
+    throw new Error(`instance_reserved_for_${instance.reserved_for}`);
+  }
   const scheduledFor = toEpochMs(input.scheduledFor);
   const provider = await getWhatsAppProvider(instance, supabaseAdmin);
   const impl = (provider as any).senderAdvanced as undefined | ((

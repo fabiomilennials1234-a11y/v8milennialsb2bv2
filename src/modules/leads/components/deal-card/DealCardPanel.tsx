@@ -31,7 +31,7 @@ import {
   useLeadComments,
   useUpdateLeadComment,
 } from "../lead-detail/hooks/useLeadComments";
-import { GavetaLateral } from "../lead-card/GavetaLateral";
+import { GavetaLateral } from "@/shared/components/GavetaLateral";
 import { LeadCardContainer } from "../lead-card/LeadCardContainer";
 import { TelefoneDoNegocioFaixa } from "./TelefoneDoNegocio";
 import { useResolucaoDoTelefoneDoNegocio } from "../../hooks/useTelefoneDoNegocio";
@@ -355,7 +355,7 @@ export const DealCardPanel = memo(function DealCardPanel() {
         // some do jeito certo mas o cabeçalho segue dizendo "aberto".
         await queryClient.invalidateQueries({ queryKey: ["leads-deals"] });
         queryClient.invalidateQueries({ queryKey: ["deal-card-extras", entryId] });
-        for (const key of ["deal-menu-outcome", "funil-desfecho-counts", "pipeline-page", "pipeline-stage-counts", "custom_pipe_entries", "custom_pipe_stage_counts", "leads-sales-metrics"]) {
+        for (const key of ["deal-menu-outcome", "funil-desfecho-counts", "pipeline-desfecho-por-mes", "pipeline-page", "pipeline-stage-counts", "custom_pipe_entries", "custom_pipe_stage_counts", "leads-sales-metrics"]) {
           void queryClient.invalidateQueries({ queryKey: [key] });
         }
       } catch (e) {

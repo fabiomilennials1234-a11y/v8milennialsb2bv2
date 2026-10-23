@@ -58,13 +58,39 @@ const CANAL_QUENTE = new Set([
  */
 export const JANELA_DE_REPIQUE_MS = 60_000;
 
+/**
+ * Tipos cujo som é contido pela RAIZ da chave, não pela chave inteira.
+ *
+ * Mensagem agendada enviada nasce um Aviso por cliente e dia
+ * (`sched_sent:<dia>:<cliente>`, Chamado fb8abe55): quem agendou precisa ver
+ * cada cliente na lista, com o link da sua conversa. Só que dez agendamentos
+ * às 09:00 são dez NASCIMENTOS no mesmo minuto — pela chave inteira, dez sons.
+ * A raiz do dia (`sched_sent:<dia>`) devolve à rajada o som que ela tinha
+ * quando era um cartão só: um.
+ */
+const RAIZ_DO_SOM = new Map<string, RegExp>([
+  ["scheduled_message_sent", /^sched_sent:\d{4}-\d{2}-\d{2}(?=:|$)/],
+]);
+
+/**
+ * A chave sob a qual o som é contido — e sob a qual quem toca registra o
+ * último som. Para quase todo tipo é o próprio `group_key`. A chave legada
+ * `sched_sent:<dia>`, do worker anterior ao Chamado fb8abe55, já é a raiz: a
+ * ordem entre o deploy do front e o do worker não importa.
+ */
+export function chaveDeSom(aviso: Pick<Aviso, "type" | "group_key">): string | null {
+  if (!aviso.group_key) return null;
+  const raiz = RAIZ_DO_SOM.get(aviso.type)?.exec(aviso.group_key);
+  return raiz ? raiz[0] : aviso.group_key;
+}
+
 export interface ContextoDeEntrega {
   preferencias: PreferenciasDeAviso;
   /** Aba em segundo plano continua ouvindo: quem está no Excel precisa ser chamado. */
   abaVisivel: boolean;
   /** Lead cuja conversa está aberta na tela agora, se houver. */
   conversaAbertaLeadId: string | null;
-  /** Último som por chave de agrupamento, em epoch ms. */
+  /** Último som por chave de som (`chaveDeSom`), em epoch ms. */
   ultimoSomPorChave: Record<string, number>;
   /** Hora local de quem recebe, 0-23. */
   horaLocal: number;
@@ -130,8 +156,12 @@ export function decidirEntrega(
     return calar("horario-silencioso");
   }
 
-  if (evento === "UPDATE") {
-    const ultimo = aviso.group_key ? contexto.ultimoSomPorChave[aviso.group_key] : undefined;
+  // Pela chave inteira só o UPDATE repica: Aviso que nasce é assunto novo. Com
+  // raiz de som, o nascimento repica também — cada cliente é um Aviso novo,
+  // mas a rajada das 09:00 é uma só.
+  if (evento === "UPDATE" || RAIZ_DO_SOM.has(aviso.type)) {
+    const chave = chaveDeSom(aviso);
+    const ultimo = chave ? contexto.ultimoSomPorChave[chave] : undefined;
     if (ultimo !== undefined && contexto.agora - ultimo < JANELA_DE_REPIQUE_MS) {
       return calar("repique-recente");
     }

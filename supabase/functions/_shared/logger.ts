@@ -354,6 +354,15 @@ export const SUCCESS_SAMPLE_RATE: Readonly<Record<string, number>> = Object.free
   "webhook:uazapi_receipt_unmatched": 0.1,
   "workflow:process_batch": 0.1,
   "whatsapp:run": 0.1,
+  // Alavanca 6 do plano de RAM (2026-10-19, prod 24 h): as três maiores fontes de
+  // sucesso que sobraram, ~4,6 mil das ~9,5 mil linhas/dia, nenhum leitor no
+  // app. `external_read_applied` é a prova do Chamado 6ebb4b73 ("recibo chegou e
+  // não mudou nada" × "nunca chegou"): rebaixada, segue inteira em function_logs
+  // com `rt:1` — a investigação passa a ser por `query_logs`, não por SQL.
+  // A falha (`uazapi_external_read_failed`) é `error` e nunca é amostrada.
+  "webhook:uazapi_external_read_applied": 0.05,
+  "webhook:uazapi_group_reaction_skipped": 0.01,
+  "webhook:uazapi_group_message_captured": 0.05,
 });
 
 type RuntimeLogRow = Record<string, unknown>;

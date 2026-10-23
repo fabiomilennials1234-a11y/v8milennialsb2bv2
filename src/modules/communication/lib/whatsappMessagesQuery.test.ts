@@ -266,6 +266,15 @@ describe('nome original do documento (Chamado f6fc3c9e)', () => {
   });
 });
 
+describe('menção em grupo (Chamado 6885e65d)', () => {
+  it('projeta os LIDs citados e o LID do remetente, sem trazer o raw_payload inteiro', () => {
+    const columns = WHATSAPP_MESSAGE_COLUMNS.split(', ');
+    expect(columns).toContain('uazapi_mentioned_jids:raw_payload->content->contextInfo->mentionedJID');
+    expect(columns).toContain('uazapi_sender_lid:raw_payload->>sender_lid');
+    expect(columns).not.toContain('raw_payload');
+  });
+});
+
 describe('cursor pagination', () => {
   it('preserves microseconds and applies a strict UUID tie-breaker', async () => {
     const timestamp = '2026-09-11T12:00:00.123456+00:00';

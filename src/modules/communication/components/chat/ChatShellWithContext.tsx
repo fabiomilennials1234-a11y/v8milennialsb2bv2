@@ -37,6 +37,8 @@ import { nomeComLeadPrimeiro, nomeDaConversa } from "@/modules/communication/lib
 import { useResolveChatDeepLink } from "@/modules/communication/hooks/chat/useResolveChatDeepLink";
 import { computeNeedsDeepLinkResolve } from "@/modules/communication/lib/computeNeedsDeepLinkResolve";
 import { resolvePendingDeepLink } from "@/modules/communication/lib/resolvePendingDeepLink";
+import { escolherCaixaSemConversa } from "@/modules/communication/lib/escolherCaixaSemConversa";
+import { useCaixasDeQuemAtende } from "@/modules/communication/hooks/chat/useCaixasDeQuemAtende";
 import {
   computeChatDeepLinkPlan,
   type ChatDeepLinkPlan,
@@ -56,6 +58,7 @@ import { MobileChatThreadHeader } from "@/modules/communication/components/chat/
 import { MessageList } from "@/modules/communication/components/chat/view/MessageList";
 import { ChatComposer } from "@/modules/communication/components/chat/composer/ChatComposer";
 import { ScheduledMessagesBanner } from "@/modules/communication/components/chat/ScheduledMessagesBanner";
+import { LeadAgendaStrip } from "@/modules/communication/components/chat/LeadAgendaStrip";
 import { MobileComposerContextual } from "@/modules/communication/components/chat/composer/MobileComposerContextual";
 import { ContextPanel } from "@/modules/communication/components/chat/context-panel/ContextPanel";
 import { LeadContactModal } from "@/modules/communication/components/chat/LeadContactModal";
@@ -80,6 +83,7 @@ import {
 } from "@/modules/communication/lib/official-conversation";
 import { useSocialRealtime } from "@/modules/communication/hooks/chat/useSocialRealtime";
 import { useWhatsAppMessages } from "@/modules/communication/hooks/chat/useWhatsAppMessages";
+import { useGroupMentionNames } from "@/modules/communication/hooks/chat/useGroupMentionNames";
 import { ChatThreadUnavailable } from "@/modules/communication/components/chat/ChatThreadUnavailable";
 import { resolveThreadState } from "@/modules/communication/lib/resolveThreadState";
 import { invalidateChipInstanceIds } from "@/modules/communication/lib/chipInstanceIds";
@@ -133,6 +137,7 @@ import type {
   SocialContact,
 } from "@/modules/communication/hooks/chat/types";
 import type { DensityMode } from "@/modules/communication/hooks/chat/useChatDensity";
+import { useNumerosDaCobranca } from "@/modules/communication/hooks/chat/useNumerosDaCobranca";
 
 // ─── Tipos internos ──────────────────────────────────────────────────────────
 
@@ -235,6 +240,8 @@ function ChatView({
   // `chat_nome_cod_contato_lead` (Chamado 82c50502): "Cód - Contato - Lead",
   // a mesma função da lista e do painel. Vence `chat_nome_do_lead`.
   const nomeCodContato = useNomeCodContatoLead();
+  // Número da cobrança (ADR-0040): o cabeçalho troca "Sem lead" pelo selo.
+  const numerosDaCobranca = useNumerosDaCobranca();
   const { data: fontesDoContato } = useContatoDaConversa(
     effectiveLeadId,
     phoneNumber,
@@ -256,6 +263,8 @@ function ChatView({
     refetch: refetchMessages,
     hasOlderMessages, loadOlderMessages, isLoadingOlder, olderError,
   } = useWhatsAppMessages(phoneNumber, instanceId);
+  // `@<LID>` citado no grupo → `@Nome` na bolha (Chamado 6885e65d).
+  const mentionNames = useGroupMentionNames(messages);
 
   useEffect(() => {
     if (hasEstablishedOutgoing(messages)) {
@@ -372,6 +381,7 @@ function ChatView({
           leadId={effectiveLeadId ?? undefined}
           instanceId={instanceId ?? undefined}
           instanceName={instanceName}
+          daCobranca={numerosDaCobranca.has(instanceId ?? "")}
           szChatSession={null}
           organizationId={organizationId}
           onBack={onBack}
@@ -445,6 +455,7 @@ function ChatView({
             density={density}
             instanceId={instanceId}
             enableActions
+            mentionNames={mentionNames}
           />
         )}
       </div>
@@ -455,6 +466,8 @@ function ChatView({
           a caminho, e mandava a mesma coisa de novo na mão.
 
           A consulta por telefone e instância inclui conversas ainda sem lead. */}
+      {effectiveLeadId && <LeadAgendaStrip leadId={effectiveLeadId} />}
+
       {(effectiveLeadId || (phoneNumber && instanceId)) && (
         <ScheduledMessagesBanner
           leadId={effectiveLeadId || null}
@@ -542,6 +555,10 @@ export function ChatShellWithContext() {
   // acontece aqui; daí pra frente o fluxo é idêntico ao de `?phone=`.
   const [searchParams, setSearchParams] = useSearchParams();
   const initialPlanRef = useRef<ChatDeepLinkPlan | null>(null);
+  // O lead do link, mesmo quando `?phone=` venceu o plano: é dele que sai o
+  // responsável na escolha de caixa sem conversa. Lido uma vez, como o plano —
+  // os params somem da URL depois de processados.
+  const leadDoLinkRef = useRef<string | null>(null);
   if (initialPlanRef.current === null) {
     initialPlanRef.current = computeChatDeepLinkPlan({
       phone: searchParams.get("phone"),
@@ -549,6 +566,7 @@ export function ChatShellWithContext() {
       box: searchParams.get("box"),
       lead: searchParams.get("lead"),
     });
+    leadDoLinkRef.current = searchParams.get("lead");
   }
   const plan = initialPlanRef.current;
 
@@ -577,7 +595,11 @@ export function ChatShellWithContext() {
   const [deepLinkProcessed, setDeepLinkProcessed] = useState(false);
   const [pendingDeepLinkPhone, setPendingDeepLinkPhone] = useState<string | null>(null);
 
-  const { preferredInstanceId, setPreferredInstance } = usePreferredInstance(instances);
+  const {
+    preferredInstanceId,
+    setPreferredInstance,
+    isLoading: preferenciaCarregando,
+  } = usePreferredInstance(instances);
 
   /**
    * O CONJUNTO de caixas marcadas. Era um id só até a caixa unificada.
@@ -697,6 +719,10 @@ export function ChatShellWithContext() {
     enabled: needsResolve,
   });
 
+  // Em paralelo ao resolver: se o lead não tiver conversa, a caixa sai daqui.
+  const quemAtende = useCaixasDeQuemAtende(leadDoLinkRef.current, needsResolve);
+  const sinaisDaCaixaCarregando = preferenciaCarregando || quemAtende.carregando;
+
   useEffect(() => {
     if (deepLinkProcessed) return;
     if (!hasDeepLinkPhone) return;
@@ -725,15 +751,26 @@ export function ChatShellWithContext() {
 
     // Caminho B: aguardando resolver server-side.
     if (!resolveFetched) return;
+    // Sem conversa, a caixa depende da preferência e do responsável. Decidir
+    // antes de chegarem é cair na ordem alfabética (Chamado 52df972e).
+    if (!resolved && sinaisDaCaixaCarregando) return;
 
     if (resolved) {
       setSelectedBoxId(resolved.instanceId);
       setPendingDeepLinkPhone(resolved.phoneNumber);
     } else {
-      // Lead sem mensagens — selecionar instância padrão e abrir chat vazio
-      const connected = instances.find((i) => i.status === "connected");
-      const escolhida = connected ?? instances[0];
-      setSelectedBoxId(escolhida.id);
+      // Lead sem mensagens: a caixa de quem atende, na mesma ordem do seletor
+      // "Iniciar conversa por". `marcarSomente`, e não `setSelectedBoxId`: a
+      // escolha automática não regrava a preferência do usuário — era assim
+      // que a caixa de outra vendedora virava a preferida de quem só clicou.
+      const escolhida =
+        escolherCaixaSemConversa({
+          instances,
+          preferredInstanceId,
+          minhasInstanceIds: quemAtende.minhasInstanceIds,
+          doResponsavelInstanceIds: quemAtende.doResponsavelInstanceIds,
+        })?.caixa ?? instances[0];
+      marcarSomente(escolhida.id);
 
       // A caixa oficial identifica a conversa por `(instância, interlocutor)`, e
       // não por telefone solto: guardar o telefone cru aqui deixaria a tela sem
@@ -761,6 +798,11 @@ export function ChatShellWithContext() {
     instances,
     resolveFetched,
     resolved,
+    sinaisDaCaixaCarregando,
+    preferredInstanceId,
+    quemAtende.minhasInstanceIds,
+    quemAtende.doResponsavelInstanceIds,
+    marcarSomente,
   ]);
 
   // Limpa query params depois de processar (sucesso ou desistência).

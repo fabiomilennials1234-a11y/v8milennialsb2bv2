@@ -19,6 +19,7 @@ import {
   type AudienceSelection,
 } from "./audience-resolve";
 import { CAP_RECOMMENDED } from "@/shared/disparo/speed-safety";
+import { ANEXO_PENDENTE } from "./disparo-media-payload";
 
 export type DisparoStepId =
   | "audience"
@@ -79,10 +80,12 @@ export type { TemplateEscolhido } from "@/shared/disparo/template-escolhido";
 import type { TemplateEscolhido } from "@/shared/disparo/template-escolhido";
 
 export interface DisparoMedia {
+  /** "image" or "document" (PDF/Word) — the two kinds the Disparo sends. */
   type: BlastMediaType;
   sizeBytes: number;
   name: string;
-  /** Public storage URL once uploaded (#910 dispatch); null while pending. */
+  /** Public storage URL once uploaded; null while the upload runs. A media
+   *  without URL holds the Mensagem step (it would otherwise go out as text). */
   url?: string | null;
 }
 
@@ -209,6 +212,10 @@ export function validateStep(
         return { ok: false, reason: "Escreva a mensagem." };
       if (draft.mediaError)
         return { ok: false, reason: draft.mediaError };
+      // A file still uploading has no URL yet: advancing would release a
+      // Disparo that drops it and goes out as text, with nobody told.
+      if (draft.media && !draft.media.url)
+        return { ok: false, reason: ANEXO_PENDENTE };
       return { ok: true, reason: null };
     }
     case "postsend":

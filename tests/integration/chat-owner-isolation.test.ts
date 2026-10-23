@@ -51,6 +51,7 @@ const ALL_ORG_A_PHONES = [PHONE_ALPHA, PHONE_BETA, PHONE_GAMMA, PHONE_DELTA, PHO
 
 const LEAD_ALPHA = '00000000-0000-0000-0000-000000001001';
 const LEAD_BETA = '00000000-0000-0000-0000-000000001002';
+const LEAD_GAMMA = '00000000-0000-0000-0000-000000001003';
 const AGENT_ID = '00000000-0000-0000-0000-00000000ca01';
 const CONV_ALPHA = '00000000-0000-0000-0000-00000000cb01';
 const CONV_BETA = '00000000-0000-0000-0000-00000000cb02';
@@ -708,6 +709,177 @@ describe.skipIf(shouldSkip)('Chat: isolamento por responsável', () => {
         p_enabled: false,
       });
       expect(error).not.toBeNull();
+    });
+  });
+
+  // ---------------------------------------------------------------
+  // Chamado 793f4b05 · PR4a/5 — co-donos (lead_owners, role='co') leem e
+  // respondem a conversa do lead.
+  //
+  // Member1 (TM 140) não tem vínculo nenhum com o lead Beta (dono: Member2) e
+  // está com leads.view_all=false e leads.view_unassigned=false. Ele só passa a
+  // ver Beta quando é gravado como co-dono. A linha entra pelo service client
+  // (a escrita de produção é por RPC; aqui interessa a LEITURA).
+  //
+  // Funções cobertas: get_whatsapp_conversation_list_multi,
+  // get_conversations_awaiting_human_reply_multi, voip_can_see_call e
+  // oraculo_chat_scope_allows. (can_link_or_read_lead é REVOGADA de
+  // authenticated e service_role; fica no pgTAP chat_co_owner_pr4a_test.sql.)
+  // ---------------------------------------------------------------
+
+  describe('co-donos veem e respondem a conversa (PR4a)', () => {
+    const TM_MEMBER_1 = '00000000-0000-0000-0000-000000000140';
+    const TM_MEMBER_2 = '00000000-0000-0000-0000-000000000150';
+
+    async function listaMulti(client: SupabaseClient, org = TEST_ORG_ID): Promise<string[]> {
+      const { data, error } = await client.rpc('get_whatsapp_conversation_list_multi', {
+        p_org: org,
+        p_instances: [INSTANCE_ID],
+        p_limit: 200,
+      });
+      if (error) throw new Error(`get_whatsapp_conversation_list_multi falhou: ${error.message}`);
+      return [...new Set((data ?? []).map((r: any) => r.normalized_phone as string))].sort();
+    }
+
+    async function aguardandoMulti(client: SupabaseClient): Promise<string[]> {
+      const { data, error } = await client.rpc('get_conversations_awaiting_human_reply_multi', {
+        p_org: TEST_ORG_ID,
+        p_instances: [INSTANCE_ID],
+        p_limit: 200,
+      });
+      if (error) throw new Error(`get_conversations_awaiting_human_reply_multi falhou: ${error.message}`);
+      return [...new Set((data ?? []).map((r: any) => r.normalized_phone as string))].sort();
+    }
+
+    async function addCoOwner(leadId: string, tm: string) {
+      const { error } = await service.from('lead_owners').insert({
+        organization_id: TEST_ORG_ID,
+        lead_id: leadId,
+        team_member_id: tm,
+        role: 'co',
+        is_primary: false,
+        source: 'manual',
+      });
+      if (error) throw new Error(`Falha ao gravar o co-dono: ${error.message}`);
+    }
+
+    async function removeCoOwners(leadId: string) {
+      await service.from('lead_owners').delete().eq('lead_id', leadId).eq('role', 'co');
+    }
+
+    beforeAll(async () => {
+      await setPolicy(service, TEST_ORG_ID, true);
+      // A lista multi só devolve caixas que o membro pode ler.
+      const { error } = await service.from('whatsapp_instance_allowed_members').upsert([
+        { whatsapp_instance_id: INSTANCE_ID, team_member_id: TM_MEMBER_1 },
+        { whatsapp_instance_id: INSTANCE_ID, team_member_id: TM_MEMBER_2 },
+      ]);
+      if (error) throw new Error(`Falha ao liberar a caixa aos membros: ${error.message}`);
+      await removeCoOwners(LEAD_BETA);
+    });
+
+    afterAll(async () => {
+      await removeCoOwners(LEAD_BETA);
+      await service
+        .from('whatsapp_instance_allowed_members')
+        .delete()
+        .eq('whatsapp_instance_id', INSTANCE_ID)
+        .in('team_member_id', [TM_MEMBER_1, TM_MEMBER_2]);
+    });
+
+    it('CONTROLE: sem vínculo, o membro não vê a conversa de Beta na lista multi', async () => {
+      expect(await listaMulti(member1)).toEqual([PHONE_ALPHA, PHONE_DELTA].sort());
+    });
+
+    it('co-dono vê a conversa de Beta na lista multi, e só a dele a mais', async () => {
+      await addCoOwner(LEAD_BETA, TM_MEMBER_1);
+      try {
+        expect(await listaMulti(member1)).toEqual([PHONE_ALPHA, PHONE_BETA, PHONE_DELTA].sort());
+      } finally {
+        await removeCoOwners(LEAD_BETA);
+      }
+    });
+
+    it('co-dono de Beta NÃO ganha a conversa sem dono nem a órfã', async () => {
+      await addCoOwner(LEAD_BETA, TM_MEMBER_1);
+      try {
+        const vistas = await listaMulti(member1);
+        expect(vistas).not.toContain(PHONE_GAMMA);
+        expect(vistas).not.toContain(PHONE_ORFA);
+      } finally {
+        await removeCoOwners(LEAD_BETA);
+      }
+    });
+
+    it('remover o co-dono tira a conversa de volta', async () => {
+      await addCoOwner(LEAD_BETA, TM_MEMBER_1);
+      await removeCoOwners(LEAD_BETA);
+      expect(await listaMulti(member1)).not.toContain(PHONE_BETA);
+    });
+
+    it('fila "aguardando resposta": co-dono recebe a conversa; sem vínculo não', async () => {
+      expect(await aguardandoMulti(member1)).not.toContain(PHONE_BETA);
+      await addCoOwner(LEAD_BETA, TM_MEMBER_1);
+      try {
+        expect(await aguardandoMulti(member1)).toContain(PHONE_BETA);
+      } finally {
+        await removeCoOwners(LEAD_BETA);
+      }
+    });
+
+    it('membro de OUTRA org não alcança a lista da Org A, com ou sem co-dono', async () => {
+      await addCoOwner(LEAD_BETA, TM_MEMBER_1);
+      try {
+        await expect(listaMulti(memberB, TEST_ORG_ID)).rejects.toThrow(/forbidden|org not accessible/);
+        // E na própria org ele continua vendo só o que é dele.
+        expect(await listaMulti(memberB, TEST_ORG_B_ID)).not.toContain(PHONE_BETA);
+      } finally {
+        await removeCoOwners(LEAD_BETA);
+      }
+    });
+
+    it('voip_can_see_call: co-dono vê o lead; sem vínculo não', async () => {
+      const ask = async (c: SupabaseClient) => {
+        const { data, error } = await c.rpc('voip_can_see_call', { p_lead_id: LEAD_BETA });
+        if (error) throw new Error(error.message);
+        return data;
+      };
+      expect(await ask(member1)).toBe(false);
+      await addCoOwner(LEAD_BETA, TM_MEMBER_1);
+      try {
+        expect(await ask(member1)).toBe(true);
+        expect(await ask(memberB)).toBe(false);
+      } finally {
+        await removeCoOwners(LEAD_BETA);
+      }
+    });
+
+    it('oraculo_chat_scope_allows: co-dono com a caixa liberada passa; sem vínculo não', async () => {
+      const ask = async (tm: string) => {
+        const { data, error } = await service.rpc('oraculo_chat_scope_allows', {
+          p_organization_id: TEST_ORG_ID,
+          p_team_member_id: tm,
+          p_lead_id: LEAD_BETA,
+          p_instance_id: INSTANCE_ID,
+        });
+        if (error) throw new Error(error.message);
+        return data;
+      };
+      expect(await ask(TM_MEMBER_1)).toBe(false);
+      await addCoOwner(LEAD_BETA, TM_MEMBER_1);
+      try {
+        expect(await ask(TM_MEMBER_1)).toBe(true);
+        // O co-dono de um lead não vira co-dono de outro (Gamma não tem dono).
+        const { data } = await service.rpc('oraculo_chat_scope_allows', {
+          p_organization_id: TEST_ORG_ID,
+          p_team_member_id: TM_MEMBER_1,
+          p_lead_id: LEAD_GAMMA,
+          p_instance_id: INSTANCE_ID,
+        });
+        expect(data).toBe(false);
+      } finally {
+        await removeCoOwners(LEAD_BETA);
+      }
     });
   });
 });

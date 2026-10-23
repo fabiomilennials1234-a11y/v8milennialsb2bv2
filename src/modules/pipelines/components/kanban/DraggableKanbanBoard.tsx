@@ -55,6 +55,7 @@ import {
 import {
   partitionClosedOutcomes,
   type ClosedGroupingAccessors,
+  type ClosedMonthSummary,
   type ClosedOutcome,
 } from "@/modules/pipelines/lib/closed-outcome-groups";
 import { ClosedOutcomeStack } from "./ClosedOutcomeStack";
@@ -74,6 +75,12 @@ export interface KanbanColumn<T extends DraggableItem> {
   hasMore?: boolean;
   isFetchingMore?: boolean;
   onLoadMore?: () => void;
+  /**
+   * Resumo do servidor dos encerrados DESTA etapa, por desfecho e mês. Com ele
+   * a pilha de Ganhos/Perdidos conta a etapa inteira; `null`/ausente = conta o
+   * que a coluna carregou e se declara parcial. Ver `closed-outcome-groups`.
+   */
+  closedSummary?: readonly ClosedMonthSummary[] | null;
 }
 
 interface DraggableKanbanBoardProps<T extends DraggableItem> {
@@ -622,7 +629,7 @@ export function DraggableKanbanBoard<T extends DraggableItem>({
           const columnSort = sortByColumn[column.id] ?? DEFAULT_COLUMN_SORT;
           const sortedItems = sortColumnItems(column.items, columnSort);
           const { open: openItems, closed: closedGroups } = closedGrouping
-            ? partitionClosedOutcomes(sortedItems, closedGrouping)
+            ? partitionClosedOutcomes(sortedItems, closedGrouping, column.closedSummary)
             : { open: sortedItems, closed: [] };
 
           // Só o que está NA TELA entra no SortableContext.
@@ -669,6 +676,8 @@ export function DraggableKanbanBoard<T extends DraggableItem>({
                       group={group}
                       expanded={expanded}
                       hasMore={column.hasMore}
+                      onLoadMore={column.onLoadMore}
+                      isFetchingMore={column.isFetchingMore}
                       openMonths={
                         new Set(
                           [...openMonths]

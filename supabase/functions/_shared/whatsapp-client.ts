@@ -50,6 +50,11 @@ export type WhatsAppInstance = {
   evolution_instance_name?: string | null;
   // Uazapi-specific metadata in JSONB
   provider_config?: Record<string, unknown>;
+  /**
+   * Setor dono exclusivo do número (`'collections'` = cobrança). Opcional porque
+   * nem todo caminho carrega a linha inteira; ver `recusaDoNumeroReservado`.
+   */
+  reserved_for?: string | null;
 };
 
 export type SendTextOptions = {

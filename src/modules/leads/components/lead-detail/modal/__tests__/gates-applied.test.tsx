@@ -53,6 +53,17 @@ vi.mock("@/modules/leads/hooks/useLeads", () => ({
   useUpdateLead: () => ({ mutateAsync: vi.fn() }),
 }));
 
+// N donos por lead (Chamado 793f4b05): o slot lê a flag e a mutação de transferência.
+vi.mock("@/modules/leads/hooks/useLeadOwners", () => ({
+  useLeadOwnersEnabled: () => false,
+}));
+vi.mock("@/modules/leads/hooks/useLeadOwnersMutations", () => ({
+  useTransferLeadOwner: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useAddLeadOwner: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useRemoveLeadOwner: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  recusaDeDonos: () => undefined,
+}));
+
 vi.mock("@/modules/identity/org-team/hooks/useTeamMembers", () => ({
   useResponsibleMembers: () => [],
 }));

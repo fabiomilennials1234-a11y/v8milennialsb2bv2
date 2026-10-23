@@ -1,4 +1,5 @@
 import { createContext, useContext, type ReactNode } from "react";
+import { useRealtimePlanRefresh } from "./realtimeTransportPlan";
 
 /**
  * Org-id corrente para scoping de subscriptions realtime.
@@ -15,6 +16,9 @@ export function RealtimeOrgProvider({
   organizationId: string | null;
   children: ReactNode;
 }) {
+  // Plano de transporte (Broadcast S1) pré-buscado assim que a org resolve:
+  // as telas montam com ele pronto e o canal abre direto no transporte certo.
+  useRealtimePlanRefresh(organizationId);
   return (
     <RealtimeOrgContext.Provider value={organizationId}>
       {children}

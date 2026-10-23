@@ -21,6 +21,7 @@ import { checkFunnelGate } from "./funnel-gate.ts";
 import { resolveMediaContent } from "../_shared/audio-transcription.ts";
 import { assertPlanFeature, PlanFeatureDeniedError } from "../_shared/plan-gate.ts";
 import { isOrgBlocked } from "../_shared/org-status.ts";
+import { setorDoNumero } from "../_shared/numero-reservado.ts";
 import { logReplyReleased } from "../_shared/copilot/reply-gate.ts";
 import { buildPublicResponse, decidePostLlmGate, sameTurnHandoffOf, shouldRunAbsorbLoop } from "./post-llm-gate.ts";
 
@@ -108,6 +109,19 @@ Deno.serve(withErrorBoundary('agent-message', async (req) => {
       return new Response(
         JSON.stringify({ error: "Invalid phone number in 'from' field", code: "INVALID_PHONE" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
+
+    // 0.7. NÚMERO DA COBRANÇA (ADR-0040) — mensagem que chegou no número
+    // reservado à cobrança não é conversa de venda: não cria lead, não pensa,
+    // não responde. O webhook já não chama para esse número; isto é a segunda
+    // porta (fila, replay, chamador novo). Mesmo contrato dos outros gates:
+    // 200 skipped, antes de qualquer side-effect.
+    const setorDaCaixa = await setorDoNumero(supabase, instance_id ?? message_context?.boxId ?? null);
+    if (setorDaCaixa) {
+      return new Response(
+        JSON.stringify({ skipped: true, reason: "numero_reservado", setor: setorDaCaixa, organization_id }),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
 
@@ -711,6 +725,7 @@ async function sendTypingIndicator(
       // Meta isolation (cert Rule 2): typing indicator only for legacy senders.
       .in("provider", ["uazapi", "evolution"])
       .in("status", ["open", "connected"])
+      .is("reserved_for", null)
       .limit(1)
       .maybeSingle();
 

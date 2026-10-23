@@ -34,6 +34,7 @@ import {
   type PitstopGroup,
 } from "@/modules/platform/lib/navigation-model";
 import { SETTINGS_BASE_PATH } from "@/modules/platform/lib/settings-tabs";
+import { useFeatureFlag } from "@/modules/platform/hooks/useFeatureFlag";
 import {
   filterByGate,
   filterByMaster,
@@ -76,6 +77,8 @@ export function useNavigationModel(): NavigationModel {
 
   const isOutboundMember = orgType === "outbound" && userRole?.role === "member";
   const metaPagesConnected = (metaPages?.pages.length ?? 0) > 0;
+  // Piloto da Cobrança (ADR-0040): só orgs com a flag veem a porta. Fail-closed.
+  const { enabled: cobranca } = useFeatureFlag("cobranca");
 
   const canViewRoute = useMemo(
     () => makeCanViewRoute({ isMaster, isAdmin, featurePerms }),
@@ -136,7 +139,7 @@ export function useNavigationModel(): NavigationModel {
     const filtered = filterByPermission(
       filterByGate(
         filterByMaster(filterByOutbound(withChildren, isOutboundMember), isMaster),
-        { metaPagesConnected },
+        { metaPagesConnected, cobranca },
       ),
       canViewRoute,
     );
@@ -146,6 +149,7 @@ export function useNavigationModel(): NavigationModel {
     isOutboundMember,
     isMaster,
     metaPagesConnected,
+    cobranca,
     canViewRoute,
   ]);
 
@@ -163,12 +167,12 @@ export function useNavigationModel(): NavigationModel {
       .map((group) => ({
         ...group,
         // O Pitstop respeita os mesmos gates de runtime e permissões da lateral.
-        items: filterByGate(group.items, { metaPagesConnected }).filter(
+        items: filterByGate(group.items, { metaPagesConnected, cobranca }).filter(
           (item) => canViewRoute(item.path),
         ),
       }))
       .filter((group) => group.items.length > 0);
-  }, [canViewRoute, isAdmin, isOutboundMember, metaPagesConnected, orgType]);
+  }, [canViewRoute, isAdmin, isOutboundMember, metaPagesConnected, cobranca, orgType]);
 
   const isActive = useMemo(
     () =>

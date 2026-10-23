@@ -854,6 +854,9 @@ async function resolveInstance(
       .from("whatsapp_instances")
       .select("id, instance_name, status")
       .eq("id", instanceId)
+      // Número reservado (cobrança, ADR-0040) não serve a automação comercial:
+      // sem linha aqui, cai no fallback abaixo, que também o exclui.
+      .is("reserved_for", null)
       .single();
     if (inst && (inst.status === "connected" || inst.status === "open")) {
       return { id: inst.id, instance_name: inst.instance_name };
@@ -866,6 +869,8 @@ async function resolveInstance(
     // Meta isolation (cert Rule 2): never auto-pick a Meta number for a legacy send.
     .in("provider", ["uazapi", "evolution"])
     .or("status.eq.open,status.eq.connected")
+    // Número reservado (cobrança, ADR-0040) nunca é escolhido por fallback.
+    .is("reserved_for", null)
     .limit(1);
   return instList?.[0] ?? null;
 }

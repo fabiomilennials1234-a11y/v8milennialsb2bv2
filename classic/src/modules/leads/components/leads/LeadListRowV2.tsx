@@ -8,6 +8,7 @@ import { LeadEtiquetasPopover } from "../etiquetas/LeadEtiquetasPopover";
 import { ReorderCycleRing } from "./ReorderCycleRing";
 import type { CicloDeRecompra } from "../../lib/reorder-cycle";
 import { erpLabel } from "@/shared/format/erp-code";
+import { nomesDosDonos, resolveLeadOwners } from "../../lib/lead-owners";
 import {
   LeadAvatar,
   SituacaoCell,
@@ -144,8 +145,10 @@ export function LeadListRowV2({
   actions,
 }: LeadListRowV2Props) {
   const tags = (lead.lead_tags ?? []).map((t) => t.tag).filter((t): t is LeadTagRef => Boolean(t));
-  const owner =
-    lead.sale_responsible?.name ?? lead.pre_sale_responsible?.name ?? lead.responsible?.name ?? null;
+  // Sem o embed (org sem N donos) é o dono único de sempre: venda → pré-venda → responsável.
+  const owners = resolveLeadOwners(lead);
+  const owner = owners[0]?.name ?? null;
+  const outrosDonos = owners.length - 1;
   const avgTicket = metrics?.avgTicket ?? 0;
 
   const ganhos = deals.filter((d) => d.outcome === "won");
@@ -374,7 +377,17 @@ export function LeadListRowV2({
 
       {/* dono */}
       <div>
-        {owner ? (
+        {owner && outrosDonos > 0 ? (
+          <span
+            className="inline-flex items-center gap-1.5 text-[12.5px] text-foreground/90"
+            title={nomesDosDonos(owners)}
+            aria-label={`Donos: ${nomesDosDonos(owners)}`}
+          >
+            <span className="size-1.5 rounded-full bg-success" />
+            {owner.split(" ")[0]}
+            <span className="tabular-nums text-muted-foreground">+{outrosDonos}</span>
+          </span>
+        ) : owner ? (
           <span className="inline-flex items-center gap-1.5 text-[12.5px] text-foreground/90">
             <span className="size-1.5 rounded-full bg-success" />
             {owner.split(" ")[0]}

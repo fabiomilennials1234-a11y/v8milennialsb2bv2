@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { describe, expect, it } from 'vitest';
-import { uazapiEventMessage, uazapiMessageReaction, mergeUazapiReaction } from '../../supabase/functions/_shared/uazapi-event';
+import { uazapiEventMessage, uazapiMessageReaction, mergeUazapiReaction, uazapiMessageEdit } from '../../supabase/functions/_shared/uazapi-event';
 const fixture = {
   EventType: 'messages', chat: { wa_chatid: '5511999999999@s.whatsapp.net', wa_chatlid: '123@lid' },
   message: { id: 'owner:REACTION', type: 'reaction', messageType: 'ReactionMessage', fromMe: true,
@@ -35,5 +35,54 @@ describe('UAZAPI real SSE envelope contract (identifiers replaced)', () => {
     const replaced = mergeUazapiReaction(once, { ...reaction, emoji: '✅' });
     expect(replaced.map(r => r.emoji)).toEqual(['👍', '✅']);
     expect(mergeUazapiReaction(replaced, { ...reaction, emoji: '' })).toEqual([other]);
+  });
+});
+
+// Shapes from prod raw_payload (Chamado 4b8d5fd1), identifiers replaced.
+describe('uazapiMessageEdit', () => {
+  const textEdit = {
+    id: '5511888888888:EDIT1', messageid: 'EDIT1', edited: 'ORIGINAL1', type: 'text',
+    messageType: 'ExtendedTextMessage', fromMe: true, text: 'texto novo', content: { text: 'texto novo' },
+  };
+  const captionEdit = {
+    id: '5511888888888:EDIT2', messageid: 'EDIT2', edited: 'ORIGINAL2', type: 'text',
+    messageType: 'DocumentMessage', fromMe: true, text: '', content: { caption: 'legenda nova' },
+  };
+
+  it('extracts the original id and the new text of a text edit', () => {
+    expect(uazapiMessageEdit(textEdit)).toEqual({ originalId: 'ORIGINAL1', text: 'texto novo' });
+  });
+
+  it('takes the caption of a media edit even though top-level text is empty', () => {
+    expect(uazapiMessageEdit(captionEdit)).toEqual({ originalId: 'ORIGINAL2', text: 'legenda nova' });
+  });
+
+  it('falls back to top-level text when content has no body', () => {
+    expect(uazapiMessageEdit({ edited: 'ORIGINAL3', text: 'só no topo', content: '' }))
+      .toEqual({ originalId: 'ORIGINAL3', text: 'só no topo' });
+  });
+
+  it('prefers a filled caption over an empty content.text', () => {
+    expect(uazapiMessageEdit({ edited: 'ORIGINAL6', text: '', content: { text: '', caption: 'legenda nova' } }))
+      .toEqual({ originalId: 'ORIGINAL6', text: 'legenda nova' });
+  });
+
+  it('keeps an emptied caption as an empty string (removal is an edit)', () => {
+    expect(uazapiMessageEdit({ edited: 'ORIGINAL4', text: '', content: { caption: '' } }))
+      .toEqual({ originalId: 'ORIGINAL4', text: '' });
+  });
+
+  it('reports no text instead of inventing one', () => {
+    expect(uazapiMessageEdit({ edited: 'ORIGINAL5', content: {} })).toEqual({ originalId: 'ORIGINAL5', text: null });
+  });
+
+  it.each([
+    ['empty string (ordinary message)', ''],
+    ['blank string', '   '],
+    ['missing', undefined],
+    ['boolean (messages_update shape)', true],
+    ['null', null],
+  ])('returns null when edited is %s', (_label, edited) => {
+    expect(uazapiMessageEdit({ ...textEdit, edited })).toBeNull();
   });
 });

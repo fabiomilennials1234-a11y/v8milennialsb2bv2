@@ -31,6 +31,9 @@ vi.mock("@/modules/leads", () => {
   const Pass = ({ children }: { children?: React.ReactNode }) => <>{children}</>;
   return {
     useUpdateLead: () => ({ mutate: vi.fn(), isPending: false }),
+    // N donos (Chamado 793f4b05): org sem a flag, nenhum co-dono.
+    useLeadOwnersEnabled: () => false,
+    useLeadOwners: () => ({ data: undefined }),
     LeadCustomFields: () => null,
     AddCustomFieldPopover: () => null,
     ResponsibleSlot: () => null,

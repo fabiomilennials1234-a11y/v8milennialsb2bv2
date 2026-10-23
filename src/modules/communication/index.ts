@@ -105,9 +105,13 @@ export {
 // ── Lib: blast media guard (consumido por campaigns/Disparos, #904) ────────
 export {
   validateBlastMedia,
+  classifyBlastMedia,
   BLAST_MEDIA_LIMITS_MB,
+  BLAST_MEDIA_ACCEPT,
+  BLAST_MEDIA_UNSUPPORTED,
   type BlastMediaType,
   type BlastMediaValidation,
+  type BlastMediaClassification,
 } from "./lib/blast-media-validator";
 
 // ── Hooks: WhatsApp — chat shell barrel (re-exports principais) ───────────

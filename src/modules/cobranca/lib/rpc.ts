@@ -1,0 +1,73 @@
+/**
+ * Cliente tipado das RPCs da cobrança.
+ *
+ * As 14 RPCs ficam FORA de `Database["Functions"]` (types.ts) de propósito: o
+ * repo tem ~10 chamadas `supabase.rpc.bind(supabase)`, e o `.bind` instancia o
+ * genérico de `rpc` sobre o catálogo inteiro de funções. Somar 14 entradas ao
+ * catálogo passou o limite de profundidade do TS (TS2589) em arquivos que nada
+ * têm a ver com cobrança — medido em 21/10. As tabelas e views continuam no
+ * types.ts (o `.from()` não sofre disso).
+ *
+ * A chamada é no OBJETO (`cliente.rpc`), não numa referência solta: supabase-js
+ * lê `this.rest` lá dentro.
+ */
+import type { PostgrestError } from "@supabase/supabase-js";
+
+import { supabase } from "@/integrations/supabase/client";
+import type { Json } from "@/integrations/supabase/types";
+
+export interface FuncoesDaCobranca {
+  // Devolve { caso_id, envio } — envio diz o que houve com "Mover e enviar" (20271214000000).
+  cobranca_caso_mover: {
+    Args: { p_caso: string; p_etapa: string; p_posicao?: number; p_enviar?: boolean };
+    Returns: Json;
+  };
+  cobranca_caso_previa_envio: { Args: { p_caso: string; p_etapa: string; p_agora?: string }; Returns: Json };
+  cobranca_casos_atribuir: { Args: { p_org: string; p_casos: string[]; p_responsavel: string | null }; Returns: number };
+  cobranca_compromisso_encerrar: { Args: { p_compromisso: string; p_status: string }; Returns: string };
+  cobranca_compromisso_registrar: {
+    Args: { p_caso: string; p_tipo: string; p_parcelas: Json; p_observacao?: string; p_mover_para?: string };
+    Returns: string;
+  };
+  cobranca_contato_registrar: {
+    Args: { p_caso: string; p_canal: string; p_resultado: string; p_nota?: string };
+    Returns: string;
+  };
+  cobranca_etapas_garantir: { Args: { p_org: string }; Returns: number };
+  cobranca_importar: { Args: { p_org: string; p_linhas: Json; p_dry_run?: boolean }; Returns: Json };
+  cobranca_inadimplente_arquivar: { Args: { p_inadimplente: string; p_motivo: string }; Returns: string };
+  cobranca_inadimplente_salvar: { Args: { p_org: string; p_id: string | null; p_dados: Json }; Returns: string };
+  cobranca_metricas: { Args: { p_org: string; p_hoje?: string }; Returns: Json };
+  cobranca_nao_contatar: { Args: { p_inadimplente: string; p_valor: boolean; p_motivo?: string }; Returns: string };
+  cobranca_pagamento_registrar: {
+    Args: { p_caso: string; p_valor: number; p_pago_em: string; p_titulo?: string };
+    Returns: Json;
+  };
+  cobranca_titulo_cancelar: { Args: { p_titulo: string; p_motivo: string }; Returns: string };
+  cobranca_titulo_incluir: { Args: { p_inadimplente: string; p_dados: Json }; Returns: string };
+  // Régua (entrega 2, 20271213000000_cobranca_regua.sql)
+  cobranca_regua_garantir: { Args: { p_org: string }; Returns: undefined };
+  cobranca_regua_salvar: { Args: { p_org: string; p_dados: Json }; Returns: undefined };
+  cobranca_regua_ativar: { Args: { p_org: string; p_ativa: boolean }; Returns: undefined };
+  cobranca_regua_definir_numero: { Args: { p_org: string; p_instancia: string | null }; Returns: undefined };
+  cobranca_regua_passo_salvar: { Args: { p_org: string; p_id: string | null; p_dados: Json }; Returns: string };
+  cobranca_regua_passo_remover: { Args: { p_id: string }; Returns: undefined };
+  cobranca_regua_cancelar_envio: { Args: { p_envio: string }; Returns: undefined };
+  cobranca_regua_previa: { Args: { p_org: string; p_agora?: string }; Returns: Json };
+  // Colunas do fluxo com automação (20271214000000_cobranca_colunas_da_regua.sql)
+  cobranca_coluna_salvar: { Args: { p_org: string; p_etapa: string | null; p_dados: Json }; Returns: string };
+  cobranca_coluna_remover: { Args: { p_etapa: string }; Returns: undefined };
+}
+
+export type FuncaoDaCobranca = keyof FuncoesDaCobranca;
+
+type Rpc = <F extends FuncaoDaCobranca>(
+  fn: F,
+  args: FuncoesDaCobranca[F]["Args"],
+) => PromiseLike<{ data: FuncoesDaCobranca[F]["Returns"] | null; error: PostgrestError | null }>;
+
+const cliente = supabase as unknown as { rpc: Rpc };
+
+export function rpcCobranca<F extends FuncaoDaCobranca>(fn: F, args: FuncoesDaCobranca[F]["Args"]) {
+  return cliente.rpc(fn, args);
+}

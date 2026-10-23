@@ -136,11 +136,14 @@ export async function resolveInstance(
   // Meta API. meta_cloud instances are reachable only via an explicit
   // preferredInstanceId (step 1) or the strict-write binding. Filtering to the
   // legacy providers is a no-op for current orgs (all uazapi/evolution).
+  // Número reservado a um setor (cobrança, ADR-0040) nunca é "o primeiro da
+  // org": quem quer ele pede pelo id. Ver `recusaDoNumeroReservado`.
   const query = supabaseAdmin
     .from("whatsapp_instances")
     .select("*")
     .eq("organization_id", organizationId)
     .in("provider", ["uazapi", "evolution"])
+    .is("reserved_for", null)
     .order("created_at", { ascending: true })
     .limit(1);
 
@@ -180,6 +183,10 @@ export async function resolveInstance(
  * born excluded — a denylist of the known names would leave the hole open.
  * The only caller, copilot-batch-processor, already treats null as the
  * retryable `no_active_instance`, so the fail-closed exit path exists.
+ *
+ * RESERVED NUMBERS — both queries skip `reserved_for IS NOT NULL` (the
+ * collections number, ADR-0040): a copilot reply to a sales lead must never go
+ * out through the debt-collection chip.
  */
 export async function selectSendableInstance(
   supabaseAdmin: any,
@@ -191,6 +198,7 @@ export async function selectSendableInstance(
     .eq("organization_id", organizationId)
     .in("provider", ["uazapi", "evolution"])
     .in("status", ["open", "connected"])
+    .is("reserved_for", null)
     .is("session_dead_since", null)
     .order("last_connection_at", { ascending: false, nullsFirst: false })
     .limit(1)
@@ -205,6 +213,7 @@ export async function selectSendableInstance(
     .eq("organization_id", organizationId)
     .in("provider", ["uazapi", "evolution"])
     .in("status", ["open", "connected"])
+    .is("reserved_for", null)
     .limit(1)
     .maybeSingle();
   return (fallback ?? null) as WhatsAppInstance | null;
@@ -365,6 +374,8 @@ async function sendTextGoverned(
   text: string,
   opts: SendTextOpts,
 ): Promise<SendResultSimple> {
+  const reservado = recusaDoNumeroReservado(instance, opts.trackSource, opts.category);
+  if (reservado) return { success: false, deliveryState: "not_sent", error: reservado };
   try {
     const provider = await getWhatsAppProvider(instance, supabaseAdmin);
     // Send Governor (SHADOW seam). doSend runs exactly once; in shadow/off it
@@ -403,6 +414,32 @@ async function sendTextGoverned(
       error: error instanceof Error ? error.message : (error as any)?.message ?? JSON.stringify(error),
     };
   }
+}
+
+/**
+ * Número reservado a um setor (`whatsapp_instances.reserved_for`; hoje só
+ * `'collections'`, a cobrança — ADR-0040) só envia mensagem DESSE setor ou de
+ * mão humana. Copilot, workflow, disparo e follow-up comerciais são recusados
+ * aqui, no choke, antes de qualquer I/O: o devedor não pode receber automação
+ * de venda pelo número da cobrança.
+ *
+ * Os fallbacks de instância (`resolveInstance`, `selectSendableInstance`) já não
+ * escolhem número reservado; esta é a segunda porta, para quem chega com a
+ * instância na mão (instância fixa num nó, binding, etc.).
+ *
+ * Fail-open de propósito quando a linha veio sem a coluna (select parcial): a
+ * coluna ausente não pode derrubar o envio do resto da plataforma.
+ */
+export function recusaDoNumeroReservado(
+  instance: { reserved_for?: string | null } | null | undefined,
+  trackSource?: string | null,
+  category?: SendCategory,
+): string | null {
+  const setor = instance?.reserved_for;
+  if (!setor) return null;
+  if (setor === "collections" && trackSource === "cobranca") return null;
+  if ((category ?? deriveCategory(trackSource)) === "manual") return null;
+  return `instance_reserved_for_${setor}`;
 }
 
 export async function sendTextViaInstance(
@@ -499,6 +536,8 @@ export async function sendTemplateViaInstance(
 ): Promise<SendResultSimple> {
   const phone = normalizeBrazilianPhone(phoneNumber);
   if (!phone) return { success: false, error: "Invalid phone" };
+  const reservado = recusaDoNumeroReservado(instance, opts.trackSource);
+  if (reservado) return { success: false, deliveryState: "not_sent", error: reservado };
 
   try {
     const provider = await getWhatsAppProvider(instance, supabaseAdmin);
@@ -567,6 +606,8 @@ export async function sendAudioViaInstance(
 ): Promise<SendResultSimple> {
   const phone = normalizeBrazilianPhone(phoneNumber);
   if (!phone) return { success: false, error: "Invalid phone" };
+  const reservado = recusaDoNumeroReservado(instance, opts.trackSource);
+  if (reservado) return { success: false, deliveryState: "not_sent", error: reservado };
   try {
     const provider = await getWhatsAppProvider(instance, supabaseAdmin);
     // Send Governor (SHADOW seam) — see sendTextViaInstance for the contract.
@@ -619,6 +660,8 @@ export async function sendMenuViaInstance(
 ): Promise<SendResultSimple> {
   const phone = normalizeBrazilianPhone(phoneNumber);
   if (!phone) return { success: false, deliveryState: "not_sent", error: "Invalid phone" };
+  const reservado = recusaDoNumeroReservado(instance, opts.trackSource);
+  if (reservado) return { success: false, deliveryState: "not_sent", error: reservado };
   let attempted = false;
   try {
     const provider = await getWhatsAppProvider(instance, supabaseAdmin);
@@ -685,6 +728,8 @@ export async function sendPixButtonViaInstance(
 ): Promise<SendResultSimple> {
   const phone = normalizeBrazilianPhone(phoneNumber);
   if (!phone) return { success: false, error: "Invalid phone" };
+  const reservado = recusaDoNumeroReservado(instance, opts.trackSource);
+  if (reservado) return { success: false, deliveryState: "not_sent", error: reservado };
   try {
     const provider = await getWhatsAppProvider(instance, supabaseAdmin);
     if (!provider.sendPixButton) {
@@ -745,6 +790,8 @@ export async function sendMediaViaInstance(
 ): Promise<SendResultSimple> {
   const phone = normalizeBrazilianPhone(phoneNumber);
   if (!phone) return { success: false, error: "Invalid phone" };
+  const reservado = recusaDoNumeroReservado(instance, opts.trackSource, opts.category);
+  if (reservado) return { success: false, deliveryState: "not_sent", error: reservado };
   try {
     const provider = await getWhatsAppProvider(instance, supabaseAdmin);
     // Send Governor (SHADOW seam) — see sendTextViaInstance for the contract.

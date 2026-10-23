@@ -67,6 +67,13 @@ export async function evaluateCondition(
   if (!lead) return false;
   const leadData = lead as LeadData;
 
+  // Chamado 793f4b05 · PR4b: "está entre os donos" olha principais + co-donos.
+  // É operador, não campo: vale para o pseudo-campo `any_responsible`, que é
+  // onde o editor legado oferece "Responsável (qualquer)".
+  if (operator === "owner_includes") {
+    return compareOwnerIncludes(await getLeadOwnerMemberIds(supabase, leadData), value);
+  }
+
   // Resolve field value
   let fieldValue: unknown;
 
@@ -273,6 +280,41 @@ export function compareAnyResponsible(
     default:
       return compare(preSale, operator, value) || compare(sale, operator, value);
   }
+}
+
+/**
+ * `owner_includes` ("está entre os donos"): o membro está entre os donos do
+ * lead, em qualquer papel. Compara por identidade (UUID), sem caixa.
+ */
+export function compareOwnerIncludes(ownerIds: ReadonlyArray<unknown>, memberId: string): boolean {
+  const wanted = String(memberId ?? "").trim().toLowerCase();
+  if (!wanted) return false;
+  return ownerIds.some((id) => typeof id === "string" && id.toLowerCase() === wanted);
+}
+
+/**
+ * Todos os donos do lead como `team_members.id`: as duas colunas canônicas
+ * (principais) mais as linhas de `lead_owners` (co-donos). A união cobre a org
+ * sem a flag `lead_owners_n_donos`, onde a tabela está vazia. Erro de leitura
+ * da tabela degrada para os principais (nunca derruba a execução).
+ */
+async function getLeadOwnerMemberIds(
+  supabase: SupabaseClient,
+  lead: LeadData,
+): Promise<string[]> {
+  const ids = new Set<string>();
+  for (const id of [lead.pre_sale_responsible_id, lead.sale_responsible_id]) {
+    if (typeof id === "string" && id) ids.add(id.toLowerCase());
+  }
+  const { data } = await supabase
+    .from("lead_owners")
+    .select("team_member_id")
+    .eq("lead_id", lead.id)
+    .eq("organization_id", lead.organization_id as string);
+  for (const row of (data ?? []) as Array<{ team_member_id: string | null }>) {
+    if (row.team_member_id) ids.add(row.team_member_id.toLowerCase());
+  }
+  return [...ids];
 }
 
 export function compare(fieldValue: unknown, operator: string, conditionValue: string): boolean {

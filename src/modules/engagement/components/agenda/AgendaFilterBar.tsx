@@ -1,7 +1,7 @@
 /**
  * Abas de estado + filtros da Agenda.
  *
- * Esquerda: segmentado Pendentes / Todas / Finalizadas.
+ * Esquerda: segmentado Pendentes / Em atraso / Todas / Finalizadas.
  * Direita: responsável (só para quem enxerga a agenda inteira) e tipo.
  *
  * O segmentado é neutro de propósito: ouro é dinheiro e ação (DESIGN.md § Cor),
@@ -35,6 +35,7 @@ export const ALL_OPTION = "all";
 
 const STATUS_TABS: Array<{ key: AgendaStatusFilter; label: string }> = [
   { key: "pending", label: "Pendentes" },
+  { key: "overdue", label: "Em atraso" },
   { key: "all", label: "Todas atividades" },
   { key: "done", label: "Finalizadas" },
 ];
@@ -81,7 +82,7 @@ export function AgendaFilterBar({
   return (
     <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
       {/* Abas de estado */}
-      {/* `max-w-full overflow-x-auto` porque em 360px os três rótulos não cabem
+      {/* `max-w-full overflow-x-auto` porque em 360px os quatro rótulos não cabem
           e "Finalizadas" ficava cortada — inalcançável, não só feia. */}
       {/* V5: o segmentado (`TabsList variant="segmented"`) na forma, mas com a
           semântica manual de sempre — não há `tabpanel` por estado, a aba só

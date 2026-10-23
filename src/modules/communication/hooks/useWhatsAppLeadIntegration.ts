@@ -4,6 +4,7 @@ import { useCurrentTeamMember } from "@/modules/identity";
 import { responsavelParaGravar } from "@/modules/communication/lib/lead-responsible";
 import { FALLBACK_STAGES } from "@/contracts/pipe";
 import { normalizePhone } from "@/lib/normalizePhone";
+import { resolveLeadByPhone } from "@/modules/communication/lib/leadByPhone";
 import type { Tables, TablesInsert } from "@/integrations/supabase/types";
 import {
   createCustomPipelineEntry as criarCardCustom,
@@ -69,40 +70,61 @@ function pipePresence(res: { data: unknown[] | null; error: unknown }): boolean 
 
 export type Lead = Tables<"leads">;
 
+const LEAD_POR_TELEFONE_SELECT = `
+  *,
+  responsible:team_members!leads_responsible_id_fkey(id, name),
+  sdr:team_members!leads_sdr_id_fkey(id, name),
+  closer:team_members!leads_closer_id_fkey(id, name),
+  lead_tags(tag:tags(id, name, color))
+`;
+
 /**
  * Busca lead por número de telefone na organização atual.
  * SECURITY: Filtra por organization_id para isolamento entre organizações.
+ *
+ * O principal mora em `leads.normalized_phone`; os
+ * demais contatos do lead (Chamado 82c50502) só existem em `lead_phones`. Sem o
+ * segundo passo, abrir a conversa pelo segundo contato caía em "Criar ou
+ * vincular lead" como se o número fosse desconhecido (Chamado 2c4e502c).
+ * Lead apagado nunca é dono: o número dele já foi liberado para outro lead.
  */
-export function useLeadByPhone(phone: string | null) {
+export function useLeadByPhone(phone: string | null, opts: { preferredLeadId?: string | null } = {}) {
   const { data: teamMember } = useCurrentTeamMember();
   const organizationId = teamMember?.organization_id ?? null;
+  const preferredLeadId = opts.preferredLeadId ?? null;
 
   return useQuery({
-    queryKey: ["lead_by_phone", phone, organizationId],
+    queryKey: ["lead_by_phone", phone, organizationId, preferredLeadId],
     queryFn: async () => {
       if (!phone || !organizationId) return null;
 
       const normalizedPhone = normalizePhone(phone) || phone.replace(/\D/g, "");
 
+      // Regra única de entrada (Chamados 99067f13, 33c5fd52): número com um lead
+      // vivo resolve para ele; com 2+, o lead de negócio aberto, ou nenhum.
+      const { leadId, error: resolveError } = await resolveLeadByPhone(
+        supabase,
+        organizationId,
+        normalizedPhone,
+        { preferredLeadId },
+      );
+      if (resolveError) {
+        console.error("Erro ao buscar lead por telefone:", resolveError);
+        return null;
+      }
+      if (!leadId) return null;
+
       const { data, error } = await supabase
         .from("leads")
-        .select(`
-          *,
-          responsible:team_members!leads_responsible_id_fkey(id, name),
-          sdr:team_members!leads_sdr_id_fkey(id, name),
-          closer:team_members!leads_closer_id_fkey(id, name),
-          lead_tags(tag:tags(id, name, color))
-        `)
+        .select(LEAD_POR_TELEFONE_SELECT)
+        .eq("id", leadId)
         .eq("organization_id", organizationId)
-        .eq("normalized_phone", normalizedPhone)
-        .limit(1)
+        .is("deleted_at", null)
         .maybeSingle();
-
       if (error) {
         console.error("Erro ao buscar lead por telefone:", error);
         return null;
       }
-
       return data;
     },
     enabled: !!phone && !!organizationId,

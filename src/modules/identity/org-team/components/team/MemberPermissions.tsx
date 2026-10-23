@@ -22,6 +22,7 @@ import {
 } from "@/modules/identity/permissions/lib/leadVisibility";
 import { toast } from "sonner";
 import { notifyError } from "@/shared/errors";
+import { useFeatureFlag } from "@/modules/platform";
 
 interface FeaturePermission {
   key: string;
@@ -264,10 +265,12 @@ export function MemberPermissions() {
     );
   }, [featurePermissions, orgDefaults, memberPermissions, localOverrides, scope]);
 
-  // Group features by module
+  // Group features by module. A Cobrança só aparece onde a área existe (flag
+  // de piloto da org, ADR-0040) — fora dela seria permissão de tela fantasma.
+  const { enabled: cobrancaLigada } = useFeatureFlag("cobranca");
   const moduleGroups = useMemo(
-    () => toModuleGroups(featurePermissions),
-    [featurePermissions],
+    () => toModuleGroups(featurePermissions).filter((g) => g.slug !== "cobranca" || cobrancaLigada),
+    [featurePermissions, cobrancaLigada],
   );
 
   // Filter features by search

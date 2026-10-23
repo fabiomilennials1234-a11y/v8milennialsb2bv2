@@ -111,6 +111,7 @@ import {
 } from "../lib/lead-classificacao";
 import { useLeadClassificacao } from "../hooks/useLeadClassificacao";
 import { useClassificacaoCafeJurere } from "../hooks/useClassificacaoCafeJurere";
+import { useLeadOwnersEnabled } from "../hooks/useLeadOwners";
 import { normalizarAbaCafeJurere } from "../lib/cafe-jurere-classificacao";
 import { useOrgUsaLeiDoErp } from "../hooks/useOrgUsaLeiDoErp";
 import { useSearchParams } from "react-router-dom";
@@ -244,6 +245,9 @@ function LeadsInner() {
   // Visão salva gravada antes desta gaveta existir não traz a chave — sem o
   // `??` o Select vira não-controlado no meio do uso.
   const usaCadastroErpCafeJurere = useClassificacaoCafeJurere();
+  // N donos por lead (Chamado 793f4b05): lista traz todos os donos e o filtro
+  // casa qualquer um. Org sem a flag: `false`, a tela de sempre.
+  const donosMultiplos = useLeadOwnersEnabled();
   const abaSalva = filterState.filterClassificacao ?? CLASSIFICACAO_TODAS;
   const filterClassificacao = usaCadastroErpCafeJurere ? normalizarAbaCafeJurere(abaSalva) : abaSalva;
   const portfolioActive = filterClassificacao === "cliente";
@@ -350,12 +354,12 @@ function LeadsInner() {
     }, { replace: true });
   }, [setSearchParams]);
 
-  const filterParams = { page, searchQuery, filterOrigin, filterQualification, filterClassificacao, usaLeiDoErp, usaCadastroErpCafeJurere, filterUf: ufFilter, createdFrom, createdTo, filterAssignment, filterResponsible, sort };
+  const filterParams = { page, searchQuery, filterOrigin, filterQualification, filterClassificacao, usaLeiDoErp, usaCadastroErpCafeJurere, filterUf: ufFilter, createdFrom, createdTo, filterAssignment, filterResponsible, donosMultiplos, sort };
   const leadsQuery = useLeads(filterParams, { enabled: !portfolioActive });
   const { data: loadedLeads = [], isLoading } = leadsQuery;
   const leads = useMemo(() => portfolioActive ? [] : loadedLeads, [portfolioActive, loadedLeads]);
-  const { data: totalLeads } = useLeadsCount({ searchQuery, filterOrigin, filterQualification, filterClassificacao, usaLeiDoErp, usaCadastroErpCafeJurere, filterUf: ufFilter, createdFrom, createdTo, filterAssignment, filterResponsible });
-  const tabFilters = { searchQuery, filterOrigin, filterQualification, usaLeiDoErp, usaCadastroErpCafeJurere, filterUf: ufFilter, createdFrom, createdTo, filterAssignment, filterResponsible };
+  const { data: totalLeads } = useLeadsCount({ searchQuery, filterOrigin, filterQualification, filterClassificacao, usaLeiDoErp, usaCadastroErpCafeJurere, filterUf: ufFilter, createdFrom, createdTo, filterAssignment, filterResponsible, donosMultiplos });
+  const tabFilters = { searchQuery, filterOrigin, filterQualification, usaLeiDoErp, usaCadastroErpCafeJurere, filterUf: ufFilter, createdFrom, createdTo, filterAssignment, filterResponsible, donosMultiplos };
   const { data: allTabCount } = useLeadsCount({ ...tabFilters, filterClassificacao: "all" });
   const { data: leadTabCount } = useLeadsCount({ ...tabFilters, filterClassificacao: "lead" });
   const { data: clientTabCount } = useLeadsCount({ ...tabFilters, filterClassificacao: "cliente" });
@@ -520,7 +524,7 @@ function LeadsInner() {
    */
   const { data: orgStats, isLoading: isLoadingStats } = useLeadsStats({
     searchQuery, filterOrigin, filterQualification, filterClassificacao, usaLeiDoErp, usaCadastroErpCafeJurere, filterResponsible,
-    filterUf: ufFilter, createdFrom, createdTo,
+    filterUf: ufFilter, createdFrom, createdTo, donosMultiplos,
   });
 
   // Redesign aprovado pelo CTO em 2026-09-11 — a tela é a versão nova.
@@ -1180,7 +1184,7 @@ function LeadsInner() {
       <ExportLeadsModal
         open={isExportModalOpen}
         onOpenChange={setIsExportModalOpen}
-        listFilters={{ searchQuery, filterOrigin, filterQualification, filterClassificacao, usaLeiDoErp, usaCadastroErpCafeJurere, filterResponsible, filterUf: ufFilter, createdFrom, createdTo }}
+        listFilters={{ searchQuery, filterOrigin, filterQualification, filterClassificacao, usaLeiDoErp, usaCadastroErpCafeJurere, filterResponsible, filterUf: ufFilter, createdFrom, createdTo, donosMultiplos }}
       />
 
       <Dialog open={isImportHistoryOpen} onOpenChange={setIsImportHistoryOpen}>

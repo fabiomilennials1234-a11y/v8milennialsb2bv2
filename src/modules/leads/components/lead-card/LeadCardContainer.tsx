@@ -15,6 +15,8 @@ import type { QualificationTier } from "../lead-detail/modal/types";
 import { useUpdateLead, useToggleLeadAI, useDeleteLead } from "../../hooks/useLeads";
 import { useSaveCustomFieldValue } from "../../hooks/useLeadCustomFields";
 import { useSetLeadDocument } from "../../hooks/useLeadDocument";
+import { useLeadPhones } from "../../hooks/useLeadPhones";
+import { formatPhoneBR } from "@/shared/format/phone";
 import { isValidBrDocument, onlyDigits } from "../../lib/document";
 import {
   useCreateLeadComment,
@@ -205,6 +207,10 @@ export function LeadCardContainer({
     [leadId, removerComentario],
   );
 
+  // Os contatos do lead, para o "Abrir conversa" saber se precisa perguntar.
+  // Mesma chave de `LeadContatos`: uma leitura serve aos dois.
+  const { data: telefones = [], isLoading: telefonesCarregando } = useLeadPhones(leadId, isOpen);
+
   if (!isOpen) return null;
 
   // Na forma `coluna` a caixa de aviso tem de ocupar EXATAMENTE a largura da
@@ -315,6 +321,7 @@ export function LeadCardContainer({
               leadId={leadId}
               preVenda={e.preVenda}
               venda={e.venda}
+              coDonos={e.coDonos}
               preQualificacao={tier(e.preQualificacao)}
               qualificacao={tier(e.qualificacao)}
               atualizadoEm={e.atualizadoEm}
@@ -328,6 +335,32 @@ export function LeadCardContainer({
   const edicao = data.edicao;
   const tierDoCard = (v: string | null | undefined): QualificationTier | null =>
     v ? (v as QualificationTier) : null;
+
+  const conversaDoTelefone = (telefone: string) =>
+    window.location.assign(
+      `/chat-whatsapp?phone=${encodeURIComponent(telefone.replace(/\D/g, ""))}&lead=${encodeURIComponent(data.id)}`,
+    );
+  const telefoneDoNegocio = telefoneDaConversa?.trim();
+  /**
+   * 2+ contatos e ninguém escolheu no negócio: PERGUNTA (Chamado b7941f5e).
+   * Antes caía em `?lead=`, que o chat traduz para o principal — o chute que
+   * `telefoneDoNegocio.ts` proíbe. Negócio que ainda precisa escolher fica de
+   * fora: lá a faixa "Com quem é este negócio" pergunta e GRAVA a resposta.
+   */
+  const conversaPorContato =
+    !conversaPrecisaEscolher && !telefoneDoNegocio && telefones.length >= 2
+      ? {
+          contatos: telefones.map((t) => ({
+            id: t.id,
+            nome: t.label,
+            numero: formatPhoneBR(t.phone),
+            telefone: t.phone,
+            principal: t.isPrimary,
+            whatsApp: t.isWhatsApp,
+          })),
+          abrir: conversaDoTelefone,
+        }
+      : undefined;
 
   return (
     <LeadCard
@@ -344,18 +377,20 @@ export function LeadCardContainer({
             leadId={leadId}
             preVenda={edicao.preVenda}
             venda={edicao.venda}
+            coDonos={edicao.coDonos}
             preQualificacao={tierDoCard(edicao.preQualificacao)}
             qualificacao={tierDoCard(edicao.qualificacao)}
             atualizadoEm={edicao.atualizadoEm}
           />
         ) : undefined
       }
-      onOpenChat={conversaPrecisaEscolher ? undefined : telefoneDaConversa?.trim() ? () => {
+      conversaPorContato={conversaPorContato}
+      onOpenChat={conversaPrecisaEscolher ? undefined : telefoneDoNegocio ? () => {
         // Negócio com telefone escolhido: a conversa é a DESSE contato.
-        window.location.assign(
-          `/chat-whatsapp?phone=${encodeURIComponent(telefoneDaConversa.replace(/\D/g, ""))}&lead=${encodeURIComponent(data.id)}`,
-        );
-      } : data.telefone?.trim() ? () => {
+        conversaDoTelefone(telefoneDoNegocio);
+      } : telefonesCarregando ? undefined : data.telefone?.trim() ? () => {
+        // Um contato só. Enquanto os contatos carregam o botão espera: abrir
+        // antes seria cair no principal sem saber se havia outro.
         // O chat resolve o lead e a caixa acessível pelo deep-link canônico.
         // Navegação de documento reinicia essa resolução mesmo quando a ficha
         // foi aberta dentro do próprio chat, que guarda o link inicial em ref.

@@ -3,6 +3,7 @@ import { cn } from "@/lib/utils";
 import { QualificationSlot } from "../lead-detail/modal/header/QualificationSlot";
 import { QUALIFICATION_TIER_CONFIG } from "../lead-detail/modal/qualification-config";
 import { ResponsibleSlot } from "../lead-detail/modal/header/ResponsibleSlot";
+import { CoOwnersSlot } from "../lead-detail/modal/header/CoOwnersSlot";
 import type { QualificationTier } from "../lead-detail/modal/types";
 
 /**
@@ -54,14 +55,21 @@ function Cartao({
   valor,
   vazio,
   children,
+  className,
 }: {
   rotulo: string;
   valor: string | null;
   vazio: string;
   children: React.ReactNode;
+  className?: string;
 }) {
   return (
-    <div className="flex min-w-0 flex-col gap-2 rounded-[18px] border border-card-border bg-card px-3.5 py-3 shadow-relevo">
+    <div
+      className={cn(
+        "flex min-w-0 flex-col gap-2 rounded-[18px] border border-card-border bg-card px-3.5 py-3 shadow-relevo",
+        className,
+      )}
+    >
       <span className="text-[10.5px] font-bold uppercase tracking-[.08em] text-muted-foreground">
         {rotulo}
       </span>
@@ -95,10 +103,18 @@ export function LeadCardControles({
   atualizadoEm,
   className,
   forma = "faixa",
+  coDonos,
 }: {
   leadId: string;
   preVenda: MembroDoLead | null;
   venda: MembroDoLead | null;
+  /**
+   * Co-donos (`lead_owners.role = 'co'`). `undefined` = a org NÃO usa N donos e
+   * nada aparece; array (mesmo vazio) = usa, e o controle de co-donos é
+   * desenhado — vazio é justamente quando se precisa dele para adicionar o
+   * primeiro. O texto vem daqui; quem edita é o `CoOwnersSlot` (Chamado 793f4b05).
+   */
+  coDonos?: MembroDoLead[];
   preQualificacao: QualificationTier | null;
   qualificacao: QualificationTier | null;
   /**
@@ -139,6 +155,16 @@ export function LeadCardControles({
             expectedUpdatedAt={atualizadoEm}
           />
         </Cartao>
+        {coDonos && (
+          <Cartao
+            rotulo="Co-donos"
+            valor={coDonos.length > 0 ? coDonos.map((m) => m.name).join(", ") : null}
+            vazio="Nenhum co-dono"
+            className="min-[420px]:col-span-2"
+          >
+            <CoOwnersSlot leadId={leadId} />
+          </Cartao>
+        )}
         <Cartao rotulo="Pré-qualificação" valor={tier(preQualificacao)} vazio="Não definida">
           <QualificationSlot
             leadId={leadId}
@@ -177,6 +203,11 @@ export function LeadCardControles({
           expectedUpdatedAt={atualizadoEm}
         />
       </Faixa>
+      {coDonos && (
+        <Faixa rotulo="Co-donos">
+          <CoOwnersSlot leadId={leadId} />
+        </Faixa>
+      )}
 
       <Faixa rotulo="Qualificação">
         <QualificationSlot

@@ -9,6 +9,8 @@ vi.mock("@/modules/pipelines/components/kanban/DraggableKanbanBoard", () => ({
 }));
 vi.mock("@/modules/leads", () => ({ LeadCard: ({ lead }: { lead: LeadCardData }) => <output data-testid="card">{JSON.stringify(lead)}</output>, CardEffectsHost: () => null, useEntradasEmDesfecho: () => new Set() }));
 vi.mock("@/modules/identity", () => ({ useCanDo: () => ({ allowed: true }) }));
+// Pilha de Ganhos/Perdidos (Chamado 172ef046): sem resumo, modo parcial.
+vi.mock("@/modules/pipelines/hooks/model/useFunilDesfechoPorMes", () => ({ useFunilDesfechoPorMes: () => ({ porEtapa: null, isLoading: false, isError: false }) }));
 vi.mock("@/modules/workflows/hooks/useStageWorkflows", () => ({ useCustomPipeWorkflowCounts: () => ({ data: {} }), useCustomPipeStageWorkflows: () => ({ data: [] }) }));
 vi.mock("@/modules/engagement/hooks/useAcoesDoDia", () => ({ useCreateAcaoDoDia: () => ({}) }));
 vi.mock("@/modules/pipelines/components/kanban/ExportStageDialog", () => ({ ExportStageDialog: () => null }));

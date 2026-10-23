@@ -219,6 +219,12 @@ export interface LeadCardData {
   dono: { nome: string; papel: string } | null;
 
   /**
+   * Todos os donos, principal primeiro — só quando há MAIS de um (org com N
+   * donos por lead, Chamado 793f4b05). Ausente: `dono` acima diz tudo.
+   */
+  donos?: { nome: string; papel: string }[];
+
+  /**
    * O que os CONTROLES precisam e o desenho não usa: ids e tiers crus.
    *
    * `dono` acima é um NOME só, colapsado por precedência (venda → pré-venda →
@@ -234,6 +240,12 @@ export interface LeadCardData {
   edicao?: {
     preVenda: { id: string; name: string } | null;
     venda: { id: string; name: string } | null;
+    /**
+     * Co-donos (`lead_owners.role = 'co'`). Ausente = a org não usa N donos e a
+     * ficha não desenha o controle; array (mesmo vazio) = usa, e a ficha deixa
+     * adicionar co-donos.
+     */
+    coDonos?: { id: string; name: string }[];
     preQualificacao: string | null;
     qualificacao: string | null;
     atualizadoEm: string | null;
@@ -247,4 +259,22 @@ export interface LeadCardData {
   nota: string;
   campos: LeadCardFieldGroup[];
   historico: LeadCardEvent[];
+}
+
+/**
+ * Um contato oferecido pelo "Abrir conversa" quando o lead tem 2+ telefones e
+ * ninguém escolheu com qual se fala (Chamado b7941f5e). Chega pronto de quem
+ * tem banco: o card não formata nem consulta.
+ */
+export interface ContatoDaConversa {
+  id: string;
+  /** Nome do contato; `null` quando ninguém o nomeou. */
+  nome: string | null;
+  /** Número para leitura, já formatado. */
+  numero: string;
+  /** O telefone que vai para o chat. */
+  telefone: string;
+  principal: boolean;
+  /** `false` = sabidamente sem WhatsApp. `null` = não se sabe. */
+  whatsApp: boolean | null;
 }

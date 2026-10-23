@@ -92,6 +92,49 @@ describe("agruparConversasDoLead", () => {
     expect(semConversa.map((r) => r.instanceName)).toEqual(["Alfa", "Zebra"]);
   });
 
+  // Chamados 52df972e / b7941f5e: admin e master enxergam TODAS as caixas e,
+  // sem preferência salva, a lista caía em ordem alfabética — a caixa de outra
+  // vendedora aparecia no topo e era aberta no lugar da do próprio usuário.
+  describe("caixa de quem atende vem antes das outras", () => {
+    const rows = [
+      caixa({ instanceId: "carolini", instanceName: "Envase Carolini" }),
+      caixa({ instanceId: "fernanda", instanceName: "FERNANDA-TELEVENDAS" }),
+      caixa({ instanceId: "isabelle", instanceName: "ISABELLE-TELEVENDAS" }),
+    ];
+
+    it("caixa vinculada ao usuário sobe acima da ordem alfabética", () => {
+      const { semConversa } = agruparConversasDoLead({ rows, minhasInstanceIds: ["fernanda"] });
+      expect(semConversa.map((r) => r.instanceId)).toEqual(["fernanda", "carolini", "isabelle"]);
+    });
+
+    it("caixa do responsável do lead vem depois das minhas e antes das demais", () => {
+      const { semConversa } = agruparConversasDoLead({
+        rows,
+        minhasInstanceIds: ["fernanda"],
+        doResponsavelInstanceIds: ["isabelle"],
+      });
+      expect(semConversa.map((r) => r.instanceId)).toEqual(["fernanda", "isabelle", "carolini"]);
+    });
+
+    it("master sem caixa própria: a do responsável do lead lidera", () => {
+      const { semConversa } = agruparConversasDoLead({
+        rows,
+        minhasInstanceIds: [],
+        doResponsavelInstanceIds: ["isabelle"],
+      });
+      expect(semConversa[0].instanceId).toBe("isabelle");
+    });
+
+    it("preferência salva continua vencendo a caixa vinculada", () => {
+      const { semConversa } = agruparConversasDoLead({
+        rows,
+        preferredInstanceId: "isabelle",
+        minhasInstanceIds: ["fernanda"],
+      });
+      expect(semConversa.map((r) => r.instanceId)).toEqual(["isabelle", "fernanda", "carolini"]);
+    });
+  });
+
   it("lista vazia devolve os dois grupos vazios, sem estourar", () => {
     expect(agruparConversasDoLead({ rows: [] })).toEqual({
       comConversa: [],

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { forwardRef, useEffect, useState } from "react";
 import { Bot, CalendarPlus, Mail, MessageCircle, Trash2, type LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { LeadCardMetrics } from "./LeadCardMetrics";
@@ -6,7 +6,8 @@ import { LeadCardDeals } from "./LeadCardDeals";
 import { LeadCardNotes } from "./LeadCardNotes";
 import { LeadCardFields } from "./LeadCardFields";
 import { LeadCardHistory } from "./LeadCardHistory";
-import type { LeadCardData } from "./types";
+import { AbrirConversaPorContato } from "./AbrirConversaPorContato";
+import type { ContatoDaConversa, LeadCardData } from "./types";
 
 /**
  * O Card do Lead — a gaveta da pessoa no formato do mockup V5.
@@ -90,6 +91,33 @@ function AcaoRapida({
     </button>
   );
 }
+
+/**
+ * O "Abrir conversa" em tinta. Repassa ref e props porque, com 2+ contatos, ele
+ * é o gatilho do popover (`AbrirConversaPorContato`, `asChild`).
+ */
+const BotaoAbrirConversa = forwardRef<HTMLButtonElement, React.ButtonHTMLAttributes<HTMLButtonElement>>(
+  function BotaoAbrirConversa({ className, ...props }, ref) {
+    return (
+      <button
+        ref={ref}
+        type="button"
+        {...props}
+        className={cn(
+          "inline-flex h-10 min-w-0 flex-1 items-center justify-center gap-2 rounded-full bg-tinta px-4 text-[13px] font-bold text-tinta-foreground",
+          "transition-[background-color,transform] hover:bg-tinta-3 active:scale-[.98]",
+          "dark:bg-foreground dark:text-background dark:hover:bg-foreground/90",
+          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
+          "disabled:pointer-events-none disabled:opacity-40",
+          className,
+        )}
+      >
+        <MessageCircle className="size-4" aria-hidden="true" />
+        Abrir conversa
+      </button>
+    );
+  },
+);
 
 /**
  * O alternador segmentado do mockup (`T.seg`) — em BOTÕES, não em `Tabs`.
@@ -207,6 +235,7 @@ export function LeadCard({
   editorDeEtiquetas,
   acaoLigar,
   onOpenChat,
+  conversaPorContato,
   controles,
   modo = "ficha",
   abaInicial,
@@ -261,6 +290,12 @@ export function LeadCard({
    */
   acaoLigar?: React.ReactNode;
   onOpenChat?: () => void;
+  /**
+   * Lead com 2+ contatos e nenhum escolhido no negócio (Chamado b7941f5e): o
+   * "Abrir conversa" pergunta com qual contato, em vez de cair no principal.
+   * Com a prop, `onOpenChat` não é usado.
+   */
+  conversaPorContato?: { contatos: ReadonlyArray<ContatoDaConversa>; abrir: (telefone: string) => void };
   /**
    * Responsáveis e qualificação QUE ESCREVEM (`LeadCardControles` em grade),
    * montados por quem tem banco — mesmo escape de `editorDeEtiquetas`. Sem a
@@ -377,21 +412,13 @@ export function LeadCard({
         </div>
 
         <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={onOpenChat}
-            disabled={!onOpenChat || !lead.telefone?.trim()}
-            className={cn(
-              "inline-flex h-10 min-w-0 flex-1 items-center justify-center gap-2 rounded-full bg-tinta px-4 text-[13px] font-bold text-tinta-foreground",
-              "transition-[background-color,transform] hover:bg-tinta-3 active:scale-[.98]",
-              "dark:bg-foreground dark:text-background dark:hover:bg-foreground/90",
-              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
-              "disabled:pointer-events-none disabled:opacity-40",
-            )}
-          >
-            <MessageCircle className="size-4" aria-hidden="true" />
-            Abrir conversa
-          </button>
+          {conversaPorContato ? (
+            <AbrirConversaPorContato contatos={conversaPorContato.contatos} abrir={conversaPorContato.abrir}>
+              <BotaoAbrirConversa />
+            </AbrirConversaPorContato>
+          ) : (
+            <BotaoAbrirConversa onClick={onOpenChat} disabled={!onOpenChat || !lead.telefone?.trim()} />
+          )}
           {acaoLigar}
           {/* Os dois abaixo vieram do card antigo sem ação ligada (HERDADO).
               Ficam só na ficha — o painel do Negócio não ganha botão morto. */}
@@ -414,8 +441,11 @@ export function LeadCard({
             {controles ?? (
               <div className={CARTAO}>
                 <span className={ROTULO}>Responsável</span>
-                <p className={cn("mt-1.5 truncate text-[13.5px]", lead.dono ? "font-bold" : "text-muted-foreground")}>
-                  {lead.dono ? lead.dono.nome : "Sem dono"}
+                <p
+                  className={cn("mt-1.5 truncate text-[13.5px]", lead.dono ? "font-bold" : "text-muted-foreground")}
+                  title={lead.donos ? lead.donos.map((d) => `${d.nome} (${d.papel})`).join(", ") : undefined}
+                >
+                  {lead.donos ? lead.donos.map((d) => d.nome).join(", ") : lead.dono ? lead.dono.nome : "Sem dono"}
                 </p>
               </div>
             )}

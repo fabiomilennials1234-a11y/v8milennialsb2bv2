@@ -88,6 +88,38 @@ Canonical terms used across the system. No implementation details here — this 
 
 - **Order**: A purchase record linked to a Carteira client. Has items, approval workflow, and ERP sync capability.
 
+## Cobrança (Collections)
+
+A separate sector of the Organization, with its own people, records and numbers (ADR-0040). Behind the `cobranca` flag on `organizations.feature_flags`.
+
+- **Inadimplente (Debtor)**: A person or company that owes the Organization money past due. **Not a Lead and never linked to one** — collections and sales are separate sectors, and the same company can be a sales Lead and an Inadimplente at the same time without either knowing. Identified by CPF/CNPJ when there is one, otherwise by phone. Enters by ERP sync, spreadsheet import or manual registration (its **origem**). Can be marked **Não contatar** (asked not to receive messages): the Régua skips it, a person can still call.
+
+- **Título (Receivable)**: One amount owed with a due date. Its **saldo** is the value minus what was paid on it. From the ERP the value is the ERP's; from a spreadsheet or by hand it is the value informed — the Torque never computes interest or fines. Status: `aberto`, `pago`, `cancelado` (contested and upheld, or entered by mistake) or `baixado` (written off when the Caso is lost).
+
+- **Caso de Cobrança (Collection Case)**: The card on the Fluxo de Cobrança — **one per Inadimplente while open**, aggregating all of its open Títulos. Opens when the Inadimplente first has saldo; closes in a **Desfecho**. A new debt after a closed Caso opens a new one. Distinct from a **Negócio**: a Negócio is a sale moving toward won/lost, a Caso is a debt moving toward recovered.
+
+- **Etapa de Cobrança**: A column of the Fluxo de Cobrança. Seeded: Vencido → 1, 3, 7, 15 and 30 dias de atraso → Em negociação → Promessa ou acordo → Jurídico, plus the three Desfecho columns. Its `papel` (`aberta`, `recuperado`, `perdido`, `cancelado`) carries the behaviour, never its name. An open Etapa can carry automation: **entrada por dias** (the Caso enters by itself at N days past due — a **Coluna de dias**) and a **mensagem** sent when a Caso enters. Not a Pipeline Stage and not in any Pipeline.
+
+- **Desfecho (Outcome)**: How a Caso ends. **Recuperado** — saldo reached zero (by ERP reconciliation or **Registrar pagamento**), in any Etapa. **Perdido** — written off; the open Títulos become `baixado`. **Cancelado** — contested and upheld, or registered by mistake; the open Títulos become `cancelado`.
+
+- **Compromisso (Commitment)**: What the debtor agreed to pay and when, registered by a person. A **Promessa** has one date; an **Acordo** has installments. One active per Caso — a new one replaces it (renegotiation). Ends `cumprido`, `quebrado` or `cancelado`. The Torque has no approval limit (alçada): it records the commitment a person negotiated, it does not negotiate.
+
+- **Registrar pagamento**: The manual payment entry for debts that did not come from the ERP. Allocated oldest-due-first across the Caso's open Títulos (FIFO). ERP Títulos are settled only by the ERP.
+
+- **Régua (Dunning Cadence)**: The automatic sequence of notices by days past due, expressed as the **Colunas de dias** of the Fluxo (default D+1, D+3, D+7, D+15, D+30; Jurídico at D+60 without a message), only in the Organization's business hours, from the **Número da cobrança**, paused in Etapas that pause it, while there is an active Compromisso, for a few days after the debtor replies, and for Inadimplentes marked Não contatar. Born **off**; a person turns it on after seeing the preview. Distinct from a **Workflow** (whose subject is always a Lead) and from a **Copilot Follow-up**.
+
+- **Coluna de dias (Days-Past-Due Column)**: An open Etapa with `entrada_dias` = N. When the oldest open due date is N days past, the Régua moves the Caso into it (only forward, **once per debt** — if the team moves the card back, the Régua does not push it into the same column again) and sends the column message. A Caso that enters late lands directly in the column of the day it is at, never receives the whole cadence. Its **entrada automática** can be switched off.
+
+- **Mover e enviar (Move and Send)**: Dropping a card into a column that has a message asks first, with the exact message the debtor will read: **Mover e enviar** queues it in the Régua (business hours, daily cap, Não contatar and no-WhatsApp still apply; at most one per column per day), **Só mover** sends nothing.
+
+- **Passo da Régua (Cadence Step)**: Since the Colunas de dias, only the **lembrete** (D-N before a Promessa date or Acordo installment). Days-past-due steps became columns.
+
+- **Envio da Régua (Cadence Send)**: One message the Régua sends — at most once per Caso, column (or lembrete) and anchor date; by Mover e enviar, at most once per Caso, column and day. Ends `enviado`, `falhou`, `pulado` (skipped with a reason) or `cancelado`. An interrupted send is recorded as uncertain and **never re-sent**: in collections, missing a message is better than sending it twice.
+
+- **Número da cobrança (Collections Number)**: The WhatsApp number reserved for collections (`whatsapp_instances.reserved_for`, ADR-0041). Replies there never become Leads nor wake the Copilot; sales automation never goes out through it; it has no sales owner and no Copilot. In the chat its conversations carry the "Cobrança" badge.
+
+- **Compromisso quebrado (Broken Commitment)**: An Acordo or Promessa whose due installments (one day of tolerance) exceed what was paid since it was made. The Régua marks it broken and returns the Caso to the Coluna de dias of its current delay (or to the configured Etapa), with that column message if it was not sent yet for this debt.
+
 ## Team & Organization
 
 - **Organization (Org)**: A tenant. All data is scoped by `organization_id`. Represents a customer company using Torque CRM.

@@ -82,6 +82,8 @@ export function ContextPanel({
   const [activeTab, setActiveTab] = useState<ContextPanelTab>("info");
   const { data: leadByPhone, isLoading: loadingByPhone } = useLeadByPhone(
     phoneNumber ?? null,
+    // Número em 2+ leads: a conversa já sabe de qual lead é (deep link / contato).
+    { preferredLeadId: leadId ?? null },
   );
   // Duas resoluções, jamais simultâneas: com telefone o caminho é o de sempre
   // (WhatsApp), e o hook por id fica DESABILITADO — nenhuma query a mais no

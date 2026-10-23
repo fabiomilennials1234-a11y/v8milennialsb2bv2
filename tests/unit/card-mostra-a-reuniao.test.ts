@@ -89,6 +89,8 @@ vi.mock("@/modules/workflows/hooks/useStageWorkflows", () => ({
   useCustomPipeWorkflowCounts: () => ({ data: {} }),
 }));
 vi.mock("@/modules/identity", () => ({ useCanDo: () => ({ allowed: true }) }));
+// Pilha de Ganhos/Perdidos (Chamado 172ef046): sem resumo, modo parcial.
+vi.mock("@/modules/pipelines/hooks/model/useFunilDesfechoPorMes", () => ({ useFunilDesfechoPorMes: () => ({ porEtapa: null, isLoading: false, isError: false }) }));
 vi.mock("@/shared/hooks/useBulkSelection", () => ({
   useBulkSelection: () => ({
     // `selectedIds` é o que o board lê desde 5e7cb4350 (mover selecionados);

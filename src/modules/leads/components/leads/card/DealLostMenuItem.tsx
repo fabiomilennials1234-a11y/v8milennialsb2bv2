@@ -54,7 +54,7 @@ export function DealLostMenuItem({ entryId }: { entryId: string }) {
       if (next === "lost") dispararEfeitoDeDesfecho(entryId, "lost");
       else cancelarEfeitoDeDesfecho(entryId);
       await Promise.all([
-        "leads-deals", "deal-card-extras", "funil-desfecho-counts",
+        "leads-deals", "deal-card-extras", "funil-desfecho-counts", "pipeline-desfecho-por-mes",
         "pipeline-page", "pipeline-stage-counts", "pipeline_entries",
         "custom_pipe_entries", "custom_pipe_stage_counts", "leads-sales-metrics",
       ].map((key) => queryClient.invalidateQueries({ queryKey: [key] })));

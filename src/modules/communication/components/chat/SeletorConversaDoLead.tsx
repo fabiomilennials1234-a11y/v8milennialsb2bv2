@@ -36,6 +36,9 @@ export interface SeletorConversaDoLeadProps {
   instanceIdsComEscrita: ReadonlyArray<string>;
   /** Preferência de caixa do usuário logado. */
   preferredInstanceId?: string | null;
+  /** Caixas vinculadas ao usuário / ao responsável do lead — ordenam "Iniciar conversa por". */
+  minhasInstanceIds?: ReadonlyArray<string>;
+  doResponsavelInstanceIds?: ReadonlyArray<string>;
   onEscolher: (instanceId: string) => void;
 }
 
@@ -72,12 +75,14 @@ export function SeletorConversaDoLead({
   caixas,
   instanceIdsComEscrita,
   preferredInstanceId = null,
+  minhasInstanceIds,
+  doResponsavelInstanceIds,
   onEscolher,
 }: SeletorConversaDoLeadProps) {
   const escrita = useMemo(() => new Set(instanceIdsComEscrita), [instanceIdsComEscrita]);
   const { comConversa, semConversa } = useMemo(
-    () => agruparConversasDoLead({ rows: caixas, preferredInstanceId }),
-    [caixas, preferredInstanceId],
+    () => agruparConversasDoLead({ rows: caixas, preferredInstanceId, minhasInstanceIds, doResponsavelInstanceIds }),
+    [caixas, preferredInstanceId, minhasInstanceIds, doResponsavelInstanceIds],
   );
 
   return (

@@ -4,6 +4,7 @@ import {
   monthLabelOf,
   partitionClosedOutcomes,
   type ClosedGroupingAccessors,
+  type ClosedMonthSummary,
 } from "./closed-outcome-groups";
 
 interface Card {
@@ -118,6 +119,103 @@ describe("partitionClosedOutcomes", () => {
       { outcomeOf: accessors.outcomeOf, closedAtOf: accessors.closedAtOf },
     );
     expect(closed[0].total).toBeNull();
+  });
+});
+
+/**
+ * Chamado 172ef046 — a pilha contava só os 20 cards carregados. O cenário é o
+ * da Café Jurerê (Envase, coluna Vendido, 20/10/2026): a 1ª página trouxe 1
+ * ganho de agosto, 8 de setembro e 11 de outubro; a etapa tem 10, 69 e 25.
+ */
+describe("partitionClosedOutcomes — com o resumo do servidor", () => {
+  const loadedWon = (): Card[] => [
+    { id: "ago-0", outcome: "won", closedAt: local(2026, 8, 20), value: 1000 },
+    ...Array.from({ length: 8 }, (_, i) => ({
+      id: `set-${i}`,
+      outcome: "won" as const,
+      closedAt: local(2026, 9, 2 + i),
+      value: 500,
+    })),
+    ...Array.from({ length: 11 }, (_, i) => ({
+      id: `out-${i}`,
+      outcome: "won" as const,
+      closedAt: local(2026, 10, 1 + i),
+      value: 100,
+    })),
+  ];
+
+  const resumoWon: ClosedMonthSummary[] = [
+    { outcome: "won", monthKey: "2026-08", count: 10, total: 25123.48 },
+    { outcome: "won", monthKey: "2026-09", count: 69, total: 411501.3 },
+    { outcome: "won", monthKey: "2026-10", count: 25, total: 91084.14 },
+  ];
+
+  it("K1 — contagem e valor do grupo e do mês vêm da etapa inteira, não dos 20 carregados", () => {
+    const cards = loadedWon();
+    expect(cards).toHaveLength(20);
+
+    const { closed } = partitionClosedOutcomes(cards, accessors, resumoWon);
+    const won = closed[0];
+
+    expect(won.outcome).toBe("won");
+    expect(won.exact).toBe(true);
+    expect(won.count).toBe(104);
+    expect(won.total).toBeCloseTo(527708.92, 2);
+    // Os cards continuam sendo só os carregados: o resumo não inventa card.
+    expect(won.items).toHaveLength(20);
+
+    const setembro = won.months.find((m) => m.key === "2026-09");
+    expect(setembro?.count).toBe(69);
+    expect(setembro?.total).toBeCloseTo(411501.3, 2);
+    expect(setembro?.items).toHaveLength(8);
+    expect(won.months.map((m) => m.key)).toEqual(["2026-10", "2026-09", "2026-08"]);
+  });
+
+  it("mês que só o servidor conhece aparece com a contagem e sem card", () => {
+    const { closed } = partitionClosedOutcomes(
+      [{ id: "out", outcome: "won", closedAt: local(2026, 10, 3), value: 10 }],
+      accessors,
+      [
+        { outcome: "won", monthKey: "2026-10", count: 1, total: 10 },
+        { outcome: "won", monthKey: "2026-07", count: 3, total: 900 },
+      ],
+    );
+    const julho = closed[0].months.find((m) => m.key === "2026-07");
+    expect(julho).toMatchObject({ count: 3, total: 900, items: [], label: "Julho de 2026" });
+    expect(closed[0].count).toBe(4);
+  });
+
+  it("grupo que só o servidor conhece aparece mesmo sem card carregado", () => {
+    const { open, closed } = partitionClosedOutcomes(
+      [{ id: "aberto" }],
+      accessors,
+      [{ outcome: "lost", monthKey: "2026-09", count: 34, total: 38498 }],
+    );
+    expect(open.map((c) => c.id)).toEqual(["aberto"]);
+    expect(closed.map((g) => [g.outcome, g.count, g.items.length])).toEqual([["lost", 34, 0]]);
+  });
+
+  it("card carregado num mês que o resumo ainda não tem (resumo velho) não some", () => {
+    const { closed } = partitionClosedOutcomes(
+      [
+        { id: "a", outcome: "won", closedAt: local(2026, 10, 3), value: 10 },
+        { id: "b", outcome: "won", closedAt: local(2026, 10, 4), value: 20 },
+      ],
+      accessors,
+      [{ outcome: "won", monthKey: "2026-10", count: 1, total: 10 }],
+    );
+    // O carregado é prova de que o mês tem pelo menos 2: vale o maior.
+    expect(closed[0].months[0]).toMatchObject({ key: "2026-10", count: 2, total: 30 });
+    expect(closed[0].count).toBe(2);
+  });
+
+  it("sem resumo o comportamento é o de antes: conta e soma o carregado, sem ser exato", () => {
+    const { closed } = partitionClosedOutcomes(loadedWon(), accessors);
+    const won = closed[0];
+    expect(won.exact).toBe(false);
+    expect(won.count).toBe(20);
+    expect(won.months.find((m) => m.key === "2026-09")?.count).toBe(8);
+    expect(won.months.find((m) => m.key === "2026-09")?.total).toBe(4000);
   });
 });
 
