@@ -301,7 +301,7 @@ describe("bulkCreateClients", () => {
       source: "toth",
       clients: [],
     });
-    expect(r).toEqual({ created: 0, failed: 0, errors: [], leadPhones: [] });
+    expect(r).toEqual({ created: 0, adopted: 0, failed: 0, errors: [], leadPhones: [] });
     expect(calls).toHaveLength(0);
   });
 });

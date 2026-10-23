@@ -24,12 +24,18 @@ import {
   leadEnrichmentColumns,
 } from "./client-enrichment.ts";
 import type { LeadPhonesSyncItem } from "./lead-phones-sync.ts";
+import type { AdoptableLead } from "./adopt-existing-leads.ts";
 
 /** Linhas por statement. */
 export const DEFAULT_BATCH_SIZE = 500;
 
 export interface BulkCreateResult {
   created: number;
+  /**
+   * Clientes que entraram na carteira pelo lead que JÁ existia (planilha,
+   * cadastro manual) em vez de gerar um lead novo. Já contados em `created`.
+   */
+  adopted: number;
   failed: number;
   errors: string[];
   /**
@@ -110,6 +116,27 @@ export function buildClientRows(
   };
 }
 
+/**
+ * O que o ERP escreve no lead adotado. Só completa vazio — o lead foi curado por
+ * gente. `erp_code` é identidade e sempre entra (é o que marca o lead como
+ * adotado e o tira da fila de candidatos). Telefone, nome e e-mail não mudam.
+ */
+export function adoptedLeadPatch(
+  client: CanonicalClient,
+  lead: AdoptableLead,
+  source: string,
+): Record<string, unknown> {
+  const cols = leadEnrichmentColumns(client, source);
+  const patch: Record<string, unknown> = {};
+  if (cols.erp_code !== undefined) patch.erp_code = cols.erp_code;
+  if (cols.segment !== undefined && !lead.hasSegment) patch.segment = cols.segment;
+  if (cols.uf !== undefined && !lead.hasUf) {
+    patch.uf = cols.uf;
+    patch.uf_source = cols.uf_source;
+  }
+  return patch;
+}
+
 export function chunk<T>(items: T[], size: number): T[][] {
   const step = size > 0 ? size : items.length || 1;
   const out: T[][] = [];
@@ -139,15 +166,58 @@ export async function bulkCreateClients(
      * dono. Só código explicitamente mapeado ganha `responsible_id`.
      */
     ownerMap?: OwnerMap;
+    /**
+     * Lead existente a adotar, por `externalId` do cliente (ver
+     * `findAdoptableLeads`). Cliente listado aqui NÃO cria lead: a carteira
+     * aponta para o lead que já está lá, e o lead só recebe o que estava vazio.
+     */
+    adopt?: Map<string, AdoptableLead>;
   },
 ): Promise<BulkCreateResult> {
   const { organizationId, source, clients } = params;
   const newId = params.newId ?? (() => crypto.randomUUID());
   const usedPhones = params.usedPhones ?? new Set<string>();
   const normalize = params.normalizePhone ?? ((p) => p);
-  const result: BulkCreateResult = { created: 0, failed: 0, errors: [], leadPhones: [] };
+  const adopt = params.adopt ?? new Map<string, AdoptableLead>();
+  const result: BulkCreateResult = { created: 0, adopted: 0, failed: 0, errors: [], leadPhones: [] };
 
-  const insertBatch = async (batch: CanonicalClient[]): Promise<void> => {
+  /**
+   * Adoção: só o cliente da carteira é inserido, apontando para o lead que já
+   * existe. O lead é atualizado DEPOIS, e só se a carteira entrou — falha na
+   * inserção não deixa lead alterado para trás.
+   */
+  const adoptBatch = async (batch: CanonicalClient[]): Promise<void> => {
+    const carteira = batch.map((c) => {
+      const { carteira: row } = buildClientRows(
+        organizationId, source, c, adopt.get(c.externalId)!.id, true, params.ownerMap,
+      );
+      return row;
+    });
+    const { error } = await admin.from("upsell_clients").insert(carteira);
+    if (error) return fail(batch, `upsell_clients (adoção): ${error.message}`);
+
+    result.created += batch.length;
+    result.adopted += batch.length;
+    for (const c of batch) {
+      const lead = adopt.get(c.externalId)!;
+      const patch = adoptedLeadPatch(c, lead, source);
+      const { error: leadErr } = await admin.from("leads").update(patch).eq("id", lead.id);
+      // Cliente já está ligado ao lead; o enriquecimento do lead é complemento e
+      // a próxima volta não o refaz (o lead agora tem `erp_code`). Registra e
+      // segue, em vez de desfazer uma adoção correta.
+      if (leadErr && result.errors.length < 3) {
+        result.errors.push(`leads (adoção) ${lead.id}: ${leadErr.message}`);
+      }
+      const phones = c.phones ?? [];
+      if (phones.length > 0) result.leadPhones.push({ leadId: lead.id, phones });
+    }
+  };
+
+  const insertBatch = async (all: CanonicalClient[]): Promise<void> => {
+    const toAdopt = all.filter((c) => adopt.has(c.externalId));
+    const batch = all.filter((c) => !adopt.has(c.externalId));
+    if (toAdopt.length > 0) await adoptBatch(toAdopt);
+    if (batch.length === 0) return;
     const rows = batch.map((c) => {
       const norm = c.phone ? normalize(c.phone) : null;
       const available = !norm || !usedPhones.has(norm);
