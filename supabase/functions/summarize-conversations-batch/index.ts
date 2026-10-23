@@ -39,7 +39,11 @@ Deno.serve(withErrorBoundary("summarize-conversations-batch", async (req) => {
   const result = await processSummaryBatch({
     claim: async (limit): Promise<SummaryJob[]> => {
       const { data, error } = await db.rpc("claim_conversation_summary_jobs", { p_limit: limit });
-      if (error) throw new Error("Falha ao reservar conversas para resumo");
+      if (error) {
+        // Sem o código/mensagem do Postgres o Sentry só mostra "falha", e o 42702
+        // (coluna ambígua) ficou 139 vezes sem causa visível.
+        throw new Error(`Falha ao reservar conversas para resumo: ${error.code ?? "?"} ${error.message}`);
+      }
       return ((data ?? []) as ClaimedRow[]).map((row) => ({
         id: row.id,
         leadId: row.lead_id,

@@ -39,7 +39,7 @@ export function useStageRoleSuggestions() {
         supabase
           .from("pipeline_stages")
           .select(
-            "id, organization_id, pipeline_type, stage_key, name, color, stage_role, suggested_stage_role, stage_role_suggested_at, stage_role_suggestion_source, organization:organizations(name), pipeline:pipelines(name, slug, type)",
+            "id, organization_id, pipeline_type, stage_key, name, color, stage_role, suggested_stage_role, stage_role_suggested_at, stage_role_suggestion_source, organization:organizations(name), pipeline:pipelines!pipeline_stages_pipeline_id_fkey(name, slug, type)",
           )
           .in("suggested_stage_role", ["won", "lost"])
           .eq("is_active", true)
