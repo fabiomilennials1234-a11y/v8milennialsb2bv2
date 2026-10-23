@@ -88,3 +88,33 @@ export function entryIdDoContexto(
   const v = raw.trim();
   return v && v !== "null" ? v : null;
 }
+
+/** Resolve um sujeito para encerramento sem escolher entre compras distintas.
+ * A etapa não define o desfecho: cards em etapa aberta podem ter deals perdidos.
+ * O limite é conservador; uma resposta truncada nunca prova unicidade.
+ */
+export async function uniqueOpenWorkflowEntry(
+  supabase: SupabaseClient,
+  organizationId: string,
+  leadId: string,
+): Promise<{ id: string; deal_id: string | null } | null> {
+  const { data, error } = await supabase.from("negocio_projetado")
+    .select("id, deal_id, stage_role")
+    .eq("organization_id", organizationId).eq("lead_id", leadId)
+    .is("closed_at", null).limit(50);
+  if (error) throw error;
+  if (!data?.length || data.length >= 50) return null;
+  const candidates = data.filter((row) => row.stage_role !== "won" && row.stage_role !== "lost");
+  const dealIds = candidates.flatMap((row) => row.deal_id ? [row.deal_id as string] : []);
+  const openDeals = new Set<string>();
+  if (dealIds.length) {
+    const { data: deals, error: dealError } = await supabase.from("deals")
+      .select("id").eq("organization_id", organizationId)
+      .in("id", dealIds).eq("source_lead_id", leadId)
+      .eq("outcome", "open").is("deleted_at", null);
+    if (dealError) throw dealError;
+    for (const deal of deals ?? []) openDeals.add(deal.id);
+  }
+  const open = candidates.filter((row) => !row.deal_id || openDeals.has(row.deal_id));
+  return open.length === 1 ? { id: open[0].id, deal_id: open[0].deal_id ?? null } : null;
+}

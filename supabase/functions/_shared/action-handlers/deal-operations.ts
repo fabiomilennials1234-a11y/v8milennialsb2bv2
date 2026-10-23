@@ -224,6 +224,7 @@ async function encerrarNegocio(input: ActionInput, papel: "won" | "lost"): Promi
     .select("id, outcome, organization_id")
     .eq("id", dealId)
     .eq("organization_id", organizationId)
+    .is("deleted_at", null)
     .maybeSingle();
 
   if (leituraErr) return { success: false, error: leituraErr.message, retryable: true };
@@ -239,6 +240,12 @@ async function encerrarNegocio(input: ActionInput, papel: "won" | "lost"): Promi
     };
   }
 
+  // Um sujeito inferido só autoriza encerrar o que ainda está aberto. Se um
+  // vendedor decidiu outro desfecho nesse intervalo, não desfazer sua decisão.
+  if (input.executionContext?._closing_subject_inferred === true && atual.outcome !== "open") {
+    return { success: false, error: "O negócio foi encerrado por outro caminho", retryable: false };
+  }
+
   const patch: Record<string, unknown> = {
     outcome: papel,
     outcome_source: "workflow",
@@ -248,17 +255,23 @@ async function encerrarNegocio(input: ActionInput, papel: "won" | "lost"): Promi
     patch.loss_reason = params.lossReason.trim();
   }
 
-  const { error: upErr } = await supabase
+  const { data: updated, error: upErr } = await supabase
     .from("deals")
     .update(patch)
     .eq("id", dealId)
     .eq("organization_id", organizationId)
+    .is("deleted_at", null)
     // Trava de concorrência: se outro caminho decidiu o desfecho entre a leitura
     // e esta escrita, o UPDATE não pega linha nenhuma e nada é gravado no
     // caderno. Sem isso, dois workflows no mesmo negócio emitem duas vendas.
-    .eq("outcome", atual.outcome);
+    .eq("outcome", atual.outcome)
+    .select("id")
+    .maybeSingle();
 
   if (upErr) return { success: false, error: upErr.message, retryable: true };
+  if (!updated) {
+    return { success: false, error: "O negócio mudou durante o encerramento; revise seu desfecho", retryable: false };
+  }
 
   return {
     success: true,
