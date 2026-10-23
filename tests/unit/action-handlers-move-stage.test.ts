@@ -378,6 +378,7 @@ function createCustomPipeDb(opts: {
 
   function from(table: string) {
     const filters: Array<[string, unknown]> = [];
+    let readLimit = Infinity;
     let mode: "select" | "insert" | "update" = "select";
     let payload: Record<string, unknown> | null = null;
 
@@ -447,7 +448,7 @@ function createCustomPipeDb(opts: {
           descNullsLast(a.created_at, b.created_at) ||
           descNullsLast(a.id, b.id),
       );
-      return rows.map((r) => ({
+      return rows.slice(0, readLimit).map((r) => ({
         id: r.id,
         pipeline_id: r.pipeline_id,
         stage_role: roleOf(r.stage_id)?.stage_role ?? "open",
@@ -477,7 +478,8 @@ function createCustomPipeDb(opts: {
     };
 
     const chain: Record<string, unknown> = {};
-    for (const m of ["select", "order", "limit"]) chain[m] = () => chain;
+    for (const m of ["select", "order"]) chain[m] = () => chain;
+    chain.limit = (count: number) => { readLimit = count; return chain; };
     chain.eq = (col: string, val: unknown) => {
       filters.push([col, val]);
       return chain;
@@ -891,6 +893,26 @@ describe("moveStage — funil custom MOVE em vez de copiar (chamado 52b4f4ca)", 
     // Nenhum dos dois saiu do lugar.
     expect(db.entries.find((e) => e.id === "entry-origem")!.pipeline_id).toBe(ORIGEM);
     expect(db.entries.find((e) => e.id === "entry-terceiro")!.pipeline_id).toBe(terceiro);
+  });
+
+  it("K2 — leitura limitada não prova que o único card aberto retornado é o único do lead", async () => {
+    const db = createCustomPipeDb({
+      stages: STAGES_2F,
+      entries: [
+        { ...cardNaOrigem(), stage_changed_at: "2026-11-01T00:00:00Z" },
+        ...Array.from({ length: 49 }, (_, i) => ({
+          ...cardNaOrigem(`won-${i}`, "st-origem-won"), stage_changed_at: "2026-10-01T00:00:00Z",
+        })),
+        { ...cardNaOrigem("open-fora-do-limite"), stage_changed_at: "2026-01-01T00:00:00Z" },
+      ],
+    });
+
+    const result = await move(db.sb, "st-open-1");
+
+    expect(result.success).toBe(true);
+    expect(db.entries.find(e => e.id === "entry-origem")!.pipeline_id).toBe(ORIGEM);
+    expect(db.entries.find(e => e.id === "open-fora-do-limite")!.pipeline_id).toBe(ORIGEM);
+    expect(db.inserted).toHaveLength(1);
   });
 
   it("K2 — sem entryId, card GANHO em outro funil não é movido (decisão G, sale_reversed)", async () => {

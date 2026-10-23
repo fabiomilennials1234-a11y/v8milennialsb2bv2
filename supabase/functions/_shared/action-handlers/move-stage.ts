@@ -289,6 +289,9 @@ async function acharNegocioAbertoUnicoForaDoDestino(
   if (error) throw error;
 
   const rows = (data ?? []) as Array<{ id: string; pipeline_id: string; stage_role: string | null }>;
+  // A resposta pode estar truncada. Sem todos os cards, não dá para provar
+  // unicidade: outro card aberto pode estar além do limite da consulta.
+  if (rows.length >= CUSTOM_PIPE_ENTRY_READ_CAP) return null;
   // `stage_role` nulo conta como aberto — mesma leitura de `readActiveCustomPipeEntry`.
   const abertos = rows.filter((row) => row.stage_role !== "won" && row.stage_role !== "lost");
 
