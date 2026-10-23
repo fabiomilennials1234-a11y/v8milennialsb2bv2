@@ -196,6 +196,13 @@ export function useFeaturePermissions() {
     enabled: !!user?.id && !!organizationId,
     staleTime: 5 * 60 * 1000,
     retry: 1,
+    // Falhou, fica falhado até alguém pedir de novo (refetch / "tentar de
+    // novo"). Com o padrão `true`, cada componente montado depois do erro
+    // refazia a busca e devolvia `isLoading` ao gate do ProtectedRoute, que
+    // desmontava a árvore e remontava — loop a cada ~2s. Incidente Riofix
+    // 2026-10-02: CORS do `www` barrava a resposta e o login nunca saía do
+    // loader. Ver tests/unit/feature-permissions-falha-sem-loop.test.tsx.
+    retryOnMount: false,
   });
 }
 
