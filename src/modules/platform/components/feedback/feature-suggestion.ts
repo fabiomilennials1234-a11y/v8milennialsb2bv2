@@ -4,7 +4,7 @@
  * Regras puras, sem React nem Supabase: o que é elegível, o que é um texto
  * válido, que rota fica de fora. O componente e os hooks só orquestram.
  *
- * Banco: `supabase/migrations/20271122000000_feature_suggestions_first_run.sql`
+ * Banco: `supabase/migrations/20271122000001_feature_suggestions_first_run.sql`
  * (os CHECKs de lá e as constantes daqui precisam concordar).
  */
 

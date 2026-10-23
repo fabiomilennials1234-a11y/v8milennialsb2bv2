@@ -46,11 +46,25 @@ REVOKE ALL ON FUNCTION public.guard_workflow_reenrollment() FROM PUBLIC, anon, a
 
 DO $$
 BEGIN
+  -- Clean installs have no tenant data. Replaying the schema must not require
+  -- this production-only workflow, while an existing mismatched row still fails.
+  IF NOT EXISTS (
+    SELECT 1 FROM public.workflows
+    WHERE id = 'f7cc3e94-b174-452c-a1a7-e2d5085c2b76'::uuid
+  ) THEN
+    RETURN;
+  END IF;
+
   UPDATE public.workflows SET re_enrollment_enabled = true
   WHERE id = 'f7cc3e94-b174-452c-a1a7-e2d5085c2b76'::uuid
     AND organization_id = '38f3bea4-44c6-4732-bb20-065f547a7ed8'::uuid
     AND is_active AND NOT re_enrollment_enabled;
-  IF NOT FOUND THEN
+  IF NOT FOUND AND NOT EXISTS (
+    SELECT 1 FROM public.workflows
+    WHERE id = 'f7cc3e94-b174-452c-a1a7-e2d5085c2b76'::uuid
+      AND organization_id = '38f3bea4-44c6-4732-bb20-065f547a7ed8'::uuid
+      AND is_active AND re_enrollment_enabled
+  ) THEN
     RAISE EXCEPTION 'R. mercos is not an active, disabled workflow in Chique';
   END IF;
 END;

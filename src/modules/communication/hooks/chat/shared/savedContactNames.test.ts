@@ -36,7 +36,7 @@ describe("nomes salvos de grupos", () => {
     );
     const contacts = ["a", "b"].map(instance_id => ({ channel: "whatsapp", instance_id, phone_number: phone, is_group: true, push_name: "Participante" }) as ChatContact);
     await enrichSavedContactNames(contacts, "org");
-    expect(contacts.map(contactLabel)).toEqual(["Pedidos Café", "Equipe Café"]);
+    expect(contacts.map(contact => contactLabel(contact))).toEqual(["Pedidos Café", "Equipe Café"]);
     expect(calls).toHaveLength(2);
   });
 

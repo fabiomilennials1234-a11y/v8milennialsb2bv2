@@ -44,6 +44,7 @@
 -- Corpos base de mover_negocio e bulk_move_pipeline_entries = prod (13/10).
 -- ============================================================================
 
+BEGIN;
 SET LOCAL lock_timeout = '10s';
 
 
@@ -379,3 +380,5 @@ BEGIN
   RETURN v_count;
 END;
 $function$;
+
+COMMIT;

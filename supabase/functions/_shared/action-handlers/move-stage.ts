@@ -217,9 +217,11 @@ async function moverNegocioQueDisparou(
   }
 
   // Funil diferente: MOVE de verdade, pela mesma RPC que a tela usa. Ela recusa
-  // destino custom e destino de outra org, e é ela que passa pela etapa de
-  // sucesso da origem quando o chamador pede — aqui não pedimos, porque quem
-  // chamou já está NA etapa que disparou o workflow.
+  // destino de outra org, e é ela que passa pela etapa de sucesso da origem
+  // quando o chamador pede — aqui não pedimos, porque quem chamou já está NA
+  // etapa que disparou o workflow. Destino CUSTOM é aceito desde
+  // `20271119000002_preserve_closed_card_on_forwarding.sql`: a RPC valida a
+  // etapa em `pipeline_stages`, que é a tabela única pós-20270906001000.
   // Card sem negócio indo para funil onde o lead já tem um é FUNDIDO no de lá:
   // a RPC devolve o id que sobreviveu, e é ele que vai no resultado.
   const { data: movedId, error: rpcError } = await supabase.rpc("mover_negocio", {
@@ -244,6 +246,80 @@ async function moverNegocioQueDisparou(
       moved: "pipeline",
     },
   };
+}
+
+/**
+ * O ÚNICO negócio aberto do lead fora do funil de destino, se houver exatamente um.
+ *
+ * Existe por causa do gatilho da pessoa (`lead_created` e irmãos): ele não tem
+ * `entryId` (`types.ts:20`), então `moverNegocioQueDisparou` não sabe qual card
+ * mover e o ramo custom acabava CRIANDO um — o lead ficava com um card aberto
+ * em cada funil (chamado 52b4f4ca, Rafthel).
+ *
+ * Quando o lead tem um só negócio aberto, não há o que chutar: é aquele. Com
+ * zero ou com dois ou mais, devolve `null` e o chamador faz o de sempre —
+ * escolher por heurística qual dos dois sai do funil seria pior que duplicar.
+ *
+ * Três recusas deliberadas:
+ *   · negócio GANHO/PERDIDO não é candidato. Tirar um ganho da etapa de ganho
+ *     dispara `sale_reversed`, que é irreversível (decisão G do CTO);
+ *   · se o lead JÁ tem card aberto no destino, manda o de lá — o lead já está
+ *     aqui, e esvaziar um funil que ninguém citou não é o pedido;
+ *   · só funil `custom`. Puxar o card para fora de um funil de SISTEMA
+ *     (whatsapp/confirmacao/propostas) tem semântica e espelhos próprios; fica
+ *     de fora até ser pedido.
+ */
+async function acharNegocioAbertoUnicoForaDoDestino(
+  input: ActionInput,
+  destinoPipelineId: string,
+): Promise<string | null> {
+  const { supabase, organizationId, leadId } = input;
+  if (!leadId) return null;
+
+  const { data, error } = await supabase
+    .from("negocio_projetado")
+    .select("id, pipeline_id, stage_role")
+    .eq("organization_id", organizationId)
+    .eq("lead_id", leadId)
+    .eq("pipeline_type", "custom")
+    .limit(CUSTOM_PIPE_ENTRY_READ_CAP);
+
+  // Mesma regra do resto do arquivo: falha de leitura não pode virar "não tem
+  // negócio", senão um soluço de rede vira card duplicado permanente.
+  if (error) throw error;
+
+  const rows = (data ?? []) as Array<{ id: string; pipeline_id: string; stage_role: string | null }>;
+  // A resposta pode estar truncada. Sem todos os cards, não dá para provar
+  // unicidade: outro card aberto pode estar além do limite da consulta.
+  if (rows.length >= CUSTOM_PIPE_ENTRY_READ_CAP) return null;
+  // `stage_role` nulo conta como aberto — mesma leitura de `readActiveCustomPipeEntry`.
+  const abertos = rows.filter((row) => row.stage_role !== "won" && row.stage_role !== "lost");
+
+  if (abertos.some((row) => row.pipeline_id === destinoPipelineId)) return null;
+  return abertos.length === 1 ? abertos[0].id : null;
+}
+
+/**
+ * Move o negócio do lead para a etapa pedida de um funil CUSTOM, quando dá para
+ * saber qual negócio é. Devolve `null` quando não dá — aí o chamador cai no
+ * `moverOuCriarCardCustom` de sempre.
+ */
+async function moverNegocioEmFunilCustom(
+  input: ActionInput,
+  alvo: ResolvedPipeline,
+  stageKey: string,
+): Promise<ActionResult | null> {
+  const doGatilho = await moverNegocioQueDisparou(input, alvo, stageKey);
+  if (doGatilho) return doGatilho;
+
+  // Veio `entryId` e ele não serviu (outra org, outro lead, inexistente): não
+  // é hora de eleger OUTRO card — o contexto já disse qual era, e estava errado.
+  if (input.entryId) return null;
+
+  const unico = await acharNegocioAbertoUnicoForaDoDestino(input, alvo.id);
+  if (!unico) return null;
+
+  return await moverNegocioQueDisparou({ ...input, entryId: unico }, alvo, stageKey);
 }
 
 export async function moveStage(input: ActionInput): Promise<ActionResult> {
@@ -328,11 +404,12 @@ export async function moveStage(input: ActionInput): Promise<ActionResult> {
     supabase, organizationId, pipeline.id, rawStageRef,
   );
 
-  // Funil de sistema com caminho próprio: mover_negocio cobre sistema→sistema;
-  // o destino custom é o passo 5c da fatia lead↔negócio e a RPC o recusa — por
-  // isso o ramo custom continua sendo upsert (posição no destino; a origem não
-  // se move). O gate é por SLUG, não por `type` (ADR-0034: type não decide
-  // comportamento; o slug de sistema é único por org).
+  // Funil de sistema tem caminho próprio por causa do fallback: quando não dá
+  // para agir pelo negócio, aqui se cai no `upsertPipeEntryDetailed` (por slug
+  // de sistema), e no ramo custom no `moverOuCriarCardCustom` (por stage_id).
+  // O MOVE em si é o mesmo nos dois desde o chamado 52b4f4ca — `mover_negocio`
+  // aceita destino custom. O gate é por SLUG, não por `type` (ADR-0034: type
+  // não decide comportamento; o slug de sistema é único por org).
   if (SYSTEM_PIPE_SLUGS.includes(pipeline.slug)) {
     // Paridade com o validador antigo: funil sem NENHUMA etapa cadastrada não
     // reprova (o executor sempre foi permissivo aqui — ver node-requirements).
@@ -376,7 +453,24 @@ export async function moveStage(input: ActionInput): Promise<ActionResult> {
   }
 
   const now = new Date().toISOString();
-  await moverOuCriarCardCustom(supabase, organizationId, pipeline.id, leadId, stageRow.id, now);
+
+  // ── Avançar é MOVE, não cópia (ADR-0023 §4) ────────────────────────────────
+  // Antes do chamado 52b4f4ca só o ramo de sistema tentava mover o negócio; o
+  // custom ia direto para o upsert, que põe o lead no destino e deixa o card de
+  // origem onde está — duas posições abertas para o mesmo negócio.
+  //
+  // A etapa vai pela KEY, não pelo uuid: a RPC grava o que receber em
+  // `stage_key`, e um uuid cru ali é o bug do card invisível que a SCRUM-617
+  // teve que curar. O par fica coerente porque o espelho `trg_pe_stage_mirror`
+  // re-resolve `stage_id` a partir de (pipeline_id, stage_key).
+  // Sem `stage_key` utilizável sobra o caminho por `stage_id`, que é exato.
+  const stageKeyAlvo = (stageRow.stage_key ?? "").trim();
+  const movido = stageKeyAlvo ? await moverNegocioEmFunilCustom(input, pipeline, stageKeyAlvo) : null;
+  if (movido && !movido.success) return movido;
+
+  if (!movido) {
+    await moverOuCriarCardCustom(supabase, organizationId, pipeline.id, leadId, stageRow.id, now);
+  }
 
   // Auto-transition on is_final_positive
   if (stageRow.is_final_positive) {
@@ -404,6 +498,13 @@ export async function moveStage(input: ActionInput): Promise<ActionResult> {
   return {
     success: true,
     message: `Lead movido para ${stageRow.stage_key || stageRow.id} no funil ${pipeline.name}`,
-    data: { target_stage: rawStageRef, target_pipe: targetPipeRef },
+    data: {
+      target_stage: rawStageRef,
+      target_pipe: targetPipeRef,
+      // Aditivo: `target_stage`/`target_pipe` seguem no formato de sempre (ref
+      // cru), e quem moveu acrescenta o card que sobreviveu — a RPC funde
+      // quando o destino já tinha um, então o id pode não ser o de entrada.
+      ...(movido ? { entry_id: movido.data?.entry_id, moved: movido.data?.moved } : {}),
+    },
   };
 }

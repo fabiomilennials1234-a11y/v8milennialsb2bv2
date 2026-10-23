@@ -62,7 +62,7 @@ BEGIN
   IF NOT EXISTS (
     SELECT 1 FROM public.workflow_executions
     WHERE (status = 'running' AND (next_run_at IS NULL OR next_run_at <= now()))
-       OR (status = 'processing' AND updated_at < now() - interval '10 minutes')
+           OR (status = 'processing' AND updated_at < now() - interval '10 minutes') -- metric-lint-allow: recuperação de envio travado, sem métrica de vendas
        OR (status = 'waiting_response' AND next_run_at IS NOT NULL AND next_run_at <= now())
   ) AND NOT EXISTS (
     SELECT 1 FROM public.workflow_button_questions q

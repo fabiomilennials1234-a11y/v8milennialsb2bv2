@@ -172,6 +172,18 @@ async function assertTargetSemantics(db, before, after) {
   }
 }
 
+test('channel_messages: fresh replay accepts an already absent broad policy and keeps tenant restrictions', async () => {
+  const db = new PGlite();
+  try {
+    await db.exec(SKELETON);
+    await db.exec(fixtures());
+    const before = await snapshot(db);
+    await db.exec('DROP POLICY channel_messages_org_access ON public.channel_messages');
+    await db.exec(MIG);
+    await assertTargetSemantics(db, before, await snapshot(db));
+  } finally { await db.close(); }
+});
+
 test('channel_messages: chat_restrict_to_owner enforced, everything else unchanged', async (t) => {
   const db = new PGlite();
   try {

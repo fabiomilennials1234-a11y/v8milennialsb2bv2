@@ -23,7 +23,7 @@ BEGIN
     WHERE status = 'queued'
   ) AND NOT EXISTS (
     SELECT 1 FROM public.history_sync_jobs
-    WHERE status = 'running' AND updated_at < now() - interval '10 minutes'
+        WHERE status = 'running' AND updated_at < now() - interval '10 minutes' -- metric-lint-allow: recuperação de job travado, sem métrica de vendas
   ) THEN
     RETURN;
   END IF;
@@ -63,7 +63,7 @@ BEGIN
     WHERE status = 'pending' AND (next_retry_at IS NULL OR next_retry_at <= now())
   ) AND NOT EXISTS (
     SELECT 1 FROM public.pending_ai_actions
-    WHERE status = 'processing' AND updated_at < now() - interval '10 minutes'
+        WHERE status = 'processing' AND updated_at < now() - interval '10 minutes' -- metric-lint-allow: recuperação de job travado, sem métrica de vendas
   ) THEN
     RETURN;
   END IF;
