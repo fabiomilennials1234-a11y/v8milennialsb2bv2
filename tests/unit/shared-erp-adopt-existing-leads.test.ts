@@ -2,9 +2,8 @@
  * Tests for _shared/erp/sync/adopt-existing-leads.ts e a adoção em
  * bulk-create-clients.ts.
  *
- * Caso real: Vetorium Engenharia e Natural Beer (Café Jurerê, 21/10) — lead
- * importado por planilha, depois cadastrado no ERP, e a sincronização criou um
- * segundo lead sem telefone em vez de ligar a carteira ao que já existia.
+ * Caso: lead importado por planilha, depois cadastrado no ERP; a sincronização
+ * criava um segundo lead sem telefone em vez de ligar a carteira ao que já existia.
  */
 import { describe, it, expect } from "vitest";
 import {
@@ -22,7 +21,7 @@ const cliente = (over: Partial<CanonicalClient> = {}): CanonicalClient => ({
   externalId: "17095",
   externalRef: null,
   cnpj: null,
-  name: "VETORIUM ENGENHARIA LTDA",
+  name: "ALFA ENGENHARIA LTDA",
   company: null,
   email: "sem@sem",
   phone: "4799635609",
@@ -33,19 +32,19 @@ const norm = (p: string | null) => (p === "4799635609" ? "47999635609" : p);
 
 describe("sameCompanyName", () => {
   it("ignora caixa, acento e pontuação", () => {
-    expect(sameCompanyName({ name: "Café do Mercado Ltda." }, { name: "CAFE DO MERCADO LTDA" })).toBe(true);
+    expect(sameCompanyName({ name: "Delta Cafes Ltda." }, { name: "DELTA CAFES LTDA" })).toBe(true);
   });
 
   it("aceita código de cliente e INAPTA como prefixo do nome", () => {
     expect(
-      sameCompanyName({ name: "3759- Eduardo- REFEICOES AO PONTO LTDA" }, { name: "REFEICOES AO PONTO LTDA" }),
-    ).toBe(true); // código tirado; "Eduardo" sobra, mas o nome da empresa está contido
-    expect(sameCompanyName({ name: "INAPTA - G D ALTHOFF ALIMENTOS EPP" }, { name: "G D ALTHOFF ALIMENTOS EPP" })).toBe(true);
-    expect(sameCompanyName({ name: "8154 CAFE DO MERCADO LTDA" }, { name: "CAFE DO MERCADO LTDA" })).toBe(true);
+      sameCompanyName({ name: "3759- Pedro- EPSILON REFEICOES LTDA" }, { name: "EPSILON REFEICOES LTDA" }),
+    ).toBe(true); // código tirado; "Pedro" sobra, mas o nome da empresa está contido
+    expect(sameCompanyName({ name: "INAPTA - ZETA ALIMENTOS EPP" }, { name: "ZETA ALIMENTOS EPP" })).toBe(true);
+    expect(sameCompanyName({ name: "8154 DELTA CAFES LTDA" }, { name: "DELTA CAFES LTDA" })).toBe(true);
   });
 
   it("um nome contido no outro vale quando o menor é longo o bastante", () => {
-    expect(sameCompanyName({ name: "LUCIANO KOVALESKI 63716631949" }, { name: "LUCIANO KOVALESKI" })).toBe(true);
+    expect(sameCompanyName({ name: "MARIA SOUZA LIMA 12345678900" }, { name: "MARIA SOUZA LIMA" })).toBe(true);
   });
 
   it("nome curto não absorve outro: 'rafael' não é 'rafael distribuidora'", () => {
@@ -54,12 +53,12 @@ describe("sameCompanyName", () => {
 
   it("empresas diferentes que dividem telefone não casam", () => {
     expect(
-      sameCompanyName({ name: "PISOFORTE REVESTIMENTOS CERAMICOS LTDA" }, { name: "CASA TEMPERO ALIMENTACAO LTDA" }),
+      sameCompanyName({ name: "BETA REVESTIMENTOS LTDA" }, { name: "GAMA ALIMENTACAO LTDA" }),
     ).toBe(false);
   });
 
   it("compara também pela empresa", () => {
-    expect(sameCompanyName({ name: "João", company: "Vetorium Engenharia" }, { name: "VETORIUM ENGENHARIA" })).toBe(true);
+    expect(sameCompanyName({ name: "João", company: "Alfa Engenharia" }, { name: "ALFA ENGENHARIA" })).toBe(true);
   });
 
   it("normalizeName tolera vazio", () => {
@@ -87,8 +86,8 @@ function fakeAdmin(leads: unknown[], owned: string[] = []) {
 
 const lead = (over: Record<string, unknown> = {}) => ({
   id: "lead-planilha",
-  name: "VETORIUM ENGENHARIA LTDA",
-  company: "VETORIUM ENGENHARIA LTDA",
+  name: "ALFA ENGENHARIA LTDA",
+  company: "ALFA ENGENHARIA LTDA",
   normalized_phone: "47999635609",
   segment: null,
   uf: null,
@@ -107,7 +106,7 @@ describe("findAdoptableLeads", () => {
   });
 
   it("mesmo telefone mas empresa diferente → não adota (telefone N:N)", async () => {
-    expect((await run([lead({ name: "CASA TEMPERO ALIMENTACAO LTDA", company: null })])).size).toBe(0);
+    expect((await run([lead({ name: "GAMA ALIMENTACAO LTDA", company: null })])).size).toBe(0);
   });
 
   it("lead que já tem cliente na carteira → não adota", async () => {

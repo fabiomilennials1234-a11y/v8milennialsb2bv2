@@ -4,7 +4,7 @@
  * Cliente do ERP sem linha na carteira nascia SEMPRE com lead novo. Mas o lead
  * pode já existir — importado por planilha, ou criado por um vendedor — e a
  * carteira só casa por `external_id` e CNPJ, que `leads` não guarda. Resultado
- * (Vetorium, Natural Beer — 21/10): o lead trabalhado, com funil e conversa,
+ * (dois cadastros da Café Jurerê, 21/10): o lead trabalhado, com funil e conversa,
  * ficava de um lado e um lead "do ERP" sem telefone, do outro.
  *
  * O lead do ERP nascia sem telefone por construção: `bulkCreateClients` tira o
@@ -50,7 +50,7 @@ export function normalizeName(value: string | null | undefined): string {
 
 /**
  * Prefixos que o ERP e a equipe põem no nome: código do cliente
- * ("3759- Eduardo- REFEICOES AO PONTO LTDA") e "INAPTA - ". Não identificam a
+ * ("3759- Pedro- EMPRESA X LTDA") e "INAPTA - ". Não identificam a
  * empresa e quebrariam a igualdade.
  */
 function stripNoise(normalized: string): string {
