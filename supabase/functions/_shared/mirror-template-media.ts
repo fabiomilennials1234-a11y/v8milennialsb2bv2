@@ -107,6 +107,46 @@ export async function espelharMidiaDeTemplate(
 
 // ─── O envelope inteiro ──────────────────────────────────────────────────────
 
+/**
+ * O link de cabeçalho é de host assinado da Meta e NÃO deu para copiá-lo.
+ *
+ * Quase sempre é a assinatura que expirou (`oe=` na URL): o link foi gravado no
+ * nó quando alguém escolheu o template, vale por dias, e depois o CDN devolve
+ * 403. Mandar o link morto adiante é falha garantida — a Meta recusa com 131053
+ * por CALLBACK, depois de o executor ter dado o passo como enviado, e para quem
+ * montou o funil a mensagem some sem rastro.
+ *
+ * Só o host vai na mensagem: a URL inteira carrega a assinatura.
+ */
+export class MidiaDeCabecalhoInacessivel extends Error {
+  readonly code = "header_media_unreachable";
+  constructor(link: string) {
+    let host = "host desconhecido";
+    try {
+      host = new URL(link).hostname;
+    } catch {
+      /* mantém o rótulo genérico */
+    }
+    super(
+      `header_media_unreachable: a imagem do cabeçalho do template (${host}) expirou ` +
+        `ou não pôde ser copiada. Abra o nó do template e escolha o template de novo.`,
+    );
+    this.name = "MidiaDeCabecalhoInacessivel";
+  }
+}
+
+export interface OpcoesDeEspelho {
+  /**
+   * Falha em vez de devolver o link original quando ele precisava ser espelhado
+   * e não foi.
+   *
+   * O padrão (`false`) mantém o comportamento do chat: a recusa da Meta aparece
+   * na própria conversa, onde a pessoa está olhando. Automação e disparo não têm
+   * esse olhar — para eles o erro tem de ser do PASSO.
+   */
+  estrito?: boolean;
+}
+
 /** Os tipos de parâmetro que carregam ARQUIVO — os únicos com link a espelhar. */
 const TIPOS_DE_MIDIA = ["image", "video", "document"];
 
@@ -148,6 +188,7 @@ export async function espelharMidiaDosComponentes(
   components: unknown[] | null | undefined,
   organizationId: string,
   deps: EspelhoDeps,
+  opcoes: OpcoesDeEspelho = {},
 ): Promise<unknown[]> {
   const lista = components ?? [];
 
@@ -179,6 +220,9 @@ export async function espelharMidiaDosComponentes(
           if (!precisaEspelhar(link)) return p;
 
           const espelhada = await espelharMidiaDeTemplate(link, organizationId, deps);
+          // `precisaEspelhar(link)` é verdadeiro aqui, então espelhar com
+          // sucesso SEMPRE troca a URL. Igual ao original = não espelhou.
+          if (opcoes.estrito && espelhada === link) throw new MidiaDeCabecalhoInacessivel(link);
           const aninhado = (par[tipo] ?? {}) as Record<string, unknown>;
           return { ...par, [tipo]: { ...aninhado, link: espelhada }, link: espelhada };
         }),
