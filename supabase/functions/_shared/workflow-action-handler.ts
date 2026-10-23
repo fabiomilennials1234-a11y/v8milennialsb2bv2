@@ -10,7 +10,7 @@ import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import type { ActionInput } from "./action-handlers/types.ts";
 import { getTimeBasedVariables } from "./time-variables.ts";
 import { getPipeEntry } from "./pipeline-adapter.ts";
-import { getStageDoNegocio, entryIdDoContexto } from "./negocio-subject.ts";
+import { getStageDoNegocio, entryIdDoContexto, uniqueOpenWorkflowEntry } from "./negocio-subject.ts";
 import { personalizationName, personalizationFirstName, isPlaceholderLeadName, tidyEmptyVarGaps } from "./lead-name.ts";
 import { moveStage as sharedMoveStage } from "./action-handlers/move-stage.ts";
 import { addTag as sharedAddTag, removeTag as sharedRemoveTag } from "./action-handlers/tag-operations.ts";
@@ -406,8 +406,8 @@ function toActionInput(ctx: ActionContext): ActionInput {
     supabase: ctx.supabase,
     organizationId: ctx.organizationId,
     leadId: ctx.leadId,
-    entryId: ctx.entryId ?? null,
-    dealId: ctx.dealId ?? null,
+    entryId: ctx.entryId ?? (ctx.executionContext._closing_subject_inferred === true ? entryIdDoContexto(ctx.executionContext) : null),
+    dealId: ctx.dealId ?? (ctx.executionContext._closing_subject_inferred === true && typeof ctx.executionContext.deal_id === "string" ? ctx.executionContext.deal_id : null),
     conversationId: null as string | null,
     params: {
       ...ctx.nodeData,
@@ -665,14 +665,43 @@ export async function executeWorkflowAction(ctx: ActionContext): Promise<ActionR
 
     // ── Negócios ──
     case "win_deal":
-      result = await sharedWinDeal(toActionInput(ctx));
+    case "lose_deal": {
+      const input = toActionInput(ctx);
+      if (!input.entryId && !input.dealId) {
+        let subject;
+        try {
+          subject = await uniqueOpenWorkflowEntry(ctx.supabase, ctx.organizationId, ctx.leadId);
+        } catch (error) {
+          result = { success: false, error: `Falha ao resolver negócio: ${(error as Error).message}`, retryable: true };
+          break;
+        }
+        if (!subject) {
+          result = { success: false, error: "Não há um único negócio aberto para encerrar; informe o negócio no gatilho", retryable: false };
+          break;
+        }
+        // Vincular ANTES do desfecho: depois da perda o card deixa de ser um
+        // candidato aberto. Um retry ou o próximo move_stage precisa do mesmo id.
+        if (!ctx.executionId) {
+          result = { success: false, error: "Execução obrigatória para vincular o negócio", retryable: false };
+          break;
+        }
+        const nextContext = { ...ctx.executionContext, pipeline_entry_id: subject.id,
+          deal_id: subject.deal_id, _closing_subject_inferred: true };
+        const { data: bound, error: bindError } = await ctx.supabase.from("workflow_executions")
+          .update({ pipeline_entry_id: subject.id, deal_id: subject.deal_id, context: nextContext })
+          .eq("id", ctx.executionId).eq("organization_id", ctx.organizationId).eq("lead_id", ctx.leadId)
+          .is("pipeline_entry_id", null).is("deal_id", null).select("id").maybeSingle();
+        if (bindError || !bound) {
+          result = { success: false, error: `Falha ao vincular negócio à execução: ${bindError?.message ?? "contexto alterado"}`, retryable: true };
+          break;
+        }
+        Object.assign(ctx.executionContext, nextContext);
+        input.entryId = subject.id;
+        input.dealId = subject.deal_id;
+      }
+      result = actionType === "win_deal" ? await sharedWinDeal(input) : await sharedLoseDeal(input);
       break;
-    case "lose_deal":
-      result = await sharedLoseDeal({
-        ...toActionInput(ctx),
-        params: { ...ctx.nodeData, lossReason: ctx.nodeData.lossReason },
-      });
-      break;
+    }
     case "set_deal_value":
       result = await sharedSetDealValue(toActionInput(ctx));
       break;
