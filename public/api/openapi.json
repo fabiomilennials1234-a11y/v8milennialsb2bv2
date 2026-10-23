@@ -310,7 +310,7 @@
             "ApiKeyAuth": []
           }
         ],
-        "description": "Cria um Lead. **Telefone repetido NÃO cria uma segunda pessoa**: responde 409 com `details.lead_id` e `details.name` de quem já está lá — siga com esse id. Aceita `Idempotency-Key`. Escopo: lead:write.",
+        "description": "Cria um Lead. **Telefone repetido NÃO cria uma segunda pessoa**: responde 409 com `details.lead_id` e `details.name` de quem já está lá — siga com esse id. **O Lead existente nunca é alterado** por esta chamada (para atualizar, use PATCH /api/v1/leads/{id}).\n\nTodos os campos do corpo são gravados na mesma chamada. Valores aceitos: texto, número (gravado como texto) ou null; texto vazio vira null. Chave fora da lista → 422 `unknown_fields` com `details.fields` (ordenados) e `details.hint` — responsáveis, tier e qualification_score vão por PATCH /api/v1/leads/{id}; campos personalizados por PUT /api/v1/leads/{id}/custom-fields. Objeto, array ou booleano num campo → 422 `invalid_value` com `details.field`. `name` ausente ou em branco → 422 `missing_name`. Nada é gravado em nenhum 422.\n\nAceita `Idempotency-Key`. Escopo: lead:write.",
         "parameters": [
           {
             "name": "Idempotency-Key",
@@ -319,7 +319,7 @@
             "schema": {
               "type": "string"
             },
-            "description": "Mesma chave dentro da janela devolve o MESMO Lead (200) em vez de criar outro (201)."
+            "description": "Retentativa segura. Mesma chave com o MESMO corpo devolve o mesmo Lead (200) em vez de criar outro (201). Mesma chave com corpo DIFERENTE não é retentativa: responde 409 `lead_already_exists` com `details.reason = \"idempotency_key_reused\"` e o Lead da chave, sem alterá-lo. Use uma chave por Lead, nunca uma chave por dia ou por fluxo."
           }
         ],
         "requestBody": {
@@ -333,21 +333,71 @@
                 ],
                 "properties": {
                   "name": {
-                    "type": "string"
+                    "type": "string",
+                    "description": "Nome do Lead. Obrigatório, não pode ser vazio."
                   },
                   "phone": {
-                    "type": "string"
+                    "type": "string",
+                    "nullable": true,
+                    "description": "Telefone. É a chave de deduplicação na organização."
                   },
                   "email": {
-                    "type": "string"
+                    "type": "string",
+                    "nullable": true,
+                    "description": "E-mail."
                   },
                   "company": {
-                    "type": "string"
+                    "type": "string",
+                    "nullable": true,
+                    "description": "Empresa."
                   },
                   "origin": {
-                    "type": "string"
+                    "type": "string",
+                    "nullable": true,
+                    "description": "Origem do Lead. Padrão: \"api\"."
+                  },
+                  "notes": {
+                    "type": "string",
+                    "nullable": true,
+                    "description": "Observações."
+                  },
+                  "segment": {
+                    "type": "string",
+                    "nullable": true,
+                    "description": "Segmento."
+                  },
+                  "faturamento": {
+                    "type": "string",
+                    "nullable": true,
+                    "description": "Faixa de faturamento."
+                  },
+                  "utm_source": {
+                    "type": "string",
+                    "nullable": true,
+                    "description": "UTM source."
+                  },
+                  "utm_medium": {
+                    "type": "string",
+                    "nullable": true,
+                    "description": "UTM medium."
+                  },
+                  "utm_campaign": {
+                    "type": "string",
+                    "nullable": true,
+                    "description": "UTM campaign."
+                  },
+                  "utm_content": {
+                    "type": "string",
+                    "nullable": true,
+                    "description": "UTM content."
+                  },
+                  "utm_term": {
+                    "type": "string",
+                    "nullable": true,
+                    "description": "UTM term."
                   }
-                }
+                },
+                "additionalProperties": false
               }
             }
           }
@@ -360,7 +410,7 @@
             "description": "Criado"
           },
           "409": {
-            "description": "lead_already_exists — details.lead_id traz quem já existe",
+            "description": "lead_already_exists — details.lead_id e details.name trazem o Lead que já existe; details.reason = \"phone_already_exists\" (telefone já cadastrado) ou \"idempotency_key_reused\" (chave reusada com outro corpo). O Lead existente não é alterado.",
             "content": {
               "application/json": {
                 "schema": {
@@ -386,7 +436,7 @@
             }
           },
           "422": {
-            "description": "Corpo inválido",
+            "description": "Corpo inválido, nada gravado: unknown_fields (details.fields + details.hint), invalid_value (details.field) ou missing_name.",
             "content": {
               "application/json": {
                 "schema": {

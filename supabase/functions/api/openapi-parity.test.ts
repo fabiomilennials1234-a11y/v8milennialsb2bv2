@@ -1,5 +1,6 @@
 import { assertEquals } from "jsr:@std/assert@^1.0.0";
 import { routes } from "./routes.ts";
+import { CREATE_FIELDS } from "../_shared/api/routes/leads-create.ts";
 
 /**
  * A especificação pública e o roteador declaram o MESMO conjunto de rotas.
@@ -70,4 +71,18 @@ Deno.test("openapi — a descrição avisa que Negócio é `deal`, e sobre o Kom
 
   assertEquals(/negócio/i.test(desc) && /\bdeal\b/i.test(desc), true, "falta a equivalência Negócio = deal");
   assertEquals(/kommo/i.test(desc), true, "falta o aviso sobre o vocabulário do Kommo");
+});
+
+/**
+ * O corpo do POST /leads documentado é o corpo que o handler aceita.
+ *
+ * A lista de campos da criação mora no handler (`CREATE_FIELDS`), na RPC e
+ * aqui na doc. Doc com campo a menos esconde dado que a API grava; doc com
+ * campo a mais promete gravar o que o handler recusa com 422.
+ */
+Deno.test("openapi — POST /leads documenta exatamente os campos de CREATE_FIELDS", () => {
+  const spec = JSON.parse(Deno.readTextFileSync(ESPEC));
+  const schema = spec.paths["/api/v1/leads"].post.requestBody.content["application/json"].schema;
+  assertEquals(Object.keys(schema.properties).sort(), [...CREATE_FIELDS].sort());
+  assertEquals(schema.additionalProperties, false);
 });
