@@ -166,6 +166,7 @@ interface ConversationListProps {
   resolveResponsavel?: (contact: InboxContact) => ResponsavelDaLinha | null | undefined;
   currentTeamMemberId: string | null;
   canSeeUnassigned: boolean;
+  canFilterOtherVendors: boolean;
   waitingHumanLeadIds?: Set<string>;
   waitingHumanCount: number;
   /**
@@ -220,6 +221,7 @@ export function ConversationList({
   resolveResponsavel,
   currentTeamMemberId,
   canSeeUnassigned,
+  canFilterOtherVendors,
   waitingHumanLeadIds,
   waitingHumanCount,
   filterGate,
@@ -488,6 +490,7 @@ export function ConversationList({
           vendorOptions={vendorOptions}
           currentTeamMemberId={currentTeamMemberId}
           canSeeUnassigned={canSeeUnassigned}
+          canFilterOtherVendors={canFilterOtherVendors}
         />
       ) : (
       <div className="shrink-0 space-y-2.5 px-3 pb-2.5 pt-3.5">
@@ -604,6 +607,7 @@ export function ConversationList({
             vendorOptions={vendorOptions}
             currentTeamMemberId={currentTeamMemberId}
             canSeeUnassigned={canSeeUnassigned}
+            canFilterOtherVendors={canFilterOtherVendors}
             allTags={allTags}
           />
         )}

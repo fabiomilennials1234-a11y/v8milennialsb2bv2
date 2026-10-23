@@ -90,7 +90,7 @@ index abe343f8e..7b233248c 100644
    try {
      const regs = (await env.serviceWorker?.getRegistrations()) ?? [];
 diff --git a/classic/src/integrations/supabase/types.ts b/classic/src/integrations/supabase/types.ts
-index 8b757e586..a7d9d99a2 100644
+index 8b757e586..f1cef0dfa 100644
 --- a/classic/src/integrations/supabase/types.ts
 +++ b/classic/src/integrations/supabase/types.ts
 @@ -7023,6 +7023,7 @@ export type Database = {
@@ -329,6 +329,17 @@ index 8b757e586..a7d9d99a2 100644
        apply_erp_lead_classification: {
          Args: { p_limit?: number; p_organization_id: string }
          Returns: {
+@@ -20725,8 +20884,8 @@ export type Database = {
+       }
+       can_see_chat_scope: {
+         Args: {
+-          p_lead_id: string
+-          p_normalized_phone: string
++          p_lead_id: string | null
++          p_normalized_phone: string | null
+           p_org_id: string
+         }
+         Returns: boolean
 @@ -20986,6 +21145,15 @@ export type Database = {
          Returns: undefined
        }
@@ -549,6 +560,19 @@ index 2898149d1..c500d8e38 100644
      reconnectCount:
        state === "reconnecting" ? prev.reconnectCount + 1 : prev.reconnectCount,
      lastReason: reason ?? prev.lastReason,
+diff --git a/classic/src/modules/analytics/components/dashboard/v2/CardProximasAgendas.tsx b/classic/src/modules/analytics/components/dashboard/v2/CardProximasAgendas.tsx
+index b957c4f43..cc8bf0f44 100644
+--- a/classic/src/modules/analytics/components/dashboard/v2/CardProximasAgendas.tsx
++++ b/classic/src/modules/analytics/components/dashboard/v2/CardProximasAgendas.tsx
+@@ -38,6 +38,8 @@ const STATUS_ENCERRADO = new Set([
+   "perdido",
+   "completed",
+   "concluido",
++  // scheduled_user_messages: a Agenda passou a listar a mensagem já enviada.
++  "sent",
+ ]);
+ 
+ function rotuloDoDia(inicio: Date): string {
 diff --git a/classic/src/modules/analytics/hooks/useCommandMetrics.ts b/classic/src/modules/analytics/hooks/useCommandMetrics.ts
 index 3a2f2bccd..e823f5b8d 100644
 --- a/classic/src/modules/analytics/hooks/useCommandMetrics.ts
@@ -1052,7 +1076,7 @@ index 7aee76ec7..b35d7f031 100644
    return useQuery({
      queryKey: ["pipeline_stages", family, organizationId],
 diff --git a/classic/src/modules/communication/components/chat/ChatShellWithContext.tsx b/classic/src/modules/communication/components/chat/ChatShellWithContext.tsx
-index 03a54f8e6..b735a7aba 100644
+index 03a54f8e6..7e0202a23 100644
 --- a/classic/src/modules/communication/components/chat/ChatShellWithContext.tsx
 +++ b/classic/src/modules/communication/components/chat/ChatShellWithContext.tsx
 @@ -31,7 +31,9 @@ import { Loader2, WifiOff, UserPlus } from "lucide-react";
@@ -1066,7 +1090,23 @@ index 03a54f8e6..b735a7aba 100644
  import { useResolveChatDeepLink } from "@/modules/communication/hooks/chat/useResolveChatDeepLink";
  import { computeNeedsDeepLinkResolve } from "@/modules/communication/lib/computeNeedsDeepLinkResolve";
  import { resolvePendingDeepLink } from "@/modules/communication/lib/resolvePendingDeepLink";
-@@ -211,6 +213,16 @@ function ChatView({
+@@ -54,6 +56,7 @@ import { MobileChatThreadHeader } from "@/modules/communication/components/chat/
+ import { MessageList } from "@/modules/communication/components/chat/view/MessageList";
+ import { ChatComposer } from "@/modules/communication/components/chat/composer/ChatComposer";
+ import { ScheduledMessagesBanner } from "@/modules/communication/components/chat/ScheduledMessagesBanner";
++import { LeadAgendaStrip } from "@/modules/communication/components/chat/LeadAgendaStrip";
+ import { MobileComposerContextual } from "@/modules/communication/components/chat/composer/MobileComposerContextual";
+ import { ContextPanel } from "@/modules/communication/components/chat/context-panel/ContextPanel";
+ import { LeadContactModal } from "@/modules/communication/components/chat/LeadContactModal";
+@@ -98,6 +101,7 @@ import { useLeadResponsibleMap } from "@/modules/communication/hooks/chat/useLea
+ import { useLeadInboxMeta } from "@/modules/communication/hooks/chat/useLeadInboxMeta";
+ import { useInboxFunnelOptions } from "@/modules/communication/hooks/chat/useInboxFunnelOptions";
+ import { useInboxFilterState } from "@/modules/communication/hooks/chat/useInboxFilterState";
++import { useChatVendorAccess } from "@/modules/communication/hooks/chat/useChatVendorAccess";
+ import { toServerFilter } from "@/modules/communication/lib/inboxFilterServer";
+ import { DEFAULT_INBOX_FILTER } from "@/modules/communication/lib/inboxFilter";
+ import { inboxFilterGate } from "@/modules/communication/lib/inboxEnrichment";
+@@ -211,6 +215,16 @@ function ChatView({
     * que segurar a thread inteira num skeleton esperando a flag.
     */
    const { enabled: nomeDoWhatsappPrimeiro } = useFeatureFlag("chat_nome_do_whatsapp");
@@ -1083,7 +1123,7 @@ index 03a54f8e6..b735a7aba 100644
  
    // O sino não anuncia a conversa que já está sendo lida (#1891). Publicar
    // daqui é o único ponto que sabe qual lead está aberto.
-@@ -306,8 +318,15 @@ function ChatView({
+@@ -306,8 +320,15 @@ function ChatView({
        nomeDoLead: effectiveLeadName,
        savedContactName: selectedContact?.saved_contact_name,
        telefone: phoneNumber ?? null,
@@ -1100,7 +1140,26 @@ index 03a54f8e6..b735a7aba 100644
    );
  
    // A lista já afirmou que existe mensagem com este contato. Se a thread volta
-@@ -784,6 +803,9 @@ export function ChatShellWithContext() {
+@@ -442,6 +463,8 @@ function ChatView({
+           a caminho, e mandava a mesma coisa de novo na mão.
+ 
+           A consulta por telefone e instância inclui conversas ainda sem lead. */}
++      {effectiveLeadId && <LeadAgendaStrip leadId={effectiveLeadId} />}
++
+       {(effectiveLeadId || (phoneNumber && instanceId)) && (
+         <ScheduledMessagesBanner
+           leadId={effectiveLeadId || null}
+@@ -770,7 +793,8 @@ export function ChatShellWithContext() {
+   // Declarado antes dos contatos porque as dimensões vão junto na busca: a RPC
+   // aplica o recorte ANTES do LIMIT (issue #1277), senão o filtro só enxergaria
+   // a página de conversas mais recentes. Busca e tab seguem efêmeros e locais.
+-  const { filter, patch, toggleMulti, clearFilter } = useInboxFilterState();
++  const canFilterOtherVendors = useChatVendorAccess(organizationId);
++  const { filter, patch, toggleMulti, clearFilter } = useInboxFilterState(canFilterOtherVendors);
+   const { isMobile } = useViewport();
+ 
+   /**
+@@ -784,6 +808,9 @@ export function ChatShellWithContext() {
     * argumento) e a lista refaz a busca — uma vez, no load.
     */
    const { enabled: abasDeGrupos } = useFeatureFlag("chat_abas_de_grupos");
@@ -1110,7 +1169,15 @@ index 03a54f8e6..b735a7aba 100644
  
    // Mobile tem header próprio (all/unread/grupos + vendedor) e ignora o resto do
    // estado persistido — empurrar essas dimensões pro servidor sumiria com
-@@ -1501,6 +1523,17 @@ export function ChatShellWithContext() {
+@@ -1428,6 +1455,7 @@ export function ChatShellWithContext() {
+             resolveContactVendorId={resolveContactVendorId}
+             currentTeamMemberId={teamMember?.id ?? null}
+             canSeeUnassigned={isAdmin}
++            canFilterOtherVendors={canFilterOtherVendors}
+             filterGate={filterGate}
+             onRetryEnrichment={retryEnrichment}
+           />
+@@ -1501,6 +1529,17 @@ export function ChatShellWithContext() {
                  leadId={selectedContact?.lead_id ?? undefined}
                  phoneNumber={telefoneSelecionado ?? undefined}
                  pushName={selectedContact?.push_name ?? null}
@@ -1128,6 +1195,107 @@ index 03a54f8e6..b735a7aba 100644
                />
              )
            ) : undefined
+diff --git a/classic/src/modules/communication/components/chat/LeadAgendaStrip.tsx b/classic/src/modules/communication/components/chat/LeadAgendaStrip.tsx
+new file mode 100644
+index 000000000..18d3081d9
+--- /dev/null
++++ b/classic/src/modules/communication/components/chat/LeadAgendaStrip.tsx
+@@ -0,0 +1,95 @@
++import { useMemo, useState } from "react";
++import { format } from "date-fns";
++import { ptBR } from "date-fns/locale";
++import { CalendarDays, ChevronDown, ChevronUp } from "lucide-react";
++import { useMeetings } from "@/modules/engagement";
++import {
++  resumirAgendaDoLead,
++  type SituacaoNaAgenda,
++} from "@/modules/communication/lib/agenda-do-lead";
++
++interface LeadAgendaStripProps {
++  /** Obrigatório: `useMeetings` sem `leadId` traria as reuniões da org inteira. */
++  leadId: string;
++}
++
++const ROTULO: Record<SituacaoNaAgenda, string> = {
++  atrasada: "Em atraso",
++  hoje: "Hoje",
++  proxima: "Agendada",
++};
++
++/**
++ * Par de escala `x dark:y`, e não `text-destructive`: o token é de
++ * preenchimento e não passa de 3:1 como texto no tema claro (medição em
++ * `AgendaOutcomeToggle`).
++ */
++const COR_DO_ROTULO: Record<SituacaoNaAgenda, string> = {
++  atrasada: "text-red-800 dark:text-red-200",
++  hoje: "text-foreground",
++  proxima: "text-muted-foreground",
++};
++
++/**
++ * Agenda simplificada do lead, logo acima do composer: quem está conversando vê
++ * a reunião marcada (ou a que ficou em atraso) sem sair do chat. Mesma forma do
++ * banner de mensagens agendadas ao lado.
++ */
++export function LeadAgendaStrip({ leadId }: LeadAgendaStripProps) {
++  const { data: reunioes = [] } = useMeetings({ leadId });
++  const [expanded, setExpanded] = useState(false);
++
++  const agenda = useMemo(() => resumirAgendaDoLead(reunioes), [reunioes]);
++
++  if (agenda.itens.length === 0) return null;
++
++  const { itens, atrasadas, proxima } = agenda;
++  const resumo = [
++    proxima ? `Próxima: ${format(proxima.start, "EEE dd/MM HH:mm", { locale: ptBR })}` : null,
++    atrasadas > 0 ? `${atrasadas} em atraso` : null,
++  ]
++    .filter(Boolean)
++    .join(" · ");
++
++  return (
++    <div className="mx-4 mb-2">
++      <button
++        type="button"
++        aria-expanded={expanded}
++        onClick={() => setExpanded(!expanded)}
++        className="flex w-full items-center justify-between gap-2 rounded-lg border border-border bg-card px-3 py-2 text-sm transition-colors hover:bg-muted"
++      >
++        <span className="flex min-w-0 items-center gap-2 font-semibold text-foreground">
++          <CalendarDays className="h-3.5 w-3.5 shrink-0" />
++          <span className="truncate">{resumo}</span>
++        </span>
++        {expanded ? (
++          <ChevronUp className="h-4 w-4 shrink-0 text-muted-foreground" />
++        ) : (
++          <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" />
++        )}
++      </button>
++
++      {expanded && (
++        <ul className="mt-1 space-y-1">
++          {itens.map((item) => (
++            <li
++              key={item.id}
++              className="flex items-center gap-2 rounded-lg border border-border bg-card px-3 py-1.5 text-xs"
++            >
++              <span className="flex-1 truncate text-foreground">{item.title}</span>
++              <span className="whitespace-nowrap tabular-nums text-muted-foreground">
++                {format(item.start, "dd/MM HH:mm", { locale: ptBR })}
++              </span>
++              <span
++                className={`whitespace-nowrap font-semibold ${COR_DO_ROTULO[item.situacao]}`}
++              >
++                {item.situacao === "atrasada" && item.faltou ? "Não compareceu" : ROTULO[item.situacao]}
++              </span>
++            </li>
++          ))}
++        </ul>
++      )}
++    </div>
++  );
++}
 diff --git a/classic/src/modules/communication/components/chat/MessagePrimitives.tsx b/classic/src/modules/communication/components/chat/MessagePrimitives.tsx
 index a15833a9f..764a3c26b 100644
 --- a/classic/src/modules/communication/components/chat/MessagePrimitives.tsx
@@ -1642,7 +1810,7 @@ index 000000000..9700c1e81
 +  );
 +}
 diff --git a/classic/src/modules/communication/components/chat/list/ConversationList.tsx b/classic/src/modules/communication/components/chat/list/ConversationList.tsx
-index c95456994..1782acc80 100644
+index c95456994..ea32b664d 100644
 --- a/classic/src/modules/communication/components/chat/list/ConversationList.tsx
 +++ b/classic/src/modules/communication/components/chat/list/ConversationList.tsx
 @@ -27,6 +27,8 @@ import {
@@ -1654,7 +1822,23 @@ index c95456994..1782acc80 100644
  import { SeletorDeCaixas } from "./SeletorDeCaixas";
  import type { CaixaDaLinha } from "@/modules/communication/lib/caixaUnificada";
  import type { NaoLidasDaCaixa } from "@/modules/communication/hooks/chat/useNaoLidasPorCaixa";
-@@ -191,6 +193,8 @@ export function ConversationList({
+@@ -132,6 +134,7 @@ interface ConversationListProps {
+   resolveContactVendorId: (contact: ChatContact) => string | null;
+   currentTeamMemberId: string | null;
+   canSeeUnassigned: boolean;
++  canFilterOtherVendors: boolean;
+   waitingHumanLeadIds?: Set<string>;
+   waitingHumanCount: number;
+   /**
+@@ -184,6 +187,7 @@ export function ConversationList({
+   resolveContactVendorId,
+   currentTeamMemberId,
+   canSeeUnassigned,
++  canFilterOtherVendors,
+   waitingHumanLeadIds,
+   waitingHumanCount,
+   filterGate,
+@@ -191,6 +195,8 @@ export function ConversationList({
  }: ConversationListProps) {
    const scrollAreaRef = useRef<HTMLDivElement | null>(null);
    const { isMobile } = useViewport();
@@ -1663,7 +1847,7 @@ index c95456994..1782acc80 100644
    const [mobileFilter, setMobileFilter] = useState<MobileChatFilter>("all");
  
    // A caixa que o header MOBILE nomeia. Com várias marcadas é a primeira da
-@@ -272,8 +276,8 @@ export function ConversationList({
+@@ -272,8 +278,8 @@ export function ConversationList({
      if (universo.length === 0) return universo;
      const q = searchQuery.trim().toLowerCase();
      if (!q) return universo;
@@ -1674,6 +1858,22 @@ index c95456994..1782acc80 100644
  
    // ── Desktop: engine puro. Mobile: header próprio (all/unread/groups + vendedor).
    const whatsappFiltered = useMemo(() => {
+@@ -411,6 +417,7 @@ export function ConversationList({
+           vendorOptions={vendorOptions}
+           currentTeamMemberId={currentTeamMemberId}
+           canSeeUnassigned={canSeeUnassigned}
++          canFilterOtherVendors={canFilterOtherVendors}
+         />
+       ) : (
+       <div className="p-3 border-b bg-background shrink-0">
+@@ -457,6 +464,7 @@ export function ConversationList({
+             vendorOptions={vendorOptions}
+             currentTeamMemberId={currentTeamMemberId}
+             canSeeUnassigned={canSeeUnassigned}
++            canFilterOtherVendors={canFilterOtherVendors}
+             allTags={allTags}
+           />
+         )}
 diff --git a/classic/src/modules/communication/components/chat/list/ConversationListItem.tsx b/classic/src/modules/communication/components/chat/list/ConversationListItem.tsx
 index 1d479a533..e54183010 100644
 --- a/classic/src/modules/communication/components/chat/list/ConversationListItem.tsx
@@ -1713,6 +1913,97 @@ index 1d479a533..e54183010 100644
    const avatarGradient = getAvatarGradient(contactAvatarSeed(contact));
    const key = contactKey(contact);
    // Ações de conversa (arquivar/excluir/etiquetar) vivem em
+diff --git a/classic/src/modules/communication/components/chat/list/InboxFilterBar.tsx b/classic/src/modules/communication/components/chat/list/InboxFilterBar.tsx
+index 524118f92..829a223bc 100644
+--- a/classic/src/modules/communication/components/chat/list/InboxFilterBar.tsx
++++ b/classic/src/modules/communication/components/chat/list/InboxFilterBar.tsx
+@@ -77,6 +77,7 @@ interface InboxFilterBarProps {
+   vendorOptions: { id: string; name: string }[];
+   currentTeamMemberId: string | null;
+   canSeeUnassigned: boolean;
++  canFilterOtherVendors: boolean;
+   allTags: { id: string; name: string; color: string }[];
+ }
+ 
+@@ -282,7 +283,7 @@ function resetDim(dim: DimKey, patch: InboxFilterBarProps["patch"]) {
+ // ─── Componente principal ────────────────────────────────────────────────────
+ 
+ export function InboxFilterBar(props: InboxFilterBarProps) {
+-  const { filter, patch, clearFilter, unreadCount, waitingHumanCount } = props;
++  const { filter, patch, clearFilter, unreadCount, waitingHumanCount, canFilterOtherVendors } = props;
+   const [menuOpen, setMenuOpen] = useState(false);
+   const [autoOpen, setAutoOpen] = useState<DimKey | null>(null);
+   // Dimensões "mostradas" mas ainda sem valor — precisam existir como chip antes
+@@ -291,8 +292,8 @@ export function InboxFilterBar(props: InboxFilterBarProps) {
+   const [shown, setShown] = useState<Set<DimKey>>(new Set());
+ 
+   const activeDims = useMemo(
+-    () => DIM_META.filter((d) => isDimActive(d.key, filter) || shown.has(d.key)),
+-    [filter, shown],
++    () => DIM_META.filter((d) => (canFilterOtherVendors || d.key !== "vendor") && (isDimActive(d.key, filter) || shown.has(d.key))),
++    [filter, shown, canFilterOtherVendors],
+   );
+   const activeCount = countActiveFilters(filter);
+ 
+@@ -323,6 +324,7 @@ export function InboxFilterBar(props: InboxFilterBarProps) {
+     <div className="mt-2 flex flex-col gap-2">
+       {/* Linha: toggle rápido + adicionar filtro */}
+       <div className="flex flex-wrap items-center gap-2">
++        {!canFilterOtherVendors && <span className="rounded-full bg-primary/15 px-3 py-1.5 text-xs font-semibold text-primary">Minhas conversas</span>}
+         <button
+           type="button"
+           onClick={() => patch({ unread: !filter.unread })}
+@@ -368,7 +370,7 @@ export function InboxFilterBar(props: InboxFilterBarProps) {
+               Adicionar filtro
+             </p>
+             <div className="flex flex-col gap-0.5">
+-              {DIM_META.map((d) => {
++              {DIM_META.filter((d) => canFilterOtherVendors || d.key !== "vendor").map((d) => {
+                 const Icon = d.icon;
+                 return (
+                   <button
+diff --git a/classic/src/modules/communication/components/chat/list/MobileChatListHeader.tsx b/classic/src/modules/communication/components/chat/list/MobileChatListHeader.tsx
+index 7f5c61abf..c2b08c920 100644
+--- a/classic/src/modules/communication/components/chat/list/MobileChatListHeader.tsx
++++ b/classic/src/modules/communication/components/chat/list/MobileChatListHeader.tsx
+@@ -57,6 +57,7 @@ export interface MobileChatListHeaderProps {
+   vendorOptions: { id: string; name: string }[];
+   currentTeamMemberId: string | null;
+   canSeeUnassigned: boolean;
++  canFilterOtherVendors: boolean;
+ }
+ 
+ // ─── Filter chip config ──────────────────────────────────────────────────────
+@@ -89,6 +90,7 @@ export function MobileChatListHeader({
+   vendorOptions,
+   currentTeamMemberId,
+   canSeeUnassigned,
++  canFilterOtherVendors,
+ }: MobileChatListHeaderProps) {
+   const [searchExpanded, setSearchExpanded] = useState(false);
+   const searchInputRef = useRef<HTMLInputElement>(null);
+@@ -198,7 +200,7 @@ export function MobileChatListHeader({
+       {showFilters && (
+       <div className="flex gap-2 px-3 pt-1 pb-2 overflow-x-auto scrollbar-none">
+         {/* Chip de vendedor — Select estilizado como chip */}
+-        <Select value={vendorFilter} onValueChange={onVendorFilterChange}>
++        {canFilterOtherVendors ? <Select value={vendorFilter} onValueChange={onVendorFilterChange}>
+           <SelectTrigger
+             className={cn(
+               "shrink-0 h-auto w-auto gap-1 rounded-full border px-3 py-1 text-xs font-medium whitespace-nowrap [&>svg]:hidden",
+@@ -225,7 +227,11 @@ export function MobileChatListHeader({
+               <SelectItem value="unassigned">Não atribuídas</SelectItem>
+             )}
+           </SelectContent>
+-        </Select>
++        </Select> : (
++          <span className="shrink-0 rounded-full bg-primary-soft px-3 py-1 text-xs font-semibold text-primary-soft-foreground">
++            Minhas conversas
++          </span>
++        )}
+         {chips.map((chip) => {
+           const isActive = activeFilter === chip.key;
+           const showCount = chip.count != null && chip.count > 0;
 diff --git a/classic/src/modules/communication/components/chat/list/MobileConversationRow.tsx b/classic/src/modules/communication/components/chat/list/MobileConversationRow.tsx
 index 72a92dbad..a977de084 100644
 --- a/classic/src/modules/communication/components/chat/list/MobileConversationRow.tsx
@@ -2473,6 +2764,38 @@ index eccb97e9e..e068440b5 100644
      const nome = c.saved_contact_name?.trim() || (c.push_name || c.lead_name || "").trim();
      if (nome) return nome;
      // Sem nome, o que sobra é o identificador — e quando ele é um LID ou um
+diff --git a/classic/src/modules/communication/hooks/chat/useChatVendorAccess.ts b/classic/src/modules/communication/hooks/chat/useChatVendorAccess.ts
+new file mode 100644
+index 000000000..ebf047ed3
+--- /dev/null
++++ b/classic/src/modules/communication/hooks/chat/useChatVendorAccess.ts
+@@ -0,0 +1,26 @@
++import { useQuery } from "@tanstack/react-query";
++import { supabase } from "@/integrations/supabase/client";
++import { useAuth } from "@/modules/identity";
++
++/** Ask the canonical chat policy whether this account has unrestricted scope.
++ * Null lead/phone cannot match ownership; only an actual bypass returns true.
++ * Strict ownership, org admins, masters and explicit exceptions stay server-owned.
++ */
++export function useChatVendorAccess(organizationId: string | null | undefined) {
++  const { user } = useAuth();
++  const access = useQuery({
++    // Shares the invalidation prefix with ChatRestrictionCard, not its cache entry.
++    queryKey: ["chat_restrict_to_owner", organizationId, "vendor-access", user?.id],
++    queryFn: async () => {
++      const { data, error } = await supabase.rpc("can_see_chat_scope", {
++        p_org_id: organizationId!, p_lead_id: null, p_normalized_phone: null,
++      });
++      if (error) throw error;
++      return data === true;
++    },
++    enabled: !!organizationId && !!user?.id,
++    staleTime: 0,
++    refetchOnWindowFocus: true,
++  });
++  return !!organizationId && !!user?.id && access.isSuccess && access.data === true;
++}
 diff --git a/classic/src/modules/communication/hooks/chat/useConversasUnificadas.ts b/classic/src/modules/communication/hooks/chat/useConversasUnificadas.ts
 index bb01d8031..5ee0295ff 100644
 --- a/classic/src/modules/communication/hooks/chat/useConversasUnificadas.ts
@@ -2506,6 +2829,40 @@ index bb01d8031..5ee0295ff 100644
    });
  
    const queryOficiais = useQuery({
+diff --git a/classic/src/modules/communication/hooks/chat/useInboxFilterState.ts b/classic/src/modules/communication/hooks/chat/useInboxFilterState.ts
+index 6adc3ae21..58a4a4d97 100644
+--- a/classic/src/modules/communication/hooks/chat/useInboxFilterState.ts
++++ b/classic/src/modules/communication/hooks/chat/useInboxFilterState.ts
+@@ -6,7 +6,7 @@
+  * tab NÃO passam por aqui (efêmeros — decisão do grill). TTL longo (30 dias): o
+  * filtro é preferência de trabalho, não estado de sessão.
+  */
+-import { useCallback } from "react";
++import { useCallback, useMemo } from "react";
+ import { usePersistedState } from "@/shared/hooks/usePersistedState";
+ import { DEFAULT_INBOX_FILTER, type InboxFilterState } from "@/modules/communication/lib/inboxFilter";
+ 
+@@ -15,13 +15,18 @@ const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
+ /** Chaves cujo valor é `string[]` (dimensões multi-select). */
+ type MultiKey = "funnels" | "stages" | "tags" | "tiers";
+ 
+-export function useInboxFilterState() {
+-  const [filter, setFilter, clearFilter] = usePersistedState<InboxFilterState>(
++export function useInboxFilterState(canFilterOtherVendors: boolean) {
++  const [savedFilter, setFilter, clearFilter] = usePersistedState<InboxFilterState>(
+     "inbox-filter",
+     DEFAULT_INBOX_FILTER,
+     { ttlMs: THIRTY_DAYS_MS },
+   );
+ 
++  // "all" means all rows authorized by RLS/RPC, including co-owned leads.
++  // Forcing "mine" would narrow that to the legacy single responsible field.
++  const filter = useMemo(() => canFilterOtherVendors
++    ? savedFilter : { ...savedFilter, vendor: "all" }, [savedFilter, canFilterOtherVendors]);
++
+   const patch = useCallback(
+     (partial: Partial<InboxFilterState>) => setFilter((prev) => ({ ...prev, ...partial })),
+     [setFilter],
 diff --git a/classic/src/modules/communication/hooks/chat/useNomeCodContatoLead.ts b/classic/src/modules/communication/hooks/chat/useNomeCodContatoLead.ts
 new file mode 100644
 index 000000000..6441b0714
@@ -3481,6 +3838,91 @@ index 76e2477a7..0422e2f9f 100644
  } from "./lib/blast-media-validator";
  
  // ── Hooks: WhatsApp — chat shell barrel (re-exports principais) ───────────
+diff --git a/classic/src/modules/communication/lib/agenda-do-lead.ts b/classic/src/modules/communication/lib/agenda-do-lead.ts
+new file mode 100644
+index 000000000..ed18ca513
+--- /dev/null
++++ b/classic/src/modules/communication/lib/agenda-do-lead.ts
+@@ -0,0 +1,79 @@
++/**
++ * Agenda do lead dentro da conversa: o que está por vir e o que ficou em atraso.
++ *
++ * A regra de atraso é a MESMA de `isOverdueEvent` da Agenda (não compareceu, ou
++ * passou do horário sem resultado) — repetida aqui sobre `Meeting` porque o chat
++ * lê a tabela `meetings` direto, sem passar pelo feed unificado. Se uma mudar,
++ * a outra muda junto.
++ *
++ * Só `event_type = 'meeting'`: ligação, follow-up e tarefa têm o próprio lugar,
++ * e comparecimento só existe para reunião (ver `podeRegistrarResultado`).
++ */
++
++import { isSameDay } from "date-fns";
++
++/** O recorte de `Meeting` que o resumo lê — evita acoplar o chat ao tipo inteiro. */
++export interface ReuniaoDoLead {
++  id: string;
++  title: string;
++  start_at: string;
++  end_at: string;
++  status: string;
++  event_type: string;
++}
++
++export type SituacaoNaAgenda = "atrasada" | "hoje" | "proxima";
++
++export interface ItemAgendaDoLead {
++  id: string;
++  title: string;
++  start: Date;
++  situacao: SituacaoNaAgenda;
++  /** `no_show` diz que a pessoa faltou; o outro atraso é "ninguém registrou". */
++  faltou: boolean;
++}
++
++export interface AgendaDoLead {
++  itens: ItemAgendaDoLead[];
++  atrasadas: number;
++  proxima: ItemAgendaDoLead | null;
++}
++
++export function resumirAgendaDoLead(
++  reunioes: ReuniaoDoLead[],
++  agora: Date = new Date(),
++): AgendaDoLead {
++  const itens: ItemAgendaDoLead[] = [];
++
++  for (const r of reunioes) {
++    if (r.event_type !== "meeting") continue;
++    const status = (r.status ?? "").toLowerCase();
++    if (status === "completed" || status === "cancelled" || status === "canceled") continue;
++
++    const start = new Date(r.start_at);
++    const end = new Date(r.end_at);
++    const faltou = status === "no_show";
++    const passou = end.getTime() < agora.getTime();
++
++    let situacao: SituacaoNaAgenda;
++    if (faltou || passou) situacao = "atrasada";
++    else if (isSameDay(start, agora)) situacao = "hoje";
++    else situacao = "proxima";
++
++    itens.push({ id: r.id, title: r.title, start, situacao, faltou });
++  }
++
++  // O atraso vem primeiro (é o que pede ação), depois o que vem por aí em ordem.
++  itens.sort((a, b) => {
++    if ((a.situacao === "atrasada") !== (b.situacao === "atrasada")) {
++      return a.situacao === "atrasada" ? -1 : 1;
++    }
++    return a.start.getTime() - b.start.getTime();
++  });
++
++  return {
++    itens,
++    atrasadas: itens.filter((i) => i.situacao === "atrasada").length,
++    proxima: itens.find((i) => i.situacao !== "atrasada") ?? null,
++  };
++}
 diff --git a/classic/src/modules/communication/lib/blast-media-validator.ts b/classic/src/modules/communication/lib/blast-media-validator.ts
 index d87f77d34..d40c2df63 100644
 --- a/classic/src/modules/communication/lib/blast-media-validator.ts
@@ -4044,6 +4486,214 @@ index 6147d6087..dacb1859c 100644
            queryClient.invalidateQueries({ queryKey: ["pipeline_entries"] });
          },
        )
+diff --git a/classic/src/modules/engagement/components/agenda/AgendaFilterBar.tsx b/classic/src/modules/engagement/components/agenda/AgendaFilterBar.tsx
+index d79967e5a..33f82ae63 100644
+--- a/classic/src/modules/engagement/components/agenda/AgendaFilterBar.tsx
++++ b/classic/src/modules/engagement/components/agenda/AgendaFilterBar.tsx
+@@ -1,7 +1,7 @@
+ /**
+  * Abas de estado + filtros da Agenda.
+  *
+- * Esquerda: segmentado Pendentes / Todas / Finalizadas.
++ * Esquerda: segmentado Pendentes / Em atraso / Todas / Finalizadas.
+  * Direita: responsável (só para quem enxerga a agenda inteira) e tipo.
+  *
+  * O segmentado é neutro de propósito: ouro é dinheiro e ação (DESIGN.md § Cor),
+@@ -35,6 +35,7 @@ export const ALL_OPTION = "all";
+ 
+ const STATUS_TABS: Array<{ key: AgendaStatusFilter; label: string }> = [
+   { key: "pending", label: "Pendentes" },
++  { key: "overdue", label: "Em atraso" },
+   { key: "all", label: "Todas atividades" },
+   { key: "done", label: "Finalizadas" },
+ ];
+@@ -81,7 +82,7 @@ export function AgendaFilterBar({
+   return (
+     <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+       {/* Abas de estado */}
+-      {/* `max-w-full overflow-x-auto` porque em 360px os três rótulos não cabem
++      {/* `max-w-full overflow-x-auto` porque em 360px os quatro rótulos não cabem
+           e "Finalizadas" ficava cortada — inalcançável, não só feia. */}
+       <div
+         role="tablist"
+diff --git a/classic/src/modules/engagement/components/agenda/AgendaOutcomeToggle.tsx b/classic/src/modules/engagement/components/agenda/AgendaOutcomeToggle.tsx
+index 13edbbe31..e05a790de 100644
+--- a/classic/src/modules/engagement/components/agenda/AgendaOutcomeToggle.tsx
++++ b/classic/src/modules/engagement/components/agenda/AgendaOutcomeToggle.tsx
+@@ -112,6 +112,12 @@ export function AgendaOutcomeToggle({
+         })}
+       </div>
+ 
++      {value === "nao_compareceu" && (
++        <p className="text-[11px] text-muted-foreground">
++          Segue em atraso até ser remarcada ou concluída.
++        </p>
++      )}
++
+       {value === null && (
+         <p className="text-[10px] text-muted-foreground">
+           Sem registro — não entra na contagem.
+diff --git a/classic/src/modules/engagement/components/agenda/DayAgendaView.tsx b/classic/src/modules/engagement/components/agenda/DayAgendaView.tsx
+index b291dab40..29b450689 100644
+--- a/classic/src/modules/engagement/components/agenda/DayAgendaView.tsx
++++ b/classic/src/modules/engagement/components/agenda/DayAgendaView.tsx
+@@ -19,7 +19,7 @@ import { motion } from "framer-motion";
+ import { CalendarOff, Check, ChevronLeft, ChevronRight, X } from "lucide-react";
+ 
+ import type { UnifiedEvent } from "./agenda-helpers";
+-import { SOURCE_LABELS, getMonthGrid, outcomeOf } from "./agenda-helpers";
++import { SOURCE_LABELS, getMonthGrid, isFinishedEvent, outcomeOf } from "./agenda-helpers";
+ 
+ interface DayAgendaViewProps {
+   /** Currently selected day (also drives which month the mini-calendar shows). */
+@@ -231,7 +231,9 @@ export function DayAgendaView({
+                           aria-label="Não compareceu"
+                         />
+                       )}
+-                      <div className="min-w-0 truncate text-[11px] font-medium text-foreground">
++                      <div
++                      className={`min-w-0 truncate text-[11px] font-medium text-foreground ${isFinishedEvent(event) && (event.status ?? "").toLowerCase() !== "no_show" ? "line-through opacity-70" : ""}`}
++                      >
+                         {event.title}
+                       </div>
+                     </div>
+diff --git a/classic/src/modules/engagement/components/agenda/MonthEventPill.tsx b/classic/src/modules/engagement/components/agenda/MonthEventPill.tsx
+index bf569c51b..fa1ae4a7c 100644
+--- a/classic/src/modules/engagement/components/agenda/MonthEventPill.tsx
++++ b/classic/src/modules/engagement/components/agenda/MonthEventPill.tsx
+@@ -3,9 +3,9 @@
+  */
+ 
+ import { format } from "date-fns";
+-import { Check, X } from "lucide-react";
++import { Check, Clock, X } from "lucide-react";
+ import type { UnifiedEvent } from "./agenda-helpers";
+-import { initialsOf, isFinishedEvent, outcomeOf } from "./agenda-helpers";
++import { initialsOf, isFinishedEvent, isOverdueEvent, outcomeOf } from "./agenda-helpers";
+ 
+ interface MonthEventPillProps {
+   event: UnifiedEvent;
+@@ -26,7 +26,10 @@ export function MonthEventPill({
+   const color = event.color;
+   const hora = event.allDay ? "dia todo" : format(event.start, "HH:mm");
+   const owner = showOwner ? initialsOf(event.creatorName) : "";
+-  const done = isFinishedEvent(event);
++  const atrasado = isOverdueEvent(event);
++  // Em atraso NÃO leva o risco de "feito": a reunião que não deu certo segue
++  // pendente de ação. O risco fica para o que de fato terminou.
++  const done = isFinishedEvent(event) && !atrasado;
+   const resultado = outcomeOf(event);
+ 
+   return (
+@@ -52,6 +55,7 @@ export function MonthEventPill({
+           : resultado === "nao_compareceu"
+             ? "Não compareceu"
+             : null,
++        atrasado ? "Em atraso" : null,
+       ]
+         .filter(Boolean)
+         .join("\n")}
+@@ -74,6 +78,16 @@ export function MonthEventPill({
+         />
+       )}
+ 
++      {/* Reunião passada sem resultado: relógio no lugar do ✓/✗. O ✗ de quem não
++          compareceu já marca o atraso; aqui só falta o sinal para "sem registro". */}
++      {atrasado && resultado === null && (
++        <Clock
++          className="h-2.5 w-2.5 shrink-0 text-red-700 dark:text-red-300"
++          strokeWidth={3}
++          aria-label="Em atraso"
++        />
++      )}
++
+       {/* Cor sozinha não é sinal (DESIGN.md): finalizado ganha o risco no texto. */}
+       <span className={`min-w-0 flex-1 truncate ${done ? "line-through opacity-70" : ""}`}>
+         {hora} {event.title}
+diff --git a/classic/src/modules/engagement/components/agenda/TimeGridEvent.tsx b/classic/src/modules/engagement/components/agenda/TimeGridEvent.tsx
+index 0c07dc76a..da095c1ae 100644
+--- a/classic/src/modules/engagement/components/agenda/TimeGridEvent.tsx
++++ b/classic/src/modules/engagement/components/agenda/TimeGridEvent.tsx
+@@ -7,7 +7,7 @@
+ 
+ import { format } from "date-fns";
+ import type { UnifiedEvent } from "./agenda-helpers";
+-import { getEventTop, getEventHeight, SOURCE_LABELS } from "./agenda-helpers";
++import { getEventTop, getEventHeight, isFinishedEvent, SOURCE_LABELS } from "./agenda-helpers";
+ 
+ interface TimeGridEventProps {
+   event: UnifiedEvent;
+@@ -30,6 +30,9 @@ export function TimeGridEvent({
+   const height = Math.max(getEventHeight(event), 22);
+   const color = event.color;
+   const MARGIN = 2;
++  // Finalizado ganha o risco (cor sozinha não é sinal). Não compareceu fica de
++  // fora: segue em atraso, pedindo ação, e não pode parecer "feito".
++  const riscado = isFinishedEvent(event) && (event.status ?? "").toLowerCase() !== "no_show";
+ 
+   return (
+     <div
+@@ -46,7 +49,7 @@ export function TimeGridEvent({
+     >
+       <div className="px-2 py-0.5 h-full flex flex-col justify-start overflow-hidden">
+         <p
+-          className="text-[11px] font-semibold leading-tight truncate"
++          className={`text-[11px] font-semibold leading-tight truncate ${riscado ? "line-through opacity-70" : ""}`}
+           style={{ color }}
+         >
+           {event.title}
+diff --git a/classic/src/modules/engagement/components/agenda/agenda-helpers.ts b/classic/src/modules/engagement/components/agenda/agenda-helpers.ts
+index 4b03b671b..79d8cca8e 100644
+--- a/classic/src/modules/engagement/components/agenda/agenda-helpers.ts
++++ b/classic/src/modules/engagement/components/agenda/agenda-helpers.ts
+@@ -119,7 +119,7 @@ export function normalizeEventType(t: string | null | undefined): EventTypeKey {
+ // ─── Estado do compromisso (pendente × finalizado) ────────────────────────────
+ 
+ /** Abas de estado da tela — mesmo vocabulário que a operação usa. */
+-export type AgendaStatusFilter = "pending" | "all" | "done";
++export type AgendaStatusFilter = "pending" | "all" | "done" | "overdue";
+ 
+ /**
+  * Status terminais das CINCO fontes da agenda. Cada uma fala um dialeto:
+@@ -161,6 +161,7 @@ export function matchesStatusFilter(
+   filter: AgendaStatusFilter,
+ ): boolean {
+   if (filter === "all") return true;
++  if (filter === "overdue") return isOverdueEvent(event);
+   const done = isFinishedEvent(event);
+   return filter === "done" ? done : !done;
+ }
+@@ -692,6 +693,30 @@ export function outcomeOf(event: UnifiedEvent): AttendanceOutcome | null {
+ }
+ 
+ 
++/**
++ * Em atraso = reunião que NÃO deu certo e ainda pede uma ação.
++ *
++ * Duas portas, e as duas são "deu errado" do ponto de vista de quem opera o dia:
++ *
++ * 1. **Não compareceu** (`no_show`). É terminal para a contagem de comparecimento
++ *    — continua valendo em "Não compareceram" —, mas não é terminal para o
++ *    trabalho: a reunião precisa ser remarcada. Por isso ela fica em atraso em
++ *    vez de sumir atrás de "Finalizadas".
++ * 2. **Passou do horário e ninguém registrou o resultado** (`scheduled` com o
++ *    fim no passado). É o "aguardando desfecho" que vencia sem aparecer.
++ *
++ * Só reuniões que aceitam resultado (`podeRegistrarResultado`): follow-up e
++ * mensagem agendada têm o próprio conceito de atraso e a própria tela. A
++ * reunião concluída (`completed`) sai do atraso assim que o resultado muda.
++ */
++export function isOverdueEvent(event: UnifiedEvent, now: Date = new Date()): boolean {
++  if (!podeRegistrarResultado(event)) return false;
++  const status = (event.status ?? "").toLowerCase();
++  if (status === "no_show") return true;
++  if (status === "completed") return false;
++  return event.end.getTime() < now.getTime();
++}
++
+ export interface ResumoComparecimento {
+   compareceu: number;
+   naoCompareceu: number;
 diff --git a/classic/src/modules/engagement/hooks/useActivities.ts b/classic/src/modules/engagement/hooks/useActivities.ts
 index fcd19e285..d9f269c95 100644
 --- a/classic/src/modules/engagement/hooks/useActivities.ts
@@ -4088,6 +4738,89 @@ index 88a6237c3..ad490fb05 100644
    return useQuery({
      queryKey: ["meetings", organizationId, filters],
      queryFn: async () => {
+diff --git a/classic/src/modules/identity/auth/contexts/AuthContext.tsx b/classic/src/modules/identity/auth/contexts/AuthContext.tsx
+index 186bd869e..703154a17 100644
+--- a/classic/src/modules/identity/auth/contexts/AuthContext.tsx
++++ b/classic/src/modules/identity/auth/contexts/AuthContext.tsx
+@@ -1,5 +1,6 @@
+ import { createContext, useContext, useEffect, useRef, useState, ReactNode } from 'react';
+ import { User, Session } from '@supabase/supabase-js';
++import { useQueryClient } from '@tanstack/react-query';
+ import { supabase } from '@/integrations/supabase/client';
+ 
+ const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string | undefined;
+@@ -36,17 +37,35 @@ interface AuthContextType {
+ export const AuthContext = createContext<AuthContextType | undefined>(undefined);
+ 
+ export function AuthProvider({ children }: { children: ReactNode }) {
++  const queryClient = useQueryClient();
+   const [user, setUser] = useState<User | null>(null);
+   const [session, setSession] = useState<Session | null>(null);
+   const [loading, setLoading] = useState(true);
+   const attachCalledForSession = useRef<string | null>(null);
++  const accountId = useRef<string | null | undefined>(undefined);
+ 
+   useEffect(() => {
++    let active = true;
++    let receivedAuthEvent = false;
++    const applySession = (next: Session | null) => {
++      const nextId = next?.user.id ?? null;
++      if (accountId.current !== nextId) {
++        // Org-scoped query keys can contain data from a more privileged account.
++        // Cancel old requests and discard their cache BEFORE publishing the new user.
++        void queryClient.cancelQueries();
++        queryClient.clear();
++        accountId.current = nextId;
++        attachCalledForSession.current = null;
++      }
++      setSession(next);
++      setUser(next?.user ?? null);
++      setLoading(false);
++    };
+     const { data: { subscription } } = supabase.auth.onAuthStateChange(
+       (event, session) => {
+-        setSession(session);
+-        setUser(session?.user ?? null);
+-        setLoading(false);
++        if (!active) return;
++        receivedAuthEvent = true;
++        applySession(session);
+         if ((event === 'SIGNED_IN' || event === 'INITIAL_SESSION') && session?.access_token && session?.user?.id) {
+           const key = `${session.user.id}:${session.access_token.slice(0, 20)}`;
+           if (attachCalledForSession.current !== key) {
+@@ -58,9 +77,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
+     );
+ 
+     supabase.auth.getSession().then(({ data: { session } }) => {
+-      setSession(session);
+-      setUser(session?.user ?? null);
+-      setLoading(false);
++      // A slow bootstrap must not restore an account superseded by an auth event.
++      if (!active || receivedAuthEvent) return;
++      applySession(session);
+       if (session?.access_token && session?.user?.id) {
+         const key = `${session.user.id}:${session.access_token.slice(0, 20)}`;
+         if (attachCalledForSession.current !== key) {
+@@ -70,8 +89,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
+       }
+     });
+ 
+-    return () => subscription.unsubscribe();
+-  }, []);
++    return () => { active = false; subscription.unsubscribe(); };
++  }, [queryClient]);
+ 
+   const signIn = async (email: string, password: string) => {
+     const { error } = await supabase.auth.signInWithPassword({
+@@ -128,7 +147,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
+   };
+ 
+   return (
+-    <AuthContext.Provider value={{ user, session, loading, signIn, signUp, signOut }}>
++    <AuthContext.Provider key={user?.id ?? 'signed-out'} value={{ user, session, loading, signIn, signUp, signOut }}>
+       {children}
+     </AuthContext.Provider>
+   );
 diff --git a/classic/src/modules/identity/org-team/hooks/useTeamMembers.ts b/classic/src/modules/identity/org-team/hooks/useTeamMembers.ts
 index 15d97831d..71e4e0747 100644
 --- a/classic/src/modules/identity/org-team/hooks/useTeamMembers.ts
@@ -9100,12 +9833,15 @@ index 76afbc226..1848457df 100644
          // workbox-window classifica um update achado >60s após o register
          // como "externo" e emite installed + waiting para o MESMO SW — o build
 diff --git a/classic/src/modules/platform/hooks/useAvisos.ts b/classic/src/modules/platform/hooks/useAvisos.ts
-index f1eb2c1ec..717b837b3 100644
+index f1eb2c1ec..f46c9ff23 100644
 --- a/classic/src/modules/platform/hooks/useAvisos.ts
 +++ b/classic/src/modules/platform/hooks/useAvisos.ts
-@@ -29,7 +29,7 @@ import {
+@@ -27,9 +27,9 @@ import {
+   type EventoDeAviso,
+ } from "../lib/aviso-stream";
  import { conversaAberta } from "../lib/conversa-aberta";
- import { decidirEntrega, type Entrega } from "../lib/decisao-de-entrega";
+-import { decidirEntrega, type Entrega } from "../lib/decisao-de-entrega";
++import { chaveDeSom, decidirEntrega, type Entrega } from "../lib/decisao-de-entrega";
  import { motorDeSom } from "../lib/motor-de-som";
 -import { mostrarCartao } from "../lib/cartoes-store";
 +import { mostrarCartao, reiniciarCartoes } from "../lib/cartoes-store";
@@ -9125,7 +9861,7 @@ index f1eb2c1ec..717b837b3 100644
  
  export interface UseAvisosResult {
    avisos: Aviso[];
-@@ -61,7 +62,8 @@ function horaLocalDeSaoPaulo(instante: number): number {
+@@ -61,14 +62,15 @@ function horaLocalDeSaoPaulo(instante: number): number {
    );
  }
  
@@ -9135,7 +9871,15 @@ index f1eb2c1ec..717b837b3 100644
    const { user } = useAuth();
    const { organizationId, isReady } = useOrganization();
    const queryClient = useQueryClient();
-@@ -76,16 +78,48 @@ export function useAvisos(): UseAvisosResult {
+   const { preferencias } = usePreferenciasDeAviso();
+ 
+   /**
+-   * Último som por chave de agrupamento. Vive num ref, não em estado: mudar
++   * Último som por chave de som (`chaveDeSom`). Vive num ref, não em estado: mudar
+    * isto não pode repintar o sino, e ele não sobrevive ao recarregar de
+    * propósito — quem acabou de abrir a aba merece ser avisado.
+    */
+@@ -76,16 +78,49 @@ export function useAvisos(): UseAvisosResult {
    const preferenciasRef = useRef(preferencias);
    preferenciasRef.current = preferencias;
  
@@ -9181,7 +9925,8 @@ index f1eb2c1ec..717b837b3 100644
 +    });
 +    if (decisao.som) {
 +      void motorDeSom.tocar(decisao.som, preferenciasRef.current.volume);
-+      if (aviso.group_key) ultimoSomPorChave.current[aviso.group_key] = agora;
++      const chave = chaveDeSom(aviso);
++      if (chave) ultimoSomPorChave.current[chave] = agora;
 +    }
 +    if (decisao.cartao) mostrarCartao(aviso, agora, abaVisivel);
 +  }, [entregar, habilitado, recebidos]);
@@ -9190,7 +9935,7 @@ index f1eb2c1ec..717b837b3 100644
      queryKey,
      queryFn: async (): Promise<Aviso[]> => {
        if (!organizationId || !user?.id) return [];
-@@ -109,50 +143,35 @@ export function useAvisos(): UseAvisosResult {
+@@ -109,50 +144,35 @@ export function useAvisos(): UseAvisosResult {
        return (data ?? []) as unknown as Aviso[];
      },
      enabled: habilitado,
@@ -9490,7 +10235,7 @@ index 82fb19bff..081a21cfb 100644
      },
    });
 diff --git a/classic/src/modules/platform/lib/decisao-de-entrega.ts b/classic/src/modules/platform/lib/decisao-de-entrega.ts
-index 4d589b2eb..ee3ea2808 100644
+index 4d589b2eb..af06f8045 100644
 --- a/classic/src/modules/platform/lib/decisao-de-entrega.ts
 +++ b/classic/src/modules/platform/lib/decisao-de-entrega.ts
 @@ -26,13 +26,30 @@ const TIMBRE_POR_TIPO: Record<string, Timbre> = {
@@ -9526,7 +10271,48 @@ index 4d589b2eb..ee3ea2808 100644
  
  /**
   * Rajada: enquanto a conversa está viva, o Aviso engorda em vez de nascer de
-@@ -95,6 +112,8 @@ export function decidirEntrega(
+@@ -41,13 +58,39 @@ const CANAL_QUENTE = new Set(["workflow_alert", "cron_drift", "lead_message", "l
+  */
+ export const JANELA_DE_REPIQUE_MS = 60_000;
+ 
++/**
++ * Tipos cujo som é contido pela RAIZ da chave, não pela chave inteira.
++ *
++ * Mensagem agendada enviada nasce um Aviso por cliente e dia
++ * (`sched_sent:<dia>:<cliente>`, Chamado fb8abe55): quem agendou precisa ver
++ * cada cliente na lista, com o link da sua conversa. Só que dez agendamentos
++ * às 09:00 são dez NASCIMENTOS no mesmo minuto — pela chave inteira, dez sons.
++ * A raiz do dia (`sched_sent:<dia>`) devolve à rajada o som que ela tinha
++ * quando era um cartão só: um.
++ */
++const RAIZ_DO_SOM = new Map<string, RegExp>([
++  ["scheduled_message_sent", /^sched_sent:\d{4}-\d{2}-\d{2}(?=:|$)/],
++]);
++
++/**
++ * A chave sob a qual o som é contido — e sob a qual quem toca registra o
++ * último som. Para quase todo tipo é o próprio `group_key`. A chave legada
++ * `sched_sent:<dia>`, do worker anterior ao Chamado fb8abe55, já é a raiz: a
++ * ordem entre o deploy do front e o do worker não importa.
++ */
++export function chaveDeSom(aviso: Pick<Aviso, "type" | "group_key">): string | null {
++  if (!aviso.group_key) return null;
++  const raiz = RAIZ_DO_SOM.get(aviso.type)?.exec(aviso.group_key);
++  return raiz ? raiz[0] : aviso.group_key;
++}
++
+ export interface ContextoDeEntrega {
+   preferencias: PreferenciasDeAviso;
+   /** Aba em segundo plano continua ouvindo: quem está no Excel precisa ser chamado. */
+   abaVisivel: boolean;
+   /** Lead cuja conversa está aberta na tela agora, se houver. */
+   conversaAbertaLeadId: string | null;
+-  /** Último som por chave de agrupamento, em epoch ms. */
++  /** Último som por chave de som (`chaveDeSom`), em epoch ms. */
+   ultimoSomPorChave: Record<string, number>;
+   /** Hora local de quem recebe, 0-23. */
+   horaLocal: number;
+@@ -95,6 +138,8 @@ export function decidirEntrega(
    // A conversa que já está na tela não precisa ser anunciada a quem a está lendo.
    if (
      preferencias.mute_active_conversation &&
@@ -9535,6 +10321,21 @@ index 4d589b2eb..ee3ea2808 100644
      aviso.lead_id !== null &&
      aviso.lead_id === contexto.conversaAbertaLeadId
    ) {
+@@ -111,8 +156,12 @@ export function decidirEntrega(
+     return calar("horario-silencioso");
+   }
+ 
+-  if (evento === "UPDATE") {
+-    const ultimo = aviso.group_key ? contexto.ultimoSomPorChave[aviso.group_key] : undefined;
++  // Pela chave inteira só o UPDATE repica: Aviso que nasce é assunto novo. Com
++  // raiz de som, o nascimento repica também — cada cliente é um Aviso novo,
++  // mas a rajada das 09:00 é uma só.
++  if (evento === "UPDATE" || RAIZ_DO_SOM.has(aviso.type)) {
++    const chave = chaveDeSom(aviso);
++    const ultimo = chave ? contexto.ultimoSomPorChave[chave] : undefined;
+     if (ultimo !== undefined && contexto.agora - ultimo < JANELA_DE_REPIQUE_MS) {
+       return calar("repique-recente");
+     }
 diff --git a/classic/src/modules/platform/lib/motor-de-som.ts b/classic/src/modules/platform/lib/motor-de-som.ts
 index 945e01a83..9d715412c 100644
 --- a/classic/src/modules/platform/lib/motor-de-som.ts
@@ -10488,7 +11289,7 @@ index 5d9e09138..599f54355 100644
        </div>
 diff --git a/classic/src/shared/realtime/broadcastTransport.ts b/classic/src/shared/realtime/broadcastTransport.ts
 new file mode 100644
-index 000000000..31aaec7e0
+index 000000000..522ef41a0
 --- /dev/null
 +++ b/classic/src/shared/realtime/broadcastTransport.ts
 @@ -0,0 +1,137 @@
@@ -11569,7 +12370,7 @@ index 000000000..c4920d58c
 +}
 diff --git a/classic/src/shared/realtime/realtimeTransportPlan.ts b/classic/src/shared/realtime/realtimeTransportPlan.ts
 new file mode 100644
-index 000000000..27ccbc700
+index 000000000..04f4989ab
 --- /dev/null
 +++ b/classic/src/shared/realtime/realtimeTransportPlan.ts
 @@ -0,0 +1,191 @@

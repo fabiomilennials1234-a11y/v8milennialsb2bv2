@@ -38,7 +38,7 @@ function Harness({ org = RIOFIX_ORG_ID, admin = true, archived = false }: { org?
     instanceId="currently-open-other-box" marcadas={["box-a", "box-b"]} allTags={[]}
     onAddTag={vi.fn()} onRemoveTag={vi.fn()} filter={DEFAULT_INBOX_FILTER} patch={vi.fn()} toggleMulti={vi.fn()}
     clearFilter={vi.fn()} funnelOptions={[]} vendorOptions={[]} resolveContactVendorId={() => null}
-    currentTeamMemberId={null} canSeeUnassigned={true} waitingHumanCount={0} filterGate="ok" onRetryEnrichment={vi.fn()} />;
+    currentTeamMemberId={null} canSeeUnassigned={true} canFilterOtherVendors={true} waitingHumanCount={0} filterGate="ok" onRetryEnrichment={vi.fn()} />;
 }
 function setup(props = {}) {
   const client = new QueryClient({ defaultOptions: { mutations: { retry: false }, queries: { retry: false } } });

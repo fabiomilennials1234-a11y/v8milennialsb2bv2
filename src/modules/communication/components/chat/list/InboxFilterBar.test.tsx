@@ -25,6 +25,7 @@ function baseProps(overrides = {}) {
     vendorOptions: [{ id: "v1", name: "Eduardo" }],
     currentTeamMemberId: "me",
     canSeeUnassigned: true,
+    canFilterOtherVendors: true,
     allTags: [{ id: "t1", name: "Ouro", color: "#fff" }],
     ...overrides,
   };
@@ -36,6 +37,13 @@ function setup(overrides = {}) {
 }
 
 describe("InboxFilterBar — o trilho", () => {
+  it("keeps restricted members in their own scope without a seller selector", () => {
+    setup({ canFilterOtherVendors: false, canSeeUnassigned: false });
+    expect(screen.queryByRole("button", { name: "Filtrar por vendedor" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Minhas conversas" })).not.toBeInTheDocument();
+    expect(screen.getByText("Minhas conversas")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Filtrar por funil" })).toBeInTheDocument();
+  });
   // V5 (02/10): as dimensões saíram de trás do "+ Filtro" e ficam sempre
   // visíveis; "Não lidas" foi para o alternador Todas · Não lidas · Grupos e
   // "Nova conversa" para o ícone do cabeçalho do inbox.

@@ -77,6 +77,7 @@ interface InboxFilterBarProps {
   vendorOptions: { id: string; name: string }[];
   currentTeamMemberId: string | null;
   canSeeUnassigned: boolean;
+  canFilterOtherVendors: boolean;
   allTags: { id: string; name: string; color: string }[];
 }
 
@@ -282,7 +283,7 @@ function resetDim(dim: DimKey, patch: InboxFilterBarProps["patch"]) {
 // ─── Componente principal ────────────────────────────────────────────────────
 
 export function InboxFilterBar(props: InboxFilterBarProps) {
-  const { filter, patch, clearFilter, unreadCount, waitingHumanCount } = props;
+  const { filter, patch, clearFilter, unreadCount, waitingHumanCount, canFilterOtherVendors } = props;
   const [menuOpen, setMenuOpen] = useState(false);
   const [autoOpen, setAutoOpen] = useState<DimKey | null>(null);
   // Dimensões "mostradas" mas ainda sem valor — precisam existir como chip antes
@@ -291,8 +292,8 @@ export function InboxFilterBar(props: InboxFilterBarProps) {
   const [shown, setShown] = useState<Set<DimKey>>(new Set());
 
   const activeDims = useMemo(
-    () => DIM_META.filter((d) => isDimActive(d.key, filter) || shown.has(d.key)),
-    [filter, shown],
+    () => DIM_META.filter((d) => (canFilterOtherVendors || d.key !== "vendor") && (isDimActive(d.key, filter) || shown.has(d.key))),
+    [filter, shown, canFilterOtherVendors],
   );
   const activeCount = countActiveFilters(filter);
 
@@ -323,6 +324,7 @@ export function InboxFilterBar(props: InboxFilterBarProps) {
     <div className="mt-2 flex flex-col gap-2">
       {/* Linha: toggle rápido + adicionar filtro */}
       <div className="flex flex-wrap items-center gap-2">
+        {!canFilterOtherVendors && <span className="rounded-full bg-primary/15 px-3 py-1.5 text-xs font-semibold text-primary">Minhas conversas</span>}
         <button
           type="button"
           onClick={() => patch({ unread: !filter.unread })}
@@ -368,7 +370,7 @@ export function InboxFilterBar(props: InboxFilterBarProps) {
               Adicionar filtro
             </p>
             <div className="flex flex-col gap-0.5">
-              {DIM_META.map((d) => {
+              {DIM_META.filter((d) => canFilterOtherVendors || d.key !== "vendor").map((d) => {
                 const Icon = d.icon;
                 return (
                   <button

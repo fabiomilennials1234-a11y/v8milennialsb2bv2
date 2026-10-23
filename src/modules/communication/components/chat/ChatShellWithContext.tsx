@@ -108,6 +108,7 @@ import {
 import { useLeadInboxMeta } from "@/modules/communication/hooks/chat/useLeadInboxMeta";
 import { useInboxFunnelOptions } from "@/modules/communication/hooks/chat/useInboxFunnelOptions";
 import { useInboxFilterState } from "@/modules/communication/hooks/chat/useInboxFilterState";
+import { useChatVendorAccess } from "@/modules/communication/hooks/chat/useChatVendorAccess";
 import { toServerFilter } from "@/modules/communication/lib/inboxFilterServer";
 import { DEFAULT_INBOX_FILTER } from "@/modules/communication/lib/inboxFilter";
 import { inboxFilterGate } from "@/modules/communication/lib/inboxEnrichment";
@@ -829,7 +830,8 @@ export function ChatShellWithContext() {
   // Declarado antes dos contatos porque as dimensões vão junto na busca: a RPC
   // aplica o recorte ANTES do LIMIT (issue #1277), senão o filtro só enxergaria
   // a página de conversas mais recentes. Busca e tab seguem efêmeros e locais.
-  const { filter, patch, toggleMulti, clearFilter } = useInboxFilterState();
+  const canFilterOtherVendors = useChatVendorAccess(organizationId);
+  const { filter, patch, toggleMulti, clearFilter } = useInboxFilterState(canFilterOtherVendors);
   const { isMobile } = useViewport();
 
   /**
@@ -1516,6 +1518,7 @@ export function ChatShellWithContext() {
             resolveResponsavel={resolveResponsavel}
             currentTeamMemberId={teamMember?.id ?? null}
             canSeeUnassigned={isAdmin}
+            canFilterOtherVendors={canFilterOtherVendors}
             filterGate={filterGate}
             onRetryEnrichment={retryEnrichment}
           />

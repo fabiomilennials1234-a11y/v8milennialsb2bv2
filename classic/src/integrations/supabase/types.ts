@@ -20884,8 +20884,8 @@ export type Database = {
       }
       can_see_chat_scope: {
         Args: {
-          p_lead_id: string
-          p_normalized_phone: string
+          p_lead_id: string | null
+          p_normalized_phone: string | null
           p_org_id: string
         }
         Returns: boolean
