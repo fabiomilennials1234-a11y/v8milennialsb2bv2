@@ -282,6 +282,10 @@ export function createMockSupabase() {
       },
       upsert: (rows: unknown, opts?: unknown) => {
         isWrite = true;
+        if (insertErrors[tableName]) {
+          insertError = insertErrors[tableName];
+          return chain;
+        }
         const arr = Array.isArray(rows) ? rows : [rows];
         if (!insertedRows[tableName]) insertedRows[tableName] = [];
         if (!upsertOpts[tableName]) upsertOpts[tableName] = [];

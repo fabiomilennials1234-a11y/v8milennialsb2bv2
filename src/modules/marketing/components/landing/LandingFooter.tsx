@@ -75,10 +75,10 @@ export function LandingFooter() {
 
         {/* Bottom bar */}
         <div className="mt-14 pt-8 border-t border-white/5 flex flex-col md:flex-row items-center justify-between gap-4">
-          <div className="text-xs text-mute">&copy; 2026 TorqueCRM · Todos os direitos reservados</div>
+          <div className="text-xs text-mute">&copy; 2026 TorqueCRM · Gabriel Aurelio Gipp · CNPJ 54.384.269/0001-48</div>
           <div className="flex items-center gap-5 text-xs text-mute">
             <Link to="/privacidade" className="hover:text-cream transition">Privacidade</Link>
-            <a href="#" className="hover:text-cream transition">Termos</a>
+            <a href="/termos" className="hover:text-cream transition">Termos</a>
             <a href="#" className="hover:text-cream transition">Segurança</a>
             <a href="#" className="hover:text-cream transition">LGPD</a>
           </div>

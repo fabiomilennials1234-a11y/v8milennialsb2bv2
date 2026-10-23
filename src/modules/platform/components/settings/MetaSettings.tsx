@@ -5,6 +5,7 @@
  * conecte contas diferentes para cada plataforma.
  */
 
+import { MetaAdsReadPanel } from "./MetaAdsReadPanel";
 import { useEffect } from "react";
 import { useSearchParams } from "react-router-dom";
 import { motion } from "framer-motion";
@@ -434,6 +435,7 @@ export function MetaSettings() {
         {/* Lead Ads config lives under Facebook */}
         <div className="pt-4 border-t">
           <MetaLeadgenConfig />
+          <MetaAdsReadPanel />
         </div>
       </ConnectionSection>
 
@@ -518,6 +520,7 @@ export function FacebookSettings() {
     >
       <div className="pt-4 border-t">
         <MetaLeadgenConfig />
+        <MetaAdsReadPanel />
       </div>
     </ConnectionSection>
   );

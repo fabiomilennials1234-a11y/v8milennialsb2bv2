@@ -108,3 +108,14 @@ describe('createMockSupabase — comparison filters', () => {
     expect(data[0].id).toBe('2');
   });
 });
+
+
+describe("createMockSupabase — failed upserts", () => {
+  it("returns the configured storage failure without recording a successful write", async () => {
+    const { sb, mockInsertError, getInserted } = createMockSupabase();
+    mockInsertError("events", { code: "XX000", message: "storage unavailable" });
+    const result = await sb.from("events").upsert({ id: "event" }, { onConflict: "id" });
+    expect(result.error).toEqual({ code: "XX000", message: "storage unavailable" });
+    expect(getInserted("events")).toHaveLength(0);
+  });
+});

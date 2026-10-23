@@ -87,7 +87,7 @@ export async function verifyMetaState(
   opts?: { now?: number },
 ): Promise<MetaStatePayload | null> {
   try {
-    if (!token || typeof token !== "string" || !secret) return null;
+    if (!token || typeof token !== "string" || token.length > 8192 || !secret) return null;
     const parts = token.split(".");
     if (parts.length !== 2) return null;
     const [payloadB64, sig] = parts;

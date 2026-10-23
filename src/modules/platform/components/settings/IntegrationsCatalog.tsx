@@ -261,12 +261,12 @@ const INTEGRATIONS: IntegrationDef[] = [
   },
   {
     id: "facebook",
-    name: "Facebook",
-    description: "Capture leads de anúncios e converse pelo Messenger.",
-    longDescription: "Conecte suas páginas do Facebook para capturar leads automaticamente via Meta Lead Ads, receber mensagens do Messenger e gerenciar conversas diretamente no Torque.",
+    name: "Meta — Facebook e Instagram",
+    description: "Mensagens, leads e resultados das suas contas Meta.",
+    longDescription: "Conecte páginas, Instagram profissional e contas de anúncios para reunir Messenger, Direct, leads e métricas de campanhas no Torque.",
     category: "marketing",
     logo: <FacebookLogo />,
-    features: ["Lead Ads automático", "Messenger", "Múltiplas páginas", "Formulários"],
+    features: ["Lead Ads automático", "Messenger e Direct", "Métricas de anúncios", "Múltiplos ativos"],
     settingsId: "facebook",
   },
   // O card "Instagram" do caminho Graph foi REMOVIDO em 14/08/2026 (decisão do
@@ -653,7 +653,7 @@ function getSettingsComponent(settingsId: string): React.FC | null {
 // ─── Main Catalog ───────────────────────────────────────
 
 export default function IntegrationsCatalog() {
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(() => typeof window !== "undefined" && new URLSearchParams(window.location.search).has("meta") ? "facebook" : null);
   const [focoId, setFocoId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [filterCategory, setFilterCategory] = useState<IntegrationCategory | "all">("all");

@@ -18,7 +18,7 @@ export function useMetaPages() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("meta_pages")
-        .select("*")
+        .select("id,meta_connection_id,organization_id,page_id,page_name,instagram_account_id,instagram_username,is_active,webhook_subscribed,created_at,updated_at")
         .eq("organization_id", organizationId)
         .eq("is_active", true)
         .eq("webhook_subscribed", true)

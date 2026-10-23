@@ -55,6 +55,8 @@ describe("useMetaSend", () => {
 
     expect(invokeMock).toHaveBeenCalledWith("send-meta-message", {
       body: {
+        organization_id: "org-1",
+        conversationId: "c1",
         recipientId: "ig_user",
         channel: "instagram",
         message: "hello",

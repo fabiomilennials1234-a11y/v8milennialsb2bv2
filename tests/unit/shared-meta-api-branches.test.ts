@@ -206,7 +206,7 @@ describe("listLeadForms — branches", () => {
           json: () =>
             Promise.resolve({
               data: [{ id: "f1", name: "Form 1", status: "ACTIVE" }],
-              paging: { next: "https://next-page" },
+              paging: { next: "https://graph.facebook.com/v21.0/next-page" },
             }),
         });
       }

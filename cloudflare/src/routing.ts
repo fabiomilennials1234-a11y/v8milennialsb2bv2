@@ -29,7 +29,7 @@ export type Route =
   /** `/sw.js`: o service worker da V5. */
   | { kind: "service-worker"; asset: typeof SERVICE_WORKER_ASSET }
   /** Páginas estáticas com caminho limpo, e a exceção de dotfile (Div1). */
-  | { kind: "page"; asset: "/sobre.html" | "/privacidade.html" | "/.well-known/security.txt" }
+  | { kind: "page"; asset: "/sobre.html" | "/privacidade.html" | "/termos.html" | "/exclusao-de-dados.html" | "/.well-known/security.txt" }
   /** `/api/v1` sem barra: 301 relativo, como o nginx faria sem o bug do :8080 (Div4). */
   | { kind: "redirect"; location: string }
   /** `/api/v1/*`: proxy para a edge function `api`. */
@@ -172,6 +172,8 @@ export function resolveRoute(url: URL, method: string): Route {
   if (path === SERVICE_WORKER_ASSET) return { kind: "service-worker", asset: SERVICE_WORKER_ASSET };
   if (CLASSIC_ENTRY_FILES.has(path.toLowerCase())) return { kind: "not-found" };
   if (path === "/sobre") return { kind: "page", asset: "/sobre.html" };
+  if (path === "/termos" || path === "/termos/") return { kind: "page", asset: "/termos.html" };
+  if (path === "/exclusao-de-dados" || path === "/exclusao-de-dados/") return { kind: "page", asset: "/exclusao-de-dados.html" };
   if (path === "/privacidade") return { kind: "page", asset: "/privacidade.html" };
 
   if (hasDotSegment(path)) {
