@@ -617,3 +617,10 @@ verify_jwt = false
 verify_jwt = false
 [functions.copilot-quote-template]
 verify_jwt = false
+
+# Meta privacy callbacks: authenticated by verified HMAC signed_request, not JWT.
+[functions.meta-data-deletion]
+verify_jwt = false
+
+[functions.meta-deauthorize]
+verify_jwt = false

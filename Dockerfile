@@ -152,6 +152,26 @@ printf '%s\n' \
   '    add_header Cache-Control "no-store, must-revalidate" always;' \
   '    try_files /privacidade.html =404;' \
   '  }' \
+  '  location = /termos {' \
+  '    include /etc/nginx/security-headers.conf;' \
+  '    add_header Cache-Control "no-store, must-revalidate" always;' \
+  '    try_files /termos.html =404;' \
+  '  }' \
+  '  location = /exclusao-de-dados {' \
+  '    include /etc/nginx/security-headers.conf;' \
+  '    add_header Cache-Control "no-store, must-revalidate" always;' \
+  '    try_files /exclusao-de-dados.html =404;' \
+  '  }' \
+  '  location = /termos/ {' \
+  '    include /etc/nginx/security-headers.conf;' \
+  '    add_header Cache-Control "no-store, must-revalidate" always;' \
+  '    try_files /termos.html =404;' \
+  '  }' \
+  '  location = /exclusao-de-dados/ {' \
+  '    include /etc/nginx/security-headers.conf;' \
+  '    add_header Cache-Control "no-store, must-revalidate" always;' \
+  '    try_files /exclusao-de-dados.html =404;' \
+  '  }' \
   '  location = / {' \
   '    include /etc/nginx/security-headers.conf;' \
   '    add_header Cache-Control "no-store, must-revalidate" always;' \
