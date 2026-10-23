@@ -80,6 +80,7 @@ export interface InboxFilterBarProps {
   vendorOptions: { id: string; name: string }[];
   currentTeamMemberId: string | null;
   canSeeUnassigned: boolean;
+  canFilterOtherVendors: boolean;
   allTags: { id: string; name: string; color: string }[];
 }
 
@@ -392,7 +393,7 @@ function useTrilho() {
 // ─── Componente principal ────────────────────────────────────────────────────
 
 export function InboxFilterBar(props: InboxFilterBarProps) {
-  const { filter, patch, clearFilter, waitingHumanCount, currentTeamMemberId, canSeeUnassigned } = props;
+  const { filter, patch, clearFilter, waitingHumanCount, currentTeamMemberId, canSeeUnassigned, canFilterOtherVendors } = props;
   const { ref, fade, medir, onWheel } = useTrilho();
   // "Não lidas" mora no alternador da lista; aqui só contam as do trilho.
   const ativosNoTrilho = countActiveFilters({ ...filter, unread: false });
@@ -416,7 +417,8 @@ export function InboxFilterBar(props: InboxFilterBarProps) {
         "data-[fade-start=true]:data-[fade-end=true]:[mask-image:linear-gradient(to_right,transparent,black_18%,black_82%,transparent)]",
       )}
     >
-      {currentTeamMemberId && (
+      {!canFilterOtherVendors && <span className="shrink-0 rounded-full bg-primary-soft px-3 py-1.5 text-xs font-semibold text-primary-soft-foreground">Minhas conversas</span>}
+      {canFilterOtherVendors && currentTeamMemberId && (
         <ToggleChip
           label="Minhas conversas"
           icon={UserCheck}
@@ -424,7 +426,7 @@ export function InboxFilterBar(props: InboxFilterBarProps) {
           onClick={() => patch({ vendor: filter.vendor === "mine" ? "all" : "mine" })}
         />
       )}
-      {canSeeUnassigned && (
+      {canFilterOtherVendors && canSeeUnassigned && (
         <ToggleChip
           label="Não atribuídas"
           icon={UserX}
@@ -460,7 +462,7 @@ export function InboxFilterBar(props: InboxFilterBarProps) {
 
       <span className="mx-0.5 h-4 w-px shrink-0 bg-foreground/15" aria-hidden />
 
-      {DIMS.map((d) => (
+      {DIMS.filter((d) => canFilterOtherVendors || d.key !== "vendor").map((d) => (
         <DimensionChip key={d.key} dim={d} props={props} />
       ))}
 

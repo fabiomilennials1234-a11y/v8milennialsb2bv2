@@ -134,6 +134,7 @@ interface ConversationListProps {
   resolveContactVendorId: (contact: ChatContact) => string | null;
   currentTeamMemberId: string | null;
   canSeeUnassigned: boolean;
+  canFilterOtherVendors: boolean;
   waitingHumanLeadIds?: Set<string>;
   waitingHumanCount: number;
   /**
@@ -186,6 +187,7 @@ export function ConversationList({
   resolveContactVendorId,
   currentTeamMemberId,
   canSeeUnassigned,
+  canFilterOtherVendors,
   waitingHumanLeadIds,
   waitingHumanCount,
   filterGate,
@@ -415,6 +417,7 @@ export function ConversationList({
           vendorOptions={vendorOptions}
           currentTeamMemberId={currentTeamMemberId}
           canSeeUnassigned={canSeeUnassigned}
+          canFilterOtherVendors={canFilterOtherVendors}
         />
       ) : (
       <div className="p-3 border-b bg-background shrink-0">
@@ -461,6 +464,7 @@ export function ConversationList({
             vendorOptions={vendorOptions}
             currentTeamMemberId={currentTeamMemberId}
             canSeeUnassigned={canSeeUnassigned}
+            canFilterOtherVendors={canFilterOtherVendors}
             allTags={allTags}
           />
         )}

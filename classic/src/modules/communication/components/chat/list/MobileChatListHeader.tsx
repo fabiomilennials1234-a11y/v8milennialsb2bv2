@@ -57,6 +57,7 @@ export interface MobileChatListHeaderProps {
   vendorOptions: { id: string; name: string }[];
   currentTeamMemberId: string | null;
   canSeeUnassigned: boolean;
+  canFilterOtherVendors: boolean;
 }
 
 // ─── Filter chip config ──────────────────────────────────────────────────────
@@ -89,6 +90,7 @@ export function MobileChatListHeader({
   vendorOptions,
   currentTeamMemberId,
   canSeeUnassigned,
+  canFilterOtherVendors,
 }: MobileChatListHeaderProps) {
   const [searchExpanded, setSearchExpanded] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
@@ -198,7 +200,7 @@ export function MobileChatListHeader({
       {showFilters && (
       <div className="flex gap-2 px-3 pt-1 pb-2 overflow-x-auto scrollbar-none">
         {/* Chip de vendedor — Select estilizado como chip */}
-        <Select value={vendorFilter} onValueChange={onVendorFilterChange}>
+        {canFilterOtherVendors ? <Select value={vendorFilter} onValueChange={onVendorFilterChange}>
           <SelectTrigger
             className={cn(
               "shrink-0 h-auto w-auto gap-1 rounded-full border px-3 py-1 text-xs font-medium whitespace-nowrap [&>svg]:hidden",
@@ -225,7 +227,11 @@ export function MobileChatListHeader({
               <SelectItem value="unassigned">Não atribuídas</SelectItem>
             )}
           </SelectContent>
-        </Select>
+        </Select> : (
+          <span className="shrink-0 rounded-full bg-primary-soft px-3 py-1 text-xs font-semibold text-primary-soft-foreground">
+            Minhas conversas
+          </span>
+        )}
         {chips.map((chip) => {
           const isActive = activeFilter === chip.key;
           const showCount = chip.count != null && chip.count > 0;

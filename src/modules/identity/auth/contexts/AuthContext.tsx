@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useRef, useState, ReactNode } from 'react';
 import { User, Session } from '@supabase/supabase-js';
+import { useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string | undefined;
@@ -36,17 +37,35 @@ interface AuthContextType {
 export const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
+  const queryClient = useQueryClient();
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
   const attachCalledForSession = useRef<string | null>(null);
+  const accountId = useRef<string | null | undefined>(undefined);
 
   useEffect(() => {
+    let active = true;
+    let receivedAuthEvent = false;
+    const applySession = (next: Session | null) => {
+      const nextId = next?.user.id ?? null;
+      if (accountId.current !== nextId) {
+        // Org-scoped query keys can contain data from a more privileged account.
+        // Cancel old requests and discard their cache BEFORE publishing the new user.
+        void queryClient.cancelQueries();
+        queryClient.clear();
+        accountId.current = nextId;
+        attachCalledForSession.current = null;
+      }
+      setSession(next);
+      setUser(next?.user ?? null);
+      setLoading(false);
+    };
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (event, session) => {
-        setSession(session);
-        setUser(session?.user ?? null);
-        setLoading(false);
+        if (!active) return;
+        receivedAuthEvent = true;
+        applySession(session);
         if ((event === 'SIGNED_IN' || event === 'INITIAL_SESSION') && session?.access_token && session?.user?.id) {
           const key = `${session.user.id}:${session.access_token.slice(0, 20)}`;
           if (attachCalledForSession.current !== key) {
@@ -58,9 +77,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     );
 
     supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      setUser(session?.user ?? null);
-      setLoading(false);
+      // A slow bootstrap must not restore an account superseded by an auth event.
+      if (!active || receivedAuthEvent) return;
+      applySession(session);
       if (session?.access_token && session?.user?.id) {
         const key = `${session.user.id}:${session.access_token.slice(0, 20)}`;
         if (attachCalledForSession.current !== key) {
@@ -70,8 +89,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     });
 
-    return () => subscription.unsubscribe();
-  }, []);
+    return () => { active = false; subscription.unsubscribe(); };
+  }, [queryClient]);
 
   const signIn = async (email: string, password: string) => {
     const { error } = await supabase.auth.signInWithPassword({
@@ -128,7 +147,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, session, loading, signIn, signUp, signOut }}>
+    <AuthContext.Provider key={user?.id ?? 'signed-out'} value={{ user, session, loading, signIn, signUp, signOut }}>
       {children}
     </AuthContext.Provider>
   );
