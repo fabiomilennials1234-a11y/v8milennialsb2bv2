@@ -96,7 +96,7 @@ BEGIN
     )
     INTO v_org
     FROM (
-      SELECT sum(uo.sale_value) AS approved_sum, count(*) AS approved_count
+      SELECT sum(uo.sale_value) AS approved_sum, count(*) AS approved_count -- metric-lint-allow: insumo de saúde da carteira por pedidos aprovados, não receita do ledger
       FROM public.upsell_orders uo
       WHERE uo.organization_id = p_org_id
         AND uo.approval_status = 'approved'

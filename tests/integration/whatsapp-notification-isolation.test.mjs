@@ -6,14 +6,16 @@ import { PGlite } from '@electric-sql/pglite';
 const sql = (name) => readFileSync(new URL(`../../supabase/migrations/${name}.sql`, import.meta.url), 'utf8');
 const id = (n) => `00000000-0000-0000-0000-${String(n).padStart(12, '0')}`;
 
-test('isolation migration follows its dependencies and is not overwritten during replay', () => {
+test('isolation helpers retain their expected final definitions during replay', () => {
   const target = '20271021000013_isolate_whatsapp_notifications.sql';
   const names = readdirSync(new URL('../../supabase/migrations/', import.meta.url))
     .filter(name => name.endsWith('.sql')).sort();
   assert.ok(names.indexOf('20271019000003_enforce_whatsapp_instance_read_access.sql') < names.indexOf(target));
   for (const fn of ['whatsapp_readable_instance_ids', 'can_see_chat_scope', 'can_see_chat_target', 'fn_aviso_de_mensagem', 'fn_avisos_pendentes_de_push', 'oraculo_chat_scope_allows']) {
     const definition = new RegExp(`CREATE OR REPLACE FUNCTION public\\.${fn}\\(`, 'i');
-    assert.equal(names.filter(name => definition.test(sql(name.slice(0, -4)))).at(-1), target, fn);
+    const finalMigration = fn === 'oraculo_chat_scope_allows'
+      ? '20271125000000_co_donos_na_conversa.sql' : target;
+    assert.equal(names.filter(name => definition.test(sql(name.slice(0, -4)))).at(-1), finalMigration, fn);
   }
 });
 
@@ -110,6 +112,10 @@ test('WhatsApp previews follow number assignments, not shared lead ownership', a
     await incoming(21);
     assert.equal((await db.query('SELECT user_id FROM notifications')).rows[0].user_id,id(12));
     await db.exec(sql('20271021000013_isolate_whatsapp_notifications'));
+    await db.exec('CREATE TABLE lead_owners(lead_id uuid, organization_id uuid, role text, team_member_id uuid)');
+    const coOwners = sql('20271125000000_co_donos_na_conversa');
+    await db.exec(coOwners.slice(coOwners.indexOf('CREATE OR REPLACE FUNCTION public.oraculo_chat_scope_allows('),
+      coOwners.indexOf('CREATE OR REPLACE FUNCTION public.can_link_or_read_lead(')));
     // A malformed cross-org allowlist row must never produce a notification.
     await db.exec(`INSERT INTO whatsapp_instance_allowed_members VALUES('${id(21)}','${id(4)}')`);
     await incoming(21);

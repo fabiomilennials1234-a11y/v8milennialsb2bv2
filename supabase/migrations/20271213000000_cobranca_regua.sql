@@ -1107,7 +1107,7 @@ BEGIN
       IF NOT EXISTS (
         SELECT 1 FROM public.cobranca_regua_envios en
          WHERE en.inadimplente_id = v_inad AND en.status IN ('enviando', 'enviado')
-           AND COALESCE(en.enviado_em, en.updated_at) > now() - interval '5 minutes') THEN
+           AND COALESCE(en.enviado_em, en.updated_at) > now() - interval '5 minutes') THEN -- metric-lint-allow: reconhecimento de eco recente, sem métrica de vendas
         PERFORM private.cobranca_evento(NEW.organization_id, v_inad, v_caso, 'mensagem_enviada',
           jsonb_build_object('origem', 'chat', 'texto', left(COALESCE(NEW.content, ''), 500),
                              'tipo', NEW.message_type, 'autor_membro', NEW.sent_by_team_member_id,
