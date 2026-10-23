@@ -21,6 +21,12 @@
  * Só o telefone não basta: o Telefone N:N existe porque empresas diferentes
  * dividem o mesmo número (13 pares na Café Jurerê), e adotar pelo número
  * fundiria clientes distintos. Sem nome compatível, cai no caminho de sempre.
+ *
+ * Exceção estreita — planilha com o nome do CONTATO ("Sidnei") e ERP com a razão
+ * social ("NATURAL BEER"), Café Jurerê 21/10. O nome não casa, então a prova de
+ * identidade passa a ser o número NÃO ser compartilhado: um único cliente do
+ * ERP o usa neste lote e nenhum outro já está na carteira com ele. As condições
+ * de "lead sem dono" continuam valendo.
  */
 
 import { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
@@ -93,6 +99,44 @@ interface LeadRow {
 }
 
 /**
+ * Dos telefones dos candidatos, os que nenhum OUTRO cliente da carteira usa.
+ *
+ * A carteira guarda o telefone como veio do ERP (`upsell_clients.phone`), então
+ * a consulta é pelo número cru do cliente a criar. Número já presente na
+ * carteira de outro lead é número compartilhado (Telefone N:N): não prova
+ * identidade.
+ */
+async function phonesWithoutOtherClients(
+  admin: SupabaseClient,
+  organizationId: string,
+  candidates: LeadRow[],
+  byPhone: Map<string, CanonicalClient[]>,
+): Promise<Set<string>> {
+  const solo = new Set<string>();
+  const rawByNormalized = new Map<string, string>();
+  for (const lead of candidates) {
+    const sameNumber = byPhone.get(lead.normalized_phone!) ?? [];
+    if (sameNumber.length === 1 && sameNumber[0].phone) {
+      rawByNormalized.set(lead.normalized_phone!, sameNumber[0].phone);
+    }
+  }
+  if (rawByNormalized.size === 0) return solo;
+
+  const { data, error } = await admin
+    .from("upsell_clients")
+    .select("phone")
+    .eq("organization_id", organizationId)
+    .in("phone", [...rawByNormalized.values()]);
+  if (error) throw new Error(`Falha ao checar telefone na carteira: ${error.message}`);
+
+  const used = new Set((data ?? []).map((r: { phone: string }) => r.phone));
+  for (const [normalized, raw] of rawByNormalized) {
+    if (!used.has(raw)) solo.add(normalized);
+  }
+  return solo;
+}
+
+/**
  * Para cada cliente a criar, o lead existente que ele deve adotar.
  *
  * Chave do resultado: `externalId` do cliente. Um lead é adotado por UM cliente
@@ -145,11 +189,20 @@ export async function findAdoptableLeads(
     if (ownedError) throw new Error(`Falha ao checar a carteira: ${ownedError.message}`);
     const withClient = new Set((owned ?? []).map((r: { lead_id: string }) => r.lead_id));
 
-    for (const lead of candidates) {
-      if (withClient.has(lead.id) || taken.has(lead.id) || !lead.normalized_phone) continue;
-      const match = (byPhone.get(lead.normalized_phone) ?? []).find(
+    const free = candidates.filter((c) => !withClient.has(c.id) && !taken.has(c.id) && !!c.normalized_phone);
+    const soloPhones = await phonesWithoutOtherClients(admin, organizationId, free, byPhone);
+
+    for (const lead of free) {
+      const sameNumber = byPhone.get(lead.normalized_phone!) ?? [];
+      let match = sameNumber.find(
         (client) => !adopted.has(client.externalId) && sameCompanyName(client, lead),
       );
+      // Nome diferente (planilha com o nome do contato, ERP com a razão social):
+      // o número sozinho só vale quando ele não é compartilhado — um único
+      // cliente do ERP o usa, e nenhum outro já está na carteira com ele.
+      if (!match && sameNumber.length === 1 && soloPhones.has(lead.normalized_phone!)) {
+        match = sameNumber.find((client) => !adopted.has(client.externalId));
+      }
       if (!match) continue;
       taken.add(lead.id);
       adopted.set(match.externalId, {

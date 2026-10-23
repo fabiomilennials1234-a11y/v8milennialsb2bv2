@@ -865,6 +865,44 @@ Deno.serve(
       if (classificacao.restantes === 0) break;
     }
 
+    // Alarme de duplicata: lead do ERP ativo, sem `erp_code` e sem carteira é o
+    // rastro do lead "fantasma" (planilha + ERP, Café Jurerê 21/10). Pelo fluxo
+    // correto não existe; se aparecer, a adoção falhou e alguém precisa ver.
+    // Falha aqui não pode derrubar o sync.
+    let leadsOrfaos: string[] = [];
+    try {
+      const { data: semCodigo } = await admin
+        .from("leads")
+        .select("id")
+        .eq("organization_id", organizationId)
+        .eq("origin", `erp_${TOTH_PROVIDER_ID}`)
+        .is("erp_code", null)
+        .is("deleted_at", null)
+        .limit(200);
+      const ids = (semCodigo ?? []).map((l: { id: string }) => l.id);
+      if (ids.length > 0) {
+        const { data: comCarteira } = await admin
+          .from("upsell_clients")
+          .select("lead_id")
+          .eq("organization_id", organizationId)
+          .in("lead_id", ids);
+        const ligados = new Set((comCarteira ?? []).map((r: { lead_id: string }) => r.lead_id));
+        leadsOrfaos = ids.filter((id: string) => !ligados.has(id));
+      }
+    } catch (e) {
+      console.warn("[toth-sync-clientes] checagem de lead órfão falhou:", e);
+    }
+    if (leadsOrfaos.length > 0) {
+      await logRuntime({
+        organizationId,
+        module: "general",
+        action: "toth_lead_orfao",
+        status: "error",
+        errorMessage: `${leadsOrfaos.length} lead(s) do ERP sem erp_code e sem carteira — possível duplicata de lead existente`,
+        payloadSnapshot: { lead_ids: leadsOrfaos.slice(0, 20), total: leadsOrfaos.length },
+      });
+    }
+
     await admin
       .from("toth_connections")
       .update({
