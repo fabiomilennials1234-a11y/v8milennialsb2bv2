@@ -94,3 +94,7 @@ Não foram alterados módulos de Leads, Copilot, VoIP ou WhatsApp para esconder 
 ## Fluxo completo no produto
 
 Após a comparação ampla, painel Meta ganhou leitura das contas/métricas por organização, datas e paginação. Retorno OAuth abre a aba/modal corretos. Recorte final de todos os testes Meta e catálogo: **266/266 aprovados em 34 arquivos**, incluindo mudança de organização sem reaproveitar métricas do tenant anterior, membro sem acesso, período inválido e re-request de permissões. Build e typecheck foram repetidos para a interface; sem erros novos. Preview local desktop/mobile foi conferido com dados sintéticos, sem conexão a ativos reais; não serve como prova de App Review.
+
+## Varredura de segurança
+
+A varredura do histórico deste PR não encontrou ocorrências. O ensaio das regras passou com três exemplos positivos artificiais, exemplos públicos e conteúdo versionado. A ocorrência remota anterior veio de prosa comum no cabeçalho do runbook. A revisão permitiu somente sua localização histórica exata em .gitleaksignore; a redação atual foi alterada. As regras do detector não foram enfraquecidas.

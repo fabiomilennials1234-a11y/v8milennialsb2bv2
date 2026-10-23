@@ -1,6 +1,6 @@
 # Meta CRM: preparação para produção
 
-Data da inspeção: 2026-10-23. **Código preparado para ensaio; liberação ainda depende de validação no alvo e na Meta.** Este PR inclui documentos, OAuth Business, isolamento/criptografia de tokens, leitura Ads e recebimento durável de eventos. Testes locais não certificam produção.
+Inspeção em 23/10/2026. **Preparado para ensaio; ativação depende da validação no Supabase e na Meta.** Escopo e critérios de liberação estão descritos abaixo.
 
 ## Identidade pública
 
