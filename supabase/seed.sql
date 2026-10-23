@@ -413,16 +413,28 @@ VALUES
   ('00000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-0000000009e1', 'Proposta', 'proposta', 1, 'open')
 ON CONFLICT (pipeline_id, stage_key) DO NOTHING;
 
-INSERT INTO pipeline_entries (id, organization_id, pipeline_id, lead_id, stage_key, entered_at)
+-- Recompra exige negócios distintos: dois cards SEM deal_id no mesmo funil
+-- violariam uq_pipeline_entries_um_card_sem_negocio desde 20271119000000.
+INSERT INTO deals (id, organization_id, source_lead_id, title, source)
+VALUES
+  ('00000000-0000-0000-0000-000000009301', '00000000-0000-0000-0000-000000000001',
+   '00000000-0000-0000-0000-000000009001', 'Primeiro negócio do Lead Dois', 'backfill'),
+  ('00000000-0000-0000-0000-000000009302', '00000000-0000-0000-0000-000000000001',
+   '00000000-0000-0000-0000-000000009001', 'Segundo negócio do Lead Dois', 'backfill'),
+  ('00000000-0000-0000-0000-000000009303', '00000000-0000-0000-0000-000000000001',
+   '00000000-0000-0000-0000-000000009002', 'Negócio do Lead Um', 'backfill')
+ON CONFLICT (id) DO NOTHING;
+
+INSERT INTO pipeline_entries (id, organization_id, pipeline_id, lead_id, stage_key, entered_at, deal_id)
 VALUES
   -- L1: DOIS negócios abertos, em etapas diferentes — é o coração do cenário
   ('00000000-0000-0000-0000-000000009101', '00000000-0000-0000-0000-000000000001',
-   '00000000-0000-0000-0000-0000000009e1', '00000000-0000-0000-0000-000000009001', 'novo', now()),
+   '00000000-0000-0000-0000-0000000009e1', '00000000-0000-0000-0000-000000009001', 'novo', now(), '00000000-0000-0000-0000-000000009301'),
   ('00000000-0000-0000-0000-000000009102', '00000000-0000-0000-0000-000000000001',
-   '00000000-0000-0000-0000-0000000009e1', '00000000-0000-0000-0000-000000009001', 'proposta', now()),
+   '00000000-0000-0000-0000-0000000009e1', '00000000-0000-0000-0000-000000009001', 'proposta', now(), '00000000-0000-0000-0000-000000009302'),
   -- L2: um só
   ('00000000-0000-0000-0000-000000009103', '00000000-0000-0000-0000-000000000001',
-   '00000000-0000-0000-0000-0000000009e1', '00000000-0000-0000-0000-000000009002', 'novo', now())
+   '00000000-0000-0000-0000-0000000009e1', '00000000-0000-0000-0000-000000009002', 'novo', now(), '00000000-0000-0000-0000-000000009303')
 ON CONFLICT (id) DO NOTHING;
 
 -- Receita do mês corrente, para a métrica personalizada `receita ÷ leads` ter
