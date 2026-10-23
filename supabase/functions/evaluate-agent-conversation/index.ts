@@ -12,10 +12,11 @@
  *
  * Chamada em fire-and-forget após cada turno de conversa.
  *
+ * Auth: só servidor → `Authorization: Bearer <service role>`. Organização, agente e
+ * lead gravados vêm da conversa no banco; `organizationId` do body tem de bater com ela.
+ *
  * Body: {
  *   conversationId: string,
- *   agentId: string,
- *   leadId: string,
  *   organizationId: string,
  *   turnCount: number,
  *   userMessage: string,
@@ -29,6 +30,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { logRuntime } from "../_shared/logger.ts";
 import { getCorsHeaders } from "../_shared/cors.ts";
 import { withSecurityHeaders } from "../_shared/security-headers.ts";
+import { isServiceRoleRequest } from "../_shared/auth.ts";
 
 Deno.serve(withErrorBoundary('evaluate-agent-conversation', async (req) => {
   const origin = req.headers.get("Origin") ?? undefined;
@@ -36,6 +38,15 @@ Deno.serve(withErrorBoundary('evaluate-agent-conversation', async (req) => {
 
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
+  }
+
+  // Só servidor chama: grava com service role e gasta a chave da OpenRouter.
+  // Sem isto, a anon key do frontend bastava para inserir avaliação em qualquer org.
+  if (!isServiceRoleRequest(req)) {
+    return new Response(
+      JSON.stringify({ error: "Unauthorized" }),
+      { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    );
   }
 
   try {
@@ -55,8 +66,6 @@ Deno.serve(withErrorBoundary('evaluate-agent-conversation', async (req) => {
     const body = await req.json();
     const {
       conversationId,
-      agentId,
-      leadId,
       organizationId,
       turnCount,
       userMessage,
@@ -67,6 +76,33 @@ Deno.serve(withErrorBoundary('evaluate-agent-conversation', async (req) => {
     if (!conversationId || !userMessage || !agentResponse || !organizationId) {
       return new Response(
         JSON.stringify({ error: "conversationId, userMessage, agentResponse, organizationId required" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // Org, agente e lead saem da conversa gravada; o body só diz QUAL conversa avaliar.
+    const { data: conversation, error: conversationError } = await supabase
+      .from("conversations")
+      .select("organization_id, agent_id, lead_id")
+      .eq("id", conversationId)
+      .maybeSingle();
+
+    if (conversationError) {
+      console.error("[evaluate-agent-conversation] Conversation lookup error:", conversationError.message);
+      return new Response(
+        JSON.stringify({ error: "Conversation lookup failed" }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+    if (!conversation) {
+      return new Response(
+        JSON.stringify({ error: "Conversation not found" }),
+        { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+    if (conversation.organization_id !== organizationId) {
+      return new Response(
+        JSON.stringify({ error: "organizationId does not match the conversation" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -148,9 +184,9 @@ Responda APENAS com JSON válido no formato:
 
     const record = {
       conversation_id: conversationId,
-      organization_id: organizationId,
-      agent_id: agentId || null,
-      lead_id: leadId || null,
+      organization_id: conversation.organization_id,
+      agent_id: conversation.agent_id,
+      lead_id: conversation.lead_id,
       turn_count: turnCount || 0,
       user_message: userMessage.substring(0, 2000),
       agent_response: agentResponse.substring(0, 2000),
