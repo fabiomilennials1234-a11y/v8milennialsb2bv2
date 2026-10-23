@@ -156,11 +156,35 @@ describe("sendTemplateViaInstance — cabeçalho de mídia (#1706)", () => {
     expect(linkEnviado()).toBe(doCliente);
   });
 
-  it("espelhamento que falha devolve a original — não troca a tentativa por um erro nosso", async () => {
+  it("🔑 espelhamento que falha É ERRO DO ENVIO — o link morto não viaja até a Meta", async () => {
+    // Era o contrário: devolvia o link original "porque talvez funcione". Com a
+    // assinatura expirada (`oe=`) não funciona nunca: a Meta recusa com 131053 por
+    // callback, o executor já deu o passo como enviado e a mensagem some do funil.
+    // Foi o que derrubou ~280 envios de uma org em 13–23/10.
     h.fetchSpy.mockRejectedValue(new Error("ECONNRESET"));
     const r = await enviar(componentesComCabecalhoDeMidia());
 
-    expect(r.success).toBe(true);
-    expect(linkEnviado()).toBe(CDN_META);
+    expect(r.success).toBe(false);
+    expect(r.error).toContain("header_media_unreachable");
+    expect(h.sendTemplateSpy).not.toHaveBeenCalled();
+  });
+
+  it("link expirado (403 no download) também falha o envio, sem upload", async () => {
+    h.fetchSpy.mockResolvedValue(new Response("Forbidden", { status: 403 }));
+    const r = await enviar(componentesComCabecalhoDeMidia());
+
+    expect(r.success).toBe(false);
+    expect(r.error).toContain("header_media_unreachable");
+    expect(h.uploads).toHaveLength(0);
+    expect(h.sendTemplateSpy).not.toHaveBeenCalled();
+  });
+
+  it("o erro NÃO vaza a assinatura da URL — só o host", async () => {
+    h.fetchSpy.mockResolvedValue(new Response("Forbidden", { status: 403 }));
+    const r = await enviar(componentesComCabecalhoDeMidia());
+
+    expect(r.error).toContain("scontent.whatsapp.net");
+    expect(r.error).not.toContain("oe=");
+    expect(r.error).not.toContain("684230101_103_n.png");
   });
 });

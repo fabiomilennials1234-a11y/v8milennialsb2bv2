@@ -15,6 +15,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import {
+  MidiaDeCabecalhoInacessivel,
   espelharMidiaDeTemplate,
   espelharMidiaDosComponentes,
   precisaEspelhar,
@@ -202,5 +203,73 @@ describe("espelharMidiaDosComponentes", () => {
     await expect(espelharMidiaDosComponentes(null, "org-1", deps)).resolves.toEqual([]);
     const so = [{ type: "body" }];
     await expect(espelharMidiaDosComponentes(so, "org-1", deps)).resolves.toBe(so);
+  });
+});
+
+describe("espelharMidiaDosComponentes — modo estrito", () => {
+  const cabecalho = (link: string) => [
+    { type: "header", parameters: [{ type: "image", image: { link } }] },
+  ];
+  const falha403 = () => vi.fn().mockResolvedValue(new Response("Forbidden", { status: 403 }));
+
+  it("padrão (chat): download que falha devolve o link original, como sempre", async () => {
+    const out = await espelharMidiaDosComponentes(cabecalho(CDN_META), "org-1", {
+      storage: storageFake().storage,
+      fetchImpl: falha403(),
+    });
+    expect((out[0] as any).parameters[0].image.link).toBe(CDN_META);
+  });
+
+  it("estrito: download que falha LANÇA em vez de devolver o link morto", async () => {
+    await expect(
+      espelharMidiaDosComponentes(
+        cabecalho(CDN_META),
+        "org-1",
+        { storage: storageFake().storage, fetchImpl: falha403() },
+        { estrito: true },
+      ),
+    ).rejects.toBeInstanceOf(MidiaDeCabecalhoInacessivel);
+  });
+
+  it("estrito: upload que falha também lança", async () => {
+    await expect(
+      espelharMidiaDosComponentes(
+        cabecalho(CDN_META),
+        "org-1",
+        {
+          storage: storageFake({ uploadError: "quota" }).storage,
+          fetchImpl: vi.fn().mockResolvedValue(respostaOk()),
+        },
+        { estrito: true },
+      ),
+    ).rejects.toMatchObject({ code: "header_media_unreachable" });
+  });
+
+  it("estrito: quando espelha com sucesso, funciona igual ao padrão", async () => {
+    const out = await espelharMidiaDosComponentes(
+      cabecalho(CDN_META),
+      "org-1",
+      { storage: storageFake().storage, fetchImpl: vi.fn().mockResolvedValue(respostaOk()) },
+      { estrito: true },
+    );
+    expect((out[0] as any).parameters[0].image.link).toMatch(/^https:\/\/nosso\.storage\//);
+  });
+
+  it("estrito: link que não precisa espelhar (do cliente) passa sem erro e sem I/O", async () => {
+    const buscar = vi.fn();
+    const out = await espelharMidiaDosComponentes(
+      cabecalho("https://cliente.com.br/banner.jpg"),
+      "org-1",
+      { storage: storageFake().storage, fetchImpl: buscar },
+      { estrito: true },
+    );
+    expect(buscar).not.toHaveBeenCalled();
+    expect((out[0] as any).parameters[0].image.link).toBe("https://cliente.com.br/banner.jpg");
+  });
+
+  it("a mensagem do erro traz só o host, nunca a assinatura", () => {
+    const e = new MidiaDeCabecalhoInacessivel(CDN_META);
+    expect(e.message).toContain("scontent.whatsapp.net");
+    expect(e.message).not.toContain("oe=");
   });
 });
