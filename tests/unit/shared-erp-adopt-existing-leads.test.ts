@@ -68,17 +68,24 @@ describe("sameCompanyName", () => {
 });
 
 /** Supabase mínimo para as duas consultas de findAdoptableLeads. */
-function fakeAdmin(leads: unknown[], owned: string[] = []) {
+function fakeAdmin(leads: unknown[], owned: string[] = [], sharedPhones: string[] = []) {
   return {
     from(table: string) {
       const chain: Record<string, unknown> = {};
+      let cols = "";
       const self = () => chain;
-      for (const m of ["select", "eq", "is", "in"]) chain[m] = self;
-      (chain as { then: unknown }).then = (resolve: (v: unknown) => void) =>
-        resolve({
-          data: table === "leads" ? leads : owned.map((lead_id) => ({ lead_id })),
-          error: null,
-        });
+      for (const m of ["eq", "is", "in"]) chain[m] = self;
+      chain.select = (c: string) => {
+        cols = c;
+        return chain;
+      };
+      (chain as { then: unknown }).then = (resolve: (v: unknown) => void) => {
+        let data: unknown[];
+        if (table === "leads") data = leads;
+        else if (cols === "phone") data = sharedPhones.map((phone) => ({ phone }));
+        else data = owned.map((lead_id) => ({ lead_id }));
+        resolve({ data, error: null });
+      };
       return chain;
     },
   } as never;
@@ -97,16 +104,52 @@ const lead = (over: Record<string, unknown> = {}) => ({
 });
 
 describe("findAdoptableLeads", () => {
-  const run = (leads: unknown[], owned: string[] = [], clients = [cliente()]) =>
-    findAdoptableLeads(fakeAdmin(leads, owned), { organizationId: "org", clients, normalizePhone: norm });
+  const run = (
+    leads: unknown[],
+    owned: string[] = [],
+    clients = [cliente()],
+    sharedPhones: string[] = [],
+  ) =>
+    findAdoptableLeads(fakeAdmin(leads, owned, sharedPhones), {
+      organizationId: "org",
+      clients,
+      normalizePhone: norm,
+    });
 
   it("🔑 mesmo telefone + nome compatível + lead sem dono → adota", async () => {
     const found = await run([lead()]);
     expect(found.get("17095")).toEqual({ id: "lead-planilha", hasSegment: false, hasUf: false });
   });
 
-  it("mesmo telefone mas empresa diferente → não adota (telefone N:N)", async () => {
-    expect((await run([lead({ name: "GAMA ALIMENTACAO LTDA", company: null })])).size).toBe(0);
+  describe("nome diferente (planilha com o nome do contato)", () => {
+    const contato = lead({ name: "Sidnei", company: null });
+
+    it("🔑 número que ninguém mais usa → adota (Natural Beer / Sidnei)", async () => {
+      const found = await run([contato]);
+      expect(found.get("17095")).toMatchObject({ id: "lead-planilha" });
+    });
+
+    it("número já na carteira de outro cliente → não adota (compartilhado)", async () => {
+      expect((await run([contato], [], [cliente()], ["4799635609"])).size).toBe(0);
+    });
+
+    it("dois clientes do ERP com o mesmo número no lote → não adota", async () => {
+      const found = await run([contato], [], [cliente({ externalId: "1" }), cliente({ externalId: "2", name: "OUTRA LTDA" })]);
+      expect(found.size).toBe(0);
+    });
+
+    it("lead com cliente na carteira continua fora, mesmo com número único", async () => {
+      expect((await run([contato], ["lead-planilha"])).size).toBe(0);
+    });
+
+    it("lead criado pelo ERP continua fora, mesmo com número único", async () => {
+      expect((await run([lead({ name: "Sidnei", origin: "erp_toth" })])).size).toBe(0);
+    });
+  });
+
+  it("mesmo telefone, empresa diferente e número compartilhado → não adota (telefone N:N)", async () => {
+    const outraEmpresa = lead({ name: "GAMA ALIMENTACAO LTDA", company: null });
+    expect((await run([outraEmpresa], [], [cliente()], ["4799635609"])).size).toBe(0);
   });
 
   it("lead que já tem cliente na carteira → não adota", async () => {
