@@ -77,8 +77,14 @@ function resolveDestinations(raw: unknown): { valid: string[]; invalid: string[]
  *  - message_id = the provider id so the Uazapi fromMe echo UPSERTs THIS row instead
  *    of inserting a duplicate (onConflict message_id,instance_id).
  *  - direction 'outgoing' + message_type 'conversation' → renders as a sent bubble.
- *  - sent_source 'workflow-send-to-number' is load-bearing: fn_human_pause_on_manual_send
- *    early-returns unless sent_source = 'manual', so this write does NOT pause the AI.
+ *  - sent_source 'workflow' satisfies BOTH constraints on this column:
+ *    (a) `whatsapp_messages_sent_source_check` only accepts manual|copilot|workflow;
+ *    (b) fn_human_pause_on_manual_send early-returns unless sent_source = 'manual',
+ *    so this write does NOT pause the AI. The "which workflow action sent this"
+ *    detail lives in raw_payload.track_source ('workflow-send-to-number'), which
+ *    has no CHECK. It used to be in sent_source — violating (a), so every upsert
+ *    failed 23514 into the best-effort catch below and the notification never
+ *    reached the chat. Measured in PROD: 0 rows in 2.3M messages.
  *  - lead_id is left NULL on purpose. The BEFORE trigger resolve_message_lead_id() only
  *    attaches a lead if the RECIPIENT's own number matches one — so a normal salesperson
  *    number yields a standalone thread and the lead's chat is never polluted.
@@ -109,7 +115,12 @@ async function persistChatHistory(
         direction: "outgoing",
         message_type: "conversation",
         content,
-        sent_source: "workflow-send-to-number",
+        // `whatsapp_messages_sent_source_check` só aceita manual|copilot|workflow.
+        // Qualquer outro valor viola a CHECK, o upsert devolve 23514 e o catch
+        // best-effort abaixo engole — a notificação some do chat em silêncio.
+        // A granularidade "veio do send_to_number" vive em `raw_payload.track_source`
+        // (trackSource abaixo), que não tem constraint.
+        sent_source: "workflow",
         lead_id: null,
         timestamp: new Date().toISOString(),
       }, { onConflict: "message_id,instance_id", ignoreDuplicates: true });
