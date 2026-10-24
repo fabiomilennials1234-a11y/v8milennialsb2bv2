@@ -2,7 +2,20 @@ import { dispatch, type DispatchContext } from "./dispatch.ts";
 import type { JsonRpcRequest, JsonRpcResponse } from "./types.ts";
 
 /**
- * Constant-time secret comparison for the x-mcp-secret gate.
+ * The gateway secret the caller presented. `x-mcp-secret` wins whenever it is sent — a wrong
+ * value there never falls through to `Authorization`. Otherwise `Authorization: Bearer <secret>`,
+ * the only shape a client that forbids custom header names can send (claude.ai custom
+ * connectors require Anthropic approval for non-standard header names).
+ */
+export function presentedSecret(headers: Headers): string | null {
+  const custom = headers.get("x-mcp-secret");
+  if (custom !== null) return custom;
+  const m = /^Bearer\s+(.+)$/i.exec(headers.get("authorization")?.trim() ?? "");
+  return m ? m[1].trim() : null;
+}
+
+/**
+ * Constant-time secret comparison for the gateway secret gate.
  * Avoids early-exit timing leaks; rejects null / length-mismatch up front.
  */
 export function secretMatches(provided: string | null, expected: string): boolean {

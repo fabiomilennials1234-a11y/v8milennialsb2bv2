@@ -4,7 +4,7 @@ import { logError } from "../_shared/error-boundary.ts";
 import { loadConfig } from "./lib/config.ts";
 import { createCachedMasterClientProvider } from "../_shared/mcp/auth.ts";
 import { signInAsMaster } from "./lib/clients.ts";
-import { handleRpcPayload, secretMatches } from "../_shared/mcp/http.ts";
+import { handleRpcPayload, presentedSecret, secretMatches } from "../_shared/mcp/http.ts";
 import type { DispatchContext } from "../_shared/mcp/dispatch.ts";
 import type { JsonRpcRequest } from "../_shared/mcp/types.ts";
 import { leadGetTool, leadRestoreTool } from "./tools/lead.ts";
@@ -103,8 +103,8 @@ Deno.serve(async (req: Request): Promise<Response> => {
     return json({ error: "Method not allowed; POST a JSON-RPC body." }, 405, cors);
   }
 
-  // Gateway secret — single guard for the whole endpoint.
-  if (!secretMatches(req.headers.get("x-mcp-secret"), config.gatewaySecret)) {
+  // Gateway secret — single guard for the whole endpoint (x-mcp-secret or Authorization: Bearer).
+  if (!secretMatches(presentedSecret(req.headers), config.gatewaySecret)) {
     return json(
       { jsonrpc: "2.0", id: null, error: { code: -32001, message: "Unauthorized" } },
       401,
