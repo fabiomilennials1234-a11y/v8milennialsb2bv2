@@ -1,8 +1,19 @@
 diff --git a/classic/src/core/stale-build-recovery.ts b/classic/src/core/stale-build-recovery.ts
-index abe343f8e..7b233248c 100644
+index abe343f8e..6897f783f 100644
 --- a/classic/src/core/stale-build-recovery.ts
 +++ b/classic/src/core/stale-build-recovery.ts
-@@ -79,6 +79,7 @@ export function missingStylesheets(doc: Document = document): string[] {
+@@ -38,6 +38,10 @@ const STALE_CHUNK_PATTERNS = [
+ export function isStaleChunkError(reason: unknown): boolean {
+   if (reason instanceof Error && reason.name === "ChunkLoadError") return true;
+   const message = reason instanceof Error ? reason.message : typeof reason === "string" ? reason : "";
++  // `response.json()` sobre uma página HTML de erro (502/504 do proxy) dá
++  // `Unexpected token '<', "<!doctype"... is not valid JSON`: é API fora, não
++  // build velho. Reload não cura e a tela "versão nova" ficaria presa.
++  if (/is not valid JSON/i.test(message) || /JSON\.parse/i.test(message)) return false;
+   return !!message && STALE_CHUNK_PATTERNS.some((re) => re.test(message));
+ }
+ 
+@@ -79,6 +83,7 @@ export function missingStylesheets(doc: Document = document): string[] {
  export interface RecoveryEnv {
    now: () => number;
    storage: Pick<Storage, "getItem" | "setItem"> | null;
@@ -10,7 +21,7 @@ index abe343f8e..7b233248c 100644
    serviceWorker?: {
      getRegistrations: () => Promise<ReadonlyArray<{ unregister: () => Promise<boolean> }>>;
    };
-@@ -86,6 +87,35 @@ export interface RecoveryEnv {
+@@ -86,6 +91,35 @@ export interface RecoveryEnv {
    reload: () => void;
  }
  
@@ -46,7 +57,7 @@ index abe343f8e..7b233248c 100644
  export function browserEnv(): RecoveryEnv {
    let storage: RecoveryEnv["storage"] = null;
    try {
-@@ -96,6 +126,7 @@ export function browserEnv(): RecoveryEnv {
+@@ -96,6 +130,7 @@ export function browserEnv(): RecoveryEnv {
    return {
      now: () => Date.now(),
      storage,
@@ -54,7 +65,7 @@ index abe343f8e..7b233248c 100644
      serviceWorker: typeof navigator !== "undefined" ? navigator.serviceWorker : undefined,
      caches: typeof caches !== "undefined" ? caches : undefined,
      reload: () => window.location.reload(),
-@@ -124,16 +155,30 @@ function writeLast(env: RecoveryEnv, at: number) {
+@@ -124,16 +159,30 @@ function writeLast(env: RecoveryEnv, at: number) {
   * Desregistra o SW, apaga os caches e recarrega. Devolve `false` quando a última
   * recuperação desta aba foi há menos de `RECOVERY_THROTTLE_MS` — o chamador
   * então mostra a tela de "versão nova" em vez de recarregar em loop.
