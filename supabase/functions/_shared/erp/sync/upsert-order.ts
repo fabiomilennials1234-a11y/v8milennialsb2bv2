@@ -29,7 +29,7 @@ export interface OrderStore {
     organizationId: string,
     source: string,
     externalId: string,
-  ): Promise<{ id: string } | null>;
+  ): Promise<{ id: string; reconciled?: boolean } | null>;
   updateOrder(id: string, patch: Record<string, unknown>): Promise<void>;
   createOrder(row: Record<string, unknown>): Promise<string>;
   /**
@@ -133,6 +133,14 @@ export async function upsertCanonicalOrder(
 
   const existing = await store.findOrderByExternalId(organizationId, source, order.externalId);
   if (existing) {
+    // A venda original continua sendo a fonte de receita; o ERP só a enriquece.
+    if (existing.reconciled) {
+      if (order.erpStatus !== undefined) {
+        await store.updateOrder(existing.id, { erp_status: order.erpStatus });
+      }
+      await writeItems(store, organizationId, existing.id, source, order);
+      return { action: "updated", orderId: existing.id };
+    }
     await store.updateOrder(existing.id, {
       ...stamp,
       sale_value: order.saleValue,

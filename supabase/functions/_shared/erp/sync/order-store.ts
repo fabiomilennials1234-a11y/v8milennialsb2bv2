@@ -9,42 +9,57 @@ import { OrderStore } from "./upsert-order.ts";
 export function supabaseOrderStore(admin: SupabaseClient): OrderStore {
   return {
     async findClientIdByExternalId(organizationId, source, clientExternalId) {
-      const { data } = await admin
+      const { data, error } = await admin
         .from("upsell_clients")
-        .select("id")
+        .select("id, leads!inner(id)")
         .eq("organization_id", organizationId)
         .eq("external_source", source)
         .eq("external_id", clientExternalId)
+        .is("leads.deleted_at", null)
         .maybeSingle();
+      if (error) throw new Error(`findClientIdByExternalId: ${error.message}`);
       return (data?.id as string | undefined) ?? null;
     },
 
     async findClientIdByCnpj(organizationId, cnpj) {
       const digits = cnpj.replace(/\D/g, "");
       if (!digits) return null;
-      const { data } = await admin
+      const { data, error } = await admin
         .from("upsell_clients")
-        .select("id")
+        .select("id, leads!inner(id)")
         .eq("organization_id", organizationId)
         .eq("cnpj", digits)
+        .is("leads.deleted_at", null)
         // Mesmo documento em duas linhas acontece (filial cadastrada duas vezes
         // no ERP, cliente criado à mão antes da integração). A mais recente é a
         // que a sincronização vem mantendo — é nela que o pedido deve entrar.
         .order("updated_at", { ascending: false })
         .limit(1)
         .maybeSingle();
+      if (error) throw new Error(`findClientIdByCnpj: ${error.message}`);
       return (data?.id as string | undefined) ?? null;
     },
 
     async findOrderByExternalId(organizationId, source, externalId) {
-      const { data } = await admin
+      const { data, error } = await admin
         .from("upsell_orders")
         .select("id")
         .eq("organization_id", organizationId)
         .eq("external_source", source)
         .eq("external_id", externalId)
         .maybeSingle();
-      return data ? { id: data.id as string } : null;
+      if (error) throw new Error(`findOrderByExternalId: ${error.message}`);
+      if (data) return { id: data.id as string };
+      // Apenas referências conciliadas explicitamente; nunca inferir por valor/data.
+      if (source !== "toth") return null;
+      const { data: alias, error: aliasError } = await admin
+        .from("upsell_orders")
+        .select("id")
+        .eq("organization_id", organizationId)
+        .eq("external_ref", `toth:${externalId}`)
+        .maybeSingle();
+      if (aliasError) throw new Error(`findOrderByExternalRef: ${aliasError.message}`);
+      return alias ? { id: alias.id as string, reconciled: true } : null;
     },
 
     async updateOrder(id, patch) {

@@ -41,6 +41,26 @@ function makeStore(overrides: Partial<OrderStore> = {}) {
 }
 
 describe("upsertCanonicalOrder", () => {
+  it("enriches a reconciled sale without replacing its original financial identity", async () => {
+    const itemsWritten: unknown[] = [];
+    const { store, calls } = makeStore({
+      findOrderByExternalId: async () => ({ id: "original-sale", reconciled: true }),
+      replaceOrderItems: async (params) => { itemsWritten.push(params); },
+    });
+    const order = { ...ORDER, erpStatus: "NORMAL", items: [{
+      productExternalId: "sku", description: "Café", quantity: 2, unitValue: 10, totalValue: 20,
+    }] };
+    for (let run = 0; run < 2; run++) {
+      expect(await upsertCanonicalOrder(store, { organizationId: "org1", source: "toth", order }))
+        .toEqual({ action: "updated", orderId: "original-sale" });
+    }
+    expect(calls.creates).toEqual([]);
+    expect(calls.updates).toEqual([
+      { id: "original-sale", patch: { erp_status: "NORMAL" } },
+      { id: "original-sale", patch: { erp_status: "NORMAL" } },
+    ]);
+    expect(itemsWritten).toHaveLength(2);
+  });
   it("skips when the order's client is not synced yet", async () => {
     const { store, calls } = makeStore({ findClientIdByExternalId: async () => null });
     const r = await upsertCanonicalOrder(store, {
