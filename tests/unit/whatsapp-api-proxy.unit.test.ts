@@ -45,22 +45,25 @@ function checkRateLimit(
   orgId: string,
   state: Map<string, { count: number; resetAt: number }>,
   now: number
-): boolean {
+): { allowed: boolean; count: number; resetAt: number } {
   const rl = state.get(orgId);
   if (rl && rl.resetAt > now) {
-    if (rl.count >= RATE_LIMIT_MAX) return false;
+    if (rl.count >= RATE_LIMIT_MAX) {
+      return { allowed: false, count: rl.count, resetAt: rl.resetAt };
+    }
     rl.count += 1;
-    return true;
+    return { allowed: true, count: rl.count, resetAt: rl.resetAt };
   }
-  state.set(orgId, { count: 1, resetAt: now + RATE_LIMIT_WINDOW_MS });
-  return true;
+  const fresh = { count: 1, resetAt: now + RATE_LIMIT_WINDOW_MS };
+  state.set(orgId, fresh);
+  return { allowed: true, count: fresh.count, resetAt: fresh.resetAt };
 }
 
 describe("checkRateLimit logic", () => {
   it("allows first request for new org", () => {
     const state = makeRateLimitState();
     const now = Date.now();
-    expect(checkRateLimit("org-a", state, now)).toBe(true);
+    expect(checkRateLimit("org-a", state, now).allowed).toBe(true);
   });
 
   it("increments count on subsequent requests within window", () => {
@@ -79,7 +82,7 @@ describe("checkRateLimit logic", () => {
     const now = Date.now();
 
     for (let i = 0; i < RATE_LIMIT_MAX; i++) {
-      expect(checkRateLimit("org-a", state, now)).toBe(true);
+      expect(checkRateLimit("org-a", state, now).allowed).toBe(true);
     }
   });
 
@@ -92,7 +95,37 @@ describe("checkRateLimit logic", () => {
     }
 
     // 61st request
-    expect(checkRateLimit("org-a", state, now)).toBe(false);
+    expect(checkRateLimit("org-a", state, now).allowed).toBe(false);
+  });
+
+  it("recusa devolve contagem e reset — é o que vai para runtime_logs", () => {
+    const state = makeRateLimitState();
+    const now = Date.now();
+
+    for (let i = 0; i < RATE_LIMIT_MAX; i++) {
+      checkRateLimit("org-a", state, now);
+    }
+
+    const veredito = checkRateLimit("org-a", state, now);
+    expect(veredito.allowed).toBe(false);
+    // Sem estes dois, o 429 registrado não distingue "org satura o teto" de
+    // "teto baixo demais" — que é a decisão que o log precisa sustentar.
+    expect(veredito.count).toBe(RATE_LIMIT_MAX);
+    expect(veredito.resetAt).toBe(now + RATE_LIMIT_WINDOW_MS);
+  });
+
+  it("recusa NÃO incrementa o contador — 429 em rajada não estende a janela", () => {
+    const state = makeRateLimitState();
+    const now = Date.now();
+
+    for (let i = 0; i < RATE_LIMIT_MAX; i++) {
+      checkRateLimit("org-a", state, now);
+    }
+    for (let i = 0; i < 10; i++) {
+      checkRateLimit("org-a", state, now);
+    }
+
+    expect(state.get("org-a")?.count).toBe(RATE_LIMIT_MAX);
   });
 
   it("resets counter after window expires", () => {
@@ -104,11 +137,11 @@ describe("checkRateLimit logic", () => {
       checkRateLimit("org-a", state, now);
     }
     // Blocked
-    expect(checkRateLimit("org-a", state, now)).toBe(false);
+    expect(checkRateLimit("org-a", state, now).allowed).toBe(false);
 
     // Move past window
     const futureNow = now + RATE_LIMIT_WINDOW_MS + 1;
-    expect(checkRateLimit("org-a", state, futureNow)).toBe(true);
+    expect(checkRateLimit("org-a", state, futureNow).allowed).toBe(true);
     expect(state.get("org-a")?.count).toBe(1);
   });
 
@@ -121,7 +154,7 @@ describe("checkRateLimit logic", () => {
       checkRateLimit("org-a", state, now);
     }
     // org-b still allowed
-    expect(checkRateLimit("org-b", state, now)).toBe(true);
+    expect(checkRateLimit("org-b", state, now).allowed).toBe(true);
   });
 });
 
