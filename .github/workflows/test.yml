@@ -244,6 +244,8 @@ jobs:
       - run: supabase start
       - name: Seed test database
         run: PGPASSWORD=postgres psql -h localhost -p 54322 -U postgres -d postgres -v ON_ERROR_STOP=1 -f supabase/seed.sql
+      - name: Seed browser-only feature and workflow fixtures
+        run: PGPASSWORD=postgres psql -h localhost -p 54322 -U postgres -d postgres -v ON_ERROR_STOP=1 -f scripts/ci/e2e-fixtures.sql
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
@@ -255,6 +257,18 @@ jobs:
           VITE_SUPABASE_URL: http://localhost:54321
           VITE_SUPABASE_PUBLISHABLE_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0
           VITE_SUPABASE_PROJECT_ID: local
+          VITE_CHAT_BUBBLE: true
+      - name: Serve local Edge Functions
+        run: |
+          printf 'WEBHOOK_API_KEY=e2e-webhook-fixture-key\n' > /tmp/e2e-edge.env
+          supabase functions serve --env-file /tmp/e2e-edge.env > /tmp/e2e-edge-functions.log 2>&1 &
+          for attempt in $(seq 1 60); do
+            status=$(curl -s -o /dev/null -w '%{http_code}' http://localhost:54321/functions/v1/agent-message || true)
+            if [ "$status" != "000" ] && [ "$status" != "503" ] && [ "$status" != "404" ]; then exit 0; fi
+            sleep 1
+          done
+          cat /tmp/e2e-edge-functions.log
+          exit 1
       - name: Create playwright auth dir
         run: mkdir -p .playwright-auth
       - run: npx playwright test
@@ -263,6 +277,10 @@ jobs:
           VITE_SUPABASE_URL: http://localhost:54321
           SUPABASE_ANON_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0
           VITE_SUPABASE_PUBLISHABLE_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0
+          SUPABASE_SERVICE_ROLE_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImV4cCI6MTk4MzgxMjk5Nn0.EGIM96RAZx35lJzdJsyH-qQwv8Hdp7fsn3W0YpN81IU
+          E2E_ORG_ID: 00000000-0000-0000-0000-000000000001
+          E2E_META_PAGE_ID: e2e-meta-page
+          E2E_WEBHOOK_KEY: e2e-webhook-fixture-key
           E2E_USER_EMAIL: admin@test.com
           E2E_USER_PASSWORD: Test123!@#
       - name: Upload E2E artifacts

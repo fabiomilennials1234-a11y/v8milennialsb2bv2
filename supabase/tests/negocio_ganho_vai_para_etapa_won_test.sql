@@ -264,7 +264,7 @@ SELECT is(
 SELECT is(
   (SELECT metadata->>'deal_outcome'
      FROM public.get_pipeline_page(
-       p_stage_id => 'proposta',
+       p_stage_id => 'proposta_p2',
        p_org_id => 'deadbeef-0000-4000-8000-00000000f001',
        p_pipeline_id => 'deadbeef-0000-4000-8000-00000000f0b2')
     WHERE id = 'deadbeef-0000-4000-8000-00000000fe02'),

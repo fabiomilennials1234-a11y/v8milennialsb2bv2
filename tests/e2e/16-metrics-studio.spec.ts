@@ -27,7 +27,7 @@ import { test, expect, type Page } from '@playwright/test';
 
 /** Lê o número de cabeça de uma janela, já desformatado de pt-BR. */
 async function valorDaJanela(page: Page, rotulo: string): Promise<number> {
-  const janela = page.getByRole('group', { name: rotulo });
+  const janela = page.getByRole('group', { name: rotulo, exact: true });
   await expect(janela).toBeVisible({ timeout: 15_000 });
 
   // A janela monta ANTES de o motor responder: o primeiro quadro é spinner, e
@@ -123,7 +123,7 @@ test.describe('Estúdio de Métricas', () => {
     // única medida garantidamente vazia — por isso ela, e não Faturamento, que
     // tem venda com `sold_at = now()`.
     await page.getByRole('button', { name: /^Reuniões marcadas/ }).click();
-    const janela = page.getByRole('group', { name: 'Reuniões marcadas' });
+    const janela = page.getByRole('group', { name: 'Reuniões marcadas', exact: true });
     await expect(janela).toBeVisible({ timeout: 15_000 });
 
     // Ausência é travessão (—), nunca "0". Zero é uma afirmação sobre o
@@ -140,7 +140,7 @@ test.describe('Estúdio de Métricas', () => {
     await painelLimpoEmEdicao(page);
 
     await page.getByRole('button', { name: /^Negócios na etapa/ }).click();
-    await expect(page.getByRole('group', { name: 'Negócios na etapa' })).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByRole('group', { name: 'Negócios na etapa', exact: true })).toBeVisible({ timeout: 15_000 });
 
     // SCRUM-309: o painel vive no servidor (`metrics_studio_panels`), um por
     // (org, membro). A gravação é debounced — dar tempo antes de recarregar.
@@ -149,7 +149,7 @@ test.describe('Estúdio de Métricas', () => {
     await page.waitForLoadState('networkidle');
     await page.getByRole('tab', { name: 'E2E Métricas', exact: true }).click();
 
-    await expect(page.getByRole('group', { name: 'Negócios na etapa' })).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByRole('group', { name: 'Negócios na etapa', exact: true })).toBeVisible({ timeout: 20_000 });
   });
 
   test('métrica personalizada: receita ÷ leads, com o aviso de 100×', async ({ page }) => {
@@ -185,7 +185,7 @@ test.describe('Estúdio de Métricas', () => {
 
     const dialogo = page.getByRole('dialog');
     await expect(dialogo.getByText('Nova métrica')).toBeVisible({ timeout: 10_000 });
-    await expect(dialogo.getByText('1 de 3')).toBeVisible();
+    await expect(dialogo.getByText('2 de 3')).toBeVisible();
 
     // Cada clique em "combinar" encaixa uma operação. No teto, o botão deixa de
     // ser oferecido — a UI não deixa MONTAR profundidade 4.
@@ -193,7 +193,7 @@ test.describe('Estúdio de Métricas', () => {
     // ⚠ A recusa do BANCO (22023 em `fn_metric_tree_validate` e no trigger de
     // escrita) é coberta pelo pgTAP, em `metric_custom_tree_test.sql` (PF2 e
     // WR4). Aqui se prova o outro lado: o usuário não chega a tentar.
-    for (const alvo of ['2 de 3', '3 de 3']) {
+    for (const alvo of ['3 de 3']) {
       const combinar = dialogo.getByRole('button', { name: 'Combinar com outra métrica' }).first();
       await combinar.click();
       await expect(dialogo.getByText(alvo)).toBeVisible({ timeout: 5_000 });

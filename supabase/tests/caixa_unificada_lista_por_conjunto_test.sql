@@ -295,7 +295,7 @@ SELECT ok(
   'for endurecida: ali "não li lista nenhuma" vira "não existe lista", que LIBERA');
 
 SELECT ok(
-  (SELECT p.proconfig::text LIKE '%search_path=public%'
+  (SELECT 'search_path=""' = ANY(p.proconfig)
      FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
     WHERE n.nspname = 'public' AND p.proname = 'whatsapp_readable_instance_ids'),
   '(S) search_path fixado');

@@ -133,7 +133,7 @@ SELECT throws_ok(
   'PM1: org sem a flag recusa');
 SELECT throws_ok(
   $$ SELECT public.cobranca_inadimplente_salvar('c0b7a000-0000-4000-8000-00000000000a', NULL, '{"nome":"X"}') $$,
-  '42501', NULL, 'PM2: admin de outra org não escreve na org A');
+  'P0001', 'access_denied', 'PM2: admin de outra org não escreve na org A');
 
 SELECT pg_temp.as_user('c0b7a000-0000-4000-8000-0000000000a2');
 SELECT throws_ok(
@@ -168,7 +168,7 @@ SELECT is((SELECT count(*)::int FROM public.cobranca_etapas), 0, 'RL4: nem as et
 
 SELECT pg_temp.as_user('c0b7a000-0000-4000-8000-0000000000a1');
 SELECT is((SELECT count(*)::int FROM public.cobranca_inadimplentes_resumo), 2, 'RL5: admin da org A vê os dois');
-SELECT is((SELECT count(*)::int FROM public.cobranca_etapas), 9, 'RL6: e as 9 etapas semeadas');
+SELECT is((SELECT count(*)::int FROM public.cobranca_etapas), 12, 'RL6: e as 12 etapas da régua vigente');
 
 SELECT pg_temp.as_user('c0b7a000-0000-4000-8000-0000000000c1');
 SELECT ok((SELECT count(*) FROM public.cobranca_inadimplentes

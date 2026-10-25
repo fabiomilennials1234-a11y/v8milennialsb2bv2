@@ -22,19 +22,10 @@ const ACCORDION_HEADER_PROPOSTAS = /propostas/i;
 
 /** Click on the first lead card / row visible on the page and wait modal. */
 async function openFirstLead(page: Page) {
-  // Generic: try card with role link/button containing lead name; fallback to
-  // first table row with data-testid lead-row.
-  const candidates = [
-    page.locator('[data-testid^="lead-card-"]').first(),
-    page.locator('[data-testid^="lead-row-"]').first(),
-    page.getByRole("link", { name: /lead/i }).first(),
-  ];
-  for (const c of candidates) {
-    if ((await c.count()) > 0) {
-      await c.click();
-      break;
-    }
-  }
+  // Seeded identity is stable across table, board and follow-up call sites.
+  const lead = page.getByText('Lead Alpha', { exact: true }).first();
+  await expect(lead).toBeVisible();
+  await lead.click();
   await expect(page.getByRole("dialog").first()).toBeVisible({ timeout: 8_000 });
 }
 

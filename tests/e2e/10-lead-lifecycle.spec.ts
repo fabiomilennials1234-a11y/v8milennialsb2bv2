@@ -19,7 +19,7 @@ async function createLeadViaLeadsPage(page: Page, name: string, phone: string) {
   await page.goto('/leads');
   await page.waitForLoadState('networkidle');
 
-  const createBtn = page.getByRole('button', { name: /novo lead|adicionar/i }).first();
+  const createBtn = page.getByRole('button', { name: 'Novo lead', exact: true }).first();
   if (!(await createBtn.isVisible({ timeout: 5_000 }).catch(() => false))) return false;
 
   await createBtn.click();
@@ -139,7 +139,7 @@ test.describe('Lead Lifecycle — Ciclo completo B2B', () => {
       await page.waitForTimeout(300);
     }
 
-    expect(page.url()).toContain('/pipe-whatsapp');
+    await expect(page).toHaveURL(/\/funil\/[0-9a-f-]+/);
   });
 
   test('pipe_whatsapp → colunas têm data-stage e lead cards têm data-lead-id', async ({ page }) => {
@@ -165,7 +165,7 @@ test.describe('Lead Lifecycle — Ciclo completo B2B', () => {
       expect(leadId).not.toBe('');
     }
 
-    expect(page.url()).toContain('/pipe-whatsapp');
+    await expect(page).toHaveURL(/\/funil\/[0-9a-f-]+/);
   });
 
   test('navegação entre os 3 pipes sem erro de rota', async ({ page }) => {
@@ -175,7 +175,7 @@ test.describe('Lead Lifecycle — Ciclo completo B2B', () => {
     for (const route of routes) {
       await page.goto(route);
       await page.waitForLoadState('networkidle');
-      expect(page.url()).toContain(route);
+      await expect(page).toHaveURL(/\/funil\/[0-9a-f-]+/);
 
       // No full-page error (like "404 Not Found" or unhandled exception banner)
       const errorText = page.getByText(/404|page not found|não encontrado|erro interno/i);
@@ -200,6 +200,7 @@ test.describe('Lead Lifecycle — Ciclo completo B2B', () => {
       headers: {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${anonKey}`,
+        'x-webhook-key': process.env.E2E_WEBHOOK_KEY ?? '',
       },
       data: {
         source: 'meta_ads',

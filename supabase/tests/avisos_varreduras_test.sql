@@ -94,10 +94,10 @@ SELECT is(
 -- ---------------------------------------------------------------------------
 SET LOCAL session_replication_role = replica;
 
-INSERT INTO public.deals (id, organization_id, source_lead_id, title)
-SELECT 'c8888888-8888-8888-8888-888888888888'::uuid, org, lead, 'Reunião próxima' FROM _v_fix
+INSERT INTO public.deals (source, id, organization_id, source_lead_id, title)
+SELECT 'human', 'c8888888-8888-8888-8888-888888888888'::uuid, org, lead, 'Reunião próxima' FROM _v_fix
 UNION ALL
-SELECT 'c9999999-9999-9999-9999-999999999999'::uuid, org, lead, 'Reunião futura' FROM _v_fix;
+SELECT 'human', 'c9999999-9999-9999-9999-999999999999'::uuid, org, lead, 'Reunião futura' FROM _v_fix;
 
 INSERT INTO public.pipeline_entries (id, deal_id, organization_id, pipeline_id, lead_id, stage_key, metadata)
 SELECT 'c8888888-8888-8888-8888-888888888888'::uuid, 'c8888888-8888-8888-8888-888888888888'::uuid, org,

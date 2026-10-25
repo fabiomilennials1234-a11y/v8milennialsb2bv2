@@ -10,7 +10,7 @@ test.describe('Criar e mover lead', () => {
     await page.waitForLoadState('networkidle');
 
     // Click "Novo Lead" button
-    const newLeadBtn = page.getByRole('button', { name: /novo lead|new lead|adicionar/i });
+    const newLeadBtn = page.getByRole('button', { name: 'Novo lead', exact: true });
     if (await newLeadBtn.isVisible()) {
       await newLeadBtn.click();
 

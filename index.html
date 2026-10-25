@@ -14,7 +14,6 @@
 
     <!-- Security Headers -->
     <meta http-equiv="X-Content-Type-Options" content="nosniff" />
-    <meta http-equiv="X-Frame-Options" content="DENY" />
     <meta http-equiv="X-XSS-Protection" content="1; mode=block" />
     <meta name="referrer" content="strict-origin-when-cross-origin" />
     
@@ -29,7 +28,6 @@
       connect-src 'self' https://*.supabase.co wss://*.supabase.co https://*.supabase.in https://graph.facebook.com https://www.facebook.com https://fonts.googleapis.com https://calls.torquecrm.com.br https://*.sentry.io;
       worker-src 'self' blob:;
       frame-src 'self' https://www.facebook.com https://web.facebook.com https://staticxx.facebook.com https://connect.facebook.net;
-      frame-ancestors 'none';
       base-uri 'self';
       form-action 'self';
     " />

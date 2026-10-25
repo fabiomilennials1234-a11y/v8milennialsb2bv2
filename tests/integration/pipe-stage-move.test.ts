@@ -42,12 +42,6 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  if (createdLeadIds.length) {
-    const { error: entriesError } = await supabase.from('pipeline_entries').delete().in('lead_id', createdLeadIds);
-    expect(entriesError).toBeNull();
-    const { error: dealsError } = await supabase.from('deals').delete().in('source_lead_id', createdLeadIds);
-    expect(dealsError).toBeNull();
-  }
   if (addedStageIds.length) {
     const { error } = await supabase.from('pipeline_stages').delete().in('id', addedStageIds);
     expect(error).toBeNull();
@@ -176,6 +170,8 @@ describe.skipIf(shouldSkip)('Pipe WhatsApp — lead entry creation', () => {
       const entries = await supabase.from('pipeline_entries').delete()
         .eq('organization_id', TEST_ORG_ID).eq('pipeline_id', pipelineId).in('lead_id', createdLeadIds);
       expect(entries.error).toBeNull();
+      const deals = await supabase.from('deals').delete().in('source_lead_id', createdLeadIds);
+      expect(deals.error).toBeNull();
       const leads = await supabase.from('leads').delete().eq('organization_id', TEST_ORG_ID).in('id', createdLeadIds);
       expect(leads.error).toBeNull();
     }
@@ -218,8 +214,8 @@ describe.skipIf(shouldSkip)('Pipe WhatsApp — lead entry creation', () => {
     expect(createdLeadIds).toHaveLength(1);
     const leadId = createdLeadIds[0];
     const { data: deals, error: dealError } = await supabase.from('deals').insert([
-      { organization_id: TEST_ORG_ID, source_lead_id: leadId, title: 'First fixture deal' },
-      { organization_id: TEST_ORG_ID, source_lead_id: leadId, title: 'Second fixture deal' },
+      { organization_id: TEST_ORG_ID, source_lead_id: leadId, source: 'human', title: 'First fixture deal' },
+      { organization_id: TEST_ORG_ID, source_lead_id: leadId, source: 'human', title: 'Second fixture deal' },
     ]).select('id');
     expect(dealError).toBeNull();
     expect(deals).toHaveLength(2);

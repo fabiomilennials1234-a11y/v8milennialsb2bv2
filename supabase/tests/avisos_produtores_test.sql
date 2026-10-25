@@ -24,7 +24,7 @@ SET LOCAL session_replication_role = replica;
 -- O Closer é um Team Member; o Aviso é endereçado à conta de usuário dele.
 CREATE TEMP TABLE _p_fix (org uuid, dono uuid, membro uuid, lead uuid, instance uuid) ON COMMIT DROP;
 
-INSERT INTO _p_fix (org, dono, membro, lead)
+INSERT INTO _p_fix (org, dono, membro, lead, instance)
 VALUES ('a1111111-1111-1111-1111-111111111111'::uuid,
         'a2222222-2222-2222-2222-222222222222'::uuid,
         'a4444444-4444-4444-4444-444444444444'::uuid,

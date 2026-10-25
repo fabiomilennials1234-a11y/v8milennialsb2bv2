@@ -24,10 +24,9 @@ function getSupabaseUrl(): string | null {
   return process.env.SUPABASE_URL ?? process.env.VITE_SUPABASE_URL ?? null;
 }
 
-function getAnonKey(): string {
+function getServiceKey(): string {
   return (
-    process.env.SUPABASE_ANON_KEY ??
-    process.env.VITE_SUPABASE_PUBLISHABLE_KEY ??
+    process.env.SUPABASE_SERVICE_ROLE_KEY ??
     ''
   );
 }
@@ -77,7 +76,7 @@ test.describe('Copilot — Página de lista', () => {
 
     // Either agents exist or the empty state message shows
     const hasAgents = (await page.locator('[data-lead-id], [class*="CardTitle"]').count()) > 0;
-    const emptyState = page.getByText(/nenhum copilot|nenhum agente/i).first();
+    const emptyState = page.getByText(/nenhum copilot|nenhum agente|primeiro copilot/i).first();
     const hasEmpty = await emptyState.isVisible({ timeout: 5_000 }).catch(() => false);
 
     expect(hasAgents || hasEmpty).toBe(true);
@@ -286,7 +285,7 @@ test.describe('Copilot — agent-message API', () => {
     const res = await request.post(`${supabaseUrl}/functions/v1/agent-message`, {
       headers: {
         'Content-Type': 'application/json',
-        Authorization: `Bearer ${getAnonKey()}`,
+        Authorization: `Bearer ${getServiceKey()}`,
       },
       data: {
         from: '+5511999998877',
@@ -310,7 +309,7 @@ test.describe('Copilot — agent-message API', () => {
     const res = await request.post(`${supabaseUrl}/functions/v1/agent-message`, {
       headers: {
         'Content-Type': 'application/json',
-        Authorization: `Bearer ${getAnonKey()}`,
+        Authorization: `Bearer ${getServiceKey()}`,
       },
       data: {
         from: '123',              // < 8 chars — invalid
@@ -334,7 +333,7 @@ test.describe('Copilot — agent-message API', () => {
     const res = await request.post(`${supabaseUrl}/functions/v1/agent-message`, {
       headers: {
         'Content-Type': 'application/json',
-        Authorization: `Bearer ${getAnonKey()}`,
+        Authorization: `Bearer ${getServiceKey()}`,
       },
       data: {
         from: TEST_PHONE,
@@ -371,7 +370,7 @@ test.describe('Copilot — agent-message API', () => {
     const res = await request.post(`${supabaseUrl}/functions/v1/agent-message`, {
       headers: {
         'Content-Type': 'application/json',
-        Authorization: `Bearer ${getAnonKey()}`,
+        Authorization: `Bearer ${getServiceKey()}`,
       },
       data: {
         from: TEST_PHONE,
@@ -402,7 +401,7 @@ test.describe('Copilot — agent-message API', () => {
     const res = await request.post(`${supabaseUrl}/functions/v1/agent-message`, {
       headers: {
         'Content-Type': 'application/json',
-        Authorization: `Bearer ${getAnonKey()}`,
+        Authorization: `Bearer ${getServiceKey()}`,
       },
       data: {
         from: TEST_PHONE,
@@ -443,7 +442,7 @@ test.describe('Copilot — Qualificação integrada com pipe_whatsapp', () => {
       {
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${getAnonKey()}`,
+          Authorization: `Bearer ${getServiceKey()}`,
         },
         data: {
           from: TEST_PHONE,
@@ -498,7 +497,7 @@ test.describe('Copilot — Qualificação integrada com pipe_whatsapp', () => {
     const res = await request.post(`${supabaseUrl}/functions/v1/agent-message`, {
       headers: {
         'Content-Type': 'application/json',
-        Authorization: `Bearer ${getAnonKey()}`,
+        Authorization: `Bearer ${getServiceKey()}`,
       },
       data: {
         from: TEST_PHONE,

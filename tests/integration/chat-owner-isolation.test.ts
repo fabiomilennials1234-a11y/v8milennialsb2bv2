@@ -778,22 +778,12 @@ describe.skipIf(shouldSkip)('Chat: isolamento por responsável', () => {
 
     beforeAll(async () => {
       await setPolicy(service, TEST_ORG_ID, true);
-      // A lista multi só devolve caixas que o membro pode ler.
-      const { error } = await service.from('whatsapp_instance_allowed_members').upsert([
-        { whatsapp_instance_id: INSTANCE_ID, team_member_id: TM_MEMBER_1 },
-        { whatsapp_instance_id: INSTANCE_ID, team_member_id: TM_MEMBER_2 },
-      ]);
-      if (error) throw new Error(`Falha ao liberar a caixa aos membros: ${error.message}`);
+      // Number assignments are part of the shared fixture, independently of co-ownership.
       await removeCoOwners(LEAD_BETA);
     });
 
     afterAll(async () => {
       await removeCoOwners(LEAD_BETA);
-      await service
-        .from('whatsapp_instance_allowed_members')
-        .delete()
-        .eq('whatsapp_instance_id', INSTANCE_ID)
-        .in('team_member_id', [TM_MEMBER_1, TM_MEMBER_2]);
     });
 
     it('CONTROLE: sem vínculo, o membro não vê a conversa de Beta na lista multi', async () => {
