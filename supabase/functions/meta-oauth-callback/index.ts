@@ -5,6 +5,7 @@ import { verifyMetaState } from "../_shared/meta-oauth-state.ts";
 import { metaBusinessConfig, exchangeBusinessCode, inspectBusinessToken, validateBusinessToken } from "../_shared/meta-business.ts";
 import { listBusinessAdAccounts } from "../_shared/meta-ad-assets.ts";
 import { encryptMetaToken } from "../_shared/meta-token-crypto.ts";
+import { metaPilotAllows } from "../_shared/meta-pilot.ts";
 import { getMe, listPages, subscribePageWebhook } from "../_shared/meta-api.ts";
 
 Deno.serve(withErrorBoundary("meta-oauth-callback", async (req) => {
@@ -24,6 +25,7 @@ Deno.serve(withErrorBoundary("meta-oauth-callback", async (req) => {
     const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!, { auth: { persistSession: false, autoRefreshToken: false } });
     const { data: consumed, error } = await supabase.rpc("meta_consume_oauth_nonce", { p_nonce: state.nonce, p_user_id: state.userId, p_organization_id: state.orgId, p_app_id: config.appId, p_connection_type: state.connectionType });
     if (error || consumed !== true) return redirect({ meta: "error", reason: "state_invalido" });
+    if (!metaPilotAllows(state.orgId)) return redirect({ meta: "error", reason: "integracao_indisponivel" });
     if (url.searchParams.has("error")) return redirect({ meta: "error", reason: "autorizacao_recusada" });
     const code = url.searchParams.get("code");
     if (!code) return redirect({ meta: "error", reason: "codigo_ausente" });

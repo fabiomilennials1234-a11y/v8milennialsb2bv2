@@ -7,7 +7,7 @@ vi.mock("../../supabase/functions/_shared/error-boundary.ts", () => ({ withError
 vi.mock("../../supabase/functions/_shared/meta-business.ts", async (original) => ({ ...await original<object>(), metaBusinessConfig: () => ({ appId: "123", secret: "crm-secret", configId: "456" }), exchangeBusinessCode: f.exchange, inspectBusinessToken: f.inspect }));
 vi.mock("../../supabase/functions/_shared/meta-api.ts", () => ({ getMe: async () => ({ id: "789", name: "System" }), listPages: f.pages, subscribePageWebhook: f.subscribe }));
 vi.mock("../../supabase/functions/_shared/meta-ad-assets.ts", () => ({ listBusinessAdAccounts: f.ads }));
-vi.stubGlobal("Deno", { env: { get: (key: string) => ({ APP_URL: "https://torquecrm.com.br", META_CRM_OAUTH_ENABLED: "true", META_CRM_ENCRYPTION_KEY_V1: "a".repeat(64) })[key] }, serve: (fn: typeof f.handler) => { f.handler = fn; } });
+vi.stubGlobal("Deno", { env: { get: (key: string) => ({ APP_URL: "https://torquecrm.com.br", META_CRM_OAUTH_ENABLED: "true", META_CRM_PILOT_ORGANIZATION_IDS: "org", META_CRM_ENCRYPTION_KEY_V1: "a".repeat(64) })[key] }, serve: (fn: typeof f.handler) => { f.handler = fn; } });
 await import("../../supabase/functions/meta-oauth-callback/index.ts");
 const state = (extra = {}) => signMetaState({ userId: "u", orgId: "org", connectionType: "facebook", nonce: "nonce", exp: Date.now() + 60000, appId: "123", configId: "456", ...extra }, "crm-secret");
 const callback = (token: string, suffix = "&code=provider-code") => f.handler(new Request(`https://edge.test?state=${encodeURIComponent(token)}${suffix}`));
@@ -31,6 +31,12 @@ describe("Business callback", () => {
   for(const delta of [{app_id:"999"},{type:"USER"},{expires_at:1}]) {f.inspect.mockResolvedValue({app_id:"123",user_id:"789",type:"SYSTEM_USER",is_valid:true,expires_at:0,...delta});await callback(await state());}
   expect(f.rpc.mock.calls.filter(([name])=>name==="meta_save_business_connection")).toHaveLength(0);
   f.inspect.mockResolvedValue({app_id:"123",user_id:"789",type:"SYSTEM_USER",is_valid:true,expires_at:0,scopes:["pages_show_list"]}); f.subscribe.mockResolvedValue(false);await callback(await state());expect(f.rpc.mock.calls.filter(([name])=>name==="meta_save_business_connection")).toHaveLength(0);
+ });
+ it("consumes a removed pilot organization's state without contacting Meta", async () => {
+  const response = await callback(await state({ orgId: "outside-pilot" }));
+  expect(response.headers.get("Location")).toContain("integracao_indisponivel");
+  expect(f.rpc).toHaveBeenCalledTimes(1);
+  expect(f.exchange).not.toHaveBeenCalled();
  });
  it("denial consumes state and returns a fixed error without reflecting upstream text", async () => {
   const response=await callback(await state(),"&error=untrusted-secret-data");expect(response.headers.get("Location")).toContain("autorizacao_recusada");expect(response.headers.get("Location")).not.toContain("untrusted");expect(f.exchange).not.toHaveBeenCalled();

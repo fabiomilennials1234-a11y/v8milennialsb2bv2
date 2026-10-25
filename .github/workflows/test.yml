@@ -230,7 +230,8 @@ jobs:
 
   e2e-tests:
     name: E2E Tests
-    runs-on: ubuntu-latest
+    # Playwright bundled here does not support Ubuntu 26.04 yet.
+    runs-on: ubuntu-24.04
     needs: [quality]
     steps:
       - uses: actions/checkout@v4

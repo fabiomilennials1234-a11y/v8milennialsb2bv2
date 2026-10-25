@@ -7,6 +7,7 @@ import { requireAdmin, AuthError, authErrorResponse } from "../_shared/user-auth
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { metaBusinessConfig, businessLoginUrl } from "../_shared/meta-business.ts";
 import { signMetaState } from "../_shared/meta-oauth-state.ts";
+import { metaPilotAllows } from "../_shared/meta-pilot.ts";
 
 const STATE_TTL_MS = 10 * 60 * 1000; // 10 minutes — enough for the OAuth round-trip.
 
@@ -42,6 +43,7 @@ Deno.serve(withErrorBoundary("meta-oauth-start", async (req) => {
   }
 
   const connectionType = body.connectionType === "instagram" ? "instagram" : "facebook";
+  if (!metaPilotAllows(auth.organizationId)) return new Response(JSON.stringify({ error: "meta_crm_pilot_unavailable" }), { status: 403, headers });
 
   if (!body.organization_id) return new Response(JSON.stringify({ error: "organization_required" }), { status: 400, headers });
   const config = metaBusinessConfig();

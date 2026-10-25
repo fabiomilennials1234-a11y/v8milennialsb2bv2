@@ -70,7 +70,7 @@ Uma função ACTIVE não prova que está configurada para este app. Não foram l
 
 ## Sequência de rollout
 
-1. Revisar e aprovar o PR. Frontend é publicável separadamente dos callbacks; validar `/termos` e identidade no domínio público após deploy. Preparar aprovação final sobre o diff concreto; não fazer merge/deploy automático nesta tarefa.
+1. Revisar e aprovar o PR. Frontend é publicável separadamente dos callbacks; validar `/termos` e identidade no domínio público após deploy. Produção autorizada expressamente pelo proprietário; concluir revisão e gates antes do merge/deploy.
 2. Para migrar uma página já vinculada a outro app, desconectar explicitamente a conexão antiga antes do consentimento novo; o sistema não sobrescreve autorização ativa de outro app. A desconexão remove credenciais locais, mas revogação remota deve ser conferida na Meta. Ensaiar o fluxo corrigido com duas organizações e conta de teste: consentimento, ativos, revogação, replay, token inválido, expiração e erros Graph. Pausar novas conexões OAuth durante a mudança do schema/callback; estados do fluxo antigo não são aceitos pelo novo callback e exigem reinício.
 3. Validar migrations `20271215000000_meta_privacy_requests.sql` e `20271215010000_meta_oauth_security.sql` em ambiente isolado. Comparar ledger e dry-run: não usar `db push` indiscriminado em produção. A numeração posterior às migrations existentes evita reordenar ledger.
 4. Após autorização explícita de produção, aplicar somente as migrations aprovadas e conferir no alvo real:
@@ -143,3 +143,11 @@ POST autenticado em `/functions/v1/meta-ad-insights`, sempre com organization_id
 O painel Facebook de Configurações consome essa API para listar contas selecionadas e consultar métricas paginadas por período. A seleção e o cache são separados por organização; leitura fica disponível ao admin/master. Isso não substitui o painel de anúncios da agência que usa integração legada. Não apresentar a integração global da agência como prova de isolamento por cliente. Vídeo de App Review deve mostrar o consumidor real dessa API e os testes do novo fluxo.
 
 Diagnóstico de testes: [test-diagnosis.md](./test-diagnosis.md). Revisão do delta: [security-review.md](./security-review.md).
+
+## Rollout autorizado — execução
+
+- Piloto restrito por `META_CRM_PILOT_ORGANIZATION_IDS` à TorqueCRM (`b2ad1ffb-e136-4356-846b-9f210f902573`). Lista vazia bloqueia consentimento; callback revalida antes de contatar Meta.
+- Seis configurações CRM cadastradas no painel, sem alterar segredos legados. OAuth permanece desligado até cadastro do App Secret e ensaio real.
+- Segredo do cron copiado de `cron_config` ao Vault **dentro do banco**, após conferir SHA-256 com digest do secret das funções. Nenhum valor foi retornado ao agente. Nome Vault: `meta_crm_cron_secret`.
+- Ensaio remoto: baseline do repositório + pré-requisitos Meta + duas migrations novas aplicadas na branch isolada `qa-meta-pr2377`. As seis RPCs verificadas: anon/authenticated sem EXECUTE; service_role com EXECUTE; uma assinatura por nome. Limite: ensaio não replica drift de produção nem dados reais. Branch excluída, ausência confirmada.
+- CI anterior: Integration tem mesmos 25 erros/3 arquivos e RLS mesmas 46 asserções vermelhas que main `56d8753ca`. Unit já comparado com main sem regressões. E2E bloqueava antes dos testes: Playwright não suporta Ubuntu 26.04; runner fixado em Ubuntu 24.04. Baselines não ampliados.
