@@ -95,7 +95,14 @@ export async function enviarTemplateAprovado(params: {
   if (!sendResult.success) {
     // A deferral means no provider send happened; preserve its scheduling instant.
     // Other transport failures retain the existing executor retry policy.
-    return { ok: false, erro: `Template send failed: ${sendResult.error}`, ...(sendResult.retryAt ? { retryAt: sendResult.retryAt } : {}) };
+    return {
+      ok: false,
+      erro: `Template send failed: ${sendResult.error}`,
+      // Link de cabeçalho expirado não se resolve sozinho: retentar só repete a
+      // falha até alguém reabrir o nó e escolher o template de novo.
+      ...(String(sendResult.error ?? "").includes("header_media_unreachable") ? { retryable: false } : {}),
+      ...(sendResult.retryAt ? { retryAt: sendResult.retryAt } : {}),
+    };
   }
 
   // ⚠️ NÃO grava a linha. O provider do canal oficial já a escreve, no mesmo

@@ -579,6 +579,9 @@ export async function sendTemplateViaInstance(
             template.components,
             instance.organization_id,
             { storage: supabaseAdmin.storage },
+            // Automação e disparo não veem a recusa da Meta (ela vem por
+            // callback): link de cabeçalho que não espelhou vira erro do envio.
+            { estrito: true },
           ),
           previewText: template.previewText,
           buttonLabels: template.buttonLabels,
