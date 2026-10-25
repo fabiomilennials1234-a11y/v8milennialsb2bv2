@@ -1,5 +1,5 @@
 // Offline smoke of the exact generated Deno bundle. Run with:
-// deno test --cached-only --no-check --allow-read --allow-env --allow-net=127.0.0.1 tests/integration/whatsapp-live-execution-smoke.test.ts
+// deno test --cached-only --no-check --allow-read --allow-env --allow-net=127.0.0.1 tests/integration/whatsapp-live-execution-smoke.deno.ts
 const runtime = Deno;
 const artifact = runtime.env.get('TORQUE_LIVE_EXECUTION_ARTIFACT') ?? '/tmp/torque-live-execution-bridge-20260924-v3';
 const indexUrl = new URL(`file://${artifact}/whatsapp-webhook/index.ts`);

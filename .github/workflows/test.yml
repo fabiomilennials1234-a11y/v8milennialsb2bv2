@@ -169,7 +169,7 @@ jobs:
 
   integration-tests:
     name: Integration Tests
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     # Independent and still blocking, like RLS: report database regressions
     # while the TypeScript quality gate runs. No check is skipped.
     steps:
@@ -191,7 +191,7 @@ jobs:
 
   rls-invariants:
     name: RLS Invariants (pgTAP)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     # Independent, still blocking: surface SQL/bootstrap regressions while
     # quality runs, instead of waiting for the full TypeScript ratchet first.
     steps:
