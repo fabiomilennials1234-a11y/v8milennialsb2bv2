@@ -357,7 +357,8 @@ vi.mock("@/modules/leads/components/lead-detail/hooks/useLeadActionGates", () =>
 
 vi.mock("@/shared/hooks/useLogLeadAction", () => ({ useLogLeadAction: () => vi.fn() }));
 // Chamado 82c50502: telefones do lead (lead_phones). Sem QueryClient aqui.
-vi.mock("@/modules/leads/hooks/useLeadPhones", () => ({
+vi.mock("@/modules/leads/hooks/useLeadPhones", async (original) => ({
+  ...await original<Record<string, unknown>>(),
   useLeadPhones: () => ({ data: [], isLoading: false }),
   useSalvarTelefonesDoLead: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useNomearContatoDoTelefone: () => ({ mutateAsync: vi.fn(), isPending: false }),

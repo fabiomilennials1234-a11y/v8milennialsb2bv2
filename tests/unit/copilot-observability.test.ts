@@ -65,9 +65,8 @@ describe("copilot observability (#206)", () => {
             return {
               select: vi.fn().mockReturnThis(),
               in: vi.fn().mockReturnThis(),
-              order: vi.fn().mockReturnValue({
-                then: (r: any) => r({ data: msgs, error: null }),
-              }),
+              order: vi.fn().mockReturnThis(),
+              then: (r: any) => r({ data: msgs, error: null }),
             };
           }
           return {

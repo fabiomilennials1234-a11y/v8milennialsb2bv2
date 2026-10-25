@@ -162,3 +162,6 @@ describe("Leads.tsx com a aba antiga `cliente`", () => {
     expect(m.useLeads).toHaveBeenLastCalledWith(expect.objectContaining({ filterClassificacao: "lead" }), { enabled: true });
   });
 });
+
+// The owner feature flag is not the target of page navigation/debounce tests.
+vi.mock("../hooks/useLeadOwners", () => ({ useLeadOwnersEnabled: () => false }));

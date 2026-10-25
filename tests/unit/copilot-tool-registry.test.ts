@@ -88,13 +88,13 @@ describe("PLAYGROUND_TOOLS registry", () => {
       "PREENCHER_CAMPOS",
       "TRANSFERIR_SZ_CHAT",
       "ENVIAR_DOCUMENTO",
+      "GERAR_ORCAMENTO_PDF",
       "CRIAR_CAMPO",
       "PAUSAR_ATENDIMENTO_HUMANO",
     ];
     for (const toolId of expected) {
       expect(ids).toContain(toolId);
     }
-    // Total count = 10
-    expect(PLAYGROUND_TOOLS).toHaveLength(10);
+    expect(ids.slice().sort()).toEqual(expected.slice().sort());
   });
 });

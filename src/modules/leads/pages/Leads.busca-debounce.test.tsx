@@ -153,3 +153,6 @@ describe("Leads.tsx — busca com debounce", () => {
     }
   });
 });
+
+// The owner feature flag is not the target of page navigation/debounce tests.
+vi.mock("../hooks/useLeadOwners", () => ({ useLeadOwnersEnabled: () => false }));

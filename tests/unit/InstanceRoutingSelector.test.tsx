@@ -97,7 +97,7 @@ describe("campo de recuo", () => {
 
   it("aparece na política 'instância do responsável'", () => {
     renderSelector({ instanceRoutingPolicy: "responsible" });
-    expect(screen.getByRole("combobox", { name: /se não houver conversa/i })).toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: /se o responsável não tiver número/i })).toBeInTheDocument();
   });
 
   it("some na política 'número fixo' — não há o que recuar", () => {

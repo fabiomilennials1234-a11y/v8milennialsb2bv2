@@ -49,13 +49,14 @@ function tableQuery(table: string) {
     if (table === "organizations") return organizations.find((org) => org.id === filters.get("id")) ?? null;
     throw new Error(`Unexpected table: ${table}`);
   };
-  const rows = () => table === "organizations" ? organizations : organizations.map((org) => ({
+  const rows = () => table === "organizations" ? organizations : backend.master ? [] : organizations.map((org) => ({
     ...member(org.id), organizations: org,
   }));
   const chain = {
     select: () => chain,
     eq: (column: string, value: unknown) => { filters.set(column, value); return chain; },
     order: () => chain,
+    not: () => chain,
     single: async () => ({ data: one(), error: null }),
     maybeSingle: async () => ({ data: one(), error: null }),
     then: (resolve: (value: { data: ReturnType<typeof rows>; error: null }) => unknown) =>
