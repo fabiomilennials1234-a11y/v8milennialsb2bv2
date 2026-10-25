@@ -26,4 +26,3 @@ SELECT cron.schedule(
   DELETE FROM public.meta_webhook_receipts WHERE status = 'completed' AND completed_at < now() - interval '7 days';
   $job$
 );
-
