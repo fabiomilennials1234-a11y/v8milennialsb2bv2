@@ -187,18 +187,13 @@ test.describe('Estúdio de Métricas', () => {
     await expect(dialogo.getByText('Nova métrica')).toBeVisible({ timeout: 10_000 });
     await expect(dialogo.getByText('2 de 3')).toBeVisible();
 
-    // Cada clique em "combinar" encaixa uma operação. No teto, o botão deixa de
-    // ser oferecido — a UI não deixa MONTAR profundidade 4.
-    //
-    // ⚠ A recusa do BANCO (22023 em `fn_metric_tree_validate` e no trigger de
-    // escrita) é coberta pelo pgTAP, em `metric_custom_tree_test.sql` (PF2 e
-    // WR4). Aqui se prova o outro lado: o usuário não chega a tentar.
-    for (const alvo of ['3 de 3']) {
-      const combinar = dialogo.getByRole('button', { name: 'Combinar com outra métrica' }).first();
-      await combinar.click();
-      await expect(dialogo.getByText(alvo)).toBeVisible({ timeout: 5_000 });
+    // The root operation starts at depth 2. Either leaf may become an
+    // operation at depth 3; neither resulting leaf may create depth 4.
+    for (const remaining of [1, 0]) {
+      await dialogo.getByRole('button', { name: 'Combinar com outra métrica' }).first().click();
+      await expect(dialogo.getByText('3 de 3', { exact: true })).toBeVisible();
+      await expect(dialogo.getByRole('button', { name: 'Combinar com outra métrica' })).toHaveCount(remaining);
     }
-
-    await expect(dialogo.getByRole('button', { name: 'Combinar com outra métrica' })).toHaveCount(0);
+    await expect(dialogo.getByRole('group', { name: 'Operação', exact: true })).toHaveCount(3);
   });
 });

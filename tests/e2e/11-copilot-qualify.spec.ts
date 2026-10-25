@@ -181,13 +181,13 @@ test.describe('Copilot — Formulário de criação', () => {
     await expect(saveBtn).toBeVisible({ timeout: 5_000 });
   });
 
-  test('seletor de template está presente', async ({ page }) => {
+  test('editor estruturado do prompt aceita instruções', async ({ page }) => {
     await page.goto('/copilot/novo');
-    await page.waitForLoadState('networkidle');
-
-    // Template combobox rendered by shadcn Select
-    const combobox = page.getByRole('combobox').first();
-    await expect(combobox).toBeVisible({ timeout: 5_000 });
+    const prompt = page.getByRole('group', { name: 'Seções do prompt', exact: true })
+      .getByRole('textbox').first();
+    await expect(prompt).toBeVisible();
+    await prompt.fill('Atenda clientes com clareza e registre os dados de qualificação.');
+    await expect(prompt).toHaveValue('Atenda clientes com clareza e registre os dados de qualificação.');
   });
 
   test('tabs Prompt / Tools / Conhecimento renderizam', async ({ page }) => {
@@ -223,52 +223,16 @@ test.describe('Copilot — Formulário de criação', () => {
     expect(page.url()).toContain('/copilot/novo');
   });
 
-  test('criar agente com template Qualificador redireciona para lista', async ({
-    page,
-  }) => {
+  test('criar agente com instruções persiste e volta à lista', async ({ page }) => {
     await page.goto('/copilot/novo');
-    await page.waitForLoadState('networkidle');
-
-    const nameInput = page.getByPlaceholder(/nome do agente/i).first();
-    if (!(await nameInput.isVisible({ timeout: 5_000 }).catch(() => false))) {
-      test.skip();
-      return;
-    }
-
-    await nameInput.fill(TEST_AGENT_NAME);
-
-    // Select Qualificador template
-    const combobox = page.getByRole('combobox').first();
-    if (await combobox.isVisible({ timeout: 3_000 }).catch(() => false)) {
-      await combobox.click();
-      const option = page.getByRole('option', { name: /qualificador/i });
-      if (await option.isVisible({ timeout: 3_000 }).catch(() => false)) {
-        await option.click();
-      }
-    }
-
-    const saveBtn = page.getByRole('button', { name: /^salvar$/i }).first();
-    if (!(await saveBtn.isVisible({ timeout: 3_000 }).catch(() => false))) {
-      test.skip();
-      return;
-    }
-
-    await saveBtn.click();
-    await page.waitForLoadState('networkidle');
-
-    // On success → redirected to /copilot; on failure stays on form
-    const onList =
-      page.url().endsWith('/copilot') || /\/copilot(\?|$)/.test(page.url());
-    const onForm = page.url().includes('/copilot/novo');
-
-    expect(onList || onForm).toBe(true);
-
-    // If redirected to list, the new agent name should be visible
-    if (onList) {
-      const agentName = page.getByText(TEST_AGENT_NAME).first();
-      await expect(agentName).toBeVisible({ timeout: 8_000 });
-    }
+    await page.getByRole('textbox', { name: 'Nome do agente', exact: true }).fill(TEST_AGENT_NAME);
+    await page.getByRole('group', { name: 'Seções do prompt', exact: true })
+      .getByRole('textbox').first().fill('Atenda clientes, confirme suas necessidades e registre os dados de qualificação.');
+    await page.getByRole('button', { name: 'Salvar', exact: true }).click();
+    await expect(page).toHaveURL(/\/copilot$/);
+    await expect(page.getByText(TEST_AGENT_NAME, { exact: true }).first()).toBeVisible();
   });
+
 });
 
 // ─────────────────────────────────────────────────────────────────────────────

@@ -776,7 +776,16 @@ describe.skipIf(shouldSkip)('Chat: isolamento por responsável', () => {
       await service.from('lead_owners').delete().eq('lead_id', leadId).eq('role', 'co');
     }
 
+    let originalFlags: Record<string, unknown> = {};
     beforeAll(async () => {
+      const { data: org, error: readError } = await service.from('organizations')
+        .select('feature_flags').eq('id', TEST_ORG_ID).single();
+      if (readError) throw readError;
+      originalFlags = (org.feature_flags ?? {}) as Record<string, unknown>;
+      const { error: flagError } = await service.from('organizations')
+        .update({ feature_flags: { ...originalFlags, lead_owners_n_donos: true } })
+        .eq('id', TEST_ORG_ID);
+      if (flagError) throw flagError;
       await setPolicy(service, TEST_ORG_ID, true);
       // Number assignments are part of the shared fixture, independently of co-ownership.
       await removeCoOwners(LEAD_BETA);
@@ -784,6 +793,9 @@ describe.skipIf(shouldSkip)('Chat: isolamento por responsável', () => {
 
     afterAll(async () => {
       await removeCoOwners(LEAD_BETA);
+      const { error } = await service.from('organizations')
+        .update({ feature_flags: originalFlags }).eq('id', TEST_ORG_ID);
+      if (error) throw error;
     });
 
     it('CONTROLE: sem vínculo, o membro não vê a conversa de Beta na lista multi', async () => {
