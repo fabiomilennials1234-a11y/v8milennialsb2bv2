@@ -78,10 +78,10 @@ INSERT INTO public.pipeline_stages
   (id, organization_id, pipeline_id, pipeline_type, stage_key, name, position, stage_role, is_active, requires_sale_value, is_final_positive)
 VALUES
   ('deadbeef-0000-4000-8000-00000000f1b5', 'deadbeef-0000-4000-8000-00000000f001', 'deadbeef-0000-4000-8000-00000000f0b1', 'custom', 'sucesso_p1',  'Sucesso P1',  4, 'open',           true, false, true),
-  ('deadbeef-0000-4000-8000-00000000f5b1', 'deadbeef-0000-4000-8000-00000000f001', 'deadbeef-0000-4000-8000-00000000f0b5', 'custom', 'proposta',    'Proposta',    0, 'open',           true, false, false),
+  ('deadbeef-0000-4000-8000-00000000f5b1', 'deadbeef-0000-4000-8000-00000000f001', 'deadbeef-0000-4000-8000-00000000f0b5', 'custom', 'proposta_p5',    'Proposta',    0, 'open',           true, false, false),
   ('deadbeef-0000-4000-8000-00000000f5b2', 'deadbeef-0000-4000-8000-00000000f001', 'deadbeef-0000-4000-8000-00000000f0b5', 'custom', 'qualificado', 'Qualificado', 1, 'open',           true, false, true),
   ('deadbeef-0000-4000-8000-00000000f5b3', 'deadbeef-0000-4000-8000-00000000f001', 'deadbeef-0000-4000-8000-00000000f0b5', 'custom', 'fechado',     'Fechado',     2, 'open',           true, false, true),
-  ('deadbeef-0000-4000-8000-00000000f6b1', 'deadbeef-0000-4000-8000-00000000f001', 'deadbeef-0000-4000-8000-00000000f0b6', 'custom', 'proposta',    'Proposta',    0, 'open',           true, false, false),
+  ('deadbeef-0000-4000-8000-00000000f6b1', 'deadbeef-0000-4000-8000-00000000f001', 'deadbeef-0000-4000-8000-00000000f0b6', 'custom', 'proposta_p6',    'Proposta',    0, 'open',           true, false, false),
   ('deadbeef-0000-4000-8000-00000000f6b2', 'deadbeef-0000-4000-8000-00000000f001', 'deadbeef-0000-4000-8000-00000000f0b6', 'custom', 'orcamento',   'Orçamento ✓', 1, 'meeting_booked', true, false, true);
 
 INSERT INTO public.pipeline_stages
@@ -91,10 +91,10 @@ VALUES
   ('deadbeef-0000-4000-8000-00000000f1b2', 'deadbeef-0000-4000-8000-00000000f001', 'deadbeef-0000-4000-8000-00000000f0b1', 'custom', 'ganho_antigo', 'Ganho antigo',  1, 'won',  false, false),
   ('deadbeef-0000-4000-8000-00000000f1b3', 'deadbeef-0000-4000-8000-00000000f001', 'deadbeef-0000-4000-8000-00000000f0b1', 'custom', 'ganhou',       'Ganhou',        2, 'won',  true,  false),
   ('deadbeef-0000-4000-8000-00000000f1b4', 'deadbeef-0000-4000-8000-00000000f001', 'deadbeef-0000-4000-8000-00000000f0b1', 'custom', 'perdeu',       'Perdeu',        3, 'lost', true,  false),
-  ('deadbeef-0000-4000-8000-00000000f2b1', 'deadbeef-0000-4000-8000-00000000f001', 'deadbeef-0000-4000-8000-00000000f0b2', 'custom', 'proposta',     'Proposta',      0, 'open', true,  false),
-  ('deadbeef-0000-4000-8000-00000000f3b1', 'deadbeef-0000-4000-8000-00000000f001', 'deadbeef-0000-4000-8000-00000000f0b3', 'custom', 'proposta',     'Proposta',      0, 'open', true,  false),
+  ('deadbeef-0000-4000-8000-00000000f2b1', 'deadbeef-0000-4000-8000-00000000f001', 'deadbeef-0000-4000-8000-00000000f0b2', 'custom', 'proposta_p2',     'Proposta',      0, 'open', true,  false),
+  ('deadbeef-0000-4000-8000-00000000f3b1', 'deadbeef-0000-4000-8000-00000000f001', 'deadbeef-0000-4000-8000-00000000f0b3', 'custom', 'proposta_p3',     'Proposta',      0, 'open', true,  false),
   ('deadbeef-0000-4000-8000-00000000f3b2', 'deadbeef-0000-4000-8000-00000000f001', 'deadbeef-0000-4000-8000-00000000f0b3', 'custom', 'vendido',      'Vendido',       1, 'won',  true,  true),
-  ('deadbeef-0000-4000-8000-00000000f4b1', 'deadbeef-0000-4000-8000-00000000f002', 'deadbeef-0000-4000-8000-00000000f0b4', 'custom', 'proposta',     'Proposta',      0, 'open', true,  false),
+  ('deadbeef-0000-4000-8000-00000000f4b1', 'deadbeef-0000-4000-8000-00000000f002', 'deadbeef-0000-4000-8000-00000000f0b4', 'custom', 'proposta_p4',     'Proposta',      0, 'open', true,  false),
   ('deadbeef-0000-4000-8000-00000000f4b2', 'deadbeef-0000-4000-8000-00000000f002', 'deadbeef-0000-4000-8000-00000000f0b4', 'custom', 'vendido',      'Vendido',       1, 'won',  true,  true);
 
 INSERT INTO public.deals (id, organization_id, source_lead_id, title, source, value) VALUES
@@ -109,12 +109,12 @@ INSERT INTO public.deals (id, organization_id, source_lead_id, title, source, va
 
 INSERT INTO public.pipeline_entries (id, organization_id, pipeline_id, lead_id, stage_key, stage_id, deal_id) VALUES
   ('deadbeef-0000-4000-8000-00000000fe01', 'deadbeef-0000-4000-8000-00000000f001', 'deadbeef-0000-4000-8000-00000000f0b1', 'deadbeef-0000-4000-8000-00000000f0a1', 'proposta', 'deadbeef-0000-4000-8000-00000000f1b1', 'deadbeef-0000-4000-8000-00000000fd01'),
-  ('deadbeef-0000-4000-8000-00000000fe02', 'deadbeef-0000-4000-8000-00000000f001', 'deadbeef-0000-4000-8000-00000000f0b2', 'deadbeef-0000-4000-8000-00000000f0a1', 'proposta', 'deadbeef-0000-4000-8000-00000000f2b1', 'deadbeef-0000-4000-8000-00000000fd02'),
+  ('deadbeef-0000-4000-8000-00000000fe02', 'deadbeef-0000-4000-8000-00000000f001', 'deadbeef-0000-4000-8000-00000000f0b2', 'deadbeef-0000-4000-8000-00000000f0a1', 'proposta_p2', 'deadbeef-0000-4000-8000-00000000f2b1', 'deadbeef-0000-4000-8000-00000000fd02'),
   ('deadbeef-0000-4000-8000-00000000fe03', 'deadbeef-0000-4000-8000-00000000f001', 'deadbeef-0000-4000-8000-00000000f0b1', 'deadbeef-0000-4000-8000-00000000f0a1', 'ganhou',   'deadbeef-0000-4000-8000-00000000f1b3', 'deadbeef-0000-4000-8000-00000000fd03'),
-  ('deadbeef-0000-4000-8000-00000000fe04', 'deadbeef-0000-4000-8000-00000000f001', 'deadbeef-0000-4000-8000-00000000f0b3', 'deadbeef-0000-4000-8000-00000000f0a1', 'proposta', 'deadbeef-0000-4000-8000-00000000f3b1', 'deadbeef-0000-4000-8000-00000000fd04'),
-  ('deadbeef-0000-4000-8000-00000000fe05', 'deadbeef-0000-4000-8000-00000000f002', 'deadbeef-0000-4000-8000-00000000f0b4', 'deadbeef-0000-4000-8000-00000000f0a2', 'proposta', 'deadbeef-0000-4000-8000-00000000f4b1', 'deadbeef-0000-4000-8000-00000000fd05'),
-  ('deadbeef-0000-4000-8000-00000000fe06', 'deadbeef-0000-4000-8000-00000000f001', 'deadbeef-0000-4000-8000-00000000f0b5', 'deadbeef-0000-4000-8000-00000000f0a1', 'proposta', 'deadbeef-0000-4000-8000-00000000f5b1', 'deadbeef-0000-4000-8000-00000000fd06'),
-  ('deadbeef-0000-4000-8000-00000000fe07', 'deadbeef-0000-4000-8000-00000000f001', 'deadbeef-0000-4000-8000-00000000f0b6', 'deadbeef-0000-4000-8000-00000000f0a1', 'proposta', 'deadbeef-0000-4000-8000-00000000f6b1', 'deadbeef-0000-4000-8000-00000000fd07'),
+  ('deadbeef-0000-4000-8000-00000000fe04', 'deadbeef-0000-4000-8000-00000000f001', 'deadbeef-0000-4000-8000-00000000f0b3', 'deadbeef-0000-4000-8000-00000000f0a1', 'proposta_p3', 'deadbeef-0000-4000-8000-00000000f3b1', 'deadbeef-0000-4000-8000-00000000fd04'),
+  ('deadbeef-0000-4000-8000-00000000fe05', 'deadbeef-0000-4000-8000-00000000f002', 'deadbeef-0000-4000-8000-00000000f0b4', 'deadbeef-0000-4000-8000-00000000f0a2', 'proposta_p4', 'deadbeef-0000-4000-8000-00000000f4b1', 'deadbeef-0000-4000-8000-00000000fd05'),
+  ('deadbeef-0000-4000-8000-00000000fe06', 'deadbeef-0000-4000-8000-00000000f001', 'deadbeef-0000-4000-8000-00000000f0b5', 'deadbeef-0000-4000-8000-00000000f0a1', 'proposta_p5', 'deadbeef-0000-4000-8000-00000000f5b1', 'deadbeef-0000-4000-8000-00000000fd06'),
+  ('deadbeef-0000-4000-8000-00000000fe07', 'deadbeef-0000-4000-8000-00000000f001', 'deadbeef-0000-4000-8000-00000000f0b6', 'deadbeef-0000-4000-8000-00000000f0a1', 'proposta_p6', 'deadbeef-0000-4000-8000-00000000f6b1', 'deadbeef-0000-4000-8000-00000000fd07'),
   ('deadbeef-0000-4000-8000-00000000fe08', 'deadbeef-0000-4000-8000-00000000f001', 'deadbeef-0000-4000-8000-00000000f0b5', 'deadbeef-0000-4000-8000-00000000f0a1', 'qualificado', 'deadbeef-0000-4000-8000-00000000f5b2', 'deadbeef-0000-4000-8000-00000000fd08');
 
 -- ===========================================================================
@@ -160,7 +160,7 @@ UPDATE public.deals SET outcome = 'won', outcome_source = 'ui'
 
 SELECT is(
   (SELECT stage_key FROM public.pipeline_entries WHERE id = 'deadbeef-0000-4000-8000-00000000fe02'),
-  'proposta',
+  'proposta_p2',
   '(SEM-ETAPA) funil sem etapa won: o card fica onde estava');
 
 SELECT is(
@@ -214,7 +214,7 @@ SELECT is(
 
 SELECT is(
   (SELECT stage_key FROM public.pipeline_entries WHERE id = 'deadbeef-0000-4000-8000-00000000fe05'),
-  'proposta',
+  'proposta_p4',
   '(PODADO) só a posição volta: sem valor, o card não entra na etapa que exige');
 
 -- ── (SUCESSO) ───────────────────────────────────────────────────────────────
@@ -232,7 +232,7 @@ UPDATE public.deals SET outcome = 'won', outcome_source = 'ui'
 
 SELECT is(
   (SELECT stage_key FROM public.pipeline_entries WHERE id = 'deadbeef-0000-4000-8000-00000000fe07'),
-  'proposta',
+  'proposta_p6',
   '(REUNIÃO) sucesso com papel de reunião não recebe o card — seria reunião fantasma na métrica');
 
 SELECT is(

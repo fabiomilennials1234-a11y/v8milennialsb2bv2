@@ -23,11 +23,14 @@ SELECT plan(13);
 SELECT ok(
   EXISTS (
     SELECT 1 FROM cron.job
-     WHERE jobname = 'voip-sweep-stuck-calls'
+     WHERE jobname = 'cron-dispatch-minute'
        AND active = true
        AND schedule = '* * * * *'
+       AND command LIKE '%cron_dispatch_minute%'
+       AND pg_get_functiondef('public.cron_dispatch_minute(timestamptz)'::regprocedure)
+         LIKE '%voip-sweep-stuck-calls%'
   ),
-  'voip-sweep-stuck-calls está agendado, ativo, a cada minuto'
+  'dispatcher ativo executa voip-sweep-stuck-calls a cada minuto'
 );
 
 -- ===========================================================================

@@ -45,12 +45,11 @@ SELECT 'ca000000-0000-0000-0000-000000000001'::uuid, org, 'Confirmação', 'conf
 -- Três follow-ups: um atrasado, um para hoje, um já concluído.
 INSERT INTO public.follow_ups (id, organization_id, lead_id, assigned_to, title, due_date, completed_at)
 SELECT 'c5555555-5555-5555-5555-555555555555'::uuid, org, lead, membro,
-       'Mandar proposta revisada', now() - interval '2 days', NULL::timestamptz FROM _v_fix
+       'Mandar proposta revisada', now() - interval '10 minutes', NULL::timestamptz FROM _v_fix
 UNION ALL
 SELECT 'c6666666-6666-6666-6666-666666666666'::uuid, org, lead, membro,
        'Confirmar recebimento',
-       (date_trunc('day', timezone('America/Sao_Paulo', now())) + interval '23 hours 59 minutes')
-         AT TIME ZONE 'America/Sao_Paulo', NULL::timestamptz FROM _v_fix
+       now() + interval '10 minutes', NULL::timestamptz FROM _v_fix
 UNION ALL
 SELECT 'c7777777-7777-7777-7777-777777777777'::uuid, org, lead, membro,
        'Ligar para o comprador', now() - interval '1 day', now() FROM _v_fix;
@@ -66,11 +65,11 @@ SELECT public.fn_varredura_avisos_followups();
 SELECT is(
   (SELECT ARRAY[
      (SELECT count(*)::int FROM public.notifications
-       WHERE group_key LIKE 'fup:c5555555%' AND type = 'follow_up_overdue'),
+       WHERE group_key LIKE 'fup:c1111111-1111-1111-1111-111111111111:c5555555%' AND type = 'follow_up_overdue'),
      (SELECT count(*)::int FROM public.notifications
-       WHERE group_key LIKE 'fup:c6666666%' AND type = 'follow_up_due'),
+       WHERE group_key LIKE 'fup:c1111111-1111-1111-1111-111111111111:c6666666%' AND type = 'follow_up_due'),
      (SELECT count(*)::int FROM public.notifications
-       WHERE group_key LIKE 'fup:c7777777%')
+       WHERE group_key LIKE 'fup:c1111111-1111-1111-1111-111111111111:c7777777%')
    ]),
   ARRAY[1, 1, 0],
   'a varredura avisa follow-up atrasado e follow-up de hoje, e ignora o concluído'
@@ -84,25 +83,30 @@ SELECT public.fn_varredura_avisos_followups();
 SELECT is(
   (SELECT ARRAY[count(*)::int, max(event_count)]
      FROM public.notifications
-    WHERE group_key LIKE 'fup:c5555555%'),
+    WHERE group_key LIKE 'fup:c1111111-1111-1111-1111-111111111111:c5555555%'),
   ARRAY[1, 1],
   'segunda passada da varredura no mesmo dia não duplica nem infla o contador'
 );
 
 -- ---------------------------------------------------------------------------
--- A janela curta: só a reunião que começa dentro de uma hora. A de amanhã
+-- A janela curta: só a reunião que começa dentro de 15 minutos. A de amanhã
 -- espera — é o único aviso que perde todo o valor se atrasar.
 -- ---------------------------------------------------------------------------
 SET LOCAL session_replication_role = replica;
 
-INSERT INTO public.pipeline_entries (id, organization_id, pipeline_id, lead_id, stage_key, metadata)
-SELECT 'c8888888-8888-8888-8888-888888888888'::uuid, org,
+INSERT INTO public.deals (id, organization_id, source_lead_id, title)
+SELECT 'c8888888-8888-8888-8888-888888888888'::uuid, org, lead, 'Reunião próxima' FROM _v_fix
+UNION ALL
+SELECT 'c9999999-9999-9999-9999-999999999999'::uuid, org, lead, 'Reunião futura' FROM _v_fix;
+
+INSERT INTO public.pipeline_entries (id, deal_id, organization_id, pipeline_id, lead_id, stage_key, metadata)
+SELECT 'c8888888-8888-8888-8888-888888888888'::uuid, 'c8888888-8888-8888-8888-888888888888'::uuid, org,
        'ca000000-0000-0000-0000-000000000001'::uuid,
        lead, 'agendado',
-       jsonb_build_object('meeting_date', to_char(now() + interval '30 minutes', 'YYYY-MM-DD"T"HH24:MI:SSOF'))
+       jsonb_build_object('meeting_date', to_char(now() + interval '10 minutes', 'YYYY-MM-DD"T"HH24:MI:SSOF'))
 FROM _v_fix f
 UNION ALL
-SELECT 'c9999999-9999-9999-9999-999999999999'::uuid, org,
+SELECT 'c9999999-9999-9999-9999-999999999999'::uuid, 'c9999999-9999-9999-9999-999999999999'::uuid, org,
        'ca000000-0000-0000-0000-000000000001'::uuid,
        lead, 'agendado',
        jsonb_build_object('meeting_date', to_char(now() + interval '2 days', 'YYYY-MM-DD"T"HH24:MI:SSOF'))
@@ -115,12 +119,12 @@ SELECT public.fn_varredura_avisos_reuniao_proxima();
 SELECT is(
   (SELECT ARRAY[
      (SELECT count(*)::int FROM public.notifications
-       WHERE group_key LIKE 'meet_soon:c8888888%'),
+       WHERE group_key LIKE 'meet_soon:c1111111-1111-1111-1111-111111111111:c8888888%'),
      (SELECT count(*)::int FROM public.notifications
-       WHERE group_key LIKE 'meet_soon:c9999999%')
+       WHERE group_key LIKE 'meet_soon:c1111111-1111-1111-1111-111111111111:c9999999%')
    ]),
   ARRAY[1, 0],
-  'a janela curta avisa a reunião de daqui a 30 minutos e não a de depois de amanhã'
+  'a janela curta avisa a reunião de daqui a 10 minutos e não a de depois de amanhã'
 );
 
 SELECT * FROM finish();

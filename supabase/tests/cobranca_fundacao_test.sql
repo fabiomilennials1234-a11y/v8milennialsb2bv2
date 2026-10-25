@@ -106,7 +106,7 @@ SELECT ok(NOT has_function_privilege('anon', 'public.cobranca_importar(uuid, jso
       AND NOT has_function_privilege('anon', 'public.cobranca_metricas(uuid, date)', 'EXECUTE'),
   'GR4: anon não executa as RPCs');
 SELECT ok(has_function_privilege('authenticated', 'public.cobranca_importar(uuid, jsonb, boolean)', 'EXECUTE')
-      AND has_function_privilege('authenticated', 'public.cobranca_caso_mover(uuid, uuid, double precision)', 'EXECUTE'),
+      AND has_function_privilege('authenticated', 'public.cobranca_caso_mover(uuid, uuid, double precision, boolean)', 'EXECUTE'),
   'GR5: authenticated executa as RPCs');
 SELECT ok(NOT has_function_privilege('authenticated', 'private.cobranca_exigir(uuid, text)', 'EXECUTE')
       AND NOT has_function_privilege('authenticated', 'private.cobranca_garantir_caso(uuid, uuid)', 'EXECUTE')

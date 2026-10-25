@@ -80,6 +80,11 @@ SELECT is(
 
 SET LOCAL session_replication_role = replica;
 
+-- Initialization uses the real current week. Remove only these transaction-local
+-- fixture snapshots so the reader selects the historical week under test.
+DELETE FROM public.oraculo_benchmark_weekly
+WHERE organization_id IN (SELECT id FROM public.organizations WHERE slug LIKE 'bench-%');
+
 INSERT INTO public.team_members (id, name, role, organization_id, is_active)
 SELECT
   ('c' || substr(replace(o.id::text, '-', ''), 2))::uuid,
