@@ -1,0 +1,3 @@
+# Reviewed false positive: ordinary Portuguese prose in documentation, not a credential.
+# Exact historical location only; current wording was corrected.
+f0ea11fd7846b958cfaa8cd772bb2c180579cf21:docs/meta-production/README.md:generic-api-key:3

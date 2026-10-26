@@ -21,8 +21,7 @@ export interface MetaConnection {
   user_id: string;
   facebook_user_id: string;
   facebook_user_name: string | null;
-  access_token: string;
-  token_expires_at: string;
+  token_expires_at: string | null;
   status: "connected" | "expired" | "disconnected";
   connection_type: ConnectionType;
   connected_at: string;
@@ -35,7 +34,6 @@ export interface MetaPage {
   organization_id: string;
   page_id: string;
   page_name: string;
-  page_access_token: string;
   instagram_account_id: string | null;
   instagram_username: string | null;
   is_active: boolean;
@@ -65,7 +63,7 @@ export function useMetaConnections() {
 
       const { data, error } = await (supabase as any)
         .from("meta_connections")
-        .select("*, meta_pages(*)")
+        .select("id,organization_id,user_id,facebook_user_id,facebook_user_name,token_expires_at,status,connection_type,connected_at,updated_at,meta_pages(id,meta_connection_id,organization_id,page_id,page_name,instagram_account_id,instagram_username,is_active,webhook_subscribed,created_at,updated_at)")
         .eq("organization_id", organizationId)
         .neq("status", "disconnected")
         .order("connected_at", { ascending: false });
@@ -152,8 +150,6 @@ export function useConnectMeta() {
     mutationFn: async (input: ConnectionType | ConnectMetaParams = "facebook") => {
       const resolvedType: ConnectionType =
         typeof input === "string" ? input : input.connectionType || "facebook";
-      const resolvedAuthType =
-        typeof input === "object" ? input.authType : undefined;
 
       if (!user?.id || !organizationId) {
         throw new Error("Usuario ou organizacao nao encontrados");
@@ -165,60 +161,15 @@ export function useConnectMeta() {
       // orgId (tenant-binding forgery no callback que escreve via service_role).
       const { data: stateData, error: stateError } = await supabase.functions.invoke(
         "meta-oauth-start",
-        { body: { connectionType: resolvedType, organization_id: organizationId } },
+        { body: { connectionType: resolvedType, organization_id: organizationId, ...(typeof input === "object" && input.authType === "rerequest" ? { authType: "rerequest" } : {}) } },
       );
       if (stateError || !stateData?.state) {
-        throw new Error(stateError?.message || "Falha ao iniciar conexão Meta");
+        throw new Error("Integração Meta indisponível. Tente novamente mais tarde.");
       }
-      const state = stateData.state as string;
-
-      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-      const redirectUri = `${supabaseUrl}/functions/v1/meta-oauth-callback`;
-
-      const appId = import.meta.env.VITE_META_APP_ID;
-      if (!appId) {
-        throw new Error("VITE_META_APP_ID nao configurado");
-      }
-
-      // Escopos baseados no tipo de conexão
-      const baseScopes = [
-        "pages_manage_metadata",
-        "pages_read_engagement",
-        "public_profile",
-      ];
-
-      const facebookScopes = [
-        ...baseScopes,
-        "pages_messaging",
-        "pages_manage_ads",
-        "leads_retrieval",
-      ];
-
-      const instagramScopes = [
-        ...baseScopes,
-        "instagram_manage_messages",
-        "instagram_basic",
-      ];
-
-      const scopes =
-        resolvedType === "instagram"
-          ? instagramScopes.join(",")
-          : facebookScopes.join(",");
-
-      const params = new URLSearchParams({
-        client_id: appId,
-        redirect_uri: redirectUri,
-        scope: scopes,
-        response_type: "code",
-        state,
-      });
-
-      if (resolvedAuthType) {
-        params.set("auth_type", resolvedAuthType);
-      }
-
-      const loginUrl = `https://www.facebook.com/v21.0/dialog/oauth?${params}`;
-      window.location.href = loginUrl;
+      let loginUrl: URL;
+      try { loginUrl = new URL(stateData.loginUrl); } catch { throw new Error("Não foi possível abrir a conexão Meta. Tente novamente."); }
+      if (loginUrl.origin !== "https://www.facebook.com" || loginUrl.pathname !== "/v26.0/dialog/oauth") throw new Error("Não foi possível abrir a conexão Meta. Tente novamente.");
+      window.location.href = loginUrl.toString();
     },
   });
 }
@@ -227,26 +178,18 @@ export function useConnectMeta() {
  * Desconecta uma conexao Meta (soft delete)
  */
 export function useDisconnectMeta() {
+  const { organizationId } = useOrganization();
   const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: async (connectionId: string) => {
-      const { error } = await (supabase as any)
-        .from("meta_connections")
-        .update({ status: "disconnected" })
-        .eq("id", connectionId);
-
-      if (error) throw error;
-
-      const { error: pagesError } = await (supabase as any)
-        .from("meta_pages")
-        .update({ is_active: false, webhook_subscribed: false })
-        .eq("meta_connection_id", connectionId);
-
-      if (pagesError) throw pagesError;
+      const { error, data } = await supabase.functions.invoke("meta-disconnect", { body: { connectionId, organization_id: organizationId } });
+      if (error || data?.error) throw error || new Error(data.error);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["meta_connections"] });
+      queryClient.invalidateQueries({ queryKey: ["meta_ad_accounts"] });
+      queryClient.invalidateQueries({ queryKey: ["meta_ad_insights"] });
     },
   });
 }
@@ -255,6 +198,7 @@ export function useDisconnectMeta() {
  * Ativa/desativa uma pagina individual
  */
 export function useToggleMetaPage() {
+  const { organizationId } = useOrganization();
   const queryClient = useQueryClient();
 
   return useMutation({
@@ -265,15 +209,13 @@ export function useToggleMetaPage() {
       pageId: string;
       isActive: boolean;
     }) => {
-      const { error } = await (supabase as any)
-        .from("meta_pages")
-        .update({ is_active: isActive })
-        .eq("id", pageId);
-
-      if (error) throw error;
+      const { error, data } = await supabase.functions.invoke("meta-disconnect", { body: { action: "toggle", pageId, isActive, organization_id: organizationId } });
+      if (error || data?.error) throw error || new Error(data.error);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["meta_connections"] });
+      queryClient.invalidateQueries({ queryKey: ["meta_ad_accounts"] });
+      queryClient.invalidateQueries({ queryKey: ["meta_ad_insights"] });
     },
   });
 }
@@ -294,6 +236,8 @@ export function useMetaOAuthCallback() {
       const instagram = searchParams.get("instagram") || "0";
       const connectionType = searchParams.get("connectionType") || "facebook";
       queryClient.invalidateQueries({ queryKey: ["meta_connections"] });
+      queryClient.invalidateQueries({ queryKey: ["meta_ad_accounts"] });
+      queryClient.invalidateQueries({ queryKey: ["meta_ad_insights"] });
 
       const label = connectionType === "instagram" ? "Instagram" : "Facebook";
       return {

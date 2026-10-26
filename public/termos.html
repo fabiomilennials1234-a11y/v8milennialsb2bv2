@@ -1,0 +1,241 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Termos de Serviço — Torque CRM</title><meta name="description" content="Termos de Serviço do Torque CRM — Gabriel Aurelio Gipp, CNPJ 54.384.269/0001-48." />
+<meta name="robots" content="index, follow" /><link rel="canonical" href="https://torquecrm.com.br/termos" /><link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+  <style>
+    :root {
+      --bg: hsl(0 0% 4%);
+      --bg-elevated: hsl(0 0% 7%);
+      --surface: hsl(0 0% 9%);
+      --fg: hsl(0 0% 98%);
+      --muted: hsl(0 0% 64%);
+      --muted-dim: hsl(0 0% 44%);
+      --border: hsl(0 0% 14%);
+      --border-strong: hsl(0 0% 20%);
+      --accent: hsl(47 100% 50%);
+      --accent-dim: hsl(47 90% 62%);
+      --max: 46rem;
+    }
+
+    * { box-sizing: border-box; }
+
+    html { -webkit-text-size-adjust: 100%; scroll-behavior: smooth; }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--fg);
+      font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      font-size: 16px;
+      line-height: 1.7;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+      text-rendering: optimizeLegibility;
+    }
+
+    a { color: var(--accent-dim); text-decoration: none; }
+    a:hover { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; }
+
+    /* ---- Header ---- */
+    .site-header {
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      background: color-mix(in srgb, var(--bg) 82%, transparent);
+      backdrop-filter: saturate(140%) blur(12px);
+      -webkit-backdrop-filter: saturate(140%) blur(12px);
+      border-bottom: 1px solid var(--border);
+    }
+    .site-header__inner {
+      max-width: var(--max);
+      margin: 0 auto;
+      padding: 0.9rem 1.5rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+    }
+    .wordmark {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.55rem;
+      font-weight: 700;
+      font-size: 1.05rem;
+      letter-spacing: -0.01em;
+      color: var(--fg);
+    }
+    .wordmark:hover { text-decoration: none; }
+    .wordmark__dot {
+      width: 0.6rem;
+      height: 0.6rem;
+      border-radius: 50%;
+      background: var(--accent);
+      box-shadow: 0 0 14px hsl(47 100% 50% / 0.55);
+    }
+    .nav {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+    }
+    .nav__link {
+      color: var(--muted);
+      font-size: 0.9rem;
+      font-weight: 500;
+      padding: 0.4rem 0.7rem;
+      border-radius: 0.5rem;
+    }
+    .nav__link:hover { color: var(--fg); text-decoration: none; background: var(--surface); }
+    .nav__cta {
+      color: var(--bg);
+      background: var(--accent);
+      font-weight: 600;
+      font-size: 0.9rem;
+      padding: 0.45rem 0.9rem;
+      border-radius: 0.55rem;
+      white-space: nowrap;
+    }
+    .nav__cta:hover { color: var(--bg); text-decoration: none; background: var(--accent-dim); }
+
+    /* ---- Layout ---- */
+    main {
+      max-width: var(--max);
+      margin: 0 auto;
+      padding: 3.5rem 1.5rem 4rem;
+    }
+
+    .doc-header { margin-bottom: 2.75rem; }
+    .eyebrow {
+      display: inline-block;
+      font-size: 0.72rem;
+      font-weight: 600;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--accent);
+      margin-bottom: 0.85rem;
+    }
+    h1 {
+      font-size: clamp(2rem, 5vw, 2.75rem);
+      line-height: 1.12;
+      font-weight: 700;
+      letter-spacing: -0.025em;
+      margin: 0 0 0.6rem;
+    }
+    .updated { color: var(--muted); font-size: 0.9rem; margin: 0; }
+
+    section { margin-top: 2.4rem; }
+    h2 {
+      font-size: 1.2rem;
+      font-weight: 600;
+      letter-spacing: -0.01em;
+      color: var(--fg);
+      margin: 0 0 0.75rem;
+      padding-top: 0.4rem;
+    }
+    p { color: var(--muted); margin: 0 0 0.9rem; }
+    p:last-child { margin-bottom: 0; }
+    strong { color: var(--fg); font-weight: 600; }
+
+    ul {
+      color: var(--muted);
+      margin: 0.4rem 0 0.9rem;
+      padding-left: 1.1rem;
+      list-style: none;
+    }
+    li { position: relative; padding-left: 1.1rem; margin-bottom: 0.5rem; }
+    li::before {
+      content: "";
+      position: absolute;
+      left: 0;
+      top: 0.65em;
+      width: 0.35rem;
+      height: 0.35rem;
+      border-radius: 50%;
+      background: var(--accent);
+      opacity: 0.85;
+    }
+
+    .callout {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-left: 3px solid var(--accent);
+      border-radius: 0.6rem;
+      padding: 1rem 1.25rem;
+      margin-top: 1rem;
+    }
+    .callout p { margin-bottom: 0.4rem; }
+    .callout p:last-child { margin-bottom: 0; }
+    .callout dl { margin: 0; }
+    .callout dt {
+      color: var(--fg);
+      font-weight: 600;
+      font-size: 0.82rem;
+      letter-spacing: 0.02em;
+      margin-top: 0.7rem;
+    }
+    .callout dt:first-child { margin-top: 0; }
+    .callout dd { margin: 0.1rem 0 0; color: var(--muted); }
+
+    /* ---- Footer ---- */
+    .doc-footer {
+      max-width: var(--max);
+      margin: 0 auto;
+      padding: 2rem 1.5rem 3.5rem;
+      border-top: 1px solid var(--border);
+      text-align: center;
+      color: var(--muted-dim);
+      font-size: 0.82rem;
+    }
+    .doc-footer a { color: var(--muted); font-weight: 500; }
+    .doc-footer a:hover { color: var(--fg); }
+    .doc-footer__copy { margin-top: 1rem; }
+
+    :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+
+    @media (max-width: 480px) {
+      .site-header__inner { flex-direction: column; align-items: flex-start; }
+      main { padding-top: 2.5rem; }
+    }
+  </style></head><body>  <header class="site-header">
+    <div class="site-header__inner">
+      <a class="wordmark" href="/sobre" aria-label="Torque CRM — página inicial">
+        <span class="wordmark__dot" aria-hidden="true"></span>
+        Torque CRM
+      </a>
+      <nav class="nav" aria-label="Navegação principal">
+        <a class="nav__link" href="/sobre">Início</a>
+        <a class="nav__cta" href="https://torquecrm.com.br">Acessar plataforma</a>
+      </nav>
+    </div>
+  </header>
+
+<main class="doc"><div class="doc-header"><h1>Termos de Serviço</h1><p class="updated">Atualizado em 23 de outubro de 2026</p></div><section>
+  <h2>1. Responsável pelo serviço</h2>
+  <p>Torque CRM é uma plataforma de CRM SaaS B2B de responsabilidade de Gabriel Aurelio Gipp, CNPJ 54.384.269/0001-48, responsável pelo produto e pelo app TORQUECRM Integrações na Meta. Contato: <a href="mailto:acesso@torquecrm.com.br">acesso@torquecrm.com.br</a>.</p>
+</section>
+<section>
+  <h2>2. Uso da plataforma</h2>
+  <p>A plataforma permite gerenciar leads, processos comerciais, relatórios e comunicações. Cada organização é responsável pelas contas de sua equipe, pelas permissões atribuídas e pela legitimidade dos dados inseridos. Não compartilhe credenciais nem utilize o serviço para acesso não autorizado, fraude, spam ou violação de direitos de terceiros.</p>
+</section>
+<section>
+  <h2>3. Integrações e autorizações</h2>
+  <p>Conexões com Google e Meta são opcionais e dependem da autorização de quem pode representar a organização e seus ativos. O acesso fica limitado às permissões concedidas e às funcionalidades contratadas. Campanhas, métricas, leads e mensagens são tratados para executar as funções do CRM solicitadas pela organização.</p>
+  <p>A conexão não autoriza o Torque CRM a alterar campanhas ou assumir compromissos em nome do cliente fora das ações autorizadas. Serviços de terceiros têm termos, regras e disponibilidade próprios. Revogue o acesso nas configurações da Meta quando não desejar mais a integração.</p>
+</section>
+<section>
+  <h2>4. Dados pessoais</h2>
+  <p>O tratamento de dados segue a <a href="/privacidade">Política de Privacidade</a>. A organização cliente deve ter base legal para os dados dos seus contatos e definir os acessos de sua equipe. Para dados obtidos da Meta, consulte <a href="/exclusao-de-dados">as instruções de exclusão</a>. Não vendemos dados obtidos das integrações.</p>
+</section>
+<section>
+  <h2>5. Contratação e encerramento</h2>
+  <p>Planos, preços, pagamento, limites e condições comerciais são os apresentados na contratação ou em contrato específico. Estes termos não alteram condições já contratadas. Para encerrar o uso ou esclarecer a retenção e exportação dos dados, entre em contato com o suporte.</p>
+</section>
+<section>
+  <h2>6. Propriedade intelectual</h2>
+  <p>O cliente mantém os direitos sobre seus dados. O software, a marca e os materiais do Torque CRM não são transferidos ao cliente pela contratação. Marcas e serviços de terceiros pertencem aos seus respectivos titulares.</p>
+</section>
+<section>
+  <h2>7. Atualizações e contato</h2>
+  <p>Alterações relevantes serão comunicadas pelos canais do serviço. Dúvidas sobre estes termos, dados pessoais ou integrações: <a href="mailto:acesso@torquecrm.com.br">acesso@torquecrm.com.br</a>.</p>
+</section></main>
+<footer class="doc-footer"><nav aria-label="Documentos legais"><a href="/sobre">Início</a> · <a href="/privacidade">Privacidade</a> · <a href="/termos">Termos</a> · <a href="/exclusao-de-dados">Exclusão de dados</a></nav><p>Torque CRM · Gabriel Aurelio Gipp · CNPJ 54.384.269/0001-48</p></footer></body></html>

@@ -10,28 +10,28 @@ test.describe('Criar e mover lead', () => {
     await page.waitForLoadState('networkidle');
 
     // Click "Novo Lead" button
-    const newLeadBtn = page.getByRole('button', { name: /novo lead|new lead|adicionar/i });
+    const newLeadBtn = page.getByRole('button', { name: 'Novo lead', exact: true });
     if (await newLeadBtn.isVisible()) {
       await newLeadBtn.click();
 
       // Fill basic fields
-      const nameInput = page.getByLabel(/nome|name/i).first();
+      const nameInput = page.getByRole('dialog').locator('input#name');
       if (await nameInput.isVisible()) {
         await nameInput.fill('E2E Test Lead');
       }
 
-      const companyInput = page.getByLabel(/empresa|company/i).first();
+      const companyInput = page.getByRole('dialog').locator('input#company');
       if (await companyInput.isVisible()) {
         await companyInput.fill('E2E Corp');
       }
 
-      const phoneInput = page.getByLabel(/telefone|phone/i).first();
+      const phoneInput = page.getByRole('dialog').locator('input#phone');
       if (await phoneInput.isVisible()) {
         await phoneInput.fill('+5511999998877');
       }
 
       // Submit
-      const saveBtn = page.getByRole('button', { name: /salvar|save|criar|create/i });
+      const saveBtn = page.getByRole('dialog').getByRole('button', { name: 'Criar lead', exact: true });
       if (await saveBtn.isVisible()) {
         await saveBtn.click();
         await page.waitForLoadState('networkidle');

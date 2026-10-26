@@ -1,3 +1,4 @@
+import { storedMetaToken } from "../_shared/meta-token-crypto.ts";
 /**
  * refresh-meta-tokens
  *
@@ -9,6 +10,7 @@
  */
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { metaBusinessConfig, inspectBusinessToken } from "../_shared/meta-business.ts";
 import { refreshLongLivedToken } from "../_shared/meta-api.ts";
 import { withErrorBoundary } from '../_shared/error-boundary.ts';
 import { withSecurityHeaders } from "../_shared/security-headers.ts";
@@ -27,8 +29,30 @@ Deno.serve(withErrorBoundary('refresh-meta-tokens', async (req) => {
   }
 
   const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
-    auth: { persistSession: false },
+    auth: { persistSession: false, autoRefreshToken: false },
   });
+
+  // System tokens are inspected, never exchanged as long-lived user tokens.
+  if (Deno.env.get("META_CRM_APP_ID") && Deno.env.get("META_CRM_APP_SECRET") && Deno.env.get("META_CRM_CONFIG_ID") && /^[a-f0-9]{64}$/i.test(Deno.env.get("META_CRM_ENCRYPTION_KEY_V1") ?? "")) {
+    const config = metaBusinessConfig();
+    const { data: systemConnections, error: systemError } = await supabase.from("meta_connections")
+      .select("id,organization_id,facebook_user_id,access_token").eq("status", "connected").eq("token_kind", "system_user").eq("app_id", config.appId);
+    if (systemError) return new Response("Storage unavailable", { status: 503 });
+    for (const connection of systemConnections ?? []) {
+      try { await inspectBusinessToken(await storedMetaToken(connection.access_token, config.appId, connection.organization_id, `connection:${connection.facebook_user_id}`), config); }
+      catch (error) {
+        const reason = error instanceof Error ? error.message : "unknown";
+        if (reason === "invalid_business_token" || reason === "expired_business_token") {
+          const { error: disconnectError } = await supabase.rpc("meta_disconnect_connection", { p_org_id: connection.organization_id, p_connection_id: connection.id });
+          if (disconnectError) return new Response("Storage unavailable", { status: 503 });
+          await supabase.from("meta_connections").update({ status: "expired" }).eq("id", connection.id).eq("organization_id", connection.organization_id).eq("app_id", config.appId);
+        } else {
+          // Network/provider failures must not revoke a valid tenant authorization.
+          await logRuntime({ organizationId: connection.organization_id, module: "permission", action: "meta_token_inspection_retry", status: "error", errorMessage: "meta_inspection_temporarily_unavailable" });
+        }
+      }
+    }
+  }
 
   console.log("[refresh-meta-tokens] Starting token refresh job...");
 
@@ -39,6 +63,8 @@ Deno.serve(withErrorBoundary('refresh-meta-tokens', async (req) => {
     .from("meta_connections")
     .select("id, access_token, token_expires_at, facebook_user_name")
     .eq("status", "connected")
+    .eq("token_kind", "user")
+    .is("app_id", null)
     .lt("token_expires_at", sevenDaysFromNow);
 
   if (error) {
@@ -68,7 +94,8 @@ Deno.serve(withErrorBoundary('refresh-meta-tokens', async (req) => {
   for (const conn of connections) {
     try {
       const newToken = await refreshLongLivedToken(conn.access_token);
-      const expiresInSeconds = newToken.expires_in || 60 * 24 * 3600;
+      const expiresInSeconds = newToken.expires_in;
+      if (!expiresInSeconds || expiresInSeconds <= 0) throw new Error("invalid_refresh_expiry");
       const newExpiresAt = new Date(Date.now() + expiresInSeconds * 1000).toISOString();
 
       // Atualizar token na conexao

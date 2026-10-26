@@ -107,6 +107,6 @@ describe('agent-message AI credentials are scoped to eligible turns', () => {
     const result = await invoke();
     expect(result.status).toBe(200);
     expect(state.client).toHaveBeenCalledWith('model-test');
-    expect(state.process).toHaveBeenCalledWith('lead-test', 'QA', undefined);
+    expect(state.process).toHaveBeenCalledWith('lead-test', 'QA', undefined, undefined);
   });
 });

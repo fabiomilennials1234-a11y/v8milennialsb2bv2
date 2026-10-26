@@ -1,67 +1,55 @@
-// tests/e2e/11-meta-chat-flow.spec.ts
-import { test, expect, request } from "@playwright/test";
+import { test, expect } from '@playwright/test';
 
-const BASE_URL = process.env.PLAYWRIGHT_BASE_URL ?? "http://localhost:8080";
-const SUPABASE_URL = process.env.SUPABASE_URL!;
-const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY!;
-const TEST_EMAIL = process.env.E2E_USER_EMAIL!;
-const TEST_PASSWORD = process.env.E2E_USER_PASSWORD!;
-const TEST_ORG_ID = process.env.E2E_ORG_ID!;
-const TEST_PAGE_ID = process.env.E2E_META_PAGE_ID!;
+const org = '00000000-0000-0000-0000-000000000001';
+const connection = 'e2e00000-0000-4000-8000-000000000001';
+const metaPage = 'e2e00000-0000-4000-8000-000000000002';
+const conversation = 'e2e00000-0000-4000-8000-000000000003';
 
-test.describe("Meta chat flow", () => {
-  test.beforeEach(async () => {
-    // wipe meta_conversations and channel_messages for the test page
-    const api = await request.newContext({ extraHTTPHeaders: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}` } });
-    await api.delete(`${SUPABASE_URL}/rest/v1/meta_conversations?organization_id=eq.${TEST_ORG_ID}`);
-    await api.delete(`${SUPABASE_URL}/rest/v1/channel_messages?organization_id=eq.${TEST_ORG_ID}&channel=in.(messenger,instagram)`);
+test('Meta inbox mostra entrada e resposta confirmada pelo servidor', async ({ page, request }) => {
+  const url = process.env.SUPABASE_URL!;
+  // These destructive fixture operations are only permitted on the CI stack.
+  expect(new URL(url).hostname).toMatch(/^(localhost|127\.0\.0\.1)$/);
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY!;
+  expect(key).toBeTruthy();
+  const headers = { apikey: key, Authorization: `Bearer ${key}`, Prefer: 'resolution=merge-duplicates' };
+  async function insert(table: string, data: object) {
+    const response = await request.post(`${url}/rest/v1/${table}`, { headers, data });
+    expect(response.ok(), await response.text()).toBe(true);
+  }
+  await insert('meta_connections', { id: connection, organization_id: org,
+    user_id: '00000000-0000-0000-0000-000000000020', facebook_user_id: 'e2e-user',
+    access_token: 'offline-fixture-never-send', token_expires_at: new Date(Date.now() + 86400000).toISOString(),
+    status: 'connected', connection_type: 'facebook' });
+  await insert('meta_pages', { id: metaPage, meta_connection_id: connection, organization_id: org,
+    page_id: 'e2e-meta-page', page_name: 'E2E Meta Page', page_access_token: 'offline-fixture-never-send',
+    is_active: true, webhook_subscribed: true });
+  await request.delete(`${url}/rest/v1/channel_messages?organization_id=eq.${org}&page_id=eq.e2e-meta-page`, { headers });
+  const timestamp = new Date().toISOString();
+  await insert('meta_conversations', { id: conversation, organization_id: org, meta_page_id: metaPage,
+    channel: 'messenger', external_user_id: 'e2e-sender', external_username: 'E2E Sender',
+    last_message_at: timestamp, last_inbound_at: timestamp, last_message_preview: 'olá do e2e', unread_count: 1 });
+  await insert('channel_messages', { organization_id: org, channel: 'messenger', page_id: 'e2e-meta-page',
+    external_id: `in-${Date.now()}`, sender_id: 'e2e-sender', direction: 'incoming',
+    content: 'olá do e2e', message_type: 'text', status: 'received', timestamp });
+
+  // No call is allowed to reach Meta. The stub persists what the server would
+  // persist, so the browser must actually refetch the outgoing message.
+  await page.route('**/functions/v1/send-meta-message', async route => {
+    const body = route.request().postDataJSON();
+    expect(body.organization_id).toBe(org);
+    expect(body.conversationId).toBe(conversation);
+    expect(body.message).toBe('resposta e2e');
+    await insert('channel_messages', { organization_id: org, channel: 'messenger', page_id: 'e2e-meta-page',
+      external_id: `out-${Date.now()}`, sender_id: 'e2e-sender', direction: 'outgoing',
+      content: body.message, message_type: 'text', status: 'sent', timestamp: new Date().toISOString() });
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ success: true }) });
   });
-
-  test("recebe mensagem inbound e responde", async ({ page, request: req }) => {
-    // 1. Login
-    await page.goto(`${BASE_URL}/auth`);
-    await page.fill('input[type="email"]', TEST_EMAIL);
-    await page.fill('input[type="password"]', TEST_PASSWORD);
-    await page.click('button[type="submit"]');
-    await page.waitForURL(/dashboard|atendimento/);
-
-    // 2. Inject an inbound channel_messages row directly (simulate webhook)
-    const inboundId = `e2e_${Date.now()}`;
-    await req.post(`${SUPABASE_URL}/rest/v1/channel_messages`, {
-      headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}`, "Content-Type": "application/json", Prefer: "return=minimal" },
-      data: {
-        organization_id: TEST_ORG_ID,
-        channel: "instagram",
-        page_id: TEST_PAGE_ID,
-        external_id: inboundId,
-        sender_id: "e2e_user_1",
-        direction: "incoming",
-        message_type: "text",
-        content: "olá do e2e",
-        status: "received",
-        timestamp: new Date().toISOString(),
-      },
-    });
-
-    // 3. Navigate to /atendimento/meta
-    await page.goto(`${BASE_URL}/atendimento/meta`);
-
-    // 4. Conversation appears
-    await expect(page.getByText("olá do e2e")).toBeVisible({ timeout: 10_000 });
-
-    // 5. Click conversation -> opens thread
-    await page.getByText("olá do e2e").click();
-    await expect(page.getByPlaceholder(/Escreva sua mensagem/i)).toBeVisible();
-
-    // 6. Type reply (composer should be enabled — within 24h window)
-    await page.getByPlaceholder(/Escreva sua mensagem/i).fill("resposta e2e");
-    // Mock send-meta-message to return success without hitting Meta:
-    await page.route("**/functions/v1/send-meta-message", (route) =>
-      route.fulfill({ status: 200, body: JSON.stringify({ success: true, message_id: "mid_e2e" }) })
-    );
-    await page.keyboard.press("Enter");
-
-    // 7. Outgoing bubble appears
-    await expect(page.getByText("resposta e2e")).toBeVisible({ timeout: 5000 });
-  });
+  await page.goto('/atendimento/meta');
+  await page.getByText('olá do e2e', { exact: true }).click();
+  const composer = page.getByPlaceholder('Escreva sua mensagem...', { exact: true });
+  await expect(composer).toBeEnabled();
+  await expect(page.getByText('olá do e2e', { exact: true }).last()).toBeVisible();
+  await composer.fill('resposta e2e');
+  await composer.press('Enter');
+  await expect(page.getByText('resposta e2e', { exact: true })).toBeVisible();
 });

@@ -147,7 +147,7 @@ test.describe('Mobile Bottom Navigation', () => {
     await page.locator('[data-testid="tab-mais"]').click();
 
     // Mais dispatches v8:open-mobile-nav → TopNavigation Sheet (nav full filtrada).
-    await expect(page.getByText('Comando')).toBeVisible({ timeout: 5_000 });
+    await expect(page.getByRole('dialog').getByRole('link', { name: 'Comando', exact: true })).toBeVisible({ timeout: 5_000 });
   });
 
   test('active tab shows gold accent color', async ({ page }) => {
@@ -184,7 +184,7 @@ test.describe('Desktop — no bottom nav', () => {
     await page.waitForLoadState('networkidle');
 
     // TopNavigation uses hidden xl:flex for the desktop nav
-    const topNav = page.locator('[data-topnav]');
+    const topNav = page.getByRole('complementary', { name: 'Navegação principal' });
     await expect(topNav).toBeVisible({ timeout: 10_000 });
   });
 });
@@ -405,7 +405,7 @@ test.describe('iOS Keyboard Offset — meta tags', () => {
     if (hasNav) {
       // Check that the nav element has pb-[env(safe-area-inset-bottom)] via class
       const classes = await nav.getAttribute('class');
-      expect(classes).toContain('pb-[env(safe-area-inset-bottom)]');
+      expect(classes).toContain('bottom-[calc(0.75rem+env(safe-area-inset-bottom))]');
     }
   });
 });
@@ -425,7 +425,7 @@ test.describe('Mobile Layout — general', () => {
 
     if (hasMain) {
       const classes = await main.getAttribute('class');
-      expect(classes).toContain('pb-16');
+      expect(classes).toContain('pb-[calc(5.5rem+env(safe-area-inset-bottom))]');
     }
   });
 
@@ -453,7 +453,7 @@ test.describe('Mobile Layout — general', () => {
     await page.locator('[data-testid="tab-mais"]').click();
     await page.waitForTimeout(300);
 
-    const navItem = page.getByText('Comando');
+    const navItem = page.getByRole('dialog').getByRole('link', { name: 'Comando', exact: true });
     await expect(navItem).toBeVisible({ timeout: 3_000 });
   });
 });

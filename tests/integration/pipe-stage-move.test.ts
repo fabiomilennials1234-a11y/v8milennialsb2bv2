@@ -170,6 +170,8 @@ describe.skipIf(shouldSkip)('Pipe WhatsApp — lead entry creation', () => {
       const entries = await supabase.from('pipeline_entries').delete()
         .eq('organization_id', TEST_ORG_ID).eq('pipeline_id', pipelineId).in('lead_id', createdLeadIds);
       expect(entries.error).toBeNull();
+      const deals = await supabase.from('deals').delete().in('source_lead_id', createdLeadIds);
+      expect(deals.error).toBeNull();
       const leads = await supabase.from('leads').delete().eq('organization_id', TEST_ORG_ID).in('id', createdLeadIds);
       expect(leads.error).toBeNull();
     }
@@ -211,9 +213,18 @@ describe.skipIf(shouldSkip)('Pipe WhatsApp — lead entry creation', () => {
   it('same lead can have two distinct deals in the same pipeline', async () => {
     expect(createdLeadIds).toHaveLength(1);
     const leadId = createdLeadIds[0];
+    const { data: deals, error: dealError } = await supabase.from('deals').insert([
+      { organization_id: TEST_ORG_ID, source_lead_id: leadId, source: 'human', title: 'First fixture deal' },
+      { organization_id: TEST_ORG_ID, source_lead_id: leadId, source: 'human', title: 'Second fixture deal' },
+    ]).select('id');
+    expect(dealError).toBeNull();
+    expect(deals).toHaveLength(2);
+    const { error: bindError } = await supabase.from('pipeline_entries').update({ deal_id: deals![0].id })
+      .eq('lead_id', leadId).eq('pipeline_id', pipelineId);
+    expect(bindError).toBeNull();
     const { data: second, error } = await supabase.from('pipeline_entries').insert({
       lead_id: leadId, organization_id: TEST_ORG_ID,
-      pipeline_id: pipelineId, stage_key: 'novo',
+      pipeline_id: pipelineId, stage_key: 'novo', deal_id: deals![1].id,
     }).select('id').single();
     expect(error).toBeNull();
     const { data: entries, error: readError } = await supabase.from('pipeline_entries')

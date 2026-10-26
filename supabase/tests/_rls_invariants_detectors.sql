@@ -389,7 +389,12 @@ STABLE
 SECURITY INVOKER
 SET search_path TO 'public', 'pg_catalog'
 AS $fn$
-  SELECT '(\m(' || string_agg(helper::text, '|' ORDER BY helper) || ')\M)'
+  SELECT '(\m(' || string_agg(helper::text, '|' ORDER BY helper) || ')\M)|' ||
+    -- Reviewed private write gate (20271212000000): rejects missing session/org,
+    -- checks feature flag, assert_org_access and action-specific permission.
+    -- Match the qualified call only; an unrelated same-name public function
+    -- must not authorize a definer by accident.
+    '(\mprivate\s*\.\s*cobranca_exigir\s*\()'
   FROM public._rls_inv_gate_helpers();
 $fn$;
 

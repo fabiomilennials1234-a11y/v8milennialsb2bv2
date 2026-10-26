@@ -128,8 +128,8 @@ SELECT ok(
   EXISTS (SELECT 1 FROM cron.job
            WHERE jobname = 'voip-webhook-events-cleanup'
              AND active = true
-             AND schedule = '*/5 * * * *'),
-  'voip-webhook-events-cleanup está agendado, ativo, a cada 5 minutos');
+             AND schedule = '4-59/5 * * * *'),
+  'voip-webhook-events-cleanup está agendado, ativo, a cada 5 minutos na fase anti-rajada');
 
 -- ===========================================================================
 -- SEMENTE

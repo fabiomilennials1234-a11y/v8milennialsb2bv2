@@ -175,11 +175,15 @@ VALUES
   ('64900000-b1b1-0000-0000-000000000649', '64900000-bbbb-0000-0000-000000000649', 'B1 da outra org',         'connected'),
   ('64900000-c1c1-0000-0000-000000000649', '64900000-cccc-0000-0000-000000000649', 'C1 org com isolamento',   'connected');
 
--- A1 fica DE FORA desta tabela de propósito: "vazio = todos da org podem
--- responder" é o COMMENT da própria tabela, e é a regra que a função tem que
--- reproduzir. A2 e A3 têm lista, e as listas são DISJUNTAS.
+-- Explicit number assignment is mandatory, independently of lead ownership.
+-- A1 is shared by both members; A2/A3 have disjoint assignments. C1 is shared
+-- so the separate owner predicate remains the only difference for Org C.
 INSERT INTO whatsapp_instance_allowed_members (whatsapp_instance_id, team_member_id)
 VALUES
+  ('64900000-1111-0000-0000-000000000649', '64900000-a001-0000-0000-000000000649'),
+  ('64900000-1111-0000-0000-000000000649', '64900000-a002-0000-0000-000000000649'),
+  ('64900000-c1c1-0000-0000-000000000649', '64900000-c001-0000-0000-000000000649'),
+  ('64900000-c1c1-0000-0000-000000000649', '64900000-c002-0000-0000-000000000649'),
   ('64900000-2222-0000-0000-000000000649', '64900000-a001-0000-0000-000000000649'),
   ('64900000-3333-0000-0000-000000000649', '64900000-a002-0000-0000-000000000649');
 
@@ -291,7 +295,7 @@ SELECT ok(
   'for endurecida: ali "não li lista nenhuma" vira "não existe lista", que LIBERA');
 
 SELECT ok(
-  (SELECT p.proconfig::text LIKE '%search_path=public%'
+  (SELECT 'search_path=""' = ANY(p.proconfig)
      FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
     WHERE n.nspname = 'public' AND p.proname = 'whatsapp_readable_instance_ids'),
   '(S) search_path fixado');
@@ -453,7 +457,7 @@ SELECT is(
 -- ===========================================================================
 -- (W) A lista do Chip, por conjunto — como `membro`
 --
--- `membro` lê A1 (aberta) e A2 (lista contém ele). NÃO lê A3.
+-- `membro` lê A1 (compartilhada) e A2 (lista contém ele). NÃO lê A3.
 -- ===========================================================================
 SET LOCAL role authenticated;
 SELECT set_config('request.jwt.claims',
@@ -628,7 +632,7 @@ SELECT is(
      p_org => '64900000-aaaa-0000-0000-000000000649',
      p_instances => NULL::uuid[])),
   3::bigint,
-  '(W18) outro membro da MESMA org vê um conjunto DIFERENTE: A1 (aberta) + A3 (lista dele) = 3 conversas');
+  '(W18) outro membro da MESMA org vê um conjunto DIFERENTE: A1 (compartilhada) + A3 (lista dele) = 3 conversas');
 
 SELECT is(
   (SELECT count(*) FROM public.get_whatsapp_conversation_list_multi(

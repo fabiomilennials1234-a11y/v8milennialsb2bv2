@@ -8,7 +8,7 @@
  * **1** em "Leads na etapa". Em produção a mesma medida servia aos dois nomes —
  * 41.025 entradas para 36.073 leads, 12% de erro que ninguém via.
  *
- * ⚠ A asserção é sobre a DIFERENÇA (`negócios = leads + 1`), não sobre os
+ * ⚠ A asserção é sobre a DIFERENÇA (`negócios = leads + 3`), não sobre os
  * totais. O seed já traz um card de `pipe_whatsapp` na mesma org, e o total
  * inclui ele; a RELAÇÃO é o que a fatia mudou, e ela sobrevive a quem
  * acrescentar lead ao seed depois. Se as duas medidas voltarem a devolver o
@@ -27,7 +27,7 @@ import { test, expect, type Page } from '@playwright/test';
 
 /** Lê o número de cabeça de uma janela, já desformatado de pt-BR. */
 async function valorDaJanela(page: Page, rotulo: string): Promise<number> {
-  const janela = page.getByRole('group', { name: rotulo });
+  const janela = page.getByRole('group', { name: rotulo, exact: true });
   await expect(janela).toBeVisible({ timeout: 15_000 });
 
   // A janela monta ANTES de o motor responder: o primeiro quadro é spinner, e
@@ -52,27 +52,22 @@ async function painelLimpoEmEdicao(page: Page) {
     await editar.click();
   }
 
-  const aba = page.getByRole('tab', { name: 'E2E Métricas', exact: true });
-  if (await aba.count()) {
-    await aba.click();
-  } else {
-    await page.getByRole('button', { name: 'Nova Aba', exact: true }).click();
-    await page.getByRole('dialog').getByRole('button', { name: 'Aba em branco', exact: true }).click();
-    await page.getByRole('button', { name: 'Opções da aba Nova aba', exact: true }).click();
-    await page.getByRole('menuitem', { name: 'Renomear', exact: true }).click();
-    await page.getByLabel('Nome da aba').fill('E2E Métricas');
-    await page.getByRole('button', { name: 'Salvar nome', exact: true }).click();
-    await expect(aba).toBeVisible();
-  }
-  const limpar = page.getByRole('button', { name: 'Limpar aba', exact: true });
-  if (await limpar.isEnabled().catch(() => false)) {
-    await limpar.click();
-    await page.getByRole('alertdialog').getByRole('button', { name: 'Limpar aba', exact: true }).click();
-  }
+  // Each test/retry owns a panel: a failed attempt must not leave windows
+  // that change the next attempt's strict locators or metric values.
+  const nomeAba = `E2E ${test.info().testId.slice(-12)}-${test.info().retry}`;
+  await page.getByRole('button', { name: 'Nova Aba', exact: true }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Aba em branco', exact: true }).click();
+  await page.getByRole('button', { name: 'Opções da aba Nova aba', exact: true }).click();
+  await page.getByRole('menuitem', { name: 'Renomear', exact: true }).click();
+  await page.getByLabel('Nome da aba').fill(nomeAba);
+  await page.getByRole('button', { name: 'Salvar nome', exact: true }).click();
+  await expect(page.getByRole('tab', { name: nomeAba, exact: true })).toBeVisible();
+  await expect(page.getByRole('group', { name: 'Negócios na etapa', exact: true })).toHaveCount(0);
+  return nomeAba;
 }
 
-// Serial de propósito: os testes compartilham UM painel persistido por
-// (org, aba). Em paralelo, o `Limpar` de um apagaria a janela do outro.
+// Serial: o catálogo personalizado pertence à mesma organização. Cada teste
+// e tentativa usa uma aba própria, sem reaproveitar janelas de tentativas anteriores.
 test.describe.configure({ mode: 'serial' });
 
 test.describe('Estúdio de Métricas', () => {
@@ -95,9 +90,10 @@ test.describe('Estúdio de Métricas', () => {
     const negocios = await valorDaJanela(page, 'Negócios na etapa');
     const leads = await valorDaJanela(page, 'Leads na etapa');
 
-    // A relação, não o total: o seed tem exatamente UM lead com um negócio a
-    // mais que os outros (bloco 11 de seed.sql).
-    expect(negocios).toBe(leads + 1);
+    // The metric seed contributes one additional business for the same lead.
+    // Browser-only confirmation/proposal fixtures add two more for Alpha.
+    // Creating unrelated leads with one card cannot change this difference.
+    expect(negocios).toBe(leads + 3);
 
     // E o contra-teste do defeito antigo: as duas NÃO podem ser o mesmo número.
     expect(negocios).not.toBe(leads);
@@ -123,7 +119,7 @@ test.describe('Estúdio de Métricas', () => {
     // única medida garantidamente vazia — por isso ela, e não Faturamento, que
     // tem venda com `sold_at = now()`.
     await page.getByRole('button', { name: /^Reuniões marcadas/ }).click();
-    const janela = page.getByRole('group', { name: 'Reuniões marcadas' });
+    const janela = page.getByRole('group', { name: 'Reuniões marcadas', exact: true });
     await expect(janela).toBeVisible({ timeout: 15_000 });
 
     // Ausência é travessão (—), nunca "0". Zero é uma afirmação sobre o
@@ -137,19 +133,19 @@ test.describe('Estúdio de Métricas', () => {
   });
 
   test('painel salvo reaparece depois de recarregar', async ({ page }) => {
-    await painelLimpoEmEdicao(page);
+    const nomeAba = await painelLimpoEmEdicao(page);
 
     await page.getByRole('button', { name: /^Negócios na etapa/ }).click();
-    await expect(page.getByRole('group', { name: 'Negócios na etapa' })).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByRole('group', { name: 'Negócios na etapa', exact: true })).toBeVisible({ timeout: 15_000 });
 
     // SCRUM-309: o painel vive no servidor (`metrics_studio_panels`), um por
     // (org, membro). A gravação é debounced — dar tempo antes de recarregar.
     await page.waitForTimeout(2_000);
     await page.reload();
     await page.waitForLoadState('networkidle');
-    await page.getByRole('tab', { name: 'E2E Métricas', exact: true }).click();
+    await page.getByRole('tab', { name: nomeAba, exact: true }).click();
 
-    await expect(page.getByRole('group', { name: 'Negócios na etapa' })).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByRole('group', { name: 'Negócios na etapa', exact: true })).toBeVisible({ timeout: 20_000 });
   });
 
   test('métrica personalizada: receita ÷ leads, com o aviso de 100×', async ({ page }) => {
@@ -185,20 +181,20 @@ test.describe('Estúdio de Métricas', () => {
 
     const dialogo = page.getByRole('dialog');
     await expect(dialogo.getByText('Nova métrica')).toBeVisible({ timeout: 10_000 });
-    await expect(dialogo.getByText('1 de 3')).toBeVisible();
+    await expect(dialogo.getByText('1 de 3', { exact: true })).toBeVisible();
 
-    // Cada clique em "combinar" encaixa uma operação. No teto, o botão deixa de
-    // ser oferecido — a UI não deixa MONTAR profundidade 4.
-    //
-    // ⚠ A recusa do BANCO (22023 em `fn_metric_tree_validate` e no trigger de
-    // escrita) é coberta pelo pgTAP, em `metric_custom_tree_test.sql` (PF2 e
-    // WR4). Aqui se prova o outro lado: o usuário não chega a tentar.
-    for (const alvo of ['2 de 3', '3 de 3']) {
-      const combinar = dialogo.getByRole('button', { name: 'Combinar com outra métrica' }).first();
-      await combinar.click();
-      await expect(dialogo.getByText(alvo)).toBeVisible({ timeout: 5_000 });
+    // Depth counts operators (a leaf has depth zero). Expand every branch
+    // to three operators; no fourth operator may be offered on any leaf.
+    const steps = [
+      { depth: 2, remaining: 3 }, { depth: 3, remaining: 2 },
+      { depth: 3, remaining: 1 }, { depth: 3, remaining: 2 },
+      { depth: 3, remaining: 1 }, { depth: 3, remaining: 0 },
+    ];
+    for (const { depth, remaining } of steps) {
+      await dialogo.getByRole('button', { name: 'Combinar com outra métrica' }).first().click();
+      await expect(dialogo.getByText(`${depth} de 3`, { exact: true })).toBeVisible();
+      await expect(dialogo.getByRole('button', { name: 'Combinar com outra métrica' })).toHaveCount(remaining);
     }
-
-    await expect(dialogo.getByRole('button', { name: 'Combinar com outra métrica' })).toHaveCount(0);
+    await expect(dialogo.getByRole('group', { name: 'Operação', exact: true })).toHaveCount(7);
   });
 });

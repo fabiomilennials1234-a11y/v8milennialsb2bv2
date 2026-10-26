@@ -1,3 +1,4 @@
+import { storedMetaToken } from "../_shared/meta-token-crypto.ts";
 /**
  * list-lead-forms
  *
@@ -39,7 +40,7 @@ Deno.serve(withErrorBoundary('list-lead-forms', async (req) => {
     // Auth: require authenticated user
     let authCtx;
     try {
-      authCtx = await requireAuth(req, { body });
+      authCtx = await requireAuth(req, { body, requireOrganization: true });
     } catch (e) {
       if (e instanceof AuthError) return authErrorResponse(e, corsHeaders);
       throw e;
@@ -53,13 +54,13 @@ Deno.serve(withErrorBoundary('list-lead-forms', async (req) => {
     }
 
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
-      auth: { persistSession: false },
+      auth: { persistSession: false, autoRefreshToken: false },
     });
 
     // Buscar pagina pelo UUID interno — scoped to user's org
     const { data: page, error: pageError } = await supabase
       .from("meta_pages")
-      .select("page_id, page_access_token")
+      .select("page_id, page_access_token, meta_connections!inner(app_id,status)")
       .eq("id", pageId)
       .eq("organization_id", authCtx.organizationId)
       .eq("is_active", true)
@@ -72,14 +73,19 @@ Deno.serve(withErrorBoundary('list-lead-forms', async (req) => {
       );
     }
 
+    const binding = Array.isArray(page.meta_connections) ? page.meta_connections[0] : page.meta_connections;
+    if (binding?.status !== "connected") return new Response(JSON.stringify({ error: "connection_inactive" }), { status: 409, headers });
+    const pageToken = await storedMetaToken(page.page_access_token, binding.app_id, authCtx.organizationId, `page:${page.page_id}`);
+    if (formId && !/^\d+$/.test(formId)) return new Response(JSON.stringify({ error: "invalid_form_id" }), { status: 400, headers });
+
     // Se formId fornecido, buscar campos do formulario
     if (formId) {
-      const fields = await getLeadFormFields(formId, page.page_access_token);
+      const fields = await getLeadFormFields(formId, pageToken, binding.app_id);
       return new Response(JSON.stringify(fields), { status: 200, headers });
     }
 
     // Senao, listar formularios da pagina (inclui deteccao de TOS)
-    const result = await listLeadForms(page.page_id, page.page_access_token);
+    const result = await listLeadForms(page.page_id, pageToken, binding.app_id);
 
     await logRuntime({
       module: "campaign",

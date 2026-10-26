@@ -19,6 +19,9 @@ it.each([true, false])('uses the claimed publication or fails when unavailable: 
     if (path === '/rest/v1/workflow_execution_steps') steps.push(JSON.parse(String(init?.body)).node_id);
     const resources: Record<string, unknown> = {
       '/rest/v1/cron_config': [],
+      '/rest/v1/rpc/claim_workflow_button_send_checks': [],
+      '/rest/v1/rpc/reconcile_workflow_button_questions': [],
+      '/rest/v1/rpc/claim_workflow_button_queue': [],
       '/rest/v1/rpc/claim_workflow_executions': [execution],
       '/rest/v1/rpc/org_get_features_and_limits': { features: { automations: true } },
       '/rest/v1/workflows': { is_active: true, name: 'Changed', loop_limit: 100, trigger_type: 'tag_added', trigger_config: { tag_id: 'different-tag' }, definition: { nodes: [], edges: [] } },
@@ -34,7 +37,7 @@ it.each([true, false])('uses the claimed publication or fails when unavailable: 
   await import('../../supabase/functions/process-workflow-executions/index');
   expect(handler).toBeTypeOf('function');
   const response = await handler!(new Request('https://edge.example.test/worker', { method: 'POST', headers: { 'x-cron-secret': 'cron-test' }, body: '{}' }));
-  expect(response.status).toBe(200);
+  expect(response.status, await response.clone().text()).toBe(200);
   expect(await response.json()).toMatchObject({ stats: { completed: versionAvailable ? 1 : 0, failed: versionAvailable ? 0 : 1 } });
   expect(steps).toEqual(versionAvailable ? ['t', 'c', 'yes'] : []);
 });

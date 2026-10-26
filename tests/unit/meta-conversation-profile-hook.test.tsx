@@ -11,6 +11,8 @@ vi.mock("@/integrations/supabase/client", () => ({
   supabase: { functions: { invoke: (...args: any[]) => invokeMock(...args) } },
 }));
 
+vi.mock("@/modules/identity", () => ({ useOrganization: () => ({ organizationId: "org-1" }) }));
+
 import { useMetaConversationProfile } from "@/modules/communication/hooks/chat-meta/useMetaConversationProfile";
 
 function wrapper({ children }: { children: React.ReactNode }) {
@@ -25,7 +27,7 @@ describe("useMetaConversationProfile", () => {
     const { result } = renderHook(() => useMetaConversationProfile(), { wrapper });
     await result.current.mutateAsync("conv-1");
 
-    expect(invokeMock).toHaveBeenCalledWith("meta-conversation-profile", { body: { conversationId: "conv-1" } });
+    expect(invokeMock).toHaveBeenCalledWith("meta-conversation-profile", { body: { conversationId: "conv-1", organization_id: "org-1" } });
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
   });
 });

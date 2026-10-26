@@ -153,11 +153,17 @@ VALUES ('dddddddd-9999-0000-0000-000000000001', 'dddddddd-0000-0000-0000-0000000
         'Pipe dup-test', 'pipe-dup-test', 'custom')
 ON CONFLICT (id) DO NOTHING;
 
-INSERT INTO public.pipeline_entries (id, organization_id, pipeline_id, lead_id, stage_key)
+-- Canonical deals keep the Lead ≠ Negócio fixture valid.
+INSERT INTO public.deals (source, id, organization_id, source_lead_id, title) VALUES
+  ('human', 'dddddddd-7777-0000-0000-000000000001', 'dddddddd-0000-0000-0000-00000000000a', 'dddddddd-aaaa-0000-0000-000000000001', 'Fixture deal 1'),
+  ('human', 'dddddddd-7777-0000-0000-000000000002', 'dddddddd-0000-0000-0000-00000000000a', 'dddddddd-aaaa-0000-0000-000000000002', 'Fixture deal 2')
+ON CONFLICT (id) DO NOTHING;
+
+INSERT INTO public.pipeline_entries (id, deal_id, organization_id, pipeline_id, lead_id, stage_key)
 VALUES
-  ('dddddddd-7777-0000-0000-000000000001', 'dddddddd-0000-0000-0000-00000000000a',
+  ('dddddddd-7777-0000-0000-000000000001', 'dddddddd-7777-0000-0000-000000000001', 'dddddddd-0000-0000-0000-00000000000a',
    'dddddddd-9999-0000-0000-000000000001', 'dddddddd-aaaa-0000-0000-000000000001', 'novo'),
-  ('dddddddd-7777-0000-0000-000000000002', 'dddddddd-0000-0000-0000-00000000000a',
+  ('dddddddd-7777-0000-0000-000000000002', 'dddddddd-7777-0000-0000-000000000002', 'dddddddd-0000-0000-0000-00000000000a',
    'dddddddd-9999-0000-0000-000000000001', 'dddddddd-aaaa-0000-0000-000000000002', 'novo')
 ON CONFLICT (id) DO NOTHING;
 

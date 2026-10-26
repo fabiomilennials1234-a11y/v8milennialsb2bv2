@@ -233,3 +233,8 @@ describe("LeadCardContainer — lead invisível tem três causas diferentes", ()
     expect(container).toBeEmptyDOMElement();
   });
 });
+
+vi.mock("@/modules/leads/hooks/useLeadPhones", async (original) => ({
+  ...await original<Record<string, unknown>>(),
+  useLeadPhones: () => ({ data: [], isLoading: false }),
+}));

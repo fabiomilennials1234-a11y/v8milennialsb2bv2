@@ -45,6 +45,7 @@ function makeMockSupabase(opts: {
         return { data: null, error: null };
       },
       single: async () => {
+        if (table === 'meetings') return { data: { id: 'meeting-1', ...state.data }, error: null };
         if (table === 'leads') return { data: opts.lead ?? null, error: null };
         if (table === 'pipe_confirmacao') return { data: opts.pipeConfirmacao ?? { id: 'p1' }, error: null };
         return { data: null, error: null };

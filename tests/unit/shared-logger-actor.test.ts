@@ -18,7 +18,7 @@ vi.mock("https://esm.sh/@supabase/supabase-js@2", () => ({
   createClient: () => ({
     from: (_table: string) => ({
       insert: (row: Record<string, unknown>) => {
-        captured.lastInsert = row;
+        captured.lastInsert = Array.isArray(row) ? row[0] : row;
         return Promise.resolve({ error: null });
       },
     }),
@@ -28,7 +28,7 @@ vi.mock("https://esm.sh/@supabase/supabase-js@2", () => ({
 setDenoEnv("SUPABASE_URL", "https://test.supabase.co");
 setDenoEnv("SUPABASE_SERVICE_ROLE_KEY", "test-key");
 
-import { logRuntime } from "../../supabase/functions/_shared/logger";
+import { logRuntime, flushRuntimeLogs } from "../../supabase/functions/_shared/logger";
 import { gestorRuntimeActor } from "../../supabase/functions/_shared/gestor-auth";
 
 beforeEach(() => {
@@ -44,6 +44,7 @@ describe("logRuntime — atribuição de ator (ADR-0021 §7)", () => {
       action: "carteira_bulk_message",
       status: "success",
     });
+    await flushRuntimeLogs();
 
     expect(captured.lastInsert).toMatchObject({
       actor_type: "gestor",
@@ -61,6 +62,7 @@ describe("logRuntime — atribuição de ator (ADR-0021 §7)", () => {
       status: "success",
       triggeredBy: "member-1",
     });
+    await flushRuntimeLogs();
 
     expect(captured.lastInsert).not.toHaveProperty("actor_type");
     expect(captured.lastInsert).not.toHaveProperty("gestor_id");
@@ -75,6 +77,7 @@ describe("logRuntime — atribuição de ator (ADR-0021 §7)", () => {
       action: "master_action",
       status: "success",
     });
+    await flushRuntimeLogs();
 
     expect(captured.lastInsert).toMatchObject({ actor_type: "master" });
     expect(captured.lastInsert).not.toHaveProperty("gestor_id");

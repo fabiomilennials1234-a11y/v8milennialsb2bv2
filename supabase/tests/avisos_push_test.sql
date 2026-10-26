@@ -39,6 +39,13 @@ SELECT org, longe,    'Longe',    'member'::app_role, true FROM _push_fix
 UNION ALL SELECT org, presente, 'Presente', 'member'::app_role, true FROM _push_fix
 UNION ALL SELECT org, sem_push, 'Sem push', 'member'::app_role, true FROM _push_fix;
 
+-- Push worker independently rechecks explicit recipient/number provenance.
+INSERT INTO public.whatsapp_instances (id, organization_id, instance_name)
+SELECT 'f5555555-5555-5555-5555-555555555555'::uuid, org, 'Push Fixture' FROM _push_fix;
+INSERT INTO public.whatsapp_instance_allowed_members (whatsapp_instance_id, team_member_id)
+SELECT 'f5555555-5555-5555-5555-555555555555'::uuid, tm.id
+FROM public.team_members tm JOIN _push_fix f ON f.org = tm.organization_id;
+
 -- Os três querem push; um deles vai desligar.
 INSERT INTO public.notification_preferences (organization_id, user_id, push_enabled)
 SELECT org, longe,    true  FROM _push_fix
@@ -85,6 +92,13 @@ SELECT public.fn_emit_aviso(
          p_type => 'meeting_booked', p_group_key => 'meet:longe',
          p_title => 'Reunião marcada')
 FROM _push_fix;
+
+-- fn_emit_aviso is a generic producer; attach the number provenance normally
+-- supplied by fn_aviso_de_mensagem before exercising delivery preferences.
+UPDATE public.notifications n SET
+  whatsapp_instance_id = 'f5555555-5555-5555-5555-555555555555',
+  whatsapp_phone = '5511999990001'
+FROM _push_fix f WHERE n.organization_id = f.org AND n.type = 'lead_message';
 
 -- ---------------------------------------------------------------------------
 SELECT is(

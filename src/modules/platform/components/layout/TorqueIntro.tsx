@@ -54,7 +54,10 @@ export function TorqueIntro() {
   const [phase, setPhase] = useState<Phase>("enter");
 
   useEffect(() => {
-    if (!shouldPlay) return;
+    // The rendered visibility owns this mount's timer. The module flag may
+    // already have changed during a concurrent/repeated render; consulting it
+    // again can leave a visible overlay without a dismissal timer.
+    if (!show) return;
     introHasPlayed = true;
 
     const t1 = window.setTimeout(() => setPhase("collapse"), 1700);
@@ -70,6 +73,10 @@ export function TorqueIntro() {
 
   const nameOpen = phase === "enter";
   const spinning = phase === "collapse" || phase === "exit";
+
+  // The exit fade finishes before the 3250ms deadline. Remove the blocking
+  // layer at that deadline even if the animation engine never settles.
+  if (!show) return null;
 
   return (
     <AnimatePresence>

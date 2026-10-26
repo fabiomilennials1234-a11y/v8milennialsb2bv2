@@ -57,7 +57,7 @@ export function useMasterAuth() {
         .select("id, user_id, permissions, is_active, granted_at, notes")
         .eq("user_id", user.id)
         .eq("is_active", true)
-        .single();
+        .maybeSingle();
 
       if (error) {
         // PGRST116 = not found, which is expected for non-master users

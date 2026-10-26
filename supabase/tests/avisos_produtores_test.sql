@@ -22,13 +22,14 @@ SET LOCAL role postgres;
 SET LOCAL session_replication_role = replica;
 
 -- O Closer é um Team Member; o Aviso é endereçado à conta de usuário dele.
-CREATE TEMP TABLE _p_fix (org uuid, dono uuid, membro uuid, lead uuid) ON COMMIT DROP;
+CREATE TEMP TABLE _p_fix (org uuid, dono uuid, membro uuid, lead uuid, instance uuid) ON COMMIT DROP;
 
-INSERT INTO _p_fix (org, dono, membro, lead)
+INSERT INTO _p_fix (org, dono, membro, lead, instance)
 VALUES ('a1111111-1111-1111-1111-111111111111'::uuid,
         'a2222222-2222-2222-2222-222222222222'::uuid,
         'a4444444-4444-4444-4444-444444444444'::uuid,
-        'a3333333-3333-3333-3333-333333333333'::uuid);
+        'a3333333-3333-3333-3333-333333333333'::uuid,
+        'a7777777-7777-7777-7777-777777777777'::uuid);
 
 INSERT INTO auth.users (id, email)
 SELECT dono, 'produtor-dono@example.test' FROM _p_fix;
@@ -42,6 +43,11 @@ SELECT membro, org, dono, 'Carla Menezes', 'member', true FROM _p_fix;
 INSERT INTO public.leads (id, organization_id, name, sale_responsible_id)
 SELECT lead, org, 'Marcos Andrade', membro FROM _p_fix;
 
+INSERT INTO public.whatsapp_instances (id, organization_id, instance_name)
+SELECT instance, org, 'Produtores Fixture' FROM _p_fix;
+INSERT INTO public.whatsapp_instance_allowed_members (whatsapp_instance_id, team_member_id)
+SELECT instance, membro FROM _p_fix;
+
 -- Gatilhos de volta: daqui para baixo é comportamento sob teste.
 SET LOCAL session_replication_role = DEFAULT;
 
@@ -49,16 +55,16 @@ SET LOCAL session_replication_role = DEFAULT;
 -- Mensagem recebida de um lead com dono → Aviso de conversa para esse dono.
 -- ---------------------------------------------------------------------------
 INSERT INTO public.whatsapp_messages
-  (organization_id, message_id, remote_jid, phone_number, direction, lead_id, content)
-SELECT org, 'msg-fixture-1', '5511999990001@s.whatsapp.net', '5511999990001',
+  (organization_id, instance_id, message_id, remote_jid, phone_number, direction, lead_id, content)
+SELECT org, instance, 'msg-fixture-1', '5511999990001@s.whatsapp.net', '5511999990001',
        'incoming', lead, 'Consigo fechar hoje'
 FROM _p_fix;
 
 SELECT is(
   (SELECT ARRAY[n.user_id::text, n.type, n.group_key, n.event_count::text]
      FROM public.notifications n, _p_fix f
-    WHERE n.group_key = 'msg:' || f.lead::text),
-  (SELECT ARRAY[dono::text, 'lead_message', 'msg:' || lead::text, '1'] FROM _p_fix),
+    WHERE n.group_key = 'msg:' || f.org::text || ':' || f.instance::text || ':5511999990001'),
+  (SELECT ARRAY[dono::text, 'lead_message', 'msg:' || org::text || ':' || instance::text || ':5511999990001', '1'] FROM _p_fix),
   'mensagem recebida de lead com dono gera Aviso de conversa para o dono'
 );
 
@@ -66,46 +72,46 @@ SELECT is(
 -- Rajada: a segunda mensagem engorda o mesmo Aviso, não cria outro.
 -- ---------------------------------------------------------------------------
 INSERT INTO public.whatsapp_messages
-  (organization_id, message_id, remote_jid, phone_number, direction, lead_id, content)
-SELECT org, 'msg-fixture-2', '5511999990001@s.whatsapp.net', '5511999990001',
+  (organization_id, instance_id, message_id, remote_jid, phone_number, direction, lead_id, content)
+SELECT org, instance, 'msg-fixture-2', '5511999990001@s.whatsapp.net', '5511999990001',
        'incoming', lead, 'Se entregarem até sexta'
 FROM _p_fix;
 
 SELECT is(
   (SELECT ARRAY[count(*)::int, max(n.event_count)]
      FROM public.notifications n, _p_fix f
-    WHERE n.group_key = 'msg:' || f.lead::text),
+    WHERE n.group_key = 'msg:' || f.org::text || ':' || f.instance::text || ':5511999990001'),
   ARRAY[1, 2],
   'segunda mensagem da mesma conversa engorda o Aviso em vez de criar outro'
 );
 
 -- ---------------------------------------------------------------------------
--- O que NÃO avisa: saída, grupo, mensagem de IA e lead sem dono.
+-- O que NÃO avisa: saída, grupo, mensagem de IA e mensagem sem número de origem.
 -- Cada um destes já custou atenção de vendedor em algum produto.
 -- ---------------------------------------------------------------------------
 INSERT INTO public.leads (id, organization_id, name)
 SELECT 'a5555555-5555-5555-5555-555555555555'::uuid, org, 'Lead órfão' FROM _p_fix;
 
 INSERT INTO public.whatsapp_messages
-  (organization_id, message_id, remote_jid, phone_number, direction, lead_id, content, is_group, sent_by_ai)
-SELECT org, 'msg-saida',  '5511999990002@s.whatsapp.net', '5511999990002', 'outgoing', lead, 'oi',  false, false FROM _p_fix
+  (organization_id, instance_id, message_id, remote_jid, phone_number, direction, lead_id, content, is_group, sent_by_ai)
+SELECT org, instance, 'msg-saida',  '5511999990002@s.whatsapp.net', '5511999990002', 'outgoing', lead, 'oi',  false, false FROM _p_fix
 UNION ALL
-SELECT org, 'msg-grupo',  '120363000000000000@g.us',      '5511999990003', 'incoming', lead, 'oi',  true,  false FROM _p_fix
+SELECT org, instance, 'msg-grupo',  '120363000000000000@g.us',      '5511999990003', 'incoming', lead, 'oi',  true,  false FROM _p_fix
 UNION ALL
-SELECT org, 'msg-da-ia',  '5511999990004@s.whatsapp.net', '5511999990004', 'incoming', lead, 'oi',  false, true  FROM _p_fix
+SELECT org, instance, 'msg-da-ia',  '5511999990004@s.whatsapp.net', '5511999990004', 'incoming', lead, 'oi',  false, true  FROM _p_fix
 UNION ALL
-SELECT org, 'msg-orfao',  '5511999990005@s.whatsapp.net', '5511999990005', 'incoming',
+SELECT org, NULL::uuid, 'msg-sem-numero',  '5511999990005@s.whatsapp.net', '5511999990005', 'incoming',
        'a5555555-5555-5555-5555-555555555555'::uuid, 'oi', false, false FROM _p_fix;
 
 SELECT is(
   (SELECT ARRAY[
      (SELECT max(n.event_count) FROM public.notifications n, _p_fix f
-       WHERE n.group_key = 'msg:' || f.lead::text),
+       WHERE n.group_key = 'msg:' || f.org::text || ':' || f.instance::text || ':5511999990001'),
      (SELECT count(*)::int FROM public.notifications
-       WHERE group_key = 'msg:a5555555-5555-5555-5555-555555555555')
+       WHERE lead_id = 'a5555555-5555-5555-5555-555555555555' AND type = 'lead_message')
    ]),
   ARRAY[2, 0],
-  'saída, grupo, mensagem de IA e lead sem dono não produzem Aviso'
+  'saída, grupo, mensagem de IA e mensagem sem número de origem não produzem Aviso'
 );
 
 -- ---------------------------------------------------------------------------

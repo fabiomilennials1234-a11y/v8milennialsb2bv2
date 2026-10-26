@@ -178,6 +178,14 @@ describe.skipIf(shouldSkip)('Chat: isolamento por responsável', () => {
     });
     if (instErr) throw new Error(`Falha ao semear a instância: ${instErr.message}`);
 
+    // Number access is independent of lead ownership. Explicit links let these
+    // tests isolate the owner predicate without bypassing the number guard.
+    const { error: accessErr } = await service.from('whatsapp_instance_allowed_members').upsert([
+      { whatsapp_instance_id: INSTANCE_ID, team_member_id: '00000000-0000-0000-0000-000000000140' },
+      { whatsapp_instance_id: INSTANCE_ID, team_member_id: '00000000-0000-0000-0000-000000000150' },
+    ]);
+    if (accessErr) throw accessErr;
+
     // O responsável do lead também precisa de uma instância permitida.
     // Uma mensagem sem instance_id deve ficar oculta para membros.
     const { error: orgBInstErr } = await service.from('whatsapp_instances').upsert({
@@ -208,6 +216,7 @@ describe.skipIf(shouldSkip)('Chat: isolamento por responsável', () => {
         remote_jid: `${phone}@s.whatsapp.net`,
         phone_number: `+55${phone}`,
         normalized_phone: phone,
+        lead_id: ({ [PHONE_ALPHA]: LEAD_ALPHA, [PHONE_BETA]: LEAD_BETA, [PHONE_GAMMA]: LEAD_GAMMA, [PHONE_DELTA]: '00000000-0000-0000-0000-000000001004' } as Record<string,string>)[phone] ?? null,
         direction: 'incoming',
         content: `mensagem de ${phone}`,
       })),
@@ -519,12 +528,12 @@ describe.skipIf(shouldSkip)('Chat: isolamento por responsável', () => {
       expect(data!.map((r) => r.lead_id)).not.toContain(LEAD_BETA);
     });
 
-    it('membro NÃO lê as mensagens do Copilot de lead alheio', async () => {
+    it('membro não lê histórico agregado do Copilot, mesmo para lead próprio', async () => {
       const { data } = await member1
         .from('conversation_messages')
         .select('content')
         .like('content', `${MSG_PREFIX}%`);
-      expect(data!.map((r) => r.content)).toContain(`${MSG_PREFIX}copilot-alpha`);
+      expect(data!.map((r) => r.content)).not.toContain(`${MSG_PREFIX}copilot-alpha`);
       expect(data!.map((r) => r.content)).not.toContain(`${MSG_PREFIX}copilot-beta`);
     });
 
@@ -548,7 +557,7 @@ describe.skipIf(shouldSkip)('Chat: isolamento por responsável', () => {
       expect(ch.data).toHaveLength(2);
     });
 
-    it('com a política desligada as três voltam a ser org-wide — no-op', async () => {
+    it('política desligada preserva estados e Meta, mas histórico agregado continua restrito', async () => {
       await setPolicy(service, TEST_ORG_ID, false);
       try {
         const [c, cm, ch] = await Promise.all([
@@ -557,7 +566,7 @@ describe.skipIf(shouldSkip)('Chat: isolamento por responsável', () => {
           member1.from('channel_messages').select('external_id').like('external_id', `${MSG_PREFIX}%`),
         ]);
         expect(c.data!.map((r) => r.lead_id).sort()).toEqual([LEAD_ALPHA, LEAD_BETA].sort());
-        expect(cm.data).toHaveLength(2);
+        expect(cm.data).toHaveLength(0);
         expect(ch.data).toHaveLength(2);
       } finally {
         await setPolicy(service, TEST_ORG_ID, true);
@@ -767,24 +776,26 @@ describe.skipIf(shouldSkip)('Chat: isolamento por responsável', () => {
       await service.from('lead_owners').delete().eq('lead_id', leadId).eq('role', 'co');
     }
 
+    let originalFlags: Record<string, unknown> = {};
     beforeAll(async () => {
+      const { data: org, error: readError } = await service.from('organizations')
+        .select('feature_flags').eq('id', TEST_ORG_ID).single();
+      if (readError) throw readError;
+      originalFlags = (org.feature_flags ?? {}) as Record<string, unknown>;
+      const { error: flagError } = await service.from('organizations')
+        .update({ feature_flags: { ...originalFlags, lead_owners_n_donos: true } })
+        .eq('id', TEST_ORG_ID);
+      if (flagError) throw flagError;
       await setPolicy(service, TEST_ORG_ID, true);
-      // A lista multi só devolve caixas que o membro pode ler.
-      const { error } = await service.from('whatsapp_instance_allowed_members').upsert([
-        { whatsapp_instance_id: INSTANCE_ID, team_member_id: TM_MEMBER_1 },
-        { whatsapp_instance_id: INSTANCE_ID, team_member_id: TM_MEMBER_2 },
-      ]);
-      if (error) throw new Error(`Falha ao liberar a caixa aos membros: ${error.message}`);
+      // Number assignments are part of the shared fixture, independently of co-ownership.
       await removeCoOwners(LEAD_BETA);
     });
 
     afterAll(async () => {
       await removeCoOwners(LEAD_BETA);
-      await service
-        .from('whatsapp_instance_allowed_members')
-        .delete()
-        .eq('whatsapp_instance_id', INSTANCE_ID)
-        .in('team_member_id', [TM_MEMBER_1, TM_MEMBER_2]);
+      const { error } = await service.from('organizations')
+        .update({ feature_flags: originalFlags }).eq('id', TEST_ORG_ID);
+      if (error) throw error;
     });
 
     it('CONTROLE: sem vínculo, o membro não vê a conversa de Beta na lista multi', async () => {
@@ -908,6 +919,12 @@ describe.skipIf(!proxyServed)('gate de escrita no whatsapp-api-proxy', () => {
     });
     if (instErr) throw new Error(`Falha ao semear a instância: ${instErr.message}`);
 
+    const { error: proxyAccessError } = await service.from('whatsapp_instance_allowed_members').upsert([
+      { whatsapp_instance_id: PROXY_INSTANCE_ID, team_member_id: '00000000-0000-0000-0000-000000000140' },
+      { whatsapp_instance_id: PROXY_INSTANCE_ID, team_member_id: '00000000-0000-0000-0000-000000000150' },
+    ]);
+    if (proxyAccessError) throw proxyAccessError;
+
     await service.from('whatsapp_messages').upsert(
       [
         { phone: PHONE_ALPHA, mid: MSG_ALPHA },
@@ -919,6 +936,7 @@ describe.skipIf(!proxyServed)('gate de escrita no whatsapp-api-proxy', () => {
         remote_jid: `${phone}@s.whatsapp.net`,
         phone_number: `+55${phone}`,
         normalized_phone: phone,
+        lead_id: ({ [PHONE_ALPHA]: LEAD_ALPHA, [PHONE_BETA]: LEAD_BETA, [PHONE_GAMMA]: LEAD_GAMMA, [PHONE_DELTA]: '00000000-0000-0000-0000-000000001004' } as Record<string,string>)[phone] ?? null,
         direction: 'incoming',
         content: mid,
       })),

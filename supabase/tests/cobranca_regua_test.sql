@@ -106,8 +106,8 @@ SELECT throws_ok(
 -- ===========================================================================
 -- (RP) a RPC do webhook carrega o setor
 -- ===========================================================================
-INSERT INTO public.whatsapp_instance_secrets (instance_id, uazapi_instance_id, uazapi_token)
-VALUES ('c0b7b000-0000-4000-8000-0000000005a1', 'pgtap-rcob', 'pgtap-tok-cob')
+INSERT INTO public.whatsapp_instance_secrets (instance_id, organization_id, uazapi_instance_id, uazapi_token)
+VALUES ('c0b7b000-0000-4000-8000-0000000005a1', (SELECT organization_id FROM public.whatsapp_instances WHERE id = 'c0b7b000-0000-4000-8000-0000000005a1'), 'pgtap-rcob', 'pgtap-tok-cob')
 ON CONFLICT (instance_id) DO UPDATE SET uazapi_instance_id = EXCLUDED.uazapi_instance_id;
 
 SET LOCAL request.jwt.claims = '{"role":"service_role"}';

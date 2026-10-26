@@ -153,3 +153,7 @@ describe("AbrirConversaButton", () => {
     expect(mockNavigate).not.toHaveBeenCalled();
   });
 });
+
+vi.mock("@/modules/communication/hooks/chat/useCaixasDeQuemAtende", () => ({
+  useCaixasDeQuemAtende: () => ({ minhasInstanceIds: [], doResponsavelInstanceIds: [], carregando: false }),
+}));

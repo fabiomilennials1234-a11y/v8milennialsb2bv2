@@ -25,6 +25,8 @@ export function useMetaSend() {
 
       const { data, error } = await supabase.functions.invoke("send-meta-message", {
         body: {
+          organization_id: conv.organization_id,
+          conversationId: input.conversationId,
           recipientId: conv.external_user_id,
           channel: conv.channel,
           message: input.text,

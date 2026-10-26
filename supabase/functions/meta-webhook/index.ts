@@ -1,3 +1,5 @@
+import { storedMetaToken } from "../_shared/meta-token-crypto.ts";
+import { readMetaWebhookBody } from "../_shared/meta-bounded-body.ts";
 import { withErrorBoundary } from '../_shared/error-boundary.ts';
 /**
  * meta-webhook
@@ -9,7 +11,7 @@ import { withErrorBoundary } from '../_shared/error-boundary.ts';
  * Webhook URL: ${SUPABASE_URL}/functions/v1/meta-webhook
  */
 
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import {
   verifyWebhookSignature,
   getLeadgenData,
@@ -26,8 +28,45 @@ const META_WEBHOOK_VERIFY_TOKEN = Deno.env.get("META_WEBHOOK_VERIFY_TOKEN")!;
 
 Deno.serve(withErrorBoundary('meta-webhook', async (req) => {
   const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
-    auth: { persistSession: false },
+    auth: { persistSession: false, autoRefreshToken: false },
   });
+
+  // CRM events are durably acknowledged; a separately authenticated cron drains the private inbox.
+  const cron = req.headers.get("x-cron-secret");
+  const expectedCron = Deno.env.get("CRON_SECRET");
+  if (req.method === "POST" && cron) {
+    if (!expectedCron || !timingSafeCompare(cron, expectedCron)) return new Response("Unauthorized", { status: 401 });
+    const appId = Deno.env.get("META_CRM_APP_ID");
+    if (!appId) return new Response("Not configured", { status: 503 });
+    const { data: receipts, error } = await supabase.rpc("meta_claim_webhooks", { p_app_id: appId });
+    if (error) return new Response("Storage unavailable", { status: 503 });
+    let completed = 0;
+    for (const receipt of receipts ?? []) {
+      try {
+        const payload = receipt.payload as WebhookPayload;
+        for (const entry of payload.entry ?? []) {
+          if (payload.object !== "page" && payload.object !== "instagram") throw new Error("unsupported_crm_object");
+          const column = payload.object === "page" ? "page_id" : "instagram_account_id";
+          const { data: bindings, error: bindingError } = await supabase.from("meta_pages").select("organization_id,is_active,meta_connections!inner(app_id,status)").eq(column, entry.id).eq("meta_connections.app_id", appId);
+          if (bindingError) throw new Error("meta_binding_lookup_failed");
+          if (!bindings?.length && receipt.attempts <= 3) throw new Error("meta_binding_pending");
+          for (const binding of bindings ?? []) {
+            const connection = Array.isArray(binding.meta_connections) ? binding.meta_connections[0] : binding.meta_connections;
+            if (!binding.is_active || connection?.status !== "connected") continue;
+            if (payload.object === "page") await processMessengerEntry(supabase, entry, appId, binding.organization_id);
+            else await processInstagramEntry(supabase, entry, appId, binding.organization_id);
+          }
+        }
+        const { error: updateError } = await supabase.from("meta_webhook_receipts").update({ status: "completed", completed_at: new Date().toISOString() }).eq("id", receipt.id).eq("app_id", appId).eq("attempts", receipt.attempts);
+        if (updateError) throw new Error("receipt_update_failed");
+        completed++;
+      } catch {
+        // Lease expires in five minutes. Payload stays private and replayable; never discard on handler error.
+        await logRuntime({ module: "webhook", action: "meta_crm_retry", status: "error", errorMessage: "meta_crm_processing_failed", payloadSnapshot: { receiptId: receipt.id, attempts: receipt.attempts } });
+      }
+    }
+    return new Response(JSON.stringify({ completed, claimed: receipts?.length ?? 0 }), { headers: withSecurityHeaders({ "Content-Type": "application/json" }) });
+  }
 
   // ── GET: Webhook verification ──────────────────────────────────────────
   if (req.method === "GET") {
@@ -36,7 +75,7 @@ Deno.serve(withErrorBoundary('meta-webhook', async (req) => {
     const token = url.searchParams.get("hub.verify_token");
     const challenge = url.searchParams.get("hub.challenge");
 
-    if (mode === "subscribe" && token && timingSafeCompare(token, META_WEBHOOK_VERIFY_TOKEN)) {
+    if (mode === "subscribe" && token && ((META_WEBHOOK_VERIFY_TOKEN && timingSafeCompare(token, META_WEBHOOK_VERIFY_TOKEN)) || (Deno.env.get("META_CRM_WEBHOOK_VERIFY_TOKEN") && timingSafeCompare(token, Deno.env.get("META_CRM_WEBHOOK_VERIFY_TOKEN")!)))) {
       console.log("[meta-webhook] Webhook verified successfully");
       return new Response(challenge, { status: 200, headers: withSecurityHeaders({}) });
     }
@@ -47,11 +86,15 @@ Deno.serve(withErrorBoundary('meta-webhook', async (req) => {
 
   // ── POST: Webhook events ───────────────────────────────────────────────
   if (req.method === "POST") {
-    const body = await req.text();
+    let body: string;
+    try { body = await readMetaWebhookBody(req); } catch { return new Response("Invalid or oversized payload", { status: 413 }); }
 
     // Verificar assinatura HMAC
     const signature = req.headers.get("x-hub-signature-256");
-    if (!verifyWebhookSignature(body, signature)) {
+    const crmSecret = Deno.env.get("META_CRM_APP_SECRET");
+    const crmAppId = Deno.env.get("META_CRM_APP_ID");
+    const isCrm = !!(crmSecret && crmAppId && verifyWebhookSignature(body, signature, crmSecret));
+    if (!isCrm && !verifyWebhookSignature(body, signature)) {
       console.error("[meta-webhook] Invalid signature");
       return new Response("Unauthorized", { status: 401, headers: withSecurityHeaders({}) });
     }
@@ -61,6 +104,14 @@ Deno.serve(withErrorBoundary('meta-webhook', async (req) => {
       payload = JSON.parse(body);
     } catch {
       return new Response("Bad Request", { status: 400, headers: withSecurityHeaders({}) });
+    }
+
+    if (isCrm) {
+      if (!["page", "instagram"].includes(payload.object) || !Array.isArray(payload.entry)) return new Response("Unsupported payload", { status: 400 });
+      const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(`${crmAppId}:${body}`));
+      const id = Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
+      const { error } = await supabase.from("meta_webhook_receipts").upsert({ id, app_id: crmAppId, payload }, { onConflict: "id", ignoreDuplicates: true });
+      return new Response(error ? "Storage unavailable" : "OK", { status: error ? 503 : 200, headers: withSecurityHeaders({}) });
     }
 
     console.log(`[meta-webhook] Received ${payload.object} event with ${payload.entry?.length || 0} entries`);
@@ -144,8 +195,10 @@ interface ChangeEvent {
 // ── Messenger Processing ─────────────────────────────────────────────────
 
 async function processMessengerEntry(
-  supabase: ReturnType<typeof createClient>,
-  entry: WebhookEntry
+  supabase: SupabaseClient,
+  entry: WebhookEntry,
+  appId: string | null = null,
+  organizationId?: string
 ) {
   const pageId = entry.id;
 
@@ -161,14 +214,14 @@ async function processMessengerEntry(
         text: event.message.text || null,
         attachments: event.message.attachments || [],
         timestamp: event.timestamp,
-      });
+      }, appId, organizationId);
     }
   }
 
   // Processar leadgen events
   for (const change of entry.changes || []) {
     if (change.field === "leadgen" && change.value.leadgen_id) {
-      await processLeadgen(supabase, pageId, change.value.leadgen_id);
+      await processLeadgen(supabase, pageId, change.value.leadgen_id, appId, organizationId);
     }
   }
 }
@@ -176,8 +229,10 @@ async function processMessengerEntry(
 // ── Instagram Processing ─────────────────────────────────────────────────
 
 async function processInstagramEntry(
-  supabase: ReturnType<typeof createClient>,
-  entry: WebhookEntry
+  supabase: SupabaseClient,
+  entry: WebhookEntry,
+  appId: string | null = null,
+  organizationId?: string
 ) {
   const igAccountId = entry.id;
 
@@ -192,7 +247,7 @@ async function processInstagramEntry(
         text: event.message.text || null,
         attachments: event.message.attachments || [],
         timestamp: event.timestamp,
-      });
+      }, appId, organizationId);
     }
   }
 }
@@ -211,8 +266,10 @@ interface IncomingMessageData {
 }
 
 async function saveIncomingMessage(
-  supabase: ReturnType<typeof createClient>,
-  data: IncomingMessageData
+  supabase: SupabaseClient,
+  data: IncomingMessageData,
+  appId: string | null = null,
+  organizationId?: string
 ) {
   // Determinar se e incoming (sender != page) ou outgoing (sender == page)
   // Para Messenger: comparar sender.id com page_id
@@ -223,15 +280,18 @@ async function saveIncomingMessage(
   // Buscar pagina para obter organization_id.
   // `id` alimenta meta_conversations.meta_page_id (FK).
   const pageColumn = data.channel === "instagram" ? "instagram_account_id" : "page_id";
-  const { data: page, error: pageError } = await supabase
+  let pageQuery = supabase
     .from("meta_pages")
-    .select("id, organization_id, page_id")
+    .select("id, organization_id, page_id, meta_connections!inner(app_id,status)")
     .eq(pageColumn, data.pageId)
     .eq("is_active", true)
-    .single();
+    .eq("meta_connections.status", "connected");
+  pageQuery = appId === null ? pageQuery.is("meta_connections.app_id", null) : pageQuery.eq("meta_connections.app_id", appId);
+  if (organizationId) pageQuery = pageQuery.eq("organization_id", organizationId);
+  const { data: page, error: pageError } = await pageQuery.single();
 
   if (pageError || !page) {
-    console.error(`[meta-webhook] Page not found for ${data.channel} ${data.pageId}:`, pageError);
+    if (appId !== null) throw new Error("meta_page_binding_not_found");
     return;
   }
 
@@ -267,6 +327,17 @@ async function saveIncomingMessage(
 
   if (existingMsg?.lead_id) {
     leadId = existingMsg.lead_id;
+  }
+
+  if (appId !== null) {
+    const { error } = await supabase.rpc("meta_record_message", {
+      p_org: page.organization_id, p_page: page.id, p_app: appId,
+      p_data: { channel: data.channel, external_id: data.externalId, sender_id: externalUserId, direction,
+        message_type: messageType, content, media_url: mediaUrl, status: direction === "incoming" ? "received" : "sent",
+        lead_id: leadId, timestamp: new Date(data.timestamp).toISOString(), raw_payload: data },
+    });
+    if (error) throw new Error("meta_message_transaction_failed");
+    return;
   }
 
   // A Meta reentrega evento. O upsert de channel_messages absorve isso pelo
@@ -305,6 +376,7 @@ async function saveIncomingMessage(
 
   if (insertError) {
     console.error(`[meta-webhook] Error saving message:`, insertError);
+    if (appId !== null) throw new Error("meta_message_write_failed");
     // Sem mensagem gravada, não mexe na conversa — o inbox ficaria apontando
     // pra uma mensagem que não existe.
     return;
@@ -328,6 +400,7 @@ async function saveIncomingMessage(
   });
 
   if (convError) {
+    if (appId !== null) throw new Error("meta_conversation_write_failed");
     // Não derruba o handler: a mensagem já está salva e é o dado que não pode
     // ser perdido. A conversa se recompõe na próxima mensagem.
     console.error(`[meta-webhook] Error upserting meta_conversation:`, convError);
@@ -400,7 +473,9 @@ const GRAPH_API_VERSION_UTM = "v21.0";
  * NEVER throws — returns empty object on any failure.
  */
 async function enrichUtmFromLeadgen(
-  leadgenId: string
+  leadgenId: string,
+  appId: string | null = null,
+  organizationId?: string
 ): Promise<Record<string, string>> {
   try {
     if (!META_ADS_ACCESS_TOKEN_ENV) return {};
@@ -437,21 +512,27 @@ async function enrichUtmFromLeadgen(
 }
 
 async function processLeadgen(
-  supabase: ReturnType<typeof createClient>,
+  supabase: SupabaseClient,
   pageId: string,
-  leadgenId: string
+  leadgenId: string,
+  appId: string | null = null,
+  organizationId?: string
 ) {
   console.log(`[meta-webhook] Processing leadgen ${leadgenId} for page ${pageId}`);
 
   // Buscar pagina para obter token e org
-  const { data: page, error: pageError } = await supabase
+  let pageQuery = supabase
     .from("meta_pages")
-    .select("organization_id, page_access_token, id")
+    .select("organization_id, page_access_token, id, meta_connections!inner(app_id,status)")
     .eq("page_id", pageId)
     .eq("is_active", true)
-    .single();
+    .eq("meta_connections.status", "connected");
+  pageQuery = appId === null ? pageQuery.is("meta_connections.app_id", null) : pageQuery.eq("meta_connections.app_id", appId);
+  if (organizationId) pageQuery = pageQuery.eq("organization_id", organizationId);
+  const { data: page, error: pageError } = await pageQuery.single();
 
   if (pageError || !page) {
+    if (appId !== null) throw new Error("meta_page_binding_not_found");
     console.error(`[meta-webhook] Page not found for leadgen:`, pageError);
     return;
   }
@@ -459,11 +540,14 @@ async function processLeadgen(
   // Buscar dados do lead via Graph API
   let leadData;
   try {
-    leadData = await getLeadgenData(leadgenId, page.page_access_token);
+    leadData = await getLeadgenData(leadgenId, await storedMetaToken(page.page_access_token, appId, page.organization_id, `page:${pageId}`), appId);
   } catch (err) {
+    if (appId !== null) throw new Error("meta_leadgen_fetch_failed");
     console.error(`[meta-webhook] Error fetching leadgen data:`, err);
     return;
   }
+
+  if (appId !== null && (!/^\d+$/.test(leadData.form_id) || !Array.isArray(leadData.field_data))) throw new Error("invalid_meta_lead_payload");
 
   // Extrair campos do formulario
   const formFields: Record<string, string> = {};
@@ -495,20 +579,26 @@ async function processLeadgen(
 
   // ── UTM Enrichment (Milennials org only, never blocks lead creation) ──
   let utmFields: Record<string, string> = {};
-  if (page.organization_id === MILENNIALS_ORG_ID && MILENNIALS_ORG_ID) {
+  if (appId === null && page.organization_id === MILENNIALS_ORG_ID && MILENNIALS_ORG_ID) {
     utmFields = await enrichUtmFromLeadgen(leadgenId);
   }
 
   // Verificar se lead ja existe (por email ou telefone)
   let existingLeadId: string | null = null;
+  if (appId !== null) {
+    const { data: delivered, error: lookupError } = await supabase.from("leads").select("id").eq("organization_id", page.organization_id).contains("metadata", { leadgen_id: leadgenId }).limit(1).maybeSingle();
+    if (lookupError) throw new Error("meta_lead_lookup_failed");
+    existingLeadId = delivered?.id ?? null;
+  }
 
-  if (phone) {
-    const normalizedPhone = phone.replace(/\D/g, "").slice(-10);
+  const normalizedPhone = phone?.replace(/\D/g, "").slice(-10) ?? "";
+  if (!existingLeadId && normalizedPhone.length >= 8) {
     const { data: existingLead } = await supabase
       .from("leads")
       .select("id")
       .eq("organization_id", page.organization_id)
       .like("phone", `%${normalizedPhone}`)
+      .is("deleted_at", null)
       .limit(1)
       .single();
 
@@ -521,13 +611,14 @@ async function processLeadgen(
       .select("id")
       .eq("organization_id", page.organization_id)
       .eq("email", email)
+      .is("deleted_at", null)
       .limit(1)
       .single();
 
     if (existingLead) existingLeadId = existingLead.id;
   }
 
-  if (existingLeadId) {
+  if (existingLeadId && appId === null) {
     console.log(`[meta-webhook] Lead already exists: ${existingLeadId}, updating...`);
     // Atualizar com campos mapeados
     const updateData: Record<string, unknown> = {
@@ -547,7 +638,8 @@ async function processLeadgen(
       }
     }
 
-    await supabase.from("leads").update(updateData).eq("id", existingLeadId);
+    const { error: updateError } = await supabase.from("leads").update(updateData).eq("id", existingLeadId).eq("organization_id", page.organization_id);
+    if (updateError && appId !== null) throw new Error("meta_lead_update_failed");
     return;
   }
 
@@ -576,15 +668,16 @@ async function processLeadgen(
   }
 
   // Criar novo lead
-  const { data: newLead, error: leadError } = await supabase
-    .from("leads")
-    .insert(newLeadData)
-    .select("id")
-    .single();
-
-  if (leadError) {
-    console.error(`[meta-webhook] Error creating lead:`, leadError);
-    return;
+  let newLead: { id: string };
+  if (appId !== null) {
+    const { data: id, error } = await supabase.rpc("meta_record_lead", { p_org: page.organization_id, p_page: page.id, p_app: appId, p_event: leadgenId, p_fields: newLeadData, p_existing: existingLeadId });
+    if (error) throw new Error("meta_lead_transaction_failed");
+    if (!id) return; // Previously erased lead: a replay must not recreate it.
+    newLead = { id };
+  } else {
+    const { data, error: leadError } = await supabase.from("leads").insert(newLeadData).select("id").single();
+    if (leadError || !data) { console.error("[meta-webhook] Lead creation failed"); return; }
+    newLead = data;
   }
 
   console.log(`[meta-webhook] Created lead ${newLead.id} from leadgen ${leadgenId}`);
@@ -602,10 +695,11 @@ async function processLeadgen(
           .single();
 
         if (tag) {
-          await supabase.from("lead_tags").upsert(
+          const { error } = await supabase.from("lead_tags").upsert(
             { lead_id: newLead.id, tag_id: tag.id },
             { onConflict: "lead_id,tag_id" }
           );
+          if (error && appId !== null) throw new Error("meta_tag_write_failed");
         }
       }
     }
@@ -613,6 +707,10 @@ async function processLeadgen(
     // Vincular a campanha com distribuição automática
     if (config.assign_to_campaign_id) {
       const campaignId = config.assign_to_campaign_id;
+      if (appId !== null) {
+        const { data: campaign, error } = await supabase.from("campanhas").select("id").eq("id", campaignId).eq("organization_id", page.organization_id).maybeSingle();
+        if (error || !campaign) throw new Error("meta_campaign_tenant_mismatch");
+      }
 
       // Buscar primeiro stage da campanha para usar como stage_id
       const { data: firstStage } = await supabase
@@ -627,13 +725,16 @@ async function processLeadgen(
         console.warn(`[meta-webhook] Campaign ${campaignId} has no stages, skipping campaign placement`);
       } else {
         // Auto-distribuir SDR via round-robin RPC
-        const sdrId = await getCampaignResponsibleAssignment(supabase, campaignId);
+        let continueCampaignPlacement = true;
+        const { data: placement } = await supabase.from("campanha_leads").select("id").eq("campanha_id", campaignId).eq("lead_id", newLead.id).maybeSingle();
+        if (placement && appId !== null) continueCampaignPlacement = false;
+        const sdrId = continueCampaignPlacement ? await getCampaignResponsibleAssignment(supabase, campaignId) : null;
 
         // Auto-distribuir Closer via RPC
         let closerId: string | null = null;
-        const { data: nextCloserId } = await supabase.rpc("get_next_campaign_closer", {
+        const { data: nextCloserId } = continueCampaignPlacement ? await supabase.rpc("get_next_campaign_closer", {
           p_campaign_id: campaignId,
-        });
+        }) : { data: null };
         if (nextCloserId) closerId = nextCloserId;
 
         const responsibleId = closerId || sdrId;
@@ -649,12 +750,13 @@ async function processLeadgen(
           sale_responsible_id: closerId,
         };
 
-        const { error: clInsertErr } = await supabase.from("campanha_leads").insert(insertPayload);
+        const { error: clInsertErr } = continueCampaignPlacement ? await supabase.from("campanha_leads").insert(insertPayload) : { error: null };
         if (clInsertErr) {
+          if (appId !== null) throw new Error("meta_campaign_placement_failed");
           console.error(`[meta-webhook] campanha_leads insert failed:`, clInsertErr);
         } else {
           // Update lead-level assignment
-          if (responsibleId) {
+          if (responsibleId && continueCampaignPlacement) {
             const leadAssign: Record<string, unknown> = { responsible_id: responsibleId };
             if (sdrId) leadAssign.sdr_id = sdrId;
             if (closerId) leadAssign.closer_id = closerId;
@@ -684,6 +786,7 @@ async function processLeadgen(
         }
         console.log(`[meta-webhook] Lead ${newLead.id} added to ${pipeRef} stage ${stage}`);
       } catch (pipeErr) {
+        if (appId !== null) throw new Error("meta_pipeline_write_failed");
         console.error(`[meta-webhook] Error adding to ${pipeRef}:`, pipeErr);
       }
     }
@@ -896,7 +999,7 @@ export function normalizeCloudMessage(
  * trusts an arbitrary payload id.
  */
 async function resolveMetaCloudInstance(
-  supabase: ReturnType<typeof createClient>,
+  supabase: SupabaseClient,
   phoneNumberId: string,
 ): Promise<MetaCloudResolvedInstance | null> {
   if (!phoneNumberId) return null;
@@ -935,7 +1038,7 @@ async function resolveMetaCloudInstance(
  * land on this row.
  */
 async function persistCloudMessage(
-  supabase: ReturnType<typeof createClient>,
+  supabase: SupabaseClient,
   resolved: MetaCloudResolvedInstance,
   msg: WhatsAppCloudMessage,
   contactName: string | null,
@@ -1000,7 +1103,7 @@ async function persistCloudMessage(
  * status is unknown or the row hasn't been written yet (echo ordering tolerated).
  */
 async function applyCloudStatus(
-  supabase: ReturnType<typeof createClient>,
+  supabase: SupabaseClient,
   resolved: MetaCloudResolvedInstance,
   status: WhatsAppCloudStatus,
 ): Promise<void> {
@@ -1023,7 +1126,7 @@ async function applyCloudStatus(
  * messages and applies status updates. Exported for unit testing.
  */
 export async function processWhatsAppCloudEntry(
-  supabase: ReturnType<typeof createClient>,
+  supabase: SupabaseClient,
   entry: WhatsAppCloudEntry,
 ): Promise<void> {
   for (const change of entry.changes ?? []) {

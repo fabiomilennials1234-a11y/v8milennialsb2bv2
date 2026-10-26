@@ -30,7 +30,7 @@ BEGIN;
 
 CREATE EXTENSION IF NOT EXISTS pgtap;
 
-SELECT plan(6);
+SELECT plan(7);
 
 -- ---------------------------------------------------------------------------
 -- (a) O invariante
@@ -38,10 +38,33 @@ SELECT plan(6);
 SELECT is(
   (SELECT count(*)::int FROM pg_policies
     WHERE schemaname = 'public'
-      AND (qual LIKE '%get_user_organization_id%'
-           OR with_check LIKE '%get_user_organization_id%')),
+      AND (qual ~ '\mget_user_organization_id\s*\('
+           OR with_check ~ '\mget_user_organization_id\s*\(')
+      -- Reviewed compatibility fallback: the selected header is an additional
+      -- restriction, while mandatory plural membership still authorizes access.
+      -- Every expression must retain both predicates, including UPDATE check.
+      AND NOT (
+        tablename = 'saved_views'
+        AND policyname IN ('saved_views_select', 'saved_views_insert',
+                           'saved_views_update', 'saved_views_delete')
+        AND COALESCE(qual, with_check) LIKE '%get_my_organization_ids()%'
+        AND COALESCE(qual, with_check) LIKE '%x-torque-saved-views-org%'
+        AND COALESCE(with_check, qual) LIKE '%get_my_organization_ids()%'
+        AND COALESCE(with_check, qual) LIKE '%x-torque-saved-views-org%'
+      )),
   0,
-  '(a) nenhuma policy resolve o tenant pela org SINGULAR');
+  '(a) nenhuma policy autoriza acesso só pela org SINGULAR');
+
+-- Keep the exception narrow and observable; removing a reviewed policy or its
+-- plural authorization must not silently make the compatibility carve-out pass.
+SELECT is((SELECT count(*)::int FROM pg_policies WHERE schemaname = 'public'
+  AND tablename = 'saved_views'
+  AND policyname IN ('saved_views_select', 'saved_views_insert', 'saved_views_update', 'saved_views_delete')
+  AND COALESCE(qual, with_check) LIKE '%get_my_organization_ids()%'
+  AND COALESCE(qual, with_check) LIKE '%x-torque-saved-views-org%'
+  AND COALESCE(with_check, qual) LIKE '%get_my_organization_ids()%'
+  AND COALESCE(with_check, qual) LIKE '%x-torque-saved-views-org%'), 4,
+  '(a) saved_views mantém autorização plural em todas as quatro policies');
 
 -- Sanidade: a função continua existindo (outros chamadores dependem dela — ver
 -- `has_feature_permission(text)`), então o invariante acima mede ausência de

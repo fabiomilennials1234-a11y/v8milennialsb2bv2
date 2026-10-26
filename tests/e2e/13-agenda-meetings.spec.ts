@@ -11,8 +11,8 @@
 import { test, expect, type Page } from "@playwright/test";
 
 const TEST_USERS = {
-  admin: { email: "qa-admin@torque.test", password: "QaTest123!@#" },
-  member: { email: "qa-member@torque.test", password: "QaTest123!@#" },
+  admin: { email: "admin@test.com", password: "Test123!@#" },
+  member: { email: "member1@test.com", password: "Test123!@#" },
 };
 
 async function login(page: Page, user: { email: string; password: string }) {
@@ -52,7 +52,7 @@ async function createMeeting(page: Page, title: string) {
   await dialog.locator("#meeting-title").fill(title);
 
   // Click "Criar Evento"
-  const submitBtn = dialog.getByRole("button", { name: /criar evento/i });
+  const submitBtn = dialog.getByRole("button", { name: /criar atividade/i });
   await expect(submitBtn).toBeEnabled();
   await submitBtn.click();
 

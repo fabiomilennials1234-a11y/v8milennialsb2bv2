@@ -11,7 +11,7 @@ export default function Privacidade() {
         <div className="mb-10">
           <h1 className="text-3xl font-bold mb-2">Política de Privacidade</h1>
           <p className="text-sm text-muted-foreground">
-            TorqueCRM · Última atualização: junho de 2026
+            TorqueCRM · Última atualização: 23 de outubro de 2026
           </p>
         </div>
 
@@ -21,7 +21,7 @@ export default function Privacidade() {
             <h2 className="text-lg font-semibold text-foreground mb-2">1. Quem somos</h2>
             <p>
               O <strong>TorqueCRM</strong> é uma plataforma de CRM e gestão de equipes
-              comerciais desenvolvida pela <strong>Millennials B2B</strong>. Nossa plataforma
+              comerciais de responsabilidade de <strong>Gabriel Aurelio Gipp</strong>, CNPJ <strong>54.384.269/0001-48</strong>. Nossa plataforma
               ajuda equipes de vendas a gerenciar leads, compromissos e comunicações com clientes.
             </p>
             <p className="mt-2">
@@ -126,6 +126,16 @@ export default function Privacidade() {
           </section>
 
           <section>
+            <h2 className="text-lg font-semibold text-foreground mb-2">Facebook, anúncios e Instagram</h2>
+            <p>Mediante autorização da organização, acessamos identificação dos ativos, campanhas,
+              métricas, insights, cadastros de Lead Ads e conversas no Messenger e Instagram Direct
+              para relatórios, acompanhamento de leads e atendimento no CRM. Não vendemos esses
+              dados nem os usamos para treinamento de modelos de IA. Você pode revogar a
+              integração nas configurações da Meta e solicitar exclusão em <a href="/exclusao-de-dados"
+              className="text-primary underline">Exclusão de dados</a>.</p>
+          </section>
+
+          <section>
             <h2 className="text-lg font-semibold text-foreground mb-2">5. Como armazenamos seus dados</h2>
             <ul className="mt-2 list-disc list-inside space-y-1">
               <li>
@@ -133,7 +143,7 @@ export default function Privacidade() {
                 <strong>Supabase</strong> (infraestrutura AWS).
               </li>
               <li>
-                Tokens de acesso ao Google e ao WhatsApp/Meta são criptografados com{" "}
+                Tokens de acesso ao Google e ao WhatsApp Cloud são criptografados com{" "}
                 <strong>AES-256-GCM</strong> antes do armazenamento.
               </li>
               <li>O acesso aos dados é restrito por políticas de segurança em nível de linha (RLS).</li>
@@ -193,10 +203,10 @@ export default function Privacidade() {
             <p className="mt-2">
               <strong>E-mail:</strong>{" "}
               <a
-                href="mailto:contato@torquecrm.com.br"
+                href="mailto:acesso@torquecrm.com.br"
                 className="text-primary underline"
               >
-                contato@torquecrm.com.br
+                acesso@torquecrm.com.br
               </a>
             </p>
           </section>
@@ -212,8 +222,9 @@ export default function Privacidade() {
           </section>
         </div>
 
+        <nav className="mt-8 flex gap-6 text-sm" aria-label="Documentos legais"><a href="/termos">Termos de Serviço</a><a href="/exclusao-de-dados">Exclusão de dados</a></nav>
         <div className="mt-12 pt-6 border-t border-border text-xs text-muted-foreground/60 text-center">
-          © {new Date().getFullYear()} TorqueCRM · Millennials B2B · Todos os direitos reservados
+          © {new Date().getFullYear()} TorqueCRM · Gabriel Aurelio Gipp · CNPJ 54.384.269/0001-48 · Todos os direitos reservados
         </div>
       </div>
     </div>

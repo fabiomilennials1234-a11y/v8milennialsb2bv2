@@ -26,6 +26,8 @@ function cenario() {
     { id: "lead-1", organization_id: "org-1", responsible_id: "tm-1", sdr_id: null, closer_id: null },
   ]);
   mock.mockTable("follow_ups", []);
+  mock.mockTable("pipeline_entries", [{ id: ENTRY, organization_id: "org-1", lead_id: "lead-1", deal_id: DEAL, pipeline_id: "pipeline-1" }]);
+  mock.mockTable("meetings", []);
   return mock;
 }
 
@@ -83,15 +85,16 @@ describe("schedule_meeting — a reunião é do Negócio", () => {
     );
 
     expect(r.success).toBe(true);
-    const [tarefa] = mock.getInserted("follow_ups");
-    expect(tarefa.pipeline_entry_id).toBe(ENTRY);
-    expect(tarefa.source_pipe).toBe("meeting");
+    const [meeting] = mock.getInserted("meetings");
+    expect(meeting.pipeline_entry_id).toBe(ENTRY);
+    expect(meeting.deal_id).toBe(DEAL);
+    expect(meeting.event_type).toBe("meeting");
   });
 
   it("sem negócio declarado, a reunião fica da pessoa", async () => {
     const mock = cenario();
     await scheduleMeeting(entrada(mock, { entryId: null, dealId: null, params: { date: "2026-09-01" } }));
 
-    expect(mock.getInserted("follow_ups")[0].pipeline_entry_id).toBeNull();
+    expect(mock.getInserted("meetings")[0].pipeline_entry_id).toBeNull();
   });
 });

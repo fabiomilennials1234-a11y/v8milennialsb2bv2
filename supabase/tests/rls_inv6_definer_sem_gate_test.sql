@@ -30,7 +30,7 @@ CREATE EXTENSION IF NOT EXISTS pgtap;
 \ir _rls_invariants_detectors.sql
 \ir rls_invariants_baseline.sql
 
-SELECT plan(8);
+SELECT plan(11);
 
 -- ===========================================================================
 -- (1) THE GATE — live count must not exceed the frozen ceiling.
@@ -264,6 +264,19 @@ SELECT is(
   0,
   'INV-6 GREEN-after-fix (B): revoking EXECUTE from PUBLIC, anon and authenticated clears the violation'
 );
+
+-- Qualified private gate is reviewed; same-name public functions and comments
+-- must not buy an exemption. These probes inspect the actual detector pattern.
+SELECT ok('BEGIN PERFORM private.cobranca_exigir(p_org, ''view''); END' ~*
+  (SELECT pattern FROM public._rls_inv_gate_helper_pattern()),
+  'INV-6 private reviewed Cobranca gate is recognized');
+SELECT ok(NOT ('BEGIN PERFORM public.cobranca_exigir(p_org, ''view''); END' ~*
+  (SELECT pattern FROM public._rls_inv_gate_helper_pattern())),
+  'INV-6 same-name public helper is not trusted');
+SELECT ok(NOT (public._rls_inv_strip_sql_comments(
+  'BEGIN /* private.cobranca_exigir(p_org, ''view'') */ RETURN; END') ~*
+  (SELECT pattern FROM public._rls_inv_gate_helper_pattern())),
+  'INV-6 commented private gate is not trusted');
 
 SELECT * FROM finish();
 

@@ -31,7 +31,12 @@ export default defineConfig({
       dependencies: ['setup'],
       // O harness de pixel é SEM-AUTH de propósito (roda no projeto 'pixel');
       // não pode passar pelo setup/storageState do chromium.
-      testIgnore: ['**/auth.setup.ts', '**/tv-wall-pixel.spec.ts'],
+      testIgnore: ['**/auth.setup.ts', '**/tv-wall-pixel.spec.ts', '**/portfolio/**'],
+    },
+    {
+      name: 'portfolio-preview',
+      testMatch: '**/portfolio/*.spec.ts',
+      use: { ...devices['Desktop Chrome'], baseURL: 'http://localhost:8090', storageState: undefined },
     },
     // Harness de pixel da parede (#1254 acabamento): dev-only, /tv-wall-preview
     // renderiza sem auth → SEM dependency 'setup' e SEM storageState. 1920x1080.
@@ -60,10 +65,17 @@ export default defineConfig({
         }]
       : []),
   ],
-  webServer: {
+  webServer: [
+  ...(process.env.PW_PREVIEW_ONLY ? [] : [{
     command: process.env.CI ? 'npx serve -s dist -l 8080' : 'npm run dev',
     url: 'http://localhost:8080',
     reuseExistingServer: !process.env.CI,
     timeout: 60_000,
-  },
+  }]), {
+    // This standalone Vite HTML harness is deliberately excluded from dist.
+    command: 'node node_modules/vite/bin/vite.js --host 127.0.0.1 --port 8090',
+    url: 'http://localhost:8090/clientes-preview.html',
+    reuseExistingServer: !process.env.CI,
+    timeout: 60_000,
+  }],
 });

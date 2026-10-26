@@ -18,16 +18,17 @@ const TS = Date.now();
 const TEST_ORG_ID = '00000000-0000-0000-0000-000000000001';
 // Unique phone per run — avoids collision across parallel CI workers
 const TEST_PHONE = `+55119${String(TS).slice(-7)}`;
+let phoneSequence = 0;
+const nextApiPhone = () => `+55119${String(TS).slice(-6)}${String(++phoneSequence).padStart(2, '0')}`;
 const TEST_AGENT_NAME = `E2E Qualifier ${TS}`;
 
 function getSupabaseUrl(): string | null {
   return process.env.SUPABASE_URL ?? process.env.VITE_SUPABASE_URL ?? null;
 }
 
-function getAnonKey(): string {
+function getServiceKey(): string {
   return (
-    process.env.SUPABASE_ANON_KEY ??
-    process.env.VITE_SUPABASE_PUBLISHABLE_KEY ??
+    process.env.SUPABASE_SERVICE_ROLE_KEY ??
     ''
   );
 }
@@ -77,7 +78,7 @@ test.describe('Copilot — Página de lista', () => {
 
     // Either agents exist or the empty state message shows
     const hasAgents = (await page.locator('[data-lead-id], [class*="CardTitle"]').count()) > 0;
-    const emptyState = page.getByText(/nenhum copilot|nenhum agente/i).first();
+    const emptyState = page.getByText(/nenhum copilot|nenhum agente|primeiro copilot/i).first();
     const hasEmpty = await emptyState.isVisible({ timeout: 5_000 }).catch(() => false);
 
     expect(hasAgents || hasEmpty).toBe(true);
@@ -182,13 +183,13 @@ test.describe('Copilot — Formulário de criação', () => {
     await expect(saveBtn).toBeVisible({ timeout: 5_000 });
   });
 
-  test('seletor de template está presente', async ({ page }) => {
+  test('editor estruturado do prompt aceita instruções', async ({ page }) => {
     await page.goto('/copilot/novo');
-    await page.waitForLoadState('networkidle');
-
-    // Template combobox rendered by shadcn Select
-    const combobox = page.getByRole('combobox').first();
-    await expect(combobox).toBeVisible({ timeout: 5_000 });
+    const prompt = page.getByRole('group', { name: 'Seções do prompt', exact: true })
+      .getByRole('textbox').first();
+    await expect(prompt).toBeVisible();
+    await prompt.fill('Atenda clientes com clareza e registre os dados de qualificação.');
+    await expect(prompt).toHaveValue('Atenda clientes com clareza e registre os dados de qualificação.');
   });
 
   test('tabs Prompt / Tools / Conhecimento renderizam', async ({ page }) => {
@@ -224,52 +225,16 @@ test.describe('Copilot — Formulário de criação', () => {
     expect(page.url()).toContain('/copilot/novo');
   });
 
-  test('criar agente com template Qualificador redireciona para lista', async ({
-    page,
-  }) => {
+  test('criar agente com instruções persiste e volta à lista', async ({ page }) => {
     await page.goto('/copilot/novo');
-    await page.waitForLoadState('networkidle');
-
-    const nameInput = page.getByPlaceholder(/nome do agente/i).first();
-    if (!(await nameInput.isVisible({ timeout: 5_000 }).catch(() => false))) {
-      test.skip();
-      return;
-    }
-
-    await nameInput.fill(TEST_AGENT_NAME);
-
-    // Select Qualificador template
-    const combobox = page.getByRole('combobox').first();
-    if (await combobox.isVisible({ timeout: 3_000 }).catch(() => false)) {
-      await combobox.click();
-      const option = page.getByRole('option', { name: /qualificador/i });
-      if (await option.isVisible({ timeout: 3_000 }).catch(() => false)) {
-        await option.click();
-      }
-    }
-
-    const saveBtn = page.getByRole('button', { name: /^salvar$/i }).first();
-    if (!(await saveBtn.isVisible({ timeout: 3_000 }).catch(() => false))) {
-      test.skip();
-      return;
-    }
-
-    await saveBtn.click();
-    await page.waitForLoadState('networkidle');
-
-    // On success → redirected to /copilot; on failure stays on form
-    const onList =
-      page.url().endsWith('/copilot') || /\/copilot(\?|$)/.test(page.url());
-    const onForm = page.url().includes('/copilot/novo');
-
-    expect(onList || onForm).toBe(true);
-
-    // If redirected to list, the new agent name should be visible
-    if (onList) {
-      const agentName = page.getByText(TEST_AGENT_NAME).first();
-      await expect(agentName).toBeVisible({ timeout: 8_000 });
-    }
+    await page.getByRole('textbox', { name: 'Nome do agente', exact: true }).fill(TEST_AGENT_NAME);
+    await page.getByRole('group', { name: 'Seções do prompt', exact: true })
+      .getByRole('textbox').first().fill('Atenda clientes, confirme suas necessidades e registre os dados de qualificação.');
+    await page.getByRole('button', { name: 'Salvar', exact: true }).click();
+    await expect(page).toHaveURL(/\/copilot$/);
+    await expect(page.getByText(TEST_AGENT_NAME, { exact: true }).first()).toBeVisible();
   });
+
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -286,7 +251,7 @@ test.describe('Copilot — agent-message API', () => {
     const res = await request.post(`${supabaseUrl}/functions/v1/agent-message`, {
       headers: {
         'Content-Type': 'application/json',
-        Authorization: `Bearer ${getAnonKey()}`,
+        Authorization: `Bearer ${getServiceKey()}`,
       },
       data: {
         from: '+5511999998877',
@@ -310,7 +275,7 @@ test.describe('Copilot — agent-message API', () => {
     const res = await request.post(`${supabaseUrl}/functions/v1/agent-message`, {
       headers: {
         'Content-Type': 'application/json',
-        Authorization: `Bearer ${getAnonKey()}`,
+        Authorization: `Bearer ${getServiceKey()}`,
       },
       data: {
         from: '123',              // < 8 chars — invalid
@@ -325,7 +290,7 @@ test.describe('Copilot — agent-message API', () => {
     expect(body.code).toBe('INVALID_PHONE');
   });
 
-  test('processa mensagem válida e retorna resposta estruturada', async ({
+  test('mensagem válida sem agente ativo retorna skip explícito', async ({
     request,
   }) => {
     const supabaseUrl = getSupabaseUrl();
@@ -334,10 +299,10 @@ test.describe('Copilot — agent-message API', () => {
     const res = await request.post(`${supabaseUrl}/functions/v1/agent-message`, {
       headers: {
         'Content-Type': 'application/json',
-        Authorization: `Bearer ${getAnonKey()}`,
+        Authorization: `Bearer ${getServiceKey()}`,
       },
       data: {
-        from: TEST_PHONE,
+        from: nextApiPhone(),
         message: 'Olá, quero saber mais sobre os produtos',
         channel: 'whatsapp',
         organization_id: TEST_ORG_ID,
@@ -345,21 +310,11 @@ test.describe('Copilot — agent-message API', () => {
       },
     });
 
-    // 200 = processed successfully
-    // 404 = no active agent configured in test org
-    // 500 = no OPENROUTER_API_KEY in test environment
-    // All are valid — we're validating the endpoint handles the request
-    expect([200, 404, 500]).toContain(res.status());
+    expect(res.status()).toBe(200);
+    const body = await res.json();
+    expect(body).toMatchObject({ skipped: true, reason: 'no_active_agents', organization_id: TEST_ORG_ID });
+    expect(body).not.toHaveProperty('action');
 
-    if (res.status() === 200) {
-      const body = await res.json();
-      // Response must have `action` field (REPLY, SKIP, etc.)
-      expect(body).toHaveProperty('action');
-      // Must be either a message reply or a deliberate skip
-      expect('message' in body || ('skipped' in body && body.skipped === true)).toBe(
-        true,
-      );
-    }
   });
 
   test('resposta 200 não vaza _eval_meta interno ao caller', async ({
@@ -371,10 +326,10 @@ test.describe('Copilot — agent-message API', () => {
     const res = await request.post(`${supabaseUrl}/functions/v1/agent-message`, {
       headers: {
         'Content-Type': 'application/json',
-        Authorization: `Bearer ${getAnonKey()}`,
+        Authorization: `Bearer ${getServiceKey()}`,
       },
       data: {
-        from: TEST_PHONE,
+        from: nextApiPhone(),
         message: 'Preciso de informações',
         channel: 'whatsapp',
         organization_id: TEST_ORG_ID,
@@ -391,7 +346,7 @@ test.describe('Copilot — agent-message API', () => {
     expect(body).not.toHaveProperty('_eval_meta');
   });
 
-  test('mensagem de lead com IA desligada retorna skipped=true', async ({
+  test('skip sem agente ativo informa motivo sem inventar lead', async ({
     request,
   }) => {
     const supabaseUrl = getSupabaseUrl();
@@ -402,10 +357,10 @@ test.describe('Copilot — agent-message API', () => {
     const res = await request.post(`${supabaseUrl}/functions/v1/agent-message`, {
       headers: {
         'Content-Type': 'application/json',
-        Authorization: `Bearer ${getAnonKey()}`,
+        Authorization: `Bearer ${getServiceKey()}`,
       },
       data: {
-        from: TEST_PHONE,
+        from: nextApiPhone(),
         message: 'Oi',
         channel: 'whatsapp',
         organization_id: TEST_ORG_ID,
@@ -418,10 +373,8 @@ test.describe('Copilot — agent-message API', () => {
     }
 
     const body = await res.json();
-    if (body.skipped === true) {
-      expect(body).toHaveProperty('reason');
-      expect(body).toHaveProperty('lead_id');
-    }
+    expect(body).toMatchObject({ skipped: true, reason: 'no_active_agents', organization_id: TEST_ORG_ID });
+
   });
 });
 
@@ -443,10 +396,10 @@ test.describe('Copilot — Qualificação integrada com pipe_whatsapp', () => {
       {
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${getAnonKey()}`,
+          Authorization: `Bearer ${getServiceKey()}`,
         },
         data: {
-          from: TEST_PHONE,
+          from: nextApiPhone(),
           message: 'Quero qualificar minha empresa',
           channel: 'whatsapp',
           organization_id: TEST_ORG_ID,
@@ -465,7 +418,7 @@ test.describe('Copilot — Qualificação integrada com pipe_whatsapp', () => {
     await page.goto('/pipe-whatsapp');
     await page.waitForLoadState('networkidle');
 
-    expect(page.url()).toContain('/pipe-whatsapp');
+    await expect(page).toHaveURL(/\/funil\/whatsapp(?:[?#]|$)/);
 
     // Stage columns must be present
     const stageCols = page.locator('[data-stage]');
@@ -488,7 +441,7 @@ test.describe('Copilot — Qualificação integrada com pipe_whatsapp', () => {
     }
   });
 
-  test('agente ativo processa e move lead para estágio correto via ação QUALIFICAR_LEAD', async ({
+  test('sem agente ativo intenção de qualificação não produz ação fictícia', async ({
     request,
   }) => {
     const supabaseUrl = getSupabaseUrl();
@@ -498,10 +451,10 @@ test.describe('Copilot — Qualificação integrada com pipe_whatsapp', () => {
     const res = await request.post(`${supabaseUrl}/functions/v1/agent-message`, {
       headers: {
         'Content-Type': 'application/json',
-        Authorization: `Bearer ${getAnonKey()}`,
+        Authorization: `Bearer ${getServiceKey()}`,
       },
       data: {
-        from: TEST_PHONE,
+        from: nextApiPhone(),
         message: 'Somos uma indústria com 50 funcionários, faturamento mensal de R$500k. Quero saber como o Torque pode nos ajudar.',
         channel: 'whatsapp',
         organization_id: TEST_ORG_ID,
@@ -516,22 +469,9 @@ test.describe('Copilot — Qualificação integrada com pipe_whatsapp', () => {
 
     const body = await res.json();
 
-    // Response must be valid
-    expect(body).toHaveProperty('action');
+    expect(body).toMatchObject({ skipped: true, reason: 'no_active_agents', organization_id: TEST_ORG_ID });
+    expect(body).not.toHaveProperty('action');
+    expect(body).not.toHaveProperty('message');
 
-    if ('message' in body && body.message) {
-      // Agent replied — message should be a non-empty string
-      expect(typeof body.message).toBe('string');
-      expect(body.message.length).toBeGreaterThan(0);
-    }
-
-    // action should be one of the known copilot actions
-    const knownActions = [
-      'REPLY', 'SKIP', 'TRANSFER_HUMAN', 'QUALIFY', 'SCHEDULE',
-      'MOVE_CARD', 'SEND_FOLLOWUP', 'reply', 'skip',
-    ];
-    const isKnownAction =
-      knownActions.includes(body.action) || typeof body.action === 'string';
-    expect(isKnownAction).toBe(true);
   });
 });

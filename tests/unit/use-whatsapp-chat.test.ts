@@ -11,7 +11,7 @@ function createChainMock(resolvedData: unknown[] = [{ id: "mock-1", name: "Test"
   [
     "select","eq","neq","or","in","gte","lte","lt","ilike","contains",
     "order","limit","range","insert","update","delete","upsert","not",
-    "is","filter","match","overlaps","textSearch","csv",
+    "is","filter","match","overlaps","textSearch","csv","abortSignal",
   ].forEach((m) => {
     chain[m] = vi.fn().mockReturnValue(chain);
   });
@@ -70,7 +70,8 @@ vi.mock("@/modules/identity/org-team/hooks/useOrganization", () => ({
 }));
 vi.mock("@/shared/realtime/useRealtimeSubscription", () => ({ useRealtimeSubscription: vi.fn() }));
 vi.mock("@/lib/analytics", () => ({ track: vi.fn() }));
-vi.mock("@/modules/communication/lib/whatsapp", () => ({
+vi.mock("@/modules/communication/lib/whatsapp", async (original) => ({
+  ...await original<Record<string, unknown>>(),
   formatPhoneForWhatsApp: (p: string) => {
     if (!p) return null;
     const cleaned = p.replace(/\D/g, "");
@@ -297,17 +298,14 @@ describe("useSendWhatsAppMessage", () => {
   it("sends a text message via Evolution API", async () => {
     const { result } = renderHook(() => useSendWhatsAppMessage(), { wrapper: createWrapper() });
     await act(async () => {
-      try {
-        await result.current.mutateAsync({
+      await result.current.mutateAsync({
           phoneNumber: "5511999999999",
           message: "Hello!",
           instanceName: "MainInstance",
           instanceId: "inst-1",
         });
-      } catch { /* chain mock may not cover every sub-call */ }
     });
-    // The hook should have called supabase.from at least for assertCanReplyOnInstance
-    expect(mockFrom).toHaveBeenCalled();
+    expect(mockFunctionsInvoke).toHaveBeenCalledWith("whatsapp-api-proxy", expect.objectContaining({ body: expect.objectContaining({ action: "sendText", instance_id: "inst-1", organization_id: "org-t" }) }));
   });
 
   it("sends via SZ.chat when instance is SZ.chat backed", async () => {
@@ -316,16 +314,14 @@ describe("useSendWhatsAppMessage", () => {
 
     const { result } = renderHook(() => useSendWhatsAppMessage(), { wrapper: createWrapper() });
     await act(async () => {
-      try {
-        await result.current.mutateAsync({
+      await result.current.mutateAsync({
           phoneNumber: "5511999999999",
           message: "Hello SZ!",
           instanceName: "SZInstance",
           instanceId: "inst-sz",
         });
-      } catch { /* */ }
     });
-    expect(mockFrom).toHaveBeenCalled();
+    expect(mockFunctionsInvoke).toHaveBeenCalledWith("sz-chat-send", expect.objectContaining({ body: expect.objectContaining({ action: "send_message", organization_id: "org-t" }) }));
   });
 });
 
@@ -488,3 +484,8 @@ describe("useWhatsAppMessagesRealtime", () => {
     expect(mockSupabase.removeChannel).toHaveBeenCalled();
   });
 });
+
+vi.mock("@/modules/identity/org-team/hooks/useCurrentTeamMember", async (original) => ({
+  ...await original<Record<string, unknown>>(),
+  useCurrentTeamMember: () => ({ data: { id: "tm1", organization_id: "org-t", role: "admin", user_id: "u1" } }),
+}));
