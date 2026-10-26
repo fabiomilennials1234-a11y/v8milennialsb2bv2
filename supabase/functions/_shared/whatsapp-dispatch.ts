@@ -585,6 +585,8 @@ export async function sendTemplateViaInstance(
           ),
           previewText: template.previewText,
           buttonLabels: template.buttonLabels,
+          trackSource: opts.trackSource,
+          trackId: opts.trackId,
         } as never),
     );
 

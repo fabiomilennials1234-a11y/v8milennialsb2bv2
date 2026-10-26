@@ -209,6 +209,11 @@ import { normalizarConteudo } from "../_shared/notificame-content.ts";
 import { reacoesDoEvento } from "../_shared/notificame-reacoes.ts";
 import { findLeadByPhoneOrEmail } from "../_shared/lead-service.ts";
 import { fireTrigger } from "../_shared/workflow-trigger.ts";
+import {
+  erroDeEnvioRecusado,
+  execucaoDaMetadata,
+  STATUS_INTERROMPIVEIS,
+} from "../_shared/envio-recusado.ts";
 import { espelharMidiaRecebida } from "../_shared/mirror-inbound-media.ts";
 import { baixarMidiaPeloFornecedor } from "../_shared/notificame-media-download.ts";
 
@@ -1147,8 +1152,8 @@ Deno.serve(withErrorBoundary(FUNCTION_NAME, async (req: Request) => {
     // seguintes o usam como chave. Sem isso a recusa da Meta cai em
     // `status_no_match` e o defeito volta a ser invisível — foi o que aconteceu
     // com a primeira versão deste bloco.
-    type Linha = LinhaDeStatus & { id: string };
-    const colunas = "id, status, raw_payload, provider_message_id";
+    type Linha = LinhaDeStatus & { id: string; metadata?: unknown };
+    const colunas = "id, status, raw_payload, provider_message_id, metadata";
     const acharLinha = async (alvo: MessageStatusUpdate): Promise<Linha | null> => {
       const porExternalId = await admin
         .from("channel_messages")
@@ -1222,6 +1227,53 @@ Deno.serve(withErrorBoundary(FUNCTION_NAME, async (req: Request) => {
         ? (p as Record<string, unknown>).messageStatus
         : undefined;
 
+    // ─── A RECUSA INTERROMPE A EXECUÇÃO QUE ENVIOU ────────────────────────
+    //
+    // O envio de template é assíncrono: o nó de workflow já terminou como
+    // sucesso quando a Meta recusa. Sem isto a execução ficava em
+    // `waiting_response` até o timeout e seguia o ramo "não respondeu" — medido
+    // na Chique, 433 de 534 templates em 14 dias, com o lead indo para `perdido`
+    // por ignorar uma mensagem que nunca saiu.
+    //
+    // Só na TRANSIÇÃO para `failed` (`progride`): reentrega do mesmo callback não
+    // repete. E NUNCA derruba o 200 — o status da linha já foi gravado.
+    const interromperExecucao = async (alvo: Linha, ev: MessageStatusUpdate) => {
+      const execucaoId = execucaoDaMetadata(alvo.metadata);
+      if (!execucaoId) return;
+      try {
+        const { data, error } = await admin
+          .from("workflow_executions")
+          .update({
+            status: "failed",
+            error: erroDeEnvioRecusado(ev.providerCode, ev.detail),
+            completed_at: new Date().toISOString(),
+            next_run_at: null,
+          })
+          .eq("id", execucaoId)
+          .eq("organization_id", organizationId)
+          .in("status", [...STATUS_INTERROMPIVEIS])
+          .select("id");
+        if (error) throw new Error(error.message);
+        await logRuntime({
+          organizationId,
+          module: "webhook",
+          action: "notificame_execucao_interrompida",
+          status: "success",
+          entityType: "workflow_execution",
+          entityId: execucaoId,
+          payloadSnapshot: { interrompida: (data ?? []).length > 0, provider_code: ev.providerCode },
+        });
+      } catch (err) {
+        await logRuntime({
+          organizationId,
+          module: "webhook",
+          action: "notificame_execucao_interrompida_failed",
+          status: "error",
+          errorMessage: (err as Error)?.message ?? "erro ao interromper a execução",
+        });
+      }
+    };
+
     const chaveEraNova = !linha.provider_message_id && !!st.providerMessageId;
     const resultado = await aplicar(linha, st, cruDoEvento(payload));
 
@@ -1234,6 +1286,10 @@ Deno.serve(withErrorBoundary(FUNCTION_NAME, async (req: Request) => {
         error: resultado.error.message,
       });
       return await parkResponse(stored, "status_no_match");
+    }
+
+    if (resultado.progride && st.status === "failed") {
+      await interromperExecucao(resultado.depois, st);
     }
 
     // ─── REAPLICAR O QUE FOI PARKADO SEM CHAVE ────────────────────────────
@@ -1263,6 +1319,9 @@ Deno.serve(withErrorBoundary(FUNCTION_NAME, async (req: Request) => {
           const r = await aplicar(atual, ev, cruDoEvento(p.payload));
           if (r.error) continue;
           atual = r.depois;
+          if (r.progride && ev.status === "failed") {
+            await interromperExecucao(atual, ev);
+          }
           await admin
             .from(PARK_TABLE)
             .update({
