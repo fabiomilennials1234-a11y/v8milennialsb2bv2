@@ -33,4 +33,8 @@ Atualização de 25/10/2026: duas migrations aplicadas em produção, onze funç
 
 CI do commit c9d478cb0: gate RLS/pgTAP aprovado no GitHub (112 arquivos, 2.444 asserções), incluindo controles negativos e preservação/restauração do rollout. As duas suítes previamente classificadas como funcionalidades pendentes (SCRUM-415/416) continuam fora do gate, sem mudança nesta tarefa. Unit ratchet completo já passou localmente com 17.422 testes e zero falhas fora do baseline; baseline não ampliado. Integração e E2E seguem sendo conciliados com contratos atuais, sem alterar autorização de produção para satisfazer fixtures.
 
-Ainda pendentes: consentimento Meta real, ativos efetivamente concedidos, entrega de webhook do novo app, leitura Ads e mensagens/lead de teste pelo frontend publicado. OAuth permanece desligado e allowlist restrita à organização TorqueCRM. Nenhuma submissão de revisão ou publicação Meta realizada. Testes sintéticos não certificam o piloto.
+Ainda pendentes: consentimento Meta real, ativos efetivamente concedidos, entrega de webhook do novo app, leitura Ads e mensagens/lead de teste pelo frontend publicado. OAuth permanece desligado e allowlist restrita à organização TorqueCRM. Nenhuma submissão de revisão realizada pelo agente. Proprietário publicou app Meta; status Publicado verificado em 26/10/2026, sem equivaler a aprovação avançada de permissões. Testes sintéticos não certificam o piloto.
+
+### Correções transversais verificadas em 26/10
+
+Migration 20271215020000 exige vínculo com organização antes de leads.view_all/co-owner no predicado de visibilidade VoIP, preservando master e comportamento de lead órfão. Migration 20271215030000 mantém Realtime em fail-closed quando helper privado opcional está ausente, preservando fallback Postgres Changes. Ambas passaram ensaios PGlite e gates Integration/RLS no CI; aplicadas em produção, com versões alinhadas no ledger, search_path vazio e acesso anon negado confirmados. Não reaplicar.
