@@ -37,11 +37,13 @@ export interface CreatorIdentity {
   isAdmin: boolean;
 }
 
-export function hasOwner(lead: Partial<Record<OwnerColumn, string | null>>): boolean {
+type OwnerFields = Partial<Record<OwnerColumn, string | null>>;
+
+export function hasOwner(lead: OwnerFields): boolean {
   return OWNER_COLUMNS.some((column) => !!lead[column]);
 }
 
-export function prepareLeadForCreate<T extends Partial<Record<OwnerColumn, string | null>> & { id?: string }>(
+export function prepareLeadForCreate<T extends OwnerFields & { id?: string } & Record<string, unknown>>(
   lead: T,
   creator: CreatorIdentity,
   newId: () => string = () => crypto.randomUUID(),
