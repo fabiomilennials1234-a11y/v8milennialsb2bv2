@@ -95,9 +95,10 @@ test.describe('Estúdio de Métricas', () => {
     const negocios = await valorDaJanela(page, 'Negócios na etapa');
     const leads = await valorDaJanela(page, 'Leads na etapa');
 
-    // A relação, não o total: o seed tem exatamente UM lead com um negócio a
-    // mais que os outros (bloco 11 de seed.sql).
-    expect(negocios).toBe(leads + 1);
+    // The metric seed contributes one additional business for the same lead.
+    // Browser-only confirmation/proposal fixtures add two more for Alpha.
+    // Creating unrelated leads with one card cannot change this difference.
+    expect(negocios).toBe(leads + 3);
 
     // E o contra-teste do defeito antigo: as duas NÃO podem ser o mesmo número.
     expect(negocios).not.toBe(leads);

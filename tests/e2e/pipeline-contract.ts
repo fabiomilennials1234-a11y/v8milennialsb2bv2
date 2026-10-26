@@ -19,7 +19,8 @@ export function pipelineContract(slug: string, label: string) {
       await expect(board.locator('[data-lead-id]').first()).toBeVisible();
     });
     test('novo negócio abre formulário', async ({ page }) => {
-      await page.getByRole('button', { name: 'Novo negócio', exact: true }).click();
+      const action = slug === 'confirmacao' ? 'Nova reunião' : slug === 'propostas' ? 'Nova proposta' : 'Novo negócio';
+      await page.getByRole('button', { name: action, exact: true }).click();
       await expect(page.getByRole('dialog')).toBeVisible();
       await page.keyboard.press('Escape');
       await expect(page.getByRole('dialog')).toHaveCount(0);

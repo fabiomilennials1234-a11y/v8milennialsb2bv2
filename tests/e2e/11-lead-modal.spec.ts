@@ -69,7 +69,9 @@ test.describe("Lead Modal v2 — call sites", () => {
   test("abre via /follow-ups", async ({ page }) => {
     await page.goto("/follow-ups");
     await page.waitForLoadState("networkidle");
-    await openFirstLead(page);
+    await page.getByText('Lead Alpha · E2E follow-up', { exact: true }).click();
+    await page.getByRole('button', { name: /^Ver Lead$/ }).first().click();
+    await expect(page.getByRole('dialog').first()).toBeVisible();
   });
 
   test("ESC fecha o modal", async ({ page }) => {

@@ -74,6 +74,10 @@ export function TorqueIntro() {
   const nameOpen = phase === "enter";
   const spinning = phase === "collapse" || phase === "exit";
 
+  // The exit fade finishes before the 3250ms deadline. Remove the blocking
+  // layer at that deadline even if the animation engine never settles.
+  if (!show) return null;
+
   return (
     <AnimatePresence>
       {show && (

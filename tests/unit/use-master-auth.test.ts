@@ -50,8 +50,8 @@ const MASTER_ROW = {
 function setupSupabaseMock(response: { data: unknown; error: unknown }) {
   mockSingle.mockResolvedValue(response);
 
-  // Builder pattern: from() -> select() -> eq() -> eq() -> single()
-  const eqSecond = vi.fn().mockReturnValue({ single: mockSingle });
+  // Builder pattern: from() -> select() -> eq() -> eq() -> maybeSingle()
+  const eqSecond = vi.fn().mockReturnValue({ maybeSingle: mockSingle });
   const eqFirst = vi.fn().mockReturnValue({ eq: eqSecond });
   mockSelect.mockReturnValue({ eq: eqFirst });
   mockFrom.mockReturnValue({ select: mockSelect });
