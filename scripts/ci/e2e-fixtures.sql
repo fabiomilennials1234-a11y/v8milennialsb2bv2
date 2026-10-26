@@ -29,4 +29,11 @@ WHERE p.organization_id = '00000000-0000-0000-0000-000000000001'
 INSERT INTO public.follow_ups (organization_id, lead_id, assigned_to, title, due_date)
 VALUES ('00000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000001001',
   '00000000-0000-0000-0000-000000000120', 'Lead Alpha · E2E follow-up', now() + interval '10 minutes');
+-- These scenarios exercise existing CRM users, not the first-run feedback
+-- campaign. Persist their prior dismissal so its timed modal cannot race a
+-- lead/meeting action. Prompt behavior remains covered by dedicated tests.
+INSERT INTO public.user_prompt_impressions (user_id, prompt_key, outcome)
+SELECT id, 'feature_suggestions_2026_10', 'dismissed' FROM auth.users
+WHERE email IN ('admin@test.com', 'sdr@test.com', 'member1@test.com', 'member2@test.com')
+ON CONFLICT (user_id, prompt_key) DO UPDATE SET outcome = 'dismissed';
 COMMIT;

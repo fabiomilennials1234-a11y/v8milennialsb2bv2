@@ -331,7 +331,9 @@ interface NoEditorProps {
  * faz "agrupar" ser uma operação local em vez de uma reescrita da expressão.
  */
 function NoEditor({ node, nivel, onChange, onRemover }: NoEditorProps) {
-  const podeAgrupar = nivel < PROFUNDIDADE_MAXIMA;
+  // A leaf at level 3 may become the third operator; its children at
+  // level 4 cannot expand. This matches profundidade(), where leaves are 0.
+  const podeAgrupar = nivel <= PROFUNDIDADE_MAXIMA;
 
   if (node.type === "op") {
     return (

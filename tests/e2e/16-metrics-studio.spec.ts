@@ -8,7 +8,7 @@
  * **1** em "Leads na etapa". Em produção a mesma medida servia aos dois nomes —
  * 41.025 entradas para 36.073 leads, 12% de erro que ninguém via.
  *
- * ⚠ A asserção é sobre a DIFERENÇA (`negócios = leads + 1`), não sobre os
+ * ⚠ A asserção é sobre a DIFERENÇA (`negócios = leads + 3`), não sobre os
  * totais. O seed já traz um card de `pipe_whatsapp` na mesma org, e o total
  * inclui ele; a RELAÇÃO é o que a fatia mudou, e ela sobrevive a quem
  * acrescentar lead ao seed depois. Se as duas medidas voltarem a devolver o
@@ -52,27 +52,22 @@ async function painelLimpoEmEdicao(page: Page) {
     await editar.click();
   }
 
-  const aba = page.getByRole('tab', { name: 'E2E Métricas', exact: true });
-  if (await aba.count()) {
-    await aba.click();
-  } else {
-    await page.getByRole('button', { name: 'Nova Aba', exact: true }).click();
-    await page.getByRole('dialog').getByRole('button', { name: 'Aba em branco', exact: true }).click();
-    await page.getByRole('button', { name: 'Opções da aba Nova aba', exact: true }).click();
-    await page.getByRole('menuitem', { name: 'Renomear', exact: true }).click();
-    await page.getByLabel('Nome da aba').fill('E2E Métricas');
-    await page.getByRole('button', { name: 'Salvar nome', exact: true }).click();
-    await expect(aba).toBeVisible();
-  }
-  const limpar = page.getByRole('button', { name: 'Limpar aba', exact: true });
-  if (await limpar.isEnabled().catch(() => false)) {
-    await limpar.click();
-    await page.getByRole('alertdialog').getByRole('button', { name: 'Limpar aba', exact: true }).click();
-  }
+  // Each test/retry owns a panel: a failed attempt must not leave windows
+  // that change the next attempt's strict locators or metric values.
+  const nomeAba = `E2E ${test.info().testId.slice(-12)}-${test.info().retry}`;
+  await page.getByRole('button', { name: 'Nova Aba', exact: true }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Aba em branco', exact: true }).click();
+  await page.getByRole('button', { name: 'Opções da aba Nova aba', exact: true }).click();
+  await page.getByRole('menuitem', { name: 'Renomear', exact: true }).click();
+  await page.getByLabel('Nome da aba').fill(nomeAba);
+  await page.getByRole('button', { name: 'Salvar nome', exact: true }).click();
+  await expect(page.getByRole('tab', { name: nomeAba, exact: true })).toBeVisible();
+  await expect(page.getByRole('group', { name: 'Negócios na etapa', exact: true })).toHaveCount(0);
+  return nomeAba;
 }
 
-// Serial de propósito: os testes compartilham UM painel persistido por
-// (org, aba). Em paralelo, o `Limpar` de um apagaria a janela do outro.
+// Serial: o catálogo personalizado pertence à mesma organização. Cada teste
+// e tentativa usa uma aba própria, sem reaproveitar janelas de tentativas anteriores.
 test.describe.configure({ mode: 'serial' });
 
 test.describe('Estúdio de Métricas', () => {
@@ -138,7 +133,7 @@ test.describe('Estúdio de Métricas', () => {
   });
 
   test('painel salvo reaparece depois de recarregar', async ({ page }) => {
-    await painelLimpoEmEdicao(page);
+    const nomeAba = await painelLimpoEmEdicao(page);
 
     await page.getByRole('button', { name: /^Negócios na etapa/ }).click();
     await expect(page.getByRole('group', { name: 'Negócios na etapa', exact: true })).toBeVisible({ timeout: 15_000 });
@@ -148,7 +143,7 @@ test.describe('Estúdio de Métricas', () => {
     await page.waitForTimeout(2_000);
     await page.reload();
     await page.waitForLoadState('networkidle');
-    await page.getByRole('tab', { name: 'E2E Métricas', exact: true }).click();
+    await page.getByRole('tab', { name: nomeAba, exact: true }).click();
 
     await expect(page.getByRole('group', { name: 'Negócios na etapa', exact: true })).toBeVisible({ timeout: 20_000 });
   });
@@ -186,15 +181,20 @@ test.describe('Estúdio de Métricas', () => {
 
     const dialogo = page.getByRole('dialog');
     await expect(dialogo.getByText('Nova métrica')).toBeVisible({ timeout: 10_000 });
-    await expect(dialogo.getByText('2 de 3')).toBeVisible();
+    await expect(dialogo.getByText('1 de 3', { exact: true })).toBeVisible();
 
-    // The root operation starts at depth 2. Either leaf may become an
-    // operation at depth 3; neither resulting leaf may create depth 4.
-    for (const remaining of [1, 0]) {
+    // Depth counts operators (a leaf has depth zero). Expand every branch
+    // to three operators; no fourth operator may be offered on any leaf.
+    const steps = [
+      { depth: 2, remaining: 3 }, { depth: 3, remaining: 2 },
+      { depth: 3, remaining: 1 }, { depth: 3, remaining: 2 },
+      { depth: 3, remaining: 1 }, { depth: 3, remaining: 0 },
+    ];
+    for (const { depth, remaining } of steps) {
       await dialogo.getByRole('button', { name: 'Combinar com outra métrica' }).first().click();
-      await expect(dialogo.getByText('3 de 3', { exact: true })).toBeVisible();
+      await expect(dialogo.getByText(`${depth} de 3`, { exact: true })).toBeVisible();
       await expect(dialogo.getByRole('button', { name: 'Combinar com outra métrica' })).toHaveCount(remaining);
     }
-    await expect(dialogo.getByRole('group', { name: 'Operação', exact: true })).toHaveCount(3);
+    await expect(dialogo.getByRole('group', { name: 'Operação', exact: true })).toHaveCount(7);
   });
 });
