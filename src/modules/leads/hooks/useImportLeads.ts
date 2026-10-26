@@ -52,7 +52,6 @@ const HEADER_TO_FIELD: Record<string, string> = {
   faturamento: "faturamento",
   "faixa de faturamento": "faturamento",
   segmento: "segment",
-  seguimento: "segment", // grafia comum na planilha de prospecção
   ramo: "segment",
   setor: "segment",
   "segmento de atuação": "segment",
@@ -975,8 +974,8 @@ export function useImportLeads() {
             // SEGMENTO - also look for "Segmento de Atuação" and "Tipo de empresa"
             const segmentField = collectFieldValues(
               rowForParse,
-              ["Segmento de Atuação", "Segmento", "Seguimento", "Setor", "Ramo", "Área de atuação", "Nicho", "Tipo de empresa"],
-              [/segmento/, /seguimento/, /setor/, /ramo/, /nicho/, /area/, /área/, /tipo.*empresa/]
+              ["Segmento de Atuação", "Segmento", "Setor", "Ramo", "Área de atuação", "Nicho", "Tipo de empresa"],
+              [/segmento/, /setor/, /ramo/, /nicho/, /area/, /área/, /tipo.*empresa/]
             );
             segmentField.matchedKeys.forEach(k => usedKeys.add(k));
             const segment = chooseBestValue("segment", segmentField.values);
