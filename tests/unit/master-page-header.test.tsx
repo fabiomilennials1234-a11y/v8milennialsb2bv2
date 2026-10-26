@@ -98,7 +98,8 @@ describe("MasterPageHeader", () => {
     const faixa = screen.getByRole("note");
     expect(faixa.textContent).toMatch(/vale para todas as organizações/);
     expect(titulo.compareDocumentPosition(faixa) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    // Central de uma página só (Operação) não ganha segmentado.
-    expect(screen.queryByRole("navigation", { name: /Páginas de/ })).toBeNull();
+    const operacao = screen.getByRole("navigation", { name: "Páginas de Operação" });
+    expect(within(operacao).getByRole("link", { name: "Chamados" })).toBeInTheDocument();
+    expect(within(operacao).getByRole("link", { name: "Tarefas" })).toHaveAttribute("href", "/master/tarefas");
   });
 });

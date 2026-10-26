@@ -28,7 +28,10 @@ export interface NavGroup {
 export const MASTER_GROUPS: NavGroup[] = [
   {
     label: "Operação",
-    items: [{ label: "Chamados", path: "/master/operacao", permission: ["operacao", "support"] }],
+    items: [
+      { label: "Chamados", path: "/master/operacao", permission: ["operacao", "support"] },
+      { label: "Tarefas", path: "/master/tarefas", requiresFullMaster: true },
+    ],
   },
   {
     label: "Implementação",

@@ -1,5 +1,9 @@
 project_id = "jsjsmuncfkbsbzqzqhfq"
 
+# JWT validado por requireAuth; o handler também exige master ativo com permissions.all.
+[functions.master-task-description]
+verify_jwt = false
+
 # Auth: signup público DESABILITADO (invite-only). Usuários são provisionados via
 # edge function create-org-user (admin.createUser, que ignora este gate).
 # Auditoria de segurança 2026-06-01: fecha a escalada anon→authenticated

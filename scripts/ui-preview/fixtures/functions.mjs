@@ -24,6 +24,10 @@ function allPermissionKeys() {
 const PERMS = allPermissionKeys();
 
 export const functionHandlers = {
+  "master-task-description": body => ({
+    description: `Objetivo\nConcluir a tarefa: ${body.title}.\n\nO que fazer\n1. Conferir o contexto informado e identificar o fluxo atual.\n2. Realizar o ajuste solicitado preservando as restrições.\n3. Validar o resultado e registrar a entrega.\n\nConcluída quando\n• O resultado esperado está validado.\n• Não há regressão no fluxo atual.`,
+    complexity: "media",
+  }),
   "get-member-permissions": (_body, fx) => ({
     features: PERMS,
     isAdmin: true,
