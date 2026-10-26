@@ -70,6 +70,31 @@ export function extendMasterFleet(fx) {
     ...extra,
   });
   const meu = fx.db.master_users[0]?.id ?? null;
+  // Os três quadros internos usam IDs de master (não IDs de membros da organização).
+  const taskOwners = [
+    { master_user_id: meu, name: "Gabriel" },
+    { master_user_id: id("misc", 2), name: "Marcelo" },
+    { master_user_id: id("misc", 3), name: "Lucas" },
+  ];
+  taskOwners.slice(1).forEach((owner, i) => fx.db.master_users.push({
+    ...fx.db.master_users[0], id: owner.master_user_id, user_id: id("user", 80 + i), notes: owner.name,
+  }));
+  fx.db.master_tasks = taskOwners.flatMap((owner, i) => [
+    {
+      id: id("misc", 700 + i * 2), owner_master_user_id: owner.master_user_id,
+      due_date: ago(-2 * D).slice(0, 10), estimated_minutes: 150,
+      title: ["Revisar fluxo de onboarding", "Organizar próximos ajustes", "Preparar checklist de implantação"][i],
+      description: "Conferir os detalhes com a equipe e registrar os próximos passos.",
+      status: "a_fazer", created_by: fx.authUser.id, created_at: ago(2 * D), updated_at: ago(H), completed_at: null,
+    },
+    {
+      id: id("misc", 701 + i * 2), owner_master_user_id: owner.master_user_id,
+      due_date: ago(2 * D).slice(0, 10), estimated_minutes: 45,
+      title: ["Validar melhoria no cadastro de leads", "Atualizar guia de atendimento", "Revisar acessos da equipe"][i],
+      description: "Reunir os resultados da revisão e acompanhar a entrega.",
+      status: i === 2 ? "feito" : "fazendo", created_by: fx.authUser.id, created_at: ago(3 * D), updated_at: ago(2 * H), completed_at: i === 2 ? ago(2 * H) : null,
+    },
+  ]);
   fx.db.support_tickets = [
     t(1, orgId(14), "Webhook do WhatsApp parou de receber mensagens às 11h", "aberto", { impacto: "parado", severidade: "critica" }),
     t(2, orgId(11), "Card some do funil depois de mover para Vendido", "aberto", { severidade: "alta" }),
@@ -232,7 +257,7 @@ export function extendMasterFleet(fx) {
           checklist: checklist([1, 3, 5, 6][i]),
         },
       })),
-    master_list_staff: () => [{ master_user_id: meu, name: "Equipe Torque" }, { master_user_id: id("misc", 2), name: "Suporte Plantão" }],
+    master_list_staff: () => taskOwners,
     master_org_health_signals: () =>
       fx.db.organizations.map((o, i) => ({
         organization_id: o.id,

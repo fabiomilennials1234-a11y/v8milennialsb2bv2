@@ -99,6 +99,8 @@ jobs:
         run: node --test tests/integration/agenda-notifications.test.mjs
       - name: Card merge (permissions and dependent preservation)
         run: node --test tests/integration/card-merge-access.test.mjs
+      - name: Master tasks (deadlines, permissions, audit and concurrent edits)
+        run: node --test tests/integration/master-tasks.test.mjs
       - name: Build (prod)
         run: npm run build
         env:

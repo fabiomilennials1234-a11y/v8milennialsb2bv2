@@ -10771,6 +10771,56 @@ export type Database = {
           },
         ]
       }
+      master_tasks: {
+        Row: {
+          id: string
+          owner_master_user_id: string
+          title: string
+          due_date: string
+          estimated_minutes: number
+          description: string
+          status: string
+          created_by: string | null
+          created_at: string
+          updated_at: string
+          completed_at: string | null
+        }
+        Insert: {
+          id?: string
+          owner_master_user_id: string
+          title: string
+          due_date: string
+          estimated_minutes: number
+          description?: string
+          status?: string
+          created_by?: string | null
+          created_at?: string
+          updated_at?: string
+          completed_at?: string | null
+        }
+        Update: {
+          id?: string
+          owner_master_user_id?: string
+          title?: string
+          due_date?: string
+          estimated_minutes?: number
+          description?: string
+          status?: string
+          created_by?: string | null
+          created_at?: string
+          updated_at?: string
+          completed_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "master_tasks_owner_master_user_id_fkey"
+            columns: ["owner_master_user_id"]
+            isOneToOne: false
+            referencedRelation: "master_users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       master_users: {
         Row: {
           created_at: string | null

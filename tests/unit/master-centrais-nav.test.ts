@@ -36,6 +36,7 @@ describe("as 5 centrais", () => {
     ["/master/plans", "Organizações"],
     ["/master/features", "Organizações"],
     ["/master/operacao", "Operação"], // era Suporte
+    ["/master/tarefas", "Operação"],
     ["/master/onboarding", "Implementação"],
     ["/master/stage-roles", "Implementação"],
     ["/master/audit-logs", "Monitoramento"],
@@ -67,6 +68,12 @@ describe("PE-4 — permissão por central", () => {
 
   it("a chave antiga `support` continua abrindo os chamados", () => {
     expect(visiveis({ support: true }).map((g) => g.label)).toContain("Operação");
+  });
+
+  it("o quadro de tarefas internas exige master pleno", () => {
+    const tasks = itens.find(item => item.path === "/master/tarefas")!;
+    expect(canSeeNavItem(tasks, { all: true })).toBe(true);
+    expect(canSeeNavItem(tasks, { support: true, operacao: true })).toBe(false);
   });
 
   it("outbounder segue vendo só Organizações (Organizações, Panorama, Usuários)", () => {

@@ -120,6 +120,7 @@ const MasterOperations = lazy(() => lazyRetry(() => import("@/modules/identity/m
 // Área Dev — as 5 centrais (board "18 telas → 5 centrais"). As páginas antigas
 // continuam nas rotas de sempre, agora como abas das centrais.
 const OperacaoCentral = lazy(() => lazyRetry(() => import("@/modules/identity/master/pages/centrais/OperacaoCentral")));
+const MasterTasks = lazy(() => lazyRetry(() => import("@/modules/identity/master/pages/MasterTasks")));
 const ImplementacaoCentral = lazy(() => lazyRetry(() => import("@/modules/identity/master/pages/centrais/ImplementacaoCentral")));
 const MonitoramentoCentral = lazy(() => lazyRetry(() => import("@/modules/identity/master/pages/centrais/MonitoramentoCentral")));
 const TestesCentral = lazy(() => lazyRetry(() => import("@/modules/identity/master/pages/centrais/TestesCentral")));
@@ -907,6 +908,7 @@ function AppRoutes() {
       >
         <Route index element={<MasterIndexRedirect />} />
         <Route path="operacao" element={<OperacaoCentral />} />
+        <Route path="tarefas" element={<MasterTasks />} />
         <Route path="implementacao" element={<ImplementacaoCentral />} />
         <Route path="monitoramento" element={<MonitoramentoCentral />} />
         <Route path="testes" element={<TestesCentral />} />
