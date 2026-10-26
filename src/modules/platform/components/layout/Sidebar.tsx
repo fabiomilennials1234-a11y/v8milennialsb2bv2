@@ -153,7 +153,7 @@ export function Sidebar() {
         data-testid="sidebar"
         aria-label="Navegação principal"
         style={{ width: RAIL_WIDTH }}
-        className="relative z-30 m-3 mr-0 flex h-[calc(100vh-1.5rem)] shrink-0 flex-col items-center gap-1.5 overflow-y-auto overflow-x-hidden rounded-panel border border-sidebar-border bg-sidebar pb-3 pt-3.5 text-sidebar-foreground shadow-relevo-tinta scrollbar-hide"
+        className="relative z-30 m-3 mr-0 flex h-[calc(100dvh-1.5rem)] shrink-0 flex-col items-center gap-1.5 overflow-y-auto overflow-x-hidden rounded-panel border border-sidebar-border bg-sidebar pb-3 pt-3.5 text-sidebar-foreground shadow-relevo-tinta scrollbar-rail [@media(max-height:760px)]:gap-1 [@media(max-height:760px)]:pt-2.5"
       >
         <div className="grid h-11 w-11 shrink-0 place-items-center">
           <SidebarBrand collapsed />

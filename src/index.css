@@ -21,6 +21,42 @@
   .scrollbar-hide::-webkit-scrollbar {
     display: none;
   }
+  /* Rolagem que se anuncia: trilho fino, sempre visível, sem setas, para o
+     usuário saber que há mais conteúdo (scrollbar-hide esconde e deixa o corte
+     sem pista). A cor deriva de `currentColor`, então acompanha o tema de quem
+     usa: lateral escura, modal claro ou escuro. O polegar é recuado da borda
+     arredondada (borda transparente + background-clip) e acende no amarelo da
+     marca ao passar o mouse. */
+  /* Chrome 121+ ignora ::-webkit-scrollbar se scrollbar-width/color existirem;
+     por isso a versão padrão só vale onde o pseudo-elemento não existe (Firefox). */
+  @supports not selector(::-webkit-scrollbar) {
+    .scrollbar-rail {
+      scrollbar-width: thin;
+      scrollbar-color: color-mix(in srgb, currentColor 40%, transparent) transparent;
+    }
+  }
+  .scrollbar-rail::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  .scrollbar-rail::-webkit-scrollbar-button {
+    display: none;
+  }
+  .scrollbar-rail::-webkit-scrollbar-track {
+    background: transparent;
+    margin-block: 14px;
+  }
+  .scrollbar-rail::-webkit-scrollbar-thumb {
+    background: color-mix(in srgb, currentColor 40%, transparent);
+    background-clip: padding-box;
+    border: 3px solid transparent;
+    border-radius: 9999px;
+    transition: background-color 0.15s;
+  }
+  .scrollbar-rail::-webkit-scrollbar-thumb:hover {
+    background: hsl(var(--primary));
+    background-clip: padding-box;
+  }
 }
 
 @layer base {
