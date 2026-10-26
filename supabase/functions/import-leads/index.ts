@@ -29,6 +29,7 @@ import {
 } from "../_shared/pipeline-adapter.ts";
 import { unauthorizedResponse } from "../_shared/auth.ts";
 import { applyImportTags, resolveImportTagIds, type ImportTagsReport } from "./import-tags.ts";
+import { withNameFallback } from "./import-name.ts";
 
 /**
  * Explica, na linha do relatório de importação, por que a linha não entrou no funil.
@@ -1301,6 +1302,7 @@ Deno.serve(
     const report: ImportReport = { total: body.leads.length, created: 0, updated: 0, rejected: 0, incomplete: 0, errors: [] };
 
     for (let i = 0; i < body.leads.length; i++) {
+      body.leads[i] = withNameFallback(body.leads[i]);
       const validationError = validateLead(body.leads[i], i);
       if (validationError) {
         report.rejected++;
