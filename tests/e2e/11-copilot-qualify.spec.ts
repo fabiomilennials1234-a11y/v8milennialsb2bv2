@@ -428,7 +428,7 @@ test.describe('Copilot — Qualificação integrada com pipe_whatsapp', () => {
     await page.goto('/pipe-whatsapp');
     await page.waitForLoadState('networkidle');
 
-    expect(page.url()).toContain('/pipe-whatsapp');
+    await expect(page).toHaveURL(/\/funil\/whatsapp(?:[?#]|$)/);
 
     // Stage columns must be present
     const stageCols = page.locator('[data-stage]');

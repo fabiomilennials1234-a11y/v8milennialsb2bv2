@@ -5,7 +5,7 @@ export function pipelineContract(slug: string, label: string) {
   test.describe(`Funil ${label}`, () => {
     test.beforeEach(async ({ page }) => {
       await page.goto(`/pipe-${slug}`);
-      await expect(page).toHaveURL(/\/funil\/[0-9a-f-]+/);
+      await expect(page).toHaveURL(new RegExp(`/funil/${slug}(?:[?#]|$)`));
       await expect(page.getByRole('heading', { name: 'Funis', exact: true })).toBeVisible();
     });
     test('link antigo abre o funil correto', async ({ page }) => {

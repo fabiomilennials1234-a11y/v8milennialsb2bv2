@@ -98,3 +98,15 @@ Após a comparação ampla, painel Meta ganhou leitura das contas/métricas por 
 ## Varredura de segurança
 
 A varredura do histórico deste PR não encontrou ocorrências. O ensaio das regras passou com três exemplos positivos artificiais, exemplos públicos e conteúdo versionado. A ocorrência remota anterior veio de prosa comum no cabeçalho do runbook. A revisão permitiu somente sua localização histórica exata em .gitleaksignore; a redação atual foi alterada. As regras do detector não foram enfraquecidas.
+
+## Correção dos bloqueios autorizada em 25/10/2026
+
+O proprietário ampliou o escopo para corrigir a dívida que bloqueava CI. Nenhum baseline foi ampliado e nenhuma suíte foi movida para pendente para obter aprovação.
+
+- Unit: 50 contratos/mocks corrigidos; gate completo aprovado no GitHub no head be741d6ca.
+- RLS: gate aprovado, 112 arquivos e 2.444 asserções. As duas suítes de funcionalidades pendentes previamente existentes continuam classificadas como antes, sem alteração neste PR.
+- Integração: 584 testes aprovados; o único controle restante revelou defeito real em `voip_can_see_call`: permissão global de leitura de leads podia produzir `true` para lead de outra organização. Definição em produção inspecionada e mesmo defeito confirmado no predicado. Migration `20271215020000` exige vínculo com tenant antes dos dois caminhos de autorização, preserva master e caso órfão, fixa search_path vazio e nega anon. Ainda não aplicada em produção; ensaio PGlite e controle cross-tenant da integração cobrem a correção.
+- E2E: última rodada encerrou com 89 aprovados e 26 falhas. Rotas canônicas usam slug (`/funil/whatsapp`), não UUID; expectativas e campos de formulário foram corrigidos. Restam revisão de respostas legítimas de skip do Copilot, recursos opcionais ausentes no seed, overlay de introdução, call site de follow-up e contagem de negócios afetada pelos novos fixtures.
+- Carteira: seis cenários completos passaram localmente no projeto de preview separado, incluindo mobile, teclado, filtros e histórico.
+
+Não confundir gate verde, fixture simulada ou worker vazio com piloto Meta real. OAuth continua desligado até frontend compatível publicado e gates conclusivos.

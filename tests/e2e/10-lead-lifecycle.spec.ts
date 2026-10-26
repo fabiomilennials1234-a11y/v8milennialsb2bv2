@@ -24,17 +24,17 @@ async function createLeadViaLeadsPage(page: Page, name: string, phone: string) {
 
   await createBtn.click();
 
-  const nameInput = page.getByLabel(/nome|name/i).first();
+  const nameInput = page.getByRole('dialog').locator('input#name');
   if (!(await nameInput.isVisible({ timeout: 4_000 }).catch(() => false))) return false;
 
   await nameInput.fill(name);
 
-  const phoneInput = page.getByLabel(/telefone|phone/i).first();
+  const phoneInput = page.getByRole('dialog').locator('input#phone');
   if (await phoneInput.isVisible().catch(() => false)) {
     await phoneInput.fill(phone);
   }
 
-  const saveBtn = page.getByRole('button', { name: /salvar|criar|save|create/i });
+  const saveBtn = page.getByRole('dialog').getByRole('button', { name: 'Criar lead', exact: true });
   if (await saveBtn.isVisible({ timeout: 3_000 }).catch(() => false)) {
     await saveBtn.click();
     await page.waitForLoadState('networkidle');
@@ -139,7 +139,7 @@ test.describe('Lead Lifecycle — Ciclo completo B2B', () => {
       await page.waitForTimeout(300);
     }
 
-    await expect(page).toHaveURL(/\/funil\/[0-9a-f-]+/);
+    await expect(page).toHaveURL(/\/funil\/(?:whatsapp|confirmacao|propostas)(?:[?#]|$)/);
   });
 
   test('pipe_whatsapp → colunas têm data-stage e lead cards têm data-lead-id', async ({ page }) => {
@@ -165,7 +165,7 @@ test.describe('Lead Lifecycle — Ciclo completo B2B', () => {
       expect(leadId).not.toBe('');
     }
 
-    await expect(page).toHaveURL(/\/funil\/[0-9a-f-]+/);
+    await expect(page).toHaveURL(/\/funil\/(?:whatsapp|confirmacao|propostas)(?:[?#]|$)/);
   });
 
   test('navegação entre os 3 pipes sem erro de rota', async ({ page }) => {
@@ -175,7 +175,7 @@ test.describe('Lead Lifecycle — Ciclo completo B2B', () => {
     for (const route of routes) {
       await page.goto(route);
       await page.waitForLoadState('networkidle');
-      await expect(page).toHaveURL(/\/funil\/[0-9a-f-]+/);
+      await expect(page).toHaveURL(/\/funil\/(?:whatsapp|confirmacao|propostas)(?:[?#]|$)/);
 
       // No full-page error (like "404 Not Found" or unhandled exception banner)
       const errorText = page.getByText(/404|page not found|não encontrado|erro interno/i);
