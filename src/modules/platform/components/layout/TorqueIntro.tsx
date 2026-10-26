@@ -54,7 +54,10 @@ export function TorqueIntro() {
   const [phase, setPhase] = useState<Phase>("enter");
 
   useEffect(() => {
-    if (!shouldPlay) return;
+    // The rendered visibility owns this mount's timer. The module flag may
+    // already have changed during a concurrent/repeated render; consulting it
+    // again can leave a visible overlay without a dismissal timer.
+    if (!show) return;
     introHasPlayed = true;
 
     const t1 = window.setTimeout(() => setPhase("collapse"), 1700);

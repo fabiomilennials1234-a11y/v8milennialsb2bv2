@@ -110,3 +110,7 @@ O proprietário ampliou o escopo para corrigir a dívida que bloqueava CI. Nenhu
 - Carteira: seis cenários completos passaram localmente no projeto de preview separado, incluindo mobile, teclado, filtros e histórico.
 
 Não confundir gate verde, fixture simulada ou worker vazio com piloto Meta real. OAuth continua desligado até frontend compatível publicado e gates conclusivos.
+
+Network traces identified the remaining console errors precisely: `master_users` returned 406 for an expected absent optional row, now queried with `maybeSingle`; `realtime_subscription_plan` returned 404/42883 because optional `private.strict_lead_member_orgs()` is absent in a clean replay. Migration `20271215030000` disables broadcast when this guard is missing, preserving Postgres Changes fallback and never bypassing owner isolation. PGlite verifies missing guard, normal membership, strict owner, invalid topic and cross-tenant denial. Production has this optional guard installed; no production rollout was changed during this heartbeat.
+
+The intro overlay was still present and opaque in a failed trace after the click deadline. Dismissal scheduling now follows the visibility captured for the mounted component, rather than rereading the mutable module-level played flag. CI browser verification remains required.
