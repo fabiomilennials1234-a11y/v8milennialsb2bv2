@@ -139,6 +139,11 @@ describe("Cauta import — phone/email reach dedicated fields", () => {
     expect(leads[1]).toMatchObject({ phone: "16997780380", email: "abertura.analise@gmail.com" });
     expect(leads[2]).toMatchObject({ phone: "11943916340", email: "nf@alop.com.br" });
 
+    // O fixo da célula com dois números segue como telefone extra; célula de um número não leva extra.
+    expect(leads[1].extra_phones).toEqual(["1632341290"]);
+    expect(leads[0].extra_phones).toBeUndefined();
+    expect(leads[2].extra_phones).toBeUndefined();
+
     // phone/email never leak into the observação (notes)
     for (const l of leads) {
       expect(l.notes ?? "").not.toContain("@");

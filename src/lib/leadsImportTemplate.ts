@@ -63,7 +63,7 @@ const INSTRUCOES_ROWS: (string | number)[][] = [
   ["Nome", "Sim", "Nome completo da pessoa ou do contato.", "Maria Silva"],
   ["Empresa", "Não", "Nome da empresa ou razão social.", "Empresa Exemplo Ltda"],
   ["Email", "Recomendado*", "E-mail de contato. *Precisa ter Email ou Telefone.", "maria@exemplo.com"],
-  ["Telefone", "Recomendado*", "Telefone ou WhatsApp (apenas números ou com DDD).", "11999998888"],
+  ["Telefone", "Recomendado*", "Telefone ou WhatsApp, com DDD. Mais de um número no mesmo lead: separe por vírgula na mesma célula; o primeiro celular vira o principal e os demais ficam como telefones do lead.", "11999998888"],
   ["Faturamento", "Não", "Faixa de faturamento da empresa.", "R$100 mil a R$250 mil"],
   ["Segmento", "Não", "Segmento ou setor de atuação.", "Varejo"],
   ["Notas", "Não", "Observações ou comentários sobre o lead.", "Lead do evento X"],

@@ -30,6 +30,7 @@ import {
 import { unauthorizedResponse } from "../_shared/auth.ts";
 import { applyImportTags, resolveImportTagIds, type ImportTagsReport } from "./import-tags.ts";
 import { withNameFallback } from "./import-name.ts";
+import { extraPhonesOf, parsePhoneCell, saveExtraPhones } from "./import-phones.ts";
 
 /**
  * Explica, na linha do relatório de importação, por que a linha não entrou no funil.
@@ -58,6 +59,8 @@ interface ParsedLead {
   name: string;
   company?: string;
   phone?: string;
+  /** Demais números da célula de telefone (o navegador já separa por vírgula etc.). Viram `lead_phones`. */
+  extra_phones?: string[];
   email?: string;
   faturamento?: string;
   segment?: string;
@@ -140,6 +143,8 @@ interface ImportReport {
   errors: { row: number; reason: string }[];
   distribution?: Record<string, number>;
   tags?: ImportTagsReport;
+  /** Telefones extras da planilha gravados em `lead_phones`. Presente só quando alguma linha trouxe mais de um número. */
+  extraPhones?: { added: number; failed: number };
 }
 
 // ─── Helpers ─────────────────────────────────────────────
@@ -209,26 +214,7 @@ async function applyCustomFields(
  * de 20+ dígitos e o lead é rejeitado por validatePhone. "" quando não há candidato.
  */
 function bestPhoneDigits(phone: string): string {
-  // Notação científica do Excel — ponto ("5.51E+12") e vírgula pt-BR ("7,1994E+10")
-  let work = (phone || "").trim();
-  const dotted = work.replace(",", ".");
-  if (/^[+-]?\d+(?:\.\d+)?[eE][+-]?\d+$/.test(dotted)) {
-    const num = Number(dotted);
-    if (!isNaN(num) && num > 0) work = Math.round(num).toString();
-  }
-
-  const chunks = work.split(/[/;,|\n]|\s+ou\s+|\s+e\s+/i);
-  const candidates: string[] = [];
-  for (const chunk of chunks) {
-    let digits = chunk.replace(/\D/g, "");
-    if (digits.startsWith("55") && (digits.length === 12 || digits.length === 13)) {
-      digits = digits.slice(2);
-    }
-    if (digits.length === 10 || digits.length === 11) candidates.push(digits);
-  }
-  if (candidates.length === 0) return "";
-  candidates.sort((a, b) => b.length - a.length); // celular (11) antes de fixo (10)
-  return candidates[0];
+  return parsePhoneCell(phone).primary ?? "";
 }
 
 function formatPhone(phone: string): string {
@@ -408,6 +394,23 @@ function mergeNotes(existingNotes?: string | null, rawNotes?: string, kommoBlock
     out = out ? `${out}\n\n${kommoBlock.trim()}` : kommoBlock.trim();
   }
   return out.trim() || undefined;
+}
+
+/** Grava os telefones extras da linha e soma no relatório. */
+async function importExtraPhones(
+  supabase: ReturnType<typeof createClient>,
+  report: ImportReport,
+  organizationId: string,
+  leadId: string,
+  lead: ParsedLead,
+): Promise<void> {
+  const extras = extraPhonesOf(lead);
+  if (extras.length === 0) return;
+  const { added, failed } = await saveExtraPhones(supabase, organizationId, leadId, extras);
+  report.extraPhones = {
+    added: (report.extraPhones?.added ?? 0) + added,
+    failed: (report.extraPhones?.failed ?? 0) + failed,
+  };
 }
 
 // ─── Validation ──────────────────────────────────────────
@@ -598,6 +601,7 @@ async function importToCampaign(
           }
 
           await applyCustomFields(supabase, existingLead.id, lead.customFields, customFieldMap);
+          await importExtraPhones(supabase, report, organizationId, existingLead.id, lead);
           importedLeadIds.add(existingLead.id);
           if (formattedPhone) processedPhones.add(formattedPhone);
           continue;
@@ -662,6 +666,7 @@ async function importToCampaign(
 
         await supabase.from("lead_tags").insert({ lead_id: newLead.id, tag_id: tagId });
         await applyCustomFields(supabase, newLead.id, lead.customFields, customFieldMap);
+        await importExtraPhones(supabase, report, organizationId, newLead.id, lead);
         importedLeadIds.add(newLead.id);
         if (formattedPhone) processedPhones.add(formattedPhone);
 
@@ -1040,6 +1045,7 @@ async function importToPipeline(
 
         // Campos personalizados → lead_custom_field_values (upsert por lead+field)
         await applyCustomFields(supabase, leadId, lead.customFields, customFieldMap);
+        await importExtraPhones(supabase, report, organizationId, leadId, lead);
         importedLeadIds.add(leadId);
 
         // Etapa da linha (coluna Etapa da planilha) → stage_key

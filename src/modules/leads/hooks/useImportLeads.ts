@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import Papa from "papaparse";
 import { useOrganization } from "@/modules/identity";
 import { withNameFallback } from "../lib/import-name";
+import { parsePhoneCell } from "../lib/import-phones";
 /** Campos conhecidos do sistema (leads + UTM + funil). Custom fields são passados separadamente. */
 export const KNOWN_LEAD_FIELDS = [
   "name",
@@ -292,12 +293,16 @@ export interface EdgeFunctionReport {
   distribution?: Record<string, number>;
   /** Presente quando o import levou etiquetas. */
   tags?: { leads: number; failed: number };
+  /** Presente quando alguma linha trouxe mais de um número na célula de telefone. */
+  extraPhones?: { added: number; failed: number };
 }
 
 interface ParsedLead {
   name: string;
   company?: string;
   phone?: string;
+  /** Demais números da célula de telefone; a edge grava como telefones secundários do lead. */
+  extra_phones?: string[];
   email?: string;
   faturamento?: string;
   segment?: string;
@@ -479,7 +484,7 @@ export function resolveProductToId(
 }
 
 /**
- * Extrai UM telefone limpo de uma célula que pode conter vários números, prefixos
+ * Extrai o telefone PRINCIPAL de uma célula que pode conter vários números, prefixos
  * ou texto solto. Export Cauta/ERP traz coisas como:
  *   "(16)3234-1290 /(16)99778-0380 Bruno"  → dois números + nome
  *   "(15)3282-2223 (marcio)"               → número + nome
@@ -494,34 +499,12 @@ export function resolveProductToId(
  * só os com 10-11 dígitos locais (DDD + número; remove código país 55 quando presente)
  * e devolve o melhor (celular 11 dígitos > fixo 10). Sem candidato válido → undefined
  * (lead importa como incompleto em vez de ser rejeitado).
+ *
+ * Os demais números da célula não se perdem: `parsePhoneCell` os devolve como
+ * extras e o import os grava como telefones secundários do lead (`lead_phones`).
  */
 export function pickBestPhone(raw: string | undefined | null): string | undefined {
-  if (!raw) return undefined;
-
-  // Notação científica do Excel (ponto ou vírgula pt-BR): "5.51E+12" / "7,1994E+10"
-  let work = String(raw).trim();
-  const dotted = work.replace(",", ".");
-  if (/^[+-]?\d+(?:\.\d+)?[eE][+-]?\d+$/.test(dotted)) {
-    const num = Number(dotted);
-    if (!isNaN(num) && num > 0) work = Math.round(num).toString();
-  }
-
-  const chunks = work.split(/[/;,|\n]|\s+ou\s+|\s+e\s+/i);
-  const candidates: string[] = [];
-  for (const chunk of chunks) {
-    let digits = chunk.replace(/\D/g, "");
-    if (!digits) continue;
-    // Remove código de país BR quando vier junto (55 + 10/11 dígitos locais)
-    if (digits.startsWith("55") && (digits.length === 12 || digits.length === 13)) {
-      digits = digits.slice(2);
-    }
-    if (digits.length === 10 || digits.length === 11) candidates.push(digits);
-  }
-  if (candidates.length === 0) return undefined;
-
-  // Prefere celular (11 dígitos) a fixo (10); empate mantém ordem de aparição.
-  candidates.sort((a, b) => b.length - a.length);
-  return candidates[0];
+  return parsePhoneCell(raw).primary;
 }
 
 /**
@@ -921,10 +904,12 @@ export function useImportLeads() {
             phoneField.matchedKeys.forEach(k => usedKeys.add(k));
             // Extrai UM telefone válido por célula (multi-número, sci-notation, texto solto).
             // Ver pickBestPhone: sem isso a célula crua virava 20+ dígitos e a edge rejeitava o lead.
-            const phoneCandidates = phoneField.values
-              .map((v) => pickBestPhone(v))
-              .filter((v): v is string => !!v);
-            const phone = chooseBestValue("phone", phoneCandidates);
+            const phoneCells = phoneField.values
+              .map((v) => parsePhoneCell(v))
+              .filter((c): c is typeof c & { primary: string } => !!c.primary);
+            const phone = chooseBestValue("phone", phoneCells.map((c) => c.primary));
+            // Vírgula (ou / ; |) entre números: o principal vai em `phone`, o resto vira telefone extra do lead.
+            const extraPhones = phoneCells.find((c) => c.primary === phone)?.extras ?? [];
 
             // EMAIL
             const emailField = collectFieldValues(
@@ -1153,6 +1138,7 @@ export function useImportLeads() {
               name,
               company: company || undefined,
               phone: phone || undefined,
+              extra_phones: extraPhones.length > 0 ? extraPhones : undefined,
               email: email || undefined,
               faturamento: faturamento || undefined,
               segment: segment || undefined,
