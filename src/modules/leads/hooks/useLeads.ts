@@ -11,6 +11,7 @@ import { applyLeadListFilters } from "../lib/lead-list-filters";
 import { applyLeadListSort, DEFAULT_LEAD_SORT, type LeadListSort } from "../lib/lead-list-sort";
 import type { LeadRelacao } from "../lib/lead-relacao-situacao";
 import { leadsKeys } from "../lib/leads-query-keys";
+import { prepareLeadForCreate } from "../lib/lead-create-payload";
 import { EMPTY_COUNT, runCappedCount, type CappedCount } from "../lib/capped-count";
 import { useLeadsRealtime } from "./useLeadsRealtime";
 import { buscarLeadIdsPorTelefoneSecundario } from "./useLeadPhones";
@@ -272,6 +273,7 @@ export function useCreateLead() {
   const queryClient = useQueryClient();
   const { organizationId } = useOrganization();
   const createPermission = useCanDo("create_lead");
+  const identity = useIdentity();
 
   return useMutation({
     mutationFn: async (lead: LeadInsert) => {
@@ -286,19 +288,19 @@ export function useCreateLead() {
       
       // SECURITY: Always override organization_id with current user's org
       // Never trust the organization_id from the input
-      const securedLead = {
-        ...lead,
-        organization_id: organizationId, // Force organization_id
-      };
-      
-      const { data, error } = await supabase
-        .from("leads")
-        .insert(securedLead)
-        .select()
-        .single();
-      
+      // Dono e id nascem aqui; sem RETURNING — ver `lead-create-payload`.
+      const securedLead = prepareLeadForCreate(
+        {
+          ...lead,
+          organization_id: organizationId, // Force organization_id
+        },
+        { teamMemberId: identity.teamMemberId, isAdmin: identity.isAdmin },
+      );
+
+      const { error } = await supabase.from("leads").insert(securedLead);
+
       if (error) throw error;
-      return data;
+      return securedLead;
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["leads"] });
