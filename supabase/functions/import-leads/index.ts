@@ -31,6 +31,7 @@ import { unauthorizedResponse } from "../_shared/auth.ts";
 import { applyImportTags, resolveImportTagIds, type ImportTagsReport } from "./import-tags.ts";
 import { withNameFallback } from "./import-name.ts";
 import { extraPhonesOf, parsePhoneCell, saveExtraPhones } from "./import-phones.ts";
+import { motivoFalhaDeInsercao, reportRow } from "./import-report.ts";
 
 /**
  * Explica, na linha do relatório de importação, por que a linha não entrou no funil.
@@ -56,6 +57,8 @@ function motivoFalhaDeFunil(status: string, nomeNaTela: string): string {
 // ─── Types ───────────────────────────────────────────────
 
 interface ParsedLead {
+  /** Linha da planilha de onde o lead saiu (cabeçalho = 1). Os erros do relatório apontam esta linha. */
+  source_row?: number;
   name: string;
   company?: string;
   phone?: string;
@@ -416,9 +419,10 @@ async function importExtraPhones(
 // ─── Validation ──────────────────────────────────────────
 
 function validateLead(lead: ParsedLead, index: number): string | null {
-  if (!lead.name?.trim()) return `Linha ${index + 1}: nome é obrigatório`;
+  const row = reportRow(lead, index);
+  if (!lead.name?.trim()) return `Linha ${row}: nome é obrigatório`;
   if (lead.phone?.trim() && !validatePhone(lead.phone)) {
-    return `Linha ${index + 1}: telefone inválido (${lead.phone}) — esperado 10-13 dígitos`;
+    return `Linha ${row}: telefone inválido (${lead.phone}) — esperado 10-13 dígitos`;
   }
   return null;
 }
@@ -501,7 +505,8 @@ async function importToCampaign(
     memberIds.forEach((id) => { distribution[id] = 0; });
   }
 
-  const processedPhones = new Set<string>();
+  /** Telefone já processado nesta execução → linha da planilha que o trouxe primeiro. */
+  const processedPhones = new Map<string, number>();
   const createdLeadIds: string[] = [];
   const BATCH_SIZE = 50;
 
@@ -510,12 +515,13 @@ async function importToCampaign(
 
     for (const lead of batch) {
       const rowIndex = leads.indexOf(lead);
+      const rowNumber = reportRow(lead, rowIndex);
       const formattedPhone = lead.phone ? formatPhone(lead.phone) : undefined;
 
       // Skip dups within this import
       if (formattedPhone && processedPhones.has(formattedPhone)) {
         report.rejected++;
-        report.errors.push({ row: rowIndex + 1, reason: "Telefone duplicado neste arquivo" });
+        report.errors.push({ row: rowNumber, reason: `Telefone duplicado neste arquivo (mesmo número da linha ${processedPhones.get(formattedPhone)})` });
         continue;
       }
 
@@ -556,7 +562,7 @@ async function importToCampaign(
             report.updated++;
           } else {
             report.rejected++;
-            report.errors.push({ row: rowIndex + 1, reason: "Lead já existe sem dados novos para atualizar" });
+            report.errors.push({ row: rowNumber, reason: "Lead já existe sem dados novos para atualizar" });
           }
 
           // Add to campaign if not already there
@@ -603,7 +609,7 @@ async function importToCampaign(
           await applyCustomFields(supabase, existingLead.id, lead.customFields, customFieldMap);
           await importExtraPhones(supabase, report, organizationId, existingLead.id, lead);
           importedLeadIds.add(existingLead.id);
-          if (formattedPhone) processedPhones.add(formattedPhone);
+          if (formattedPhone) processedPhones.set(formattedPhone, rowNumber);
           continue;
         }
 
@@ -632,7 +638,7 @@ async function importToCampaign(
 
         if (leadError) {
           report.rejected++;
-          report.errors.push({ row: rowIndex + 1, reason: `Erro ao inserir: ${leadError.message}` });
+          report.errors.push({ row: rowNumber, reason: await motivoFalhaDeInsercao(supabase, organizationId, leadError, formattedPhone) });
           continue;
         }
 
@@ -668,13 +674,13 @@ async function importToCampaign(
         await applyCustomFields(supabase, newLead.id, lead.customFields, customFieldMap);
         await importExtraPhones(supabase, report, organizationId, newLead.id, lead);
         importedLeadIds.add(newLead.id);
-        if (formattedPhone) processedPhones.add(formattedPhone);
+        if (formattedPhone) processedPhones.set(formattedPhone, rowNumber);
 
         report.created++;
         createdLeadIds.push(newLead.id);
       } catch (err) {
         report.rejected++;
-        report.errors.push({ row: rowIndex + 1, reason: `Erro inesperado: ${(err as Error).message}` });
+        report.errors.push({ row: rowNumber, reason: `Erro inesperado: ${(err as Error).message}` });
       }
     }
   }
@@ -962,7 +968,8 @@ async function importToPipeline(
     existingByEmail?.forEach((l: any) => { if (l.email) existingEmailMap.set(l.email.toLowerCase(), l); });
   }
 
-  const processedPhones = new Set<string>();
+  /** Telefone já processado nesta execução → linha da planilha que o trouxe primeiro. */
+  const processedPhones = new Map<string, number>();
   const createdLeadIds: string[] = [];
   const BATCH_SIZE = 50;
   const membersList = members ?? [];
@@ -972,11 +979,12 @@ async function importToPipeline(
 
     for (const lead of batch) {
       const rowIndex = leads.indexOf(lead);
+      const rowNumber = reportRow(lead, rowIndex);
       const formattedPhone = lead.phone ? formatPhone(lead.phone) : undefined;
 
       if (formattedPhone && processedPhones.has(formattedPhone)) {
         report.rejected++;
-        report.errors.push({ row: rowIndex + 1, reason: "Telefone duplicado neste arquivo" });
+        report.errors.push({ row: rowNumber, reason: `Telefone duplicado neste arquivo (mesmo número da linha ${processedPhones.get(formattedPhone)})` });
         continue;
       }
 
@@ -1007,7 +1015,7 @@ async function importToPipeline(
             report.updated++;
           } else {
             report.rejected++;
-            report.errors.push({ row: rowIndex + 1, reason: "Lead já existe sem dados novos para atualizar" });
+            report.errors.push({ row: rowNumber, reason: "Lead já existe sem dados novos para atualizar" });
           }
         } else {
           const leadInsert: Record<string, unknown> = {
@@ -1034,7 +1042,7 @@ async function importToPipeline(
 
           if (leadError) {
             report.rejected++;
-            report.errors.push({ row: rowIndex + 1, reason: `Erro ao inserir lead: ${truncateErr(leadError.message)}` });
+            report.errors.push({ row: rowNumber, reason: await motivoFalhaDeInsercao(supabase, organizationId, leadError, formattedPhone) });
             continue;
           }
           leadId = newLead.id;
@@ -1128,7 +1136,7 @@ async function importToPipeline(
         // SEM FUNIL: acabou aqui. A pessoa está cadastrada, com vendedor e
         // campos personalizados; nenhum negócio foi aberto em nome dela.
         if (semFunil) {
-          if (formattedPhone) processedPhones.add(formattedPhone);
+          if (formattedPhone) processedPhones.set(formattedPhone, rowNumber);
           continue;
         }
 
@@ -1145,7 +1153,7 @@ async function importToPipeline(
 
         if (entryResult.status !== "created" && entryResult.status !== "updated") {
           report.rejected++;
-          report.errors.push({ row: rowIndex + 1, reason: motivoFalhaDeFunil(entryResult.status, funnelLabel) });
+          report.errors.push({ row: rowNumber, reason: motivoFalhaDeFunil(entryResult.status, funnelLabel) });
           // Lead novo que não entrou no funil não conta como importado — o
           // caminho custom já fazia esta contabilidade; agora vale pra todos.
           if (leadWasCreated) report.created = Math.max(0, report.created - 1);
@@ -1167,10 +1175,10 @@ async function importToPipeline(
           await supabase.from("pipe_proposta_items").insert(itemsToInsert);
         }
 
-        if (formattedPhone) processedPhones.add(formattedPhone);
+        if (formattedPhone) processedPhones.set(formattedPhone, rowNumber);
       } catch (err) {
         report.rejected++;
-        report.errors.push({ row: rowIndex + 1, reason: `Erro inesperado: ${(err as Error).message}` });
+        report.errors.push({ row: rowNumber, reason: `Erro inesperado: ${(err as Error).message}` });
       }
     }
   }
@@ -1312,7 +1320,7 @@ Deno.serve(
       const validationError = validateLead(body.leads[i], i);
       if (validationError) {
         report.rejected++;
-        report.errors.push({ row: i + 1, reason: validationError });
+        report.errors.push({ row: reportRow(body.leads[i], i), reason: validationError });
       } else {
         if (isIncomplete(body.leads[i])) report.incomplete++;
         validLeads.push(body.leads[i]);

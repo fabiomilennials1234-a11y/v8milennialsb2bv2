@@ -5,6 +5,7 @@ import Papa from "papaparse";
 import { useOrganization } from "@/modules/identity";
 import { withNameFallback } from "../lib/import-name";
 import { parsePhoneCell } from "../lib/import-phones";
+import { isBlankRow, markSourceRow, sourceRowOf } from "../lib/import-source-row";
 /** Campos conhecidos do sistema (leads + UTM + funil). Custom fields são passados separadamente. */
 export const KNOWN_LEAD_FIELDS = [
   "name",
@@ -150,18 +151,23 @@ export async function parseFileToRows(file: File, sheetName?: string): Promise<R
     return new Promise((resolve, reject) => {
       Papa.parse(file, {
         header: true,
-        skipEmptyLines: true,
+        // Linhas vazias são descartadas abaixo (não aqui): o índice no arquivo é o que
+        // dá o número da linha no relatório.
+        skipEmptyLines: false,
         encoding: "UTF-8",
         complete: (r) => {
           const rows = (r.data || []) as Record<string, string>[];
-          resolve(rows.map((row) => {
-            const out: Record<string, string> = {};
+          const out: Record<string, string>[] = [];
+          rows.forEach((row, i) => {
+            const clean: Record<string, string> = {};
             for (const k of Object.keys(row)) {
               const v = row[k];
-              out[k] = v != null ? String(v).trim() : "";
+              clean[k] = v != null ? String(v).trim() : "";
             }
-            return out;
-          }));
+            if (isBlankRow(clean)) return;
+            out.push(markSourceRow(clean, i + 2)); // cabeçalho = linha 1
+          });
+          resolve(out);
         },
         error: (e) => reject(e),
       });
@@ -193,7 +199,7 @@ export async function parseFileToRows(file: File, sheetName?: string): Promise<R
         const v = cell.value;
         rowObj[h] = v != null ? String(v).trim() : "";
       });
-      rows.push(rowObj);
+      rows.push(markSourceRow(rowObj, rowNumber));
     });
 
     return rows;
@@ -298,6 +304,8 @@ export interface EdgeFunctionReport {
 }
 
 interface ParsedLead {
+  /** Linha da planilha de onde o lead saiu (cabeçalho = 1). A edge usa nos erros do relatório. */
+  source_row?: number;
   name: string;
   company?: string;
   phone?: string;
@@ -1135,6 +1143,7 @@ export function useImportLeads() {
             });
 
             leads.push({
+              source_row: sourceRowOf(row),
               name,
               company: company || undefined,
               phone: phone || undefined,
