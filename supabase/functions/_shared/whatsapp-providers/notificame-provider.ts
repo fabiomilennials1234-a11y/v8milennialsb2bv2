@@ -81,6 +81,7 @@ import {
   type SendTextOptions,
   type WhatsAppProvider,
 } from "../whatsapp-client.ts";
+import { CHAVE_DE_ORIGEM, origemDoEnvio, type OrigemDoEnvio } from "../envio-recusado.ts";
 import {
   listChannels,
   NOTIFICAME_DEFAULT_BASE_URL,
@@ -976,6 +977,12 @@ export function buildOutboundChannelMessageRow(params: {
    * o histórico mentir sobre o que o cliente viu.
    */
   botoes?: string[];
+  /**
+   * A execução de workflow que mandou. A recusa da Meta chega por callback,
+   * sem nenhuma pista de quem enviou; é esta marca que deixa o webhook
+   * interromper a execução em vez de deixá-la esperar uma resposta que não vem.
+   */
+  origem?: OrigemDoEnvio | null;
 }): OutboundChannelMessageRow {
   // A CHAVE gravada é canônica (13 dígitos para celular BR), não o que foi
   // enviado à Meta. O destinatário enviado continua o que já entrega hoje; só a
@@ -1005,8 +1012,11 @@ export function buildOutboundChannelMessageRow(params: {
     lead_id: null,
     timestamp: params.timestampIso,
     raw_payload: params.rawPayload,
-    metadata: params.botoes?.length
-      ? { tipo: "template", botoes: params.botoes }
+    metadata: params.botoes?.length || params.origem
+      ? {
+        ...(params.botoes?.length ? { tipo: "template", botoes: params.botoes } : {}),
+        ...(params.origem ? { [CHAVE_DE_ORIGEM]: params.origem } : {}),
+      }
       : null,
   };
 }
@@ -1177,6 +1187,8 @@ export class NotificameProvider implements WhatsAppProvider {
     botoes?: string[];
     /** O id ESTÁVEL da mensagem citada, quando esta responde a outra. */
     citandoProviderMessageId?: string | null;
+    /** A execução de workflow que mandou — para a recusa da Meta achá-la depois. */
+    origem?: OrigemDoEnvio | null;
     /**
      * `true` para o que NÃO é mensagem da conversa — hoje só o balão de
      * digitando. Sem isto, cada indicador viraria uma linha vazia na thread, e a
@@ -1274,6 +1286,7 @@ export class NotificameProvider implements WhatsAppProvider {
       content: params.text,
       mediaUrl: params.mediaUrl,
       botoes: params.botoes,
+      origem: params.origem,
       rawPayload: { request: envelope, response: parsed.value },
     });
 
@@ -1301,6 +1314,7 @@ export class NotificameProvider implements WhatsAppProvider {
     mediaUrl: string | null;
     rawPayload: unknown;
     botoes?: string[];
+    origem?: OrigemDoEnvio | null;
   }): Promise<void> {
     const row = buildOutboundChannelMessageRow({
       organizationId: this.organizationId,
@@ -1313,6 +1327,7 @@ export class NotificameProvider implements WhatsAppProvider {
       content: params.content,
       mediaUrl: params.mediaUrl,
       botoes: params.botoes,
+      origem: params.origem,
       // O relógio mora AQUI, fora dos módulos puros.
       timestampIso: this.now().toISOString(),
       rawPayload: params.rawPayload,
@@ -1399,6 +1414,7 @@ export class NotificameProvider implements WhatsAppProvider {
       // a faixa de botões do lado dela, e sem isto a conversa mostra o texto e
       // esconde as opções que o cliente está vendo.
       botoes: opts.buttonLabels?.map((r) => r.trim()).filter(Boolean),
+      origem: origemDoEnvio(opts.trackSource, opts.trackId),
     });
   }
 

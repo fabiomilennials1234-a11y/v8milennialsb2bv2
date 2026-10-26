@@ -143,6 +143,12 @@ export type SendTemplateOptions = {
   previewText?: string;
   /** Rótulos dos botões do template, na ordem — só para exibir na conversa. */
   buttonLabels?: string[];
+  /**
+   * Quem mandou. Só o canal oficial usa: grava a origem em `metadata` para a
+   * recusa da Meta, que chega por callback, achar a execução que enviou.
+   */
+  trackSource?: string;
+  trackId?: string;
 };
 
 export type SendMenuOptions = {
