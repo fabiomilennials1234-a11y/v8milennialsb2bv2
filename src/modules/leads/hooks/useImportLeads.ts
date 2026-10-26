@@ -3,6 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import Papa from "papaparse";
 import { useOrganization } from "@/modules/identity";
+import { withNameFallback } from "../lib/import-name";
 /** Campos conhecidos do sistema (leads + UTM + funil). Custom fields são passados separadamente. */
 export const KNOWN_LEAD_FIELDS = [
   "name",
@@ -51,6 +52,7 @@ const HEADER_TO_FIELD: Record<string, string> = {
   faturamento: "faturamento",
   "faixa de faturamento": "faturamento",
   segmento: "segment",
+  ramo: "segment",
   setor: "segment",
   "segmento de atuação": "segment",
   origem: "origin",
@@ -906,6 +908,8 @@ export function useImportLeads() {
               name = chooseBestValue("name", nameField.values);
             }
 
+            // Lista só com empresa e telefone: a empresa vira o nome (ver import-name).
+            name = withNameFallback({ name, company }).name;
             if (!name) continue;
 
             // TELEFONE
