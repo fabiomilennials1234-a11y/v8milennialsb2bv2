@@ -1,15 +1,15 @@
-import { render, screen, within, cleanup, waitFor, act } from "@testing-library/react";
+import { render, screen, within, cleanup, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeAll, afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 import MasterTasks from "./MasterTasks";
 
-const mocks = vi.hoisted(() => ({ user: 0, full: true, error: false, generating: false, generate: vi.fn(), save: vi.fn(), move: vi.fn(), remove: vi.fn(), query: vi.fn(), notify: vi.fn() }));
+const mocks = vi.hoisted(() => ({ user: 0, full: true, error: false, save: vi.fn(), move: vi.fn(), remove: vi.fn(), query: vi.fn(), notify: vi.fn() }));
 const owners = ["Gabriel", "Marcelo", "Lucas"].map((name, index) => ({
   name, id: `00000000-0000-4000-8000-00000000000${index + 1}`, userId: `user-${index}`,
 }));
 const tasks = owners.map((owner, index) => ({
   id: `task-${index}`, owner_master_user_id: owner.id, title: `Trabalho de ${owner.name}`, description: "Contexto da tarefa",
-  context: "Preservar o fluxo atual", prompt_complexity: "media",
+  due_date: "2026-10-30", estimated_minutes: 150,
   status: index === 1 ? "fazendo" : "a_fazer", created_at: "2026-10-26T12:00:00Z", updated_at: "2026-10-26T12:00:00Z", completed_at: null,
 }));
 vi.mock("../hooks/useMasterAuth", () => ({ useMasterAuth: () => ({
@@ -25,13 +25,11 @@ vi.mock("../hooks/useMasterTasks", () => ({
     save: { mutate: mocks.save, isPending: false }, move: { mutate: mocks.move, isPending: false }, remove: { mutate: mocks.remove, isPending: false },
   }),
 }));
-vi.mock("../hooks/useMasterTaskDescription", () => ({ useMasterTaskDescription: () => ({ mutateAsync: mocks.generate, isPending: mocks.generating }) }));
 vi.mock("../components/MasterPageHeader", () => ({ MasterPageHeader: ({ title, actions }: { title: string; actions: React.ReactNode }) => <header><h1>{title}</h1>{actions}</header> }));
 vi.mock("@/shared/errors", () => ({ notifyError: (...args: unknown[]) => mocks.notify(...args) }));
 
 beforeEach(() => {
-  cleanup(); vi.resetAllMocks(); mocks.user = 0; mocks.full = true; mocks.error = false; mocks.generating = false;
-  mocks.generate.mockResolvedValue({ description: "Objetivo\nRevisar implantação\n\nO que fazer\n1. Conferir o fluxo.\n\nConcluída quando\n• Fluxo validado.", complexity: "baixa" });
+  cleanup(); vi.resetAllMocks(); mocks.user = 0; mocks.full = true; mocks.error = false;
 });
 beforeAll(() => {
   Object.defineProperty(HTMLElement.prototype, "scrollIntoView", { configurable: true, value: vi.fn() });
@@ -78,13 +76,15 @@ describe("quadro pessoal compartilhado dos masters", () => {
     const dialog = screen.getByRole("dialog");
     expect(within(dialog).getByRole("combobox", { name: "Responsável" })).toHaveTextContent("Marcelo");
     await userEvent.type(within(dialog).getByLabelText("Título"), "Revisar implantação");
+    await userEvent.type(within(dialog).getByLabelText("Data limite"), "2026-10-30");
+    await userEvent.type(within(dialog).getByLabelText("Horas"), "2");
+    await userEvent.type(within(dialog).getByLabelText("Minutos"), "30");
     await userEvent.click(within(dialog).getByRole("combobox", { name: "Responsável" }));
     await userEvent.click(screen.getByRole("option", { name: "Lucas" }));
     await userEvent.click(within(dialog).getByRole("button", { name: "Criar tarefa" }));
     await waitFor(() => expect(mocks.save).toHaveBeenCalledWith({ task: undefined, input: {
-      title: "Revisar implantação", context: "", prompt_complexity: "baixa", description: expect.stringContaining("Concluída quando"), status: "a_fazer", owner_master_user_id: owners[2].id,
+      title: "Revisar implantação", due_date: "2026-10-30", estimated_minutes: 150, description: "", status: "a_fazer", owner_master_user_id: owners[2].id,
     } }, expect.any(Object)));
-    expect(mocks.generate).toHaveBeenCalledWith({ title: "Revisar implantação", context: "" });
   });
 
   it("edita o status pela gaveta sem precisar arrastar e preserva conteúdo em falha", async () => {
@@ -115,10 +115,9 @@ describe("quadro pessoal compartilhado dos masters", () => {
     await userEvent.click(screen.getByText("Trabalho de Marcelo"));
     await userEvent.click(screen.getByRole("button", { name: "Pegar para mim" }));
     expect(mocks.save).toHaveBeenCalledWith({ task: tasks[1], input: expect.objectContaining({
-      owner_master_user_id: owners[0].id, status: "fazendo", description: tasks[1].description,
+      owner_master_user_id: owners[0].id, status: "fazendo", description: tasks[1].description, due_date: tasks[1].due_date, estimated_minutes: tasks[1].estimated_minutes,
     }) }, expect.any(Object));
     expect(screen.getByRole("combobox", { name: "Tarefas de" })).toHaveTextContent("Gabriel (você)");
-    expect(mocks.generate).not.toHaveBeenCalled();
   });
 
   it("encaminha uma tarefa para outro master e acompanha o quadro de destino", async () => {
@@ -128,79 +127,71 @@ describe("quadro pessoal compartilhado dos masters", () => {
     await userEvent.click(screen.getByRole("combobox", { name: "Responsável" }));
     await userEvent.click(screen.getByRole("option", { name: "Lucas" }));
     await userEvent.click(screen.getByRole("button", { name: "Encaminhar tarefa" }));
-    expect(mocks.save).toHaveBeenCalledWith({ task: tasks[0], input: expect.objectContaining({ owner_master_user_id: owners[2].id, status: "a_fazer" }) }, expect.any(Object));
+    expect(mocks.save).toHaveBeenCalledWith({ task: tasks[0], input: expect.objectContaining({ owner_master_user_id: owners[2].id, status: "a_fazer", due_date: tasks[0].due_date, estimated_minutes: tasks[0].estimated_minutes }) }, expect.any(Object));
     expect(screen.getByRole("combobox", { name: "Tarefas de" })).toHaveTextContent("Lucas");
   });
 
-  it("falha do agente preserva o formulário e permite criar sem descrição sem repetir a geração", async () => {
-    mocks.generate.mockRejectedValue(new Error("Provedor indisponível"));
+  it("exige data limite e tempo estimado positivo antes de criar", async () => {
     render(<MasterTasks />);
     await userEvent.click(screen.getByRole("button", { name: "Nova tarefa" }));
-    await userEvent.type(screen.getByLabelText("Título"), "Revisar implantação");
-    await userEvent.type(screen.getByLabelText("Contexto para o prompt"), "Manter o fluxo atual");
+    await userEvent.type(screen.getByLabelText("Título"), "Planejar entrega");
     await userEvent.click(screen.getByRole("button", { name: "Criar tarefa" }));
-    await screen.findByRole("alert");
+    expect(screen.getByRole("alert")).toHaveTextContent("Informe uma data limite válida.");
     expect(mocks.save).not.toHaveBeenCalled();
-    expect(screen.getByLabelText("Contexto para o prompt")).toHaveValue("Manter o fluxo atual");
-    await userEvent.click(screen.getByRole("button", { name: "Criar sem descrição" }));
-    expect(mocks.generate).toHaveBeenCalledTimes(1);
-    expect(mocks.save).toHaveBeenCalledWith(expect.objectContaining({ input: expect.objectContaining({ description: "", context: "Manter o fluxo atual" }) }), expect.any(Object));
-  });
-
-  it("descrição manual não é substituída automaticamente", async () => {
-    render(<MasterTasks />);
-    await userEvent.click(screen.getByRole("button", { name: "Nova tarefa" }));
-    await userEvent.type(screen.getByLabelText("Título"), "Minha tarefa");
-    await userEvent.type(screen.getByLabelText("Descrição", { exact: true }), "Meu prompt revisado");
+    await userEvent.type(screen.getByLabelText("Data limite"), "2026-10-30");
     await userEvent.click(screen.getByRole("button", { name: "Criar tarefa" }));
-    expect(mocks.generate).not.toHaveBeenCalled();
-    expect(mocks.save).toHaveBeenCalledWith(expect.objectContaining({ input: expect.objectContaining({ description: "Meu prompt revisado" }) }), expect.any(Object));
+    expect(screen.getByRole("alert")).toHaveTextContent("Informe o tempo estimado");
+    expect(mocks.save).not.toHaveBeenCalled();
+    await userEvent.type(screen.getByLabelText("Minutos"), "15");
+    await userEvent.type(screen.getByLabelText("Descrição", { exact: true }), "Conferir a entrega com a equipe.");
+    await userEvent.click(screen.getByRole("button", { name: "Criar tarefa" }));
+    expect(mocks.save).toHaveBeenCalledWith(expect.objectContaining({ input: expect.objectContaining({
+      due_date: "2026-10-30", estimated_minutes: 15, description: "Conferir a entrega com a equipe.",
+    }) }), expect.any(Object));
+    expect(screen.queryByText(/Codex|Claude Code|Complexidade do trabalho|Contexto para o prompt/)).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Gerar descrição|Copiar prompt/ })).not.toBeInTheDocument();
   });
 
-  it("oferece as duas ferramentas e copia prompt com modelo, esforço e contexto", async () => {
-    const user = userEvent.setup();
-    const clipboard = vi.spyOn(navigator.clipboard, "writeText").mockResolvedValue();
-    render(<MasterTasks />);
-    await user.click(screen.getByText("Trabalho de Gabriel"));
-    const choices = screen.getByRole("group", { name: "Destino do prompt" });
-    expect(within(choices).getByRole("button", { name: /Codex/ })).toHaveTextContent("GPT-6.1 Sol");
-    expect(within(choices).getByRole("button", { name: /Claude Code/ })).toHaveTextContent("Opus");
-    await user.click(screen.getByRole("button", { name: "Copiar prompt para Codex" }));
-    expect(clipboard).toHaveBeenLastCalledWith(expect.stringContaining("Modelo recomendado: GPT-6.1 Sol (gpt-6.1-sol)"));
-    expect(clipboard).toHaveBeenLastCalledWith(expect.stringContaining("Preservar o fluxo atual"));
-    await user.click(within(choices).getByRole("button", { name: /Claude Code/ }));
-    await user.click(screen.getByRole("button", { name: "Copiar /model opus" }));
-    expect(clipboard).toHaveBeenLastCalledWith("/model opus");
-    await user.click(screen.getByRole("button", { name: "Copiar /effort medium" }));
-    expect(clipboard).toHaveBeenLastCalledWith("/effort medium");
-    await user.click(screen.getByRole("button", { name: "Copiar prompt para Claude Code" }));
-    expect(clipboard).toHaveBeenLastCalledWith(expect.stringContaining("Ambiente: Claude Code"));
-    expect(clipboard.mock.calls.at(-1)?.[0]).not.toContain("/model");
-    clipboard.mockRestore();
-  });
-
-  it("regenerar exige confirmação e só altera a descrição ao obter sucesso", async () => {
+  it("edita o prazo e a estimativa e mantém os valores se o salvamento falhar", async () => {
+    mocks.save.mockImplementation((_value, callbacks) => callbacks.onError(new Error("Falha simulada")));
     render(<MasterTasks />);
     await userEvent.click(screen.getByText("Trabalho de Gabriel"));
-    await userEvent.click(screen.getByRole("button", { name: "Gerar novamente" }));
-    expect(mocks.generate).not.toHaveBeenCalled();
-    await userEvent.click(screen.getByRole("button", { name: "Gerar nova descrição" }));
-    await waitFor(() => expect((screen.getByLabelText("Descrição", { exact: true }) as HTMLTextAreaElement).value).toContain("Concluída quando"));
-    expect(mocks.save).not.toHaveBeenCalled();
-    expect(screen.getByRole("combobox", { name: "Complexidade do trabalho" })).toHaveTextContent("Baixa");
+    expect(screen.getByLabelText("Data limite")).toHaveValue("2026-10-30");
+    expect(screen.getByLabelText("Horas")).toHaveValue(2);
+    expect(screen.getByLabelText("Minutos")).toHaveValue(30);
+    await userEvent.clear(screen.getByLabelText("Data limite"));
+    await userEvent.type(screen.getByLabelText("Data limite"), "2026-11-05");
+    await userEvent.clear(screen.getByLabelText("Horas"));
+    await userEvent.type(screen.getByLabelText("Horas"), "3");
+    await userEvent.click(screen.getByRole("button", { name: "Salvar alterações" }));
+    expect(mocks.save).toHaveBeenCalledWith(expect.objectContaining({ input: expect.objectContaining({
+      due_date: "2026-11-05", estimated_minutes: 210,
+    }) }), expect.any(Object));
+    expect(screen.getByLabelText("Data limite")).toHaveValue("2026-11-05");
+    expect(screen.getByLabelText("Horas")).toHaveValue(3);
+    expect(screen.getByLabelText("Minutos")).toHaveValue(30);
   });
 
-  it("trocar de conta durante a geração não cria uma tarefa na nova sessão", async () => {
-    let finish: (value: { description: string; complexity: string }) => void;
-    mocks.generate.mockReturnValue(new Promise(resolve => { finish = resolve; }));
-    const view = render(<MasterTasks />);
-    await userEvent.click(screen.getByRole("button", { name: "Nova tarefa" }));
-    await userEvent.type(screen.getByLabelText("Título"), "Tarefa da conta anterior");
-    await userEvent.click(screen.getByRole("button", { name: "Criar tarefa" }));
-    mocks.user = 2; view.rerender(<MasterTasks />);
-    await act(async () => { finish!({ description: "Prompt antigo", complexity: "media" }); });
+  it("rejeita frações de hora e minutos fora da faixa", async () => {
+    render(<MasterTasks />);
+    await userEvent.click(screen.getByText("Trabalho de Gabriel"));
+    await userEvent.clear(screen.getByLabelText("Horas"));
+    await userEvent.type(screen.getByLabelText("Horas"), "1.5");
+    await userEvent.click(screen.getByRole("button", { name: "Salvar alterações" }));
+    expect(screen.getByRole("alert")).toHaveTextContent("Informe horas inteiras e minutos entre 0 e 59.");
     expect(mocks.save).not.toHaveBeenCalled();
-    expect(screen.getByRole("combobox", { name: "Tarefas de" })).toHaveTextContent("Lucas (você)");
+    await userEvent.clear(screen.getByLabelText("Horas"));
+    await userEvent.clear(screen.getByLabelText("Minutos"));
+    await userEvent.type(screen.getByLabelText("Minutos"), "60");
+    await userEvent.click(screen.getByRole("button", { name: "Salvar alterações" }));
+    expect(screen.getByRole("alert")).toHaveTextContent("Informe horas inteiras e minutos entre 0 e 59.");
+    expect(mocks.save).not.toHaveBeenCalled();
+  });
+
+  it("exibe a data limite e a estimativa no cartão", () => {
+    render(<MasterTasks />);
+    expect(screen.getByText(/Até 30\/10\/2026/)).toBeInTheDocument();
+    expect(screen.getByText("Estimativa: 2h 30min")).toBeInTheDocument();
   });
 
   it("nega acesso direto a um master restrito", () => {

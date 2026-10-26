@@ -82,14 +82,14 @@ export function extendMasterFleet(fx) {
   fx.db.master_tasks = taskOwners.flatMap((owner, i) => [
     {
       id: id("misc", 700 + i * 2), owner_master_user_id: owner.master_user_id,
-      context: "Preservar os fluxos atuais e conferir a experiência no celular.", prompt_complexity: "media",
+      due_date: ago(-2 * D).slice(0, 10), estimated_minutes: 150,
       title: ["Revisar fluxo de onboarding", "Organizar próximos ajustes", "Preparar checklist de implantação"][i],
       description: "Conferir os detalhes com a equipe e registrar os próximos passos.",
       status: "a_fazer", created_by: fx.authUser.id, created_at: ago(2 * D), updated_at: ago(H), completed_at: null,
     },
     {
       id: id("misc", 701 + i * 2), owner_master_user_id: owner.master_user_id,
-      context: "Usar os dados disponíveis para validar a entrega.", prompt_complexity: "baixa",
+      due_date: ago(2 * D).slice(0, 10), estimated_minutes: 45,
       title: ["Validar melhoria no cadastro de leads", "Atualizar guia de atendimento", "Revisar acessos da equipe"][i],
       description: "Reunir os resultados da revisão e acompanhar a entrega.",
       status: i === 2 ? "feito" : "fazendo", created_by: fx.authUser.id, created_at: ago(3 * D), updated_at: ago(2 * H), completed_at: i === 2 ? ago(2 * H) : null,

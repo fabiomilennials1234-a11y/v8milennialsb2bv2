@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { CircleDashed, CircleCheck, Hand, Loader2, Plus, RotateCw, Search, ArrowUpRight, CheckCheck } from "lucide-react";
+import { CircleDashed, CircleCheck, Hand, Loader2, Plus, RotateCw, Search, ArrowUpRight, CheckCheck, CalendarDays, Clock3 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,8 +13,7 @@ import { MasterKanban, type KanbanColumnDef } from "../components/MasterKanban";
 import { MasterTaskEditor } from "../components/tasks/MasterTaskEditor";
 import { useMasterAuth, type MasterUser } from "../hooks/useMasterAuth";
 import { useMasterTaskOwners, useMasterTasks, useMasterTaskMutations } from "../hooks/useMasterTasks";
-import { useMasterTaskDescription } from "../hooks/useMasterTaskDescription";
-import { groupMasterTasks, TASK_LABELS, type MasterTask, type MasterTaskInput, type MasterTaskStatus } from "../lib/master-tasks";
+import { groupMasterTasks, formatTaskDueDate, formatTaskEstimate, isMasterTaskOverdue, TASK_LABELS, type MasterTask, type MasterTaskInput, type MasterTaskStatus } from "../lib/master-tasks";
 
 const COLUMNS: KanbanColumnDef<MasterTaskStatus>[] = [
   { id: "a_fazer", label: "A fazer", hint: "Trabalho que ainda vai começar." },
@@ -45,10 +44,9 @@ function TaskBoard({ masterUser }: { masterUser: MasterUser }) {
   const [editor, setEditor] = useState<{ task?: MasterTask } | null>(null);
   const tasksQuery = useMasterTasks(selectedOwnerId);
   const { save, move, remove } = useMasterTaskMutations();
-  const description = useMasterTaskDescription();
   const tasks = tasksQuery.data ?? NO_TASKS;
   const selectedOwner = owners.find(owner => owner.id === selectedOwnerId);
-  const busy = save.isPending || move.isPending || remove.isPending || description.isPending;
+  const busy = save.isPending || move.isPending || remove.isPending;
   const loading = ownersQuery.isLoading || tasksQuery.isLoading;
   const error = ownersQuery.isError || tasksQuery.isError;
   const grouped = useMemo(() => groupMasterTasks(tasks, search), [tasks, search]);
@@ -129,6 +127,12 @@ function TaskBoard({ masterUser }: { masterUser: MasterUser }) {
               renderCard={task => <div className="rounded-2xl border border-card-border bg-card p-4 shadow-relevo">
                 <h3 className="break-words text-sm font-bold leading-snug">{task.title}</h3>
                 {task.description && <p className="mt-2 line-clamp-2 break-words text-xs text-muted-foreground">{task.description}</p>}
+                <div className="mt-3 flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                  <span className={cn("flex items-center gap-1", isMasterTaskOverdue(task) && "font-semibold text-destructive")}>
+                    <CalendarDays className="h-3.5 w-3.5" />Até {formatTaskDueDate(task.due_date)}{isMasterTaskOverdue(task) && " · Atrasada"}
+                  </span>
+                  <span className="flex items-center gap-1"><Clock3 className="h-3.5 w-3.5" />Estimativa: {formatTaskEstimate(task.estimated_minutes)}</span>
+                </div>
                 <div className="mt-4 flex items-center justify-between gap-2 text-[11px] text-muted-foreground">
                   <span>{selectedOwner?.name}</span><span className="flex items-center gap-1">{task.status === "feito" ? <><CheckCheck className="h-3.5 w-3.5" />Concluída</> : <><ArrowUpRight className="h-3.5 w-3.5" />Ver detalhes</>}</span>
                 </div>
@@ -138,7 +142,7 @@ function TaskBoard({ masterUser }: { masterUser: MasterUser }) {
       <Sheet open={editor !== null} onOpenChange={open => !open && !busy && setEditor(null)}>
         <SheetContent className="w-full overflow-y-auto sm:max-w-lg" onEscapeKeyDown={e => busy && e.preventDefault()} onInteractOutside={e => busy && e.preventDefault()}>
           {editor && <MasterTaskEditor key={editor.task?.id ?? "new"} task={editor.task} ownerId={selectedOwnerId} owners={owners}
-            currentMasterId={masterUser.id} generating={description.isPending} onGenerate={description.mutateAsync}
+            currentMasterId={masterUser.id}
             busy={busy} onSave={saveTask} onDelete={deleteTask} onClose={() => setEditor(null)} />}
         </SheetContent>
       </Sheet>

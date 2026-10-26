@@ -5,8 +5,8 @@ CREATE TABLE public.master_tasks (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   owner_master_user_id uuid NOT NULL REFERENCES public.master_users(id) ON DELETE RESTRICT,
   title text NOT NULL CHECK (char_length(btrim(title)) BETWEEN 1 AND 200),
-  context text NOT NULL DEFAULT '' CHECK (char_length(context) <= 5000),
-  prompt_complexity text NOT NULL DEFAULT 'media' CHECK (prompt_complexity IN ('baixa', 'media', 'alta')),
+  due_date date NOT NULL CHECK (due_date BETWEEN DATE '0001-01-01' AND DATE '9999-12-31'),
+  estimated_minutes integer NOT NULL CHECK (estimated_minutes > 0),
   description text NOT NULL DEFAULT '' CHECK (char_length(description) <= 10000),
   status text NOT NULL DEFAULT 'a_fazer' CHECK (status IN ('a_fazer', 'fazendo', 'feito')),
   created_by uuid DEFAULT auth.uid() REFERENCES auth.users(id) ON DELETE SET NULL,
@@ -20,8 +20,8 @@ CREATE INDEX master_tasks_created_by_idx ON public.master_tasks (created_by);
 ALTER TABLE public.master_tasks ENABLE ROW LEVEL SECURITY;
 REVOKE ALL ON public.master_tasks FROM anon, authenticated;
 GRANT SELECT, DELETE ON public.master_tasks TO authenticated;
-GRANT INSERT (owner_master_user_id, title, context, prompt_complexity, description, status),
-  UPDATE (owner_master_user_id, title, context, prompt_complexity, description, status) ON public.master_tasks TO authenticated;
+GRANT INSERT (owner_master_user_id, title, due_date, estimated_minutes, description, status),
+  UPDATE (owner_master_user_id, title, due_date, estimated_minutes, description, status) ON public.master_tasks TO authenticated;
 GRANT ALL ON public.master_tasks TO service_role;
 
 -- O responsável organiza o quadro, não limita a leitura entre masters.

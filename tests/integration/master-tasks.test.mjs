@@ -14,7 +14,7 @@ const login = async (user = 1, role = 'authenticated') => {
   await db.exec(`SET ROLE ${role}`);
 };
 const create = (owner = 11, title = 'Revisar onboarding') => one(
-  'insert into master_tasks(owner_master_user_id,title) values($1,$2) returning *', [id(owner), title]);
+  "insert into master_tasks(owner_master_user_id,title,due_date,estimated_minutes) values($1,$2,'2026-10-30',150) returning *", [id(owner), title]);
 
 before(async () => {
   db = new PGlite();
@@ -106,8 +106,6 @@ test('exige responsável ativo, título preenchido e status válido; cliente nã
   await assert.rejects(create(11, '  '), /check constraint/i);
   const task = await create();
   await assert.rejects(query("update master_tasks set status='cancelado' where id=$1", [task.id]), /check constraint/i);
-  await assert.rejects(query("update master_tasks set prompt_complexity='impossivel' where id=$1", [task.id]), /check constraint/i);
-  await assert.rejects(query("update master_tasks set context=repeat('a',5001) where id=$1", [task.id]), /check constraint/i);
   await assert.rejects(query('update master_tasks set created_by=$2 where id=$1', [task.id, id(2)]), /permission denied/i);
   await assert.rejects(query('update master_tasks set completed_at=now() where id=$1', [task.id]), /permission denied/i);
   await assert.rejects(query('insert into master_tasks(owner_master_user_id,title,created_by) values($1,$2,$3)', [id(11), 'Falsa', id(2)]), /permission denied/i);
@@ -121,19 +119,43 @@ test('versão antiga não sobrescreve mudanças simultâneas nem exclui tarefa a
   assert.equal((await one('select status from master_tasks where id=$1', [task.id])).status, 'fazendo');
 });
 
-test('pegar e encaminhar preserva o prompt e impede uma transferência com versão antiga', async () => {
-  const task = await one("insert into master_tasks(owner_master_user_id,title,context,description,prompt_complexity,status) values($1,'Revisar acesso','Preservar permissões','Objetivo e passos','alta','fazendo') returning *", [id(11)]);
+test('pegar e encaminhar preserva descrição, prazo e estimativa e impede uma transferência com versão antiga', async () => {
+  const task = await one("insert into master_tasks(owner_master_user_id,title,due_date,estimated_minutes,description,status) values($1,'Revisar acesso','2026-10-30',150,'Conferir permissões de acesso','fazendo') returning *", [id(11)]);
   await login(2);
   const taken = await one('update master_tasks set owner_master_user_id=$2 where id=$1 and updated_at=$3 returning *', [task.id, id(12), task.updated_at]);
   assert.equal(taken.description, task.description);
-  assert.equal(taken.context, task.context);
-  assert.equal(taken.prompt_complexity, 'alta');
+  assert.deepEqual(taken.due_date, task.due_date);
+  assert.equal(taken.estimated_minutes, task.estimated_minutes);
   assert.equal(taken.status, 'fazendo');
   await login(3);
   assert.equal((await query('update master_tasks set owner_master_user_id=$2 where id=$1 and updated_at=$3 returning *', [task.id, id(13), task.updated_at])).rows.length, 0);
   const forwarded = await one('update master_tasks set owner_master_user_id=$2 where id=$1 and updated_at=$3 returning *', [task.id, id(13), taken.updated_at]);
   assert.equal(forwarded.owner_master_user_id, id(13));
+  assert.deepEqual(forwarded.due_date, task.due_date);
+  assert.equal(forwarded.estimated_minutes, task.estimated_minutes);
+  assert.equal(forwarded.description, task.description);
   const audit = await one('select * from master_audit_logs where user_id=$1', [id(3)]);
   assert.equal(audit.details.before.owner_master_user_id, id(12));
   assert.equal(audit.details.after.owner_master_user_id, id(13));
+});
+
+test('prazo e estimativa são obrigatórios e válidos; alterações ficam na auditoria', async () => {
+  await assert.rejects(query("insert into master_tasks(owner_master_user_id,title,estimated_minutes) values($1,'Sem prazo',30)", [id(11)]), /not-null constraint/i);
+  await assert.rejects(query("insert into master_tasks(owner_master_user_id,title,due_date) values($1,'Sem estimativa','2026-10-30')", [id(11)]), /not-null constraint/i);
+  const task = await create();
+  for (const minutes of [0, -1]) {
+    await assert.rejects(query('update master_tasks set estimated_minutes=$2 where id=$1', [task.id, minutes]), /check constraint/i);
+  }
+  for (const date of ['2026-02-30', 'infinity', '10000-01-01']) {
+    await assert.rejects(query('update master_tasks set due_date=$2 where id=$1', [task.id, date]), /out of range|check constraint/i);
+  }
+  await assert.rejects(query('update master_tasks set due_date=null where id=$1', [task.id]), /not-null constraint/i);
+  await assert.rejects(query('update master_tasks set estimated_minutes=null where id=$1', [task.id]), /not-null constraint/i);
+  const edited = await one("update master_tasks set due_date='2026-11-05',estimated_minutes=45 where id=$1 returning *", [task.id]);
+  assert.equal(edited.due_date.toISOString().slice(0, 10), '2026-11-05');
+  assert.equal(edited.estimated_minutes, 45);
+  const audit = await one("select details from master_audit_logs where action='master_task_update'");
+  assert.equal(audit.details.before.due_date, '2026-10-30');
+  assert.equal(audit.details.after.due_date, '2026-11-05');
+  assert.equal(audit.details.after.estimated_minutes, 45);
 });

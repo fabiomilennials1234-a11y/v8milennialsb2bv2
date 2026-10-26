@@ -8,9 +8,9 @@ await mkdir(out, { recursive: true });
 const browser = await launchBrowser();
 try {
   const context = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
-  await context.grantPermissions(['clipboard-read', 'clipboard-write']);
   await context.request.get('http://127.0.0.1:54399/__reset');
-  await prepareContext(context, { theme: 'light', master: true });
+  const health = await (await context.request.get('http://127.0.0.1:54399/__health')).json();
+  await prepareContext(context, { theme: 'light', master: true, now: health.now });
   const page = await context.newPage();
   const errors = [];
   page.on('pageerror', error => errors.push(error.message));
@@ -18,6 +18,7 @@ try {
   const owner = page.getByRole('combobox', { name: 'Tarefas de' });
   await owner.getByText('Gabriel (você)', { exact: true }).waitFor({ timeout: 60_000 });
   await page.getByRole('heading', { name: 'Revisar fluxo de onboarding', exact: true }).waitFor();
+  assert.equal(await page.getByText(/Atrasada/).count(), 1, 'Only the past-due unfinished task is overdue');
   await page.waitForTimeout(3500); // A abertura do shell termina antes da captura.
   await page.screenshot({ path: `${out}/desktop.png`, fullPage: true });
   await owner.click();
@@ -31,7 +32,14 @@ try {
   await page.getByRole('button', { name: 'Nova tarefa', exact: true }).click();
   assert.match(await page.getByRole('combobox', { name: 'Responsável', exact: true }).innerText(), /Lucas/);
   await page.getByLabel('Título', { exact: true }).fill(title);
-  await page.getByLabel('Contexto para o prompt', { exact: true }).fill('Tarefa criada pelo teste da interface local.');
+  await page.getByLabel('Descrição', { exact: true }).fill('Conferir os acessos com a equipe.');
+  await page.getByRole('button', { name: 'Criar tarefa', exact: true }).click();
+  await page.getByRole('alert').getByText('Informe uma data limite válida.', { exact: true }).waitFor();
+  await page.getByLabel('Data limite', { exact: true }).fill('2026-11-05');
+  await page.getByRole('button', { name: 'Criar tarefa', exact: true }).click();
+  await page.getByRole('alert').getByText('Informe o tempo estimado para concluir a tarefa.', { exact: true }).waitFor();
+  await page.getByLabel('Horas', { exact: true }).fill('2');
+  await page.getByLabel('Minutos', { exact: true }).fill('30');
   await page.getByRole('button', { name: 'Criar tarefa', exact: true }).click();
   await page.getByRole('dialog').waitFor({ state: 'hidden' });
   await page.getByRole('heading', { name: title, exact: true }).waitFor();
@@ -49,17 +57,14 @@ try {
   await page.getByRole('region', { name: 'Fazendo, 1 item', exact: true }).getByRole('heading', { name: title, exact: true }).waitFor();
 
   await page.getByRole('region', { name: 'Fazendo, 1 item', exact: true }).getByRole('heading', { name: title, exact: true }).click();
-  assert.match(await page.getByLabel('Descrição', { exact: true }).inputValue(), /Concluída quando/);
-  await page.getByRole('button', { name: 'Copiar prompt para Codex', exact: true }).click();
-  assert.match(await page.evaluate(() => navigator.clipboard.readText()), /gpt-6.1-sol/);
-  await page.getByRole('group', { name: 'Destino do prompt' }).getByRole('button', { name: /Claude Code/ }).click();
-  await page.getByRole('button', { name: 'Copiar /effort medium', exact: true }).click();
-  assert.equal(await page.evaluate(() => navigator.clipboard.readText()), '/effort medium');
-  await page.getByRole('button', { name: 'Copiar prompt para Claude Code', exact: true }).click();
-  const prompt = await page.evaluate(() => navigator.clipboard.readText());
-  assert.match(prompt, /Ambiente: Claude Code/);
-  assert.match(prompt, /Tarefa criada pelo teste da interface local/);
-  await page.screenshot({ path: `${out}/desktop-prompt.png`, fullPage: true });
+  assert.equal(await page.getByLabel('Descrição', { exact: true }).inputValue(), 'Conferir os acessos com a equipe.');
+  assert.equal(await page.getByLabel('Data limite', { exact: true }).inputValue(), '2026-11-05');
+  assert.equal(await page.getByLabel('Horas', { exact: true }).inputValue(), '2');
+  assert.equal(await page.getByLabel('Minutos', { exact: true }).inputValue(), '30');
+  await page.getByLabel('Data limite', { exact: true }).fill('2026-11-06');
+  await page.getByLabel('Horas', { exact: true }).fill('3');
+  await page.waitForTimeout(700); // Aguarda a gaveta terminar de entrar antes da captura.
+  await page.screenshot({ path: `${out}/desktop-editor.png`, fullPage: true });
   await page.getByRole('combobox', { name: 'Status', exact: true }).click();
   await page.getByRole('option', { name: 'Feito', exact: true }).click();
   await page.getByRole('button', { name: 'Salvar alterações', exact: true }).click();
@@ -78,12 +83,17 @@ try {
   await owner.getByText('Gabriel (você)', { exact: true }).waitFor();
   await page.getByRole('heading', { name: title, exact: true }).click();
   assert.match(await page.getByRole('combobox', { name: 'Status', exact: true }).innerText(), /Feito/);
-  assert.match(await page.getByLabel('Descrição', { exact: true }).inputValue(), /Concluída quando/);
+  assert.equal(await page.getByLabel('Descrição', { exact: true }).inputValue(), 'Conferir os acessos com a equipe.');
+  assert.equal(await page.getByLabel('Data limite', { exact: true }).inputValue(), '2026-11-06');
+  assert.equal(await page.getByLabel('Horas', { exact: true }).inputValue(), '3');
+  assert.equal(await page.getByLabel('Minutos', { exact: true }).inputValue(), '30');
   await page.getByRole('combobox', { name: 'Responsável', exact: true }).click();
   await page.getByRole('option', { name: 'Marcelo', exact: true }).click();
   await page.getByRole('button', { name: 'Encaminhar tarefa', exact: true }).click();
   await page.getByRole('dialog').waitFor({ state: 'hidden' });
   await owner.getByText('Marcelo', { exact: true }).waitFor();
+  assert.match(await card.innerText(), /Até 06\/11\/2026/);
+  assert.match(await card.innerText(), /Estimativa: 3h 30min/);
   await page.getByRole('heading', { name: title, exact: true }).click();
   await page.getByRole('button', { name: 'Excluir', exact: true }).click();
   await page.getByRole('button', { name: 'Excluir tarefa', exact: true }).click();
@@ -99,12 +109,14 @@ try {
   await page.getByLabel('Título', { exact: true }).fill('Revisão em tela pequena');
   await page.waitForTimeout(700);
   await page.screenshot({ path: `${out}/mobile-editor.png`, fullPage: true });
-  await page.getByRole('button', { name: 'Gerar descrição', exact: true }).click();
-  await page.getByRole('button', { name: 'Copiar prompt para Codex', exact: true }).scrollIntoViewIfNeeded();
-  await page.screenshot({ path: `${out}/mobile-prompt.png`, fullPage: true });
-  assert.equal(await page.getByRole('button', { name: 'Criar tarefa', exact: true }).isVisible(), true);
+  await page.getByLabel('Data limite', { exact: true }).fill('2026-11-07');
+  await page.getByLabel('Minutos', { exact: true }).fill('45');
+  assert.equal(await page.getByRole('dialog').evaluate(el => el.scrollWidth > el.clientWidth), false, 'No editor overflow at 390px');
+  await page.getByRole('button', { name: 'Criar tarefa', exact: true }).click();
+  await page.getByRole('dialog').waitFor({ state: 'hidden' });
+  await page.getByRole('heading', { name: 'Revisão em tela pequena', exact: true }).waitFor();
   assert.deepEqual(errors, []);
-  console.log('PASS: default owner, three owners, create with generated prompt, drag, edit, copy for Codex/Claude, persistence, take, forward, delete, mobile.');
+  console.log('PASS: default owner, three owners, required deadline and estimate, create, drag, edit, persistence, take, forward, delete, mobile.');
 } finally {
   await browser.close();
 }

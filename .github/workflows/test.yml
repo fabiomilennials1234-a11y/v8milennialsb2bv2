@@ -99,10 +99,8 @@ jobs:
         run: node --test tests/integration/agenda-notifications.test.mjs
       - name: Card merge (permissions and dependent preservation)
         run: node --test tests/integration/card-merge-access.test.mjs
-      - name: Master tasks (permissions, audit and concurrent edits)
-        run: |
-          node --test tests/integration/master-tasks.test.mjs tests/integration/master-task-description.test.mjs
-          deno check --node-modules-dir=none --no-lock supabase/functions/master-task-description/index.ts
+      - name: Master tasks (deadlines, permissions, audit and concurrent edits)
+        run: node --test tests/integration/master-tasks.test.mjs
       - name: Build (prod)
         run: npm run build
         env:

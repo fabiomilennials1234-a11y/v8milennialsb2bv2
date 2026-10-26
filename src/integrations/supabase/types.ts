@@ -10776,8 +10776,8 @@ export type Database = {
           id: string
           owner_master_user_id: string
           title: string
-          context: string
-          prompt_complexity: string
+          due_date: string
+          estimated_minutes: number
           description: string
           status: string
           created_by: string | null
@@ -10789,8 +10789,8 @@ export type Database = {
           id?: string
           owner_master_user_id: string
           title: string
-          context?: string
-          prompt_complexity?: string
+          due_date: string
+          estimated_minutes: number
           description?: string
           status?: string
           created_by?: string | null
@@ -10802,8 +10802,8 @@ export type Database = {
           id?: string
           owner_master_user_id?: string
           title?: string
-          context?: string
-          prompt_complexity?: string
+          due_date?: string
+          estimated_minutes?: number
           description?: string
           status?: string
           created_by?: string | null
