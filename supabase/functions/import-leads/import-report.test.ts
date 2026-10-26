@@ -1,4 +1,5 @@
 import { assertEquals } from "jsr:@std/assert@^1.0.0";
+import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { motivoFalhaDeInsercao, reportRow } from "./import-report.ts";
 
 Deno.test("reportRow — usa a linha da planilha quando o navegador mandou", () => {
@@ -17,28 +18,33 @@ Deno.test("reportRow — source_row inválido é ignorado", () => {
   assertEquals(reportRow({ source_row: 0 }, 3), 4);
   assertEquals(reportRow({ source_row: -2 }, 3), 4);
   assertEquals(reportRow({ source_row: 2.5 }, 3), 4);
-  // deno-lint-ignore no-explicit-any
-  assertEquals(reportRow({ source_row: "9" as any }, 3), 4);
+  assertEquals(reportRow({ source_row: "9" as unknown as number }, 3), 4);
 });
 
-// deno-lint-ignore no-explicit-any
-type Fake = any;
+interface Chain {
+  select: () => Chain;
+  eq: () => Chain;
+  is: () => Chain;
+  limit: () => Chain;
+  maybeSingle: () => Promise<{ data: unknown }>;
+}
 
-function fakeDb(opts: { norm?: unknown; dono?: unknown; rpcThrows?: boolean }): Fake {
-  const chain: Fake = {
+function fakeDb(opts: { norm?: unknown; dono?: unknown; rpcThrows?: boolean }): SupabaseClient {
+  const chain: Chain = {
     select: () => chain,
     eq: () => chain,
     is: () => chain,
     limit: () => chain,
     maybeSingle: () => Promise.resolve({ data: opts.dono ?? null }),
   };
-  return {
+  const db = {
     rpc: () => {
       if (opts.rpcThrows) throw new Error("rpc fora do ar");
       return Promise.resolve({ data: opts.norm ?? null });
     },
     from: () => chain,
   };
+  return db as unknown as SupabaseClient;
 }
 
 Deno.test("motivoFalhaDeInsercao — erro que não é de telefone segue truncado", async () => {
