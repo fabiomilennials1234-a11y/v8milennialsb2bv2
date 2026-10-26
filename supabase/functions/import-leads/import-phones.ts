@@ -15,6 +15,8 @@
  *  - telefone extra sem nome (`label` nulo) — a planilha não diz com quem se fala.
  */
 
+import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
+
 export const MAX_EXTRA_PHONES = 9;
 
 export interface PhoneCell {
@@ -86,11 +88,6 @@ function localDigits(phone: string | null | undefined): string {
   return d.startsWith("55") && (d.length === 12 || d.length === 13) ? d.slice(2) : d;
 }
 
-// Só o que usamos do client — deixa o teste trocar o Supabase por um fake.
-interface LeadPhonesClient {
-  from(table: "lead_phones"): any;
-}
-
 export interface ExtraPhonesResult {
   added: number;
   failed: number;
@@ -102,7 +99,7 @@ export interface ExtraPhonesResult {
  * erro conta como falha — o lead já existe, então não derruba a linha.
  */
 export async function saveExtraPhones(
-  supabase: LeadPhonesClient,
+  supabase: SupabaseClient,
   organizationId: string,
   leadId: string,
   extras: string[],

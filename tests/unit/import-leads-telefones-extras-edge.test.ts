@@ -69,7 +69,7 @@ describe("extraPhonesOf", () => {
 describe("saveExtraPhones", () => {
   it("🔑 grava o extra como secundário do CRM: nunca principal, nunca com nome", async () => {
     const { client, inserts } = fakeClient({ existing: ["5548999991111"] });
-    const r = await saveExtraPhones(client, ORG, LEAD, ["5548988882222"]);
+    const r = await saveExtraPhones(client as never, ORG, LEAD, ["5548988882222"]);
     expect(r).toEqual({ added: 1, failed: 0 });
     expect(inserts).toEqual([
       { organization_id: ORG, lead_id: LEAD, phone: "5548988882222", is_primary: false, source: "crm" },
@@ -78,26 +78,26 @@ describe("saveExtraPhones", () => {
 
   it("pula o que o lead já tem, mesmo gravado sem o 55", async () => {
     const { client, inserts } = fakeClient({ existing: ["5548999991111", "(48) 98888-2222"] });
-    const r = await saveExtraPhones(client, ORG, LEAD, ["5548988882222"]);
+    const r = await saveExtraPhones(client as never, ORG, LEAD, ["5548988882222"]);
     expect(r).toEqual({ added: 0, failed: 0 });
     expect(inserts).toHaveLength(0);
   });
 
   it("reimportar a mesma planilha não duplica: corrida do índice único (23505) não é falha", async () => {
     const { client } = fakeClient({ insertErrors: { 0: { code: "23505", message: "lead_phones_lead_numero_uq" } } });
-    const r = await saveExtraPhones(client, ORG, LEAD, ["5548988882222", "5548977773333"]);
+    const r = await saveExtraPhones(client as never, ORG, LEAD, ["5548988882222", "5548977773333"]);
     expect(r).toEqual({ added: 1, failed: 0 });
   });
 
   it("outro erro conta como falha e não impede os próximos números", async () => {
     const { client } = fakeClient({ insertErrors: { 0: { code: "42501", message: "permission denied" } } });
-    const r = await saveExtraPhones(client, ORG, LEAD, ["5548988882222", "5548977773333"]);
+    const r = await saveExtraPhones(client as never, ORG, LEAD, ["5548988882222", "5548977773333"]);
     expect(r).toEqual({ added: 1, failed: 1 });
   });
 
   it("sem extras não toca no banco", async () => {
     const { client } = fakeClient();
-    expect(await saveExtraPhones(client, ORG, LEAD, [])).toEqual({ added: 0, failed: 0 });
+    expect(await saveExtraPhones(client as never, ORG, LEAD, [])).toEqual({ added: 0, failed: 0 });
     expect(client.from).not.toHaveBeenCalled();
   });
 });
