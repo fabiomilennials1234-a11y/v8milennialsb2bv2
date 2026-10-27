@@ -21247,6 +21247,7 @@ export type Database = {
         Args: { p_expected_state: string; p_org_id: string; p_payload?: Json }
         Returns: Json
       }
+      agenda_search_fold: { Args: { p_value: string }; Returns: string }
       api_add_lead_tags: {
         Args: { p_lead_id: string; p_org: string; p_tags: string[] }
         Returns: Json
@@ -24421,6 +24422,30 @@ export type Database = {
           p_whatsapp_instance_id: string
         }
         Returns: boolean
+      }
+      search_agenda_events: {
+        Args: { p_limit?: number; p_organization_id: string; p_query: string }
+        Returns: {
+          all_day: boolean
+          color: string
+          created_by: string
+          creator_name: string
+          description: string
+          end_at: string
+          event_type: string
+          google_event_id: string
+          id: string
+          lead_company: string
+          lead_id: string
+          lead_name: string
+          location: string
+          meet_link: string
+          owner_team_member_id: string
+          source: string
+          start_at: string
+          status: string
+          title: string
+        }[]
       }
       search_messages: {
         Args: {

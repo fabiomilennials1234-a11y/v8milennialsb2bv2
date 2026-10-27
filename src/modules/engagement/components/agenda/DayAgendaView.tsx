@@ -52,7 +52,7 @@ const PANEL_CLASS =
   "rounded-card border border-card-border bg-card shadow-relevo";
 
 /** Build a per-event subtitle from the richest detail available. */
-function eventSubtitle(event: UnifiedEvent, showOwner: boolean): string {
+export function eventSubtitle(event: UnifiedEvent, showOwner: boolean): string {
   const detalhe = (() => {
     if (event.location) return event.location;
     const lead = [event.leadCompany, event.leadName].filter(Boolean).join(" · ");

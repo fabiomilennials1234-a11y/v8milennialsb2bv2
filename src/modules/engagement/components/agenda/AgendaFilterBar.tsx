@@ -8,8 +8,9 @@
  * e escolher uma aba não é nenhum dos dois.
  */
 
-import { ChevronDown } from "lucide-react";
+import { ChevronDown, Search, X } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Input } from "@/components/ui/input";
 import {
   Select,
   SelectContent,
@@ -57,6 +58,13 @@ interface AgendaFilterBarProps {
   /** Tipos visíveis. Multi-seleção: dá para ver reunião + ligação sem tarefa. */
   activeTypes: Set<EventTypeKey>;
   onToggleType: (type: EventTypeKey) => void;
+  /**
+   * Busca global (sem janela de datas). Ausente esconde o campo — as telas que
+   * montam a barra sem a busca continuam como eram. O debounce NÃO mora aqui:
+   * o campo é controlado e quem consome (`useAgendaSearch`) espera o termo.
+   */
+  search?: string;
+  onSearchChange?: (value: string) => void;
 }
 
 /** Rótulo do gatilho de tipos — diz o estado sem obrigar a abrir o menu. */
@@ -78,6 +86,8 @@ export function AgendaFilterBar({
   ownerOptions,
   activeTypes,
   onToggleType,
+  search,
+  onSearchChange,
 }: AgendaFilterBarProps) {
   return (
     <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
@@ -122,6 +132,42 @@ export function AgendaFilterBar({
 
       {/* Filtros */}
       <div className="flex flex-wrap items-center gap-2">
+        {onSearchChange && (
+          <div className="relative w-full sm:w-[260px]">
+            <Search
+              className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
+              aria-hidden="true"
+            />
+            <Input
+              type="search"
+              value={search ?? ""}
+              onChange={(e) => onSearchChange(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Escape" && search) {
+                  e.preventDefault();
+                  onSearchChange("");
+                }
+              }}
+              placeholder="Buscar cliente, empresa ou código"
+              aria-label="Buscar na agenda"
+              autoComplete="off"
+              // `[&::-webkit-search-cancel-button]:hidden`: o X nativo do
+              // `type=search` duplicaria o nosso.
+              className="h-9 pl-9 pr-9 [&::-webkit-search-cancel-button]:hidden"
+            />
+            {search && (
+              <button
+                type="button"
+                onClick={() => onSearchChange("")}
+                aria-label="Limpar busca"
+                className="absolute right-2 top-1/2 grid h-6 w-6 -translate-y-1/2 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            )}
+          </div>
+        )}
+
         {ownerOptions.length > 0 && (
           <Select value={owner} onValueChange={onOwnerChange}>
             <SelectTrigger
