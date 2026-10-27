@@ -5,18 +5,30 @@ import { precacheAndRoute, cleanupOutdatedCaches } from 'workbox-precaching';
 import { registerRoute } from 'workbox-routing';
 import { CacheFirst, NetworkFirst, StaleWhileRevalidate } from 'workbox-strategies';
 import { ExpirationPlugin } from 'workbox-expiration';
+import { MATCH_APP_ENTRY } from './shared/pwa/build-identity';
 
 declare let self: ServiceWorkerGlobalScope;
+
+const precacheManifest = self.__WB_MANIFEST;
 
 // ─── Skip waiting when prompted by the app (registerSW → SKIP_WAITING) ──
 self.addEventListener('message', (event) => {
   if (event.data && event.data.type === 'SKIP_WAITING') {
     self.skipWaiting();
   }
+  if (event.data?.type === MATCH_APP_ENTRY && typeof event.data.entry === 'string') {
+    // HTML is network-only. A reloaded tab can already run this build even
+    // while another tab keeps its service worker waiting for activation.
+    const matches = precacheManifest.some(entry => {
+      const url = typeof entry === 'string' ? entry : entry.url;
+      return new URL(url, self.registration.scope).href === event.data.entry;
+    });
+    event.ports[0]?.postMessage({ type: MATCH_APP_ENTRY, matches });
+  }
 });
 
 // ─── Workbox precache (injected by vite-plugin-pwa) ─────
-precacheAndRoute(self.__WB_MANIFEST);
+precacheAndRoute(precacheManifest);
 cleanupOutdatedCaches();
 clientsClaim();
 
