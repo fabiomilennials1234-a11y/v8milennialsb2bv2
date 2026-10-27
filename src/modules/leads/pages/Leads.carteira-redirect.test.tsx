@@ -57,6 +57,13 @@ vi.mock("../hooks/useLeadsStats", () => ({ useLeadsStats: () => query(undefined)
 vi.mock("../hooks/useLeadClassificacao", () => ({ useLeadClassificacao: mutation }));
 vi.mock("../hooks/useClassificacaoCafeJurere", () => ({ useClassificacaoCafeJurere: () => false }));
 vi.mock("../hooks/useOrgUsaLeiDoErp", () => ({ useOrgUsaLeiDoErp: () => ({ usaLeiDoErp: false }) }));
+// Lista fria (ADR-0042): org sem a flag. A aba e o cartão de buscas nem entram na tela.
+vi.mock("@/modules/lista-fria", () => ({
+  useListaFriaAcesso: () => ({ carregando: false, habilitada: false, podeVer: false, podeEditar: false }),
+  useSaldoDeCreditos: () => ({ data: undefined }),
+  BuscasCard: () => null,
+  NovaBuscaDialog: () => null,
+}));
 vi.mock("../pipe-ops", () => ({
   usePipeOps: () => ({
     useCustomPipelines: () => query([]),

@@ -23,6 +23,7 @@ export interface LeadsKeyFilters {
   filterClassificacao?: string;
   usaLeiDoErp?: boolean;
   usaCadastroErpCafeJurere?: boolean;
+  usaListaFria?: boolean;
   filterUf?: string;
   createdFrom?: string;
   createdTo?: string;
@@ -46,7 +47,7 @@ export const leadsKeys = {
     [
       "leads", "list", org, page,
       f.searchQuery, f.filterOrigin, f.filterQualification, f.filterClassificacao, f.usaLeiDoErp,
-      f.usaCadastroErpCafeJurere, f.filterUf, f.createdFrom, f.createdTo, f.filterAssignment, f.filterResponsible,
+      f.usaCadastroErpCafeJurere, f.usaListaFria, f.filterUf, f.createdFrom, f.createdTo, f.filterAssignment, f.filterResponsible,
       sort.key, sort.direction,
     ] as const,
 
@@ -56,7 +57,7 @@ export const leadsKeys = {
     [
       "leads", "count", org,
       f.searchQuery, f.filterOrigin, f.filterQualification, f.filterClassificacao, f.usaLeiDoErp,
-      f.usaCadastroErpCafeJurere, f.filterUf, f.createdFrom, f.createdTo, f.filterAssignment, f.filterResponsible,
+      f.usaCadastroErpCafeJurere, f.usaListaFria, f.filterUf, f.createdFrom, f.createdTo, f.filterAssignment, f.filterResponsible,
     ] as const,
 
   allStats: (org: Org) => ["leads", "stats", org] as const,
@@ -64,6 +65,6 @@ export const leadsKeys = {
     [
       "leads", "stats", org, timeZone,
       f.searchQuery, f.filterOrigin, f.filterQualification, f.filterClassificacao, f.usaLeiDoErp,
-      f.usaCadastroErpCafeJurere, f.filterUf, f.createdFrom, f.createdTo, f.filterResponsible,
+      f.usaCadastroErpCafeJurere, f.usaListaFria, f.filterUf, f.createdFrom, f.createdTo, f.filterResponsible,
     ] as const,
 };

@@ -10,6 +10,9 @@
  * Manter aqui — e só aqui — evita drift entre a lista e a exportação.
  */
 
+/** Valor da aba "Lista fria" no seletor de gaveta. Não é uma classificação do lead. */
+export const ABA_LISTA_FRIA = "lista_fria";
+
 /** Valores dos filtros da lista de leads aplicáveis a uma query. Todos opcionais;
  * o sentinel `"all"` (e vazio/undefined) significa "sem filtro". */
 export interface LeadListFilterValues {
@@ -44,6 +47,13 @@ export interface LeadListFilterValues {
   usaLeiDoErp?: boolean;
   /** Piloto exclusivo da Café Jurerê: cadastro ERP > perda sem ganho > lead. */
   usaCadastroErpCafeJurere?: boolean;
+  /**
+   * A org tem a Lista fria (flag `lista_fria`)? Então a lista SEPARA a seção:
+   * a aba `lista_fria` mostra só os leads de `lista_fria_busca_id`, e todas as
+   * outras abas (e a exportação) os escondem. Ausente/false: a lista de sempre,
+   * sem tocar na coluna — org sem a flag nem sabe que ela existe.
+   */
+  usaListaFria?: boolean;
   filterUf?: string;
   /** Instante ISO (inclusive) — limite inferior de `created_at`. */
   createdFrom?: string;
@@ -272,7 +282,16 @@ export function applyLeadListFilters<Q>(query: Q, filters: LeadListFilterValues)
   //     `indefinido`, que só existe nesse mundo.
   //   • org SEM integração → relacao_negocios: ganho > só perdas > lead.
   // Campo calculado evita filtrar só os 50 leads carregados no browser.
-  if (filters.filterClassificacao && filters.filterClassificacao !== "all") {
+  // ── LISTA FRIA — a seção separada ─────────────────────────────────────────
+  // Só com a flag: a coluna `lista_fria_busca_id` nasce na migration que liga a
+  // flag, então org sem flag nunca a referencia (front novo, banco velho).
+  if (filters.usaListaFria) {
+    q = filters.filterClassificacao === ABA_LISTA_FRIA
+      ? q.not("lista_fria_busca_id", "is", null)
+      : q.is("lista_fria_busca_id", null);
+  }
+
+  if (filters.filterClassificacao && filters.filterClassificacao !== "all" && filters.filterClassificacao !== ABA_LISTA_FRIA) {
     if (filters.usaCadastroErpCafeJurere) {
       if (["lead", "cliente", "perdido"].includes(filters.filterClassificacao)) {
         q = q.eq("classificacao_cafe_jurere", filters.filterClassificacao);

@@ -10339,6 +10339,7 @@ export type Database = {
           import_batch_id: string | null
           interest: string | null
           is_shadow: boolean | null
+          lista_fria_busca_id: string | null
           meta_ad_id: string | null
           meta_adset_id: string | null
           meta_campaign_id: string | null
@@ -10405,6 +10406,7 @@ export type Database = {
           import_batch_id?: string | null
           interest?: string | null
           is_shadow?: boolean | null
+          lista_fria_busca_id?: string | null
           meta_ad_id?: string | null
           meta_adset_id?: string | null
           meta_campaign_id?: string | null
@@ -10471,6 +10473,7 @@ export type Database = {
           import_batch_id?: string | null
           interest?: string | null
           is_shadow?: boolean | null
+          lista_fria_busca_id?: string | null
           meta_ad_id?: string | null
           meta_adset_id?: string | null
           meta_campaign_id?: string | null
@@ -10682,6 +10685,192 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      lista_fria_buscas: {
+        Row: {
+          cidade: string | null
+          com_email: number
+          com_telefone: number
+          created_at: string
+          creditos_devolvidos: boolean
+          creditos_limite: number
+          creditos_usados: number
+          criado_por: string | null
+          encontrados: number
+          erro: string | null
+          etapa: string | null
+          finished_at: string | null
+          fonte: string
+          heartbeat_at: string | null
+          id: string
+          importada_em: string | null
+          importados: number
+          instagram_handle: string | null
+          ja_leads: number
+          nicho: string | null
+          organization_id: string
+          progresso: number
+          sem_contato: number
+          started_at: string | null
+          status: string
+          updated_at: string
+          worker_id: string | null
+        }
+        Insert: {
+          cidade?: string | null
+          com_email?: number
+          com_telefone?: number
+          created_at?: string
+          creditos_devolvidos?: boolean
+          creditos_limite: number
+          creditos_usados?: number
+          criado_por?: string | null
+          encontrados?: number
+          erro?: string | null
+          etapa?: string | null
+          finished_at?: string | null
+          fonte: string
+          heartbeat_at?: string | null
+          id?: string
+          importada_em?: string | null
+          importados?: number
+          instagram_handle?: string | null
+          ja_leads?: number
+          nicho?: string | null
+          organization_id: string
+          progresso?: number
+          sem_contato?: number
+          started_at?: string | null
+          status?: string
+          updated_at?: string
+          worker_id?: string | null
+        }
+        Update: {
+          cidade?: string | null
+          com_email?: number
+          com_telefone?: number
+          created_at?: string
+          creditos_devolvidos?: boolean
+          creditos_limite?: number
+          creditos_usados?: number
+          criado_por?: string | null
+          encontrados?: number
+          erro?: string | null
+          etapa?: string | null
+          finished_at?: string | null
+          fonte?: string
+          heartbeat_at?: string | null
+          id?: string
+          importada_em?: string | null
+          importados?: number
+          instagram_handle?: string | null
+          ja_leads?: number
+          nicho?: string | null
+          organization_id?: string
+          progresso?: number
+          sem_contato?: number
+          started_at?: string | null
+          status?: string
+          updated_at?: string
+          worker_id?: string | null
+        }
+        Relationships: []
+      }
+      lista_fria_creditos: {
+        Row: {
+          busca_id: string | null
+          created_at: string
+          criado_por: string | null
+          delta: number
+          id: string
+          motivo: string
+          nota: string | null
+          organization_id: string
+        }
+        Insert: {
+          busca_id?: string | null
+          created_at?: string
+          criado_por?: string | null
+          delta: number
+          id?: string
+          motivo: string
+          nota?: string | null
+          organization_id: string
+        }
+        Update: {
+          busca_id?: string | null
+          created_at?: string
+          criado_por?: string | null
+          delta?: number
+          id?: string
+          motivo?: string
+          nota?: string | null
+          organization_id?: string
+        }
+        Relationships: []
+      }
+      lista_fria_resultados: {
+        Row: {
+          bairro: string | null
+          busca_id: string
+          categoria: string | null
+          created_at: string
+          email: string | null
+          endereco: string | null
+          id: string
+          importado_em: string | null
+          instagram: string | null
+          ja_e_lead: boolean
+          lead_id: string | null
+          nome: string
+          organization_id: string
+          qualidade: string
+          ref_externa: string
+          selecionado: boolean
+          site: string | null
+          telefone: string | null
+        }
+        Insert: {
+          bairro?: string | null
+          busca_id: string
+          categoria?: string | null
+          created_at?: string
+          email?: string | null
+          endereco?: string | null
+          id?: string
+          importado_em?: string | null
+          instagram?: string | null
+          ja_e_lead?: boolean
+          lead_id?: string | null
+          nome: string
+          organization_id: string
+          qualidade?: string
+          ref_externa: string
+          selecionado?: boolean
+          site?: string | null
+          telefone?: string | null
+        }
+        Update: {
+          bairro?: string | null
+          busca_id?: string
+          categoria?: string | null
+          created_at?: string
+          email?: string | null
+          endereco?: string | null
+          id?: string
+          importado_em?: string | null
+          instagram?: string | null
+          ja_e_lead?: boolean
+          lead_id?: string | null
+          nome?: string
+          organization_id?: string
+          qualidade?: string
+          ref_externa?: string
+          selecionado?: boolean
+          site?: string | null
+          telefone?: string | null
+        }
+        Relationships: []
       }
       loss_reasons: {
         Row: {
