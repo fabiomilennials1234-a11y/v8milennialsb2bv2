@@ -1,4 +1,5 @@
 import { RichContactBubble } from "./bubbles/RichContactBubble";
+import { isLocationMessageType } from "@/modules/communication/lib/location-maps-link";
 import { readUazapiPix, type UazapiPixFields } from "../../lib/uazapiPixDisplay";
 import { PixMessage } from "./media/PixMessage";
 import { AudioTranscription } from "./media/AudioTranscription";
@@ -238,7 +239,7 @@ export function MessageBubble({
   // Media purged by the 30-day retention job. media_url is NULL by now; show a
   // graceful "expired" state instead of the "[Mídia indisponível]" fallback.
   const isMediaExpired = isWhatsAppMsg && (message as WhatsAppMessage).media_expired === true;
-  const isLocation = messageType === "location" || messageType === "LocationMessage" || messageType === "livelocation";
+  const isLocation = isLocationMessageType(messageType);
   const isContact = messageType === "contact" || messageType === "ContactMessage" || messageType === "ContactsArrayMessage" || messageType === "vcard" || messageType === "contact_array";
   const isReaction = messageType === "reaction" || messageType === "ReactionMessage";
   const isPoll = messageType === "poll";

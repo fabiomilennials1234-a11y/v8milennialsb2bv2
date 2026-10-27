@@ -19,6 +19,7 @@ import { Contact as ContactIcon, ExternalLink, MapPin, Phone, Reply } from "luci
 
 import { Button } from "@/components/ui/button";
 import type { Bolha } from "@/modules/communication/lib/inbound-metadata";
+import { googleMapsUrl } from "@/modules/communication/lib/location-maps-link";
 
 export function BolhaNormalizada({ bolha }: { bolha: Bolha }) {
   if (bolha.tipo === "resposta") {
@@ -60,7 +61,7 @@ export function BolhaNormalizada({ bolha }: { bolha: Bolha }) {
     // Sem chave de mapa embutida e sem pedir uma: o link universal do Google
     // abre no app nativo em celular, que é onde o vendedor está quando precisa
     // chegar no endereço.
-    const mapa = `https://www.google.com/maps/search/?api=1&query=${bolha.latitude},${bolha.longitude}`;
+    const mapa = googleMapsUrl(bolha.latitude, bolha.longitude);
     return (
       <div className="space-y-1">
         <div className="flex items-center gap-2 text-sm">
@@ -70,14 +71,14 @@ export function BolhaNormalizada({ bolha }: { bolha: Bolha }) {
         {bolha.endereco && (
           <p className="text-xs text-muted-foreground break-words">{bolha.endereco}</p>
         )}
-        <a
+        {mapa && <a
           href={mapa}
           target="_blank"
           rel="noopener noreferrer"
-          className="inline-block text-xs underline underline-offset-2 hover:opacity-80"
+          className="inline-flex min-h-11 items-center text-xs underline underline-offset-2 hover:opacity-80"
         >
-          Abrir no mapa
-        </a>
+          Abrir no Google Maps
+        </a>}
       </div>
     );
   }
