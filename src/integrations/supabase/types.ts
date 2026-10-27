@@ -23940,6 +23940,14 @@ export type Database = {
       }
       lead_in_my_org: { Args: { p_lead_id: string }; Returns: boolean }
       lead_phone_descompartilhar: { Args: { p_lead_id: string }; Returns: boolean }
+      lead_tem_card_no_funil: {
+        Args: {
+          p_apenas_sem_negocio?: boolean
+          p_lead_id: string
+          p_pipeline_id: string
+        }
+        Returns: boolean
+      }
       lead_owner_add: {
         Args: { p_lead_id: string; p_team_member_id: string }
         Returns: Json

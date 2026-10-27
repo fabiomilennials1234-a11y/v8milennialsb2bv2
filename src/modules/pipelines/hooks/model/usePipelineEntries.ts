@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useRealtimeSubscription, type RealtimeHandlers } from "@/shared/realtime/useRealtimeSubscription";
 import { useOrganization } from "@/modules/identity";
@@ -105,7 +106,7 @@ export async function findOrCreatePipelineEntry(params: {
   assignedTo: string | null;
   metadata: Record<string, unknown>;
   notes?: string | null;
-}): Promise<{ entry: any; created: boolean }> {
+}): Promise<{ entry: any; created: boolean; hiddenFromCreator?: boolean }> {
   const { pipelineId, leadId, organizationId, stageKey, assignedTo, metadata, notes } = params;
 
   // ⚠️ MUDANÇA DE COMPORTAMENTO — não é no-op, e é deliberada.
@@ -134,13 +135,44 @@ export async function findOrCreatePipelineEntry(params: {
   };
   if (notes !== undefined) insertPayload.notes = notes;
 
-  const { data, error } = await supabase
+  // Id gerado aqui e INSERT sem RETURNING (ADR-0042): com a visualização do
+  // Funil restrita (`pipeline.view_all` desligada), a policy RESTRICTIVE de
+  // SELECT avalia a linha nova no RETURNING e devolveria 42501 para quem cria o
+  // card de um lead que não é dele (assigned_to de outra pessoa). A leitura
+  // vem depois, separada: se a linha não for visível ao criador, o fluxo
+  // SEGUE com o que ele mesmo enviou e avisa — não falha e não some em silêncio.
+  const id = crypto.randomUUID();
+  const { error } = await supabase
     .from("pipeline_entries")
-    .insert(insertPayload)
-    .select()
-    .single();
+    .insert({ id, ...insertPayload });
 
-  if (!error) return { entry: data, created: true };
+  if (!error) {
+    const { data: row } = await supabase
+      .from("pipeline_entries")
+      .select("*")
+      .eq("id", id)
+      .maybeSingle();
+    if (row) return { entry: row, created: true };
+
+    toast.info("Card criado; ele aparece para o responsável.");
+    const now = new Date().toISOString();
+    return {
+      // Campos gerados pelo servidor (stage_id, entered_at...) não são
+      // conhecidos aqui: quem consome usa id/lead_id/stage_key/organization_id.
+      entry: {
+        id,
+        ...insertPayload,
+        notes: insertPayload.notes ?? null,
+        stage_id: null,
+        deal_id: null,
+        closed_at: null,
+        created_at: now,
+        updated_at: now,
+      },
+      created: true,
+      hiddenFromCreator: true,
+    };
+  }
 
   // Recuperação de corrida: outro cliente inseriu entre o pré-check e este insert,
   // e um dos dois uniques devolveu 23505. Continua load-bearing HOJE.
@@ -152,6 +184,29 @@ export async function findOrCreatePipelineEntry(params: {
   if ((error as { code?: string }).code === "23505") {
     const raced = await readActivePipelineEntry(pipelineId, leadId);
     if (raced) return { entry: raced, created: false };
+
+    // Visualização no Funil "só os meus" (pipeline.view_all, ADR-0042): o card
+    // que ganhou a corrida pode ser de outra pessoa e a RLS não o mostra — a
+    // releitura volta vazia. `lead_tem_card_no_funil` (DEFINER, só booleano)
+    // distingue "existe e não é meu" de qualquer outro 23505.
+    const { data: existe } = await supabase.rpc("lead_tem_card_no_funil", {
+      p_lead_id: leadId,
+      p_pipeline_id: pipelineId,
+    });
+    if (existe === true) {
+      throw Object.assign(
+        new Error("Este lead já está neste funil, sob outro responsável."),
+        { code: "23505", details: "lead_ja_no_funil" },
+      );
+    }
+  }
+
+  if ((error as { code?: string }).code === "42501") {
+    // RLS residual (ex.: regime estrito de dono): mensagem de domínio, não o
+    // texto cru "new row violates row-level security policy".
+    throw Object.assign(new Error("Sem permissão para criar este card no funil."), {
+      code: "42501",
+    });
   }
 
   throw error;
