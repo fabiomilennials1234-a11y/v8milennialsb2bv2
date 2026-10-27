@@ -759,8 +759,13 @@ export function DealCard({
               <textarea
                 value={nota}
                 onChange={(e) => setNota(e.target.value)}
-                onBlur={() => nota !== negocio.nota && onSaveNote?.(nota)}
-                placeholder="O que precisa ser lembrado sobre este negócio…"
+                onBlur={() => !negocio.notaIndisponivel && nota !== negocio.nota && onSaveNote?.(nota)}
+                disabled={negocio.notaIndisponivel}
+                placeholder={
+                  negocio.notaIndisponivel
+                    ? "Não foi possível carregar a anotação. Feche e abra o card de novo."
+                    : "O que precisa ser lembrado sobre este negócio…"
+                }
                 rows={3}
                 className={cn(
                   "w-full resize-none rounded-xl border border-input bg-background/60 px-3 py-2",
