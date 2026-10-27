@@ -541,8 +541,13 @@ CREATE POLICY pipeline_view_all_select ON public.pipeline_entries
   );
 
 -- UPDATE/DELETE já passam pelo SELECT quando há WHERE; as duas policies fecham
--- o caso sem WHERE visível. WITH CHECK (true): o predicado vale para a linha
--- ANTIGA — transferir o card para outra pessoa continua possível a quem o vê.
+-- o caso sem WHERE visível. O WITH CHECK NÃO repete o predicado de visibilidade:
+-- ele vale para a linha ANTIGA, então transferir o card para outra pessoa continua
+-- possível a quem o vê. Também NÃO pode ser `true` literal: a invariante INV-1
+-- (supabase/tests/rls_invariants.sql) reprova qualquer WITH CHECK(true) para
+-- authenticated. Só repete a trava de org que pipeline_entries_update já impõe
+-- (o WITH CHECK padrão de uma policy sem cláusula é o próprio USING): a org da
+-- linha nova tem de ser uma das do usuário, ou ele é master.
 CREATE POLICY pipeline_view_all_update ON public.pipeline_entries
   AS RESTRICTIVE FOR UPDATE TO authenticated
   USING (
@@ -556,7 +561,10 @@ CREATE POLICY pipeline_view_all_update ON public.pipeline_entries
     OR lower(metadata->>'sale_responsible_id')     = ANY ((SELECT public.rls_my_active_tm_ids_text())::text[])
     OR lead_id = ANY ((SELECT public.rls_my_pipeline_lead_ids())::uuid[])
   )
-  WITH CHECK (true);
+  WITH CHECK (
+    organization_id IN (SELECT public.get_my_organization_ids())
+    OR (SELECT public.is_master_user())
+  );
 
 CREATE POLICY pipeline_view_all_delete ON public.pipeline_entries
   AS RESTRICTIVE FOR DELETE TO authenticated
