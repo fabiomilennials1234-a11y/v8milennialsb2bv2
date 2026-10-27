@@ -94,7 +94,7 @@ O procedimento do repositório para um ensaio conectado está em
 1. Confirmar o projeto alvo e comparar seu ledger com as migrations do checkout.
    Não executar `db push` indiscriminadamente: a numeração do repo é histórica e
    pode divergir do ledger do ambiente.
-2. Revisar a migration `20271212000000_tarefas_playbook_opcao_b.sql`, principalmente
+2. Revisar a migration `20271216000000_tarefas_playbook_opcao_b.sql`, principalmente
    RLS, grants, RPCs e os gatilhos dos negócios e das ações pessoais. Confirmar
    dependências e fazer o ensaio conectado antes de liberar a mudança.
 3. Aplicar a migration autorizada antes de publicar o frontend que usa os RPCs.

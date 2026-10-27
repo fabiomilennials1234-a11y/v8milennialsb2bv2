@@ -29,7 +29,7 @@ before(async () => {
   const trigger=unified.match(/CREATE OR REPLACE FUNCTION public\.apply_stage_checklist\(\)[\s\S]*?\$\$;/)?.[0];
   assert.ok(trigger,'uses the real unified legacy trigger');
   await db.exec(trigger);
-  await db.exec(sql('supabase/migrations/20271212000000_tarefas_playbook_opcao_b.sql'));
+  await db.exec(sql('supabase/migrations/20271216000000_tarefas_playbook_opcao_b.sql'));
 });
 after(async()=>{await db?.close();});
 beforeEach(async()=>{
