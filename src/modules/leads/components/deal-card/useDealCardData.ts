@@ -99,7 +99,9 @@ export function useDealCardData(entryId: string | null, leadId: string | null, i
   const extras = useQuery({
     queryKey: ["deal-card-extras", entryId, negocioBase?.pipelineId, negocioBase?.stageKey],
     enabled: isOpen && !!entryId && !!organizationId && !!negocioBase,
-    staleTime: 60_000,
+    // Leitura sem a entrada (erro ou RLS) não pode ficar em cache: reabrir o card
+    // é a forma de tentar de novo, e 60 s de "anotação indisponível" não é aceitável.
+    staleTime: (query) => (query.state.data?.entry ? 60_000 : 0),
     queryFn: async () => {
       const pipelineId = negocioBase!.pipelineId;
 
@@ -477,6 +479,7 @@ export function useDealCardData(entryId: string | null, leadId: string | null, i
 
       movimentacoes,
       nota: typeof entry?.notes === "string" ? entry.notes : "",
+      notaIndisponivel: typeof entry?.notes !== "string",
 
       /**
        * As tarefas do negócio entram na MESMA lista da aba, e antes das

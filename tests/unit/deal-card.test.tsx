@@ -475,6 +475,17 @@ describe("DealCard — anotação", () => {
     expect(onSaveNote).toHaveBeenCalledWith("Cliente pediu desconto");
   });
 
+  it("leitura da anotação indisponível: campo bloqueado, não sobrescreve a nota real", () => {
+    const onSaveNote = vi.fn();
+    render(<DealCard negocio={negocio({ nota: "", notaIndisponivel: true })} onSaveNote={onSaveNote} />);
+    const campo = abrirAnotacao();
+
+    expect(campo).toBeDisabled();
+    expect(campo).toHaveAttribute("placeholder", expect.stringContaining("Não foi possível carregar"));
+    fireEvent.blur(campo);
+    expect(onSaveNote).not.toHaveBeenCalled();
+  });
+
   it("troca de negócio troca a anotação em tela — o card é reusado entre cards do funil", () => {
     const { rerender } = render(<DealCard negocio={negocio({ id: "e1", nota: "Nota do e1" })} />);
     expect(abrirAnotacao()).toHaveValue("Nota do e1");
