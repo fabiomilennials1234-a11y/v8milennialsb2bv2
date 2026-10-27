@@ -741,6 +741,11 @@ export function MessageBubble({
           </p>
         )}
         {isFailed && <p role="status" className="mt-1 text-[11px] text-destructive">Falha no envio</p>}
+        {isFailed && (message.retry_attempt ?? 0) >= 10 && (
+          <p className="mt-0.5 text-[11px] text-muted-foreground">
+            Pode ter sido entregue. Confira no WhatsApp antes de reenviar.
+          </p>
+        )}
         {/* Exhausted sends cannot restart an automatic loop. */}
         {isFailed && onRetry && (message.retry_attempt ?? 0) < 10 && (
           <button
