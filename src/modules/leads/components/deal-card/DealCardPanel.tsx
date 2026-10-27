@@ -415,12 +415,19 @@ export const DealCardPanel = memo(function DealCardPanel() {
 
   const salvarNota = useCallback(
     async (texto: string) => {
-      if (!entryId) return;
-      const { error } = await supabase
+      if (!entryId) {
+        toast.error("Não foi possível salvar a anotação: este card não tem negócio aberto. O texto continua na tela.");
+        return;
+      }
+      /* `.select("id")` porque UPDATE barrado por RLS volta 200 com zero linhas
+         e sem erro — a anotação "salvava", não gravava, e a pessoa só via o
+         texto sumir no próximo refetch. */
+      const { data: gravadas, error } = await supabase
         .from("pipeline_entries")
         .update({ notes: texto })
-        .eq("id", entryId);
-      if (error) {
+        .eq("id", entryId)
+        .select("id");
+      if (error || !gravadas?.length) {
         toast.error("Não foi possível salvar a anotação. O texto continua na tela.");
         return;
       }
