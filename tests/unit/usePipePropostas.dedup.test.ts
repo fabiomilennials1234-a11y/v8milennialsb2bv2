@@ -66,7 +66,12 @@ vi.mock("@/modules/workflows/hooks/useAutoFollowUp", () => ({
 // Resolve a leitura de pipeline_entries. Devolve `{ data: Row[] }` — array, como a
 // query real, porque a leitura agora tolera N linhas em vez de `.maybeSingle()`.
 const mockSelectRows = vi.fn();
+// Resultado do INSERT. O insert não pede RETURNING (ADR-0042: com a visualização do
+// Funil restrita, o RETURNING avalia a policy de SELECT na linha nova), então
+// `await insert(...)` resolve direto em `{ error }`.
 const mockInsertSingle = vi.fn();
+// Releitura da linha recém-criada, por id: `.select("*").eq("id", id).maybeSingle()`.
+const mockReadInserted = vi.fn();
 
 const buildChain = () => {
   const chain: any = {};
@@ -75,8 +80,8 @@ const buildChain = () => {
   chain.is = vi.fn().mockReturnValue(chain);
   chain.order = vi.fn().mockReturnValue(chain);
   chain.limit = mockSelectRows;
-  chain.single = mockInsertSingle;
-  chain.insert = vi.fn().mockReturnValue(chain);
+  chain.maybeSingle = mockReadInserted;
+  chain.insert = vi.fn(() => Object.assign(Promise.resolve().then(() => mockInsertSingle()), chain));
   chain.update = vi.fn().mockReturnValue(chain);
   return chain;
 };
@@ -106,6 +111,7 @@ import { useCreatePipeProposta } from "@/modules/pipelines/hooks/legacy/usePipeP
 beforeEach(() => {
   mockSelectRows.mockReset();
   mockInsertSingle.mockReset();
+  mockReadInserted.mockReset();
   mockFrom.mockClear();
 });
 
@@ -113,7 +119,7 @@ describe("useCreatePipeProposta — idempotent create", () => {
   it("inserts a new pipeline_entries row when none exists for (pipeline_id, lead_id)", async () => {
     // Pre-check: no existing entry
     mockSelectRows.mockResolvedValueOnce({ data: [], error: null });
-    // Insert returns the new row
+    // O insert passa (sem RETURNING) e a releitura por id devolve a linha criada
     const newRow = {
       id: "entry-new",
       pipeline_id: PIPELINE_ID,
@@ -121,7 +127,8 @@ describe("useCreatePipeProposta — idempotent create", () => {
       stage_key: "marcar_compromisso",
       organization_id: ORG_ID,
     };
-    mockInsertSingle.mockResolvedValueOnce({ data: newRow, error: null });
+    mockInsertSingle.mockResolvedValueOnce({ data: null, error: null });
+    mockReadInserted.mockResolvedValueOnce({ data: newRow, error: null });
 
     const { result } = renderHook(() => useCreatePipeProposta(), { wrapper: createWrapper() });
 
