@@ -95,6 +95,7 @@ import { useFailedMessages, useRetryMessage } from "@/modules/communication/hook
 import { useConversationCalls } from "@/modules/communication/hooks/chat/useConversationCalls";
 import { useChatDensity } from "@/modules/communication/hooks/chat/useChatDensity";
 import { AiStateStrip } from "@/modules/communication/components/chat/takeover/AiStateStrip";
+import { useChatCopilotAvailability } from "@/modules/communication/hooks/chat/useChatCopilotAvailability";
 import { useIdentity } from "@/modules/identity";
 import { useTags } from "@/modules/leads/hooks/useTags";
 import { useCurrentTeamMember } from "@/modules/identity";
@@ -307,6 +308,7 @@ function ChatView({
   });
 
   const aiDisabled = copilotToggle.aiDisabled;
+  const copilotAvailability = useChatCopilotAvailability(organizationId);
   const toggleAi = (checked: boolean) => copilotToggle.toggle(!checked);
 
   const handleRetry = useCallback(
@@ -403,6 +405,8 @@ function ChatView({
           de tela: no celular ela substitui o banner "IA pediu ajuda". */}
       <AiStateStrip
         conversationId={conversationId}
+        copilotAvailability={copilotAvailability}
+        aiStatusLoading={copilotToggle.isLoading}
         aiDisabled={aiDisabled}
         onToggleAi={toggleAi}
         toggleAiPending={copilotToggle.isPending}
