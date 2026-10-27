@@ -1,0 +1,33 @@
+# Worker + gosom. Suba com:
+#   cp .env.example .env   # preencha SUPABASE_URL e SUPABASE_SERVICE_ROLE_KEY
+#   docker compose -f services/lista-fria-worker/compose.yaml up -d --build
+services:
+  gosom:
+    # Fixado por digest (medido em 27/10/2026): o contrato do gosom mudou entre o
+    # spec e a resposta real, então a imagem não pode andar sozinha.
+    image: gosom/google-maps-scraper@sha256:e205c02913c5a69c16fc2094b8e5b194a2f655166d2c1126d50548d216e6b1b2
+    command: ["-data-folder", "/gmapsdata"]
+    volumes:
+      - gmapsdata:/gmapsdata
+    # Chromium estoura /dev/shm de 64 MB em página pesada.
+    shm_size: 1gb
+    restart: unless-stopped
+    # SEM `ports:`. A API do gosom não tem autenticação: quem alcança a porta 8080
+    # cria job, lê resultado e apaga. Só o worker, pela rede interna do compose.
+
+  worker:
+    build:
+      context: ../..
+      dockerfile: services/lista-fria-worker/Dockerfile
+    depends_on: [gosom]
+    restart: unless-stopped
+    environment:
+      GOSOM_URL: http://gosom:8080
+      SUPABASE_URL: ${SUPABASE_URL:?defina SUPABASE_URL}
+      SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY:?defina SUPABASE_SERVICE_ROLE_KEY}
+      # Opcional. Sem ela a busca roda sem expansão por bairro e sem filtro de nicho.
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      GOSOM_MAX_TIME_S: ${GOSOM_MAX_TIME_S:-3600}
+
+volumes:
+  gmapsdata:

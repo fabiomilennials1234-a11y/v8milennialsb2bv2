@@ -44,7 +44,9 @@ A marca só muda pelas RPCs (`BEFORE INSERT/UPDATE` com `app.lista_fria_rpc`), n
 
 **4. Créditos.** Livro de créditos que só soma (`lista_fria_creditos`); o saldo é `SUM(delta)` da org. A busca **reserva** o limite que o cliente escolheu ao ser criada (advisory lock por org: duas abas não gastam o mesmo saldo) e **devolve a sobra** ao terminar, uma vez só (`creditos_devolvidos`). O worker cobra 1 crédito por contato novo e válido; contato que já é lead entra marcado `ja_e_lead` e não consome. Quem libera saldo, por ora, é o time Torque (`lista_fria_creditos_conceder`, só master): não há compra no produto.
 
-**5. Execução fora do banco.** O banco é a fila (`lista_fria_worker_reivindicar` com `FOR UPDATE SKIP LOCKED`, heartbeat, recuperação de busca travada que devolve a reserva). Quem executa é um **worker em container**, fora das edge functions: coletar no Maps e ler sites passa do limite de tempo delas. O contrato do worker é só o conjunto de RPCs acima; trocar o provedor (gosom, Apify) não toca no banco.
+**5. Execução fora do banco.** O banco é a fila (`lista_fria_worker_reivindicar` com `FOR UPDATE SKIP LOCKED`, heartbeat, recuperação de busca travada que devolve a reserva). Quem executa é um **worker em container**, fora das edge functions: coletar no Maps e ler sites passa do limite de tempo delas. O contrato do worker é só o conjunto de RPCs acima; trocar o provedor (gosom, Apify) não toca no banco. O worker do Maps está em `services/lista-fria-worker` (Node 24, sem dependências): lê o CSV **parcial** do gosom a cada 5 s e ingere só o que é novo, por isso "parar e ficar com o que achou" funciona. Contrato do gosom **medido na imagem real** (o spec que ela serve diverge da resposta: chaves maiúsculas, `lang` ISO curto); detalhes no README do worker.
+
+**6. Leitura de site e IA são cercadas.** O endereço do site vem do Maps (texto de terceiro) e o worker tem a chave de serviço no ambiente: a leitura valida o IP na conexão, só 80/443, redirecionamento à mão, corpo e tempo limitados (`ssrf.ts`). A API do gosom não tem autenticação e nunca é publicada. Título e categoria do Maps entram na IA como dado, com saída forçada por ferramenta; IA fora do ar nunca derruba nem decide gasto.
 
 ## Consequences
 
@@ -56,6 +58,9 @@ A marca só muda pelas RPCs (`BEFORE INSERT/UPDATE` com `app.lista_fria_rpc`), n
 
 ## Fora desta entrega
 
-- O worker (gosom + extração por IA + validação) e o adaptador do Instagram.
+- O adaptador do Instagram (o worker fecha a busca como `instagram_indisponivel` e devolve a reserva).
+- Checar se o número tem WhatsApp (exige instância conectada da própria org). "Verificado" hoje é formato válido / MX.
+- Cobertura por grade de coordenadas; hoje a cidade é coberta por sinônimos e bairros que a IA sugere.
+- A IA do worker só foi exercitada com `fetch` falso, não contra a API da Anthropic.
 - Compra de créditos e cobrança.
 - Levar um contato da Lista fria para um funil (ação manual). Hoje ele só sai da seção se a marca for retirada pelo time.
