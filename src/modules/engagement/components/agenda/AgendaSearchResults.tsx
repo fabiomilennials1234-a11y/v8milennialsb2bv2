@@ -19,8 +19,7 @@ import { AlertTriangle, CalendarOff, Check, Loader2, RefreshCw, X } from "lucide
 import { Button } from "@/components/ui/button";
 import { IconChip } from "@/components/ui/bento";
 import type { UnifiedEvent } from "./agenda-helpers";
-import { isFinishedEvent, outcomeOf } from "./agenda-helpers";
-import { eventSubtitle } from "./DayAgendaView";
+import { eventSubtitle, isFinishedEvent, outcomeOf } from "./agenda-helpers";
 import { AGENDA_SEARCH_LIMIT, AGENDA_SEARCH_MIN_CHARS } from "../../hooks/useAgendaSearch";
 
 const PANEL_CLASS =
