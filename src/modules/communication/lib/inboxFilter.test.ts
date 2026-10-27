@@ -141,6 +141,70 @@ describe("applyInboxFilters — escopo", () => {
   });
 });
 
+describe("applyInboxFilters — busca por código do ERP", () => {
+  const run = (cs: ChatContact[], searchQuery: string, extra = {}) =>
+    applyInboxFilters(cs, state(), ctx(), { searchQuery, ...extra });
+
+  it("acha pelo lead_erp_code mesmo quando o nome não contém o código", () => {
+    const a = contact({ lead_name: "Fernando Porto", lead_erp_code: "6627" });
+    const b = contact({ lead_name: "Outro", lead_erp_code: "1234" });
+    expect(run([a, b], "6627")).toEqual([a]);
+    expect(run([a, b], "66")).toEqual([a]);
+  });
+
+  it("acha pelo rótulo do contato", () => {
+    const a = contact({ lead_name: "Fernando", lead_contact_label: "José Luiz - Compras" });
+    expect(run([a], "compras")).toEqual([a]);
+    expect(run([a], "jose luiz")).toEqual([a]);
+  });
+
+  it("ignora acento e caixa em ambos os lados", () => {
+    const a = contact({ lead_name: "Café Jurerê" });
+    expect(run([a], "jurere")).toEqual([a]);
+    expect(run([a], "JURERÊ")).toEqual([a]);
+    const b = contact({ lead_name: "Jurere Bar" });
+    expect(run([b], "jurerê")).toEqual([b]);
+  });
+
+  it("'6627 -' casa com o nome exibido 'Cód - Contato - Lead'", () => {
+    const a = contact({ lead_name: "Fernando", lead_erp_code: "6627" });
+    const displayName = () => "6627 - Compras - Fernando";
+    expect(run([a], "6627 -", { displayName })).toEqual([a]);
+    expect(run([a], "6627 - compras", { displayName })).toEqual([a]);
+    expect(run([a], "6627-compras", { displayName })).toEqual([a]);
+    expect(run([a], "6627 – compras", { displayName })).toEqual([a]);
+    expect(run([a], "9999 -", { displayName })).toEqual([]);
+  });
+
+  it("código exato vem antes de telefone e de prefixo", () => {
+    const porTelefone = contact({ lead_name: "tel", phone_number: "5548966270001", lead_erp_code: "1" });
+    const porPrefixo = contact({ lead_name: "prefixo", lead_erp_code: "66271" });
+    const exato = contact({ lead_name: "exato", lead_erp_code: "6627" });
+    expect(names(run([porTelefone, porPrefixo, exato], "6627"))).toEqual(["exato", "prefixo", "tel"]);
+  });
+
+  it("empate preserva a ordem original (sort estável)", () => {
+    const x = contact({ lead_name: "x", phone_number: "5548900006627" });
+    const y = contact({ lead_name: "y", phone_number: "5548911116627" });
+    expect(names(run([x, y], "6627"))).toEqual(["x", "y"]);
+  });
+
+  it("telefone continua casando por includes", () => {
+    const a = contact({ lead_name: "tel", phone_number: "5548933334444" });
+    expect(run([a], "3333")).toEqual([a]);
+  });
+
+  it("sem busca a ordem é inalterada", () => {
+    const cs = [
+      contact({ lead_name: "c", lead_erp_code: "3" }),
+      contact({ lead_name: "a", lead_erp_code: "1" }),
+      contact({ lead_name: "b", lead_erp_code: "2" }),
+    ];
+    expect(names(applyInboxFilters(cs, state(), ctx()))).toEqual(["c", "a", "b"]);
+    expect(names(run(cs, "   "))).toEqual(["c", "a", "b"]);
+  });
+});
+
 // ─── Dimensões individuais ──────────────────────────────────────────────────
 
 describe("applyInboxFilters — dimensões", () => {
