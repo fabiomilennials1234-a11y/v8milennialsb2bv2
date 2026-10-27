@@ -28,6 +28,8 @@ beforeAll(() => {
 const fsm = {
   state: "AI_ACTIVE" as AiTakeoverState,
   resumeMode: null as null | "immediate" | "after_response" | "dont_resume",
+  isLoading: false,
+  isError: false,
   pauseAi: vi.fn(async () => {}),
   resumeAi: vi.fn(async () => {}),
   markHumanActive: vi.fn(async () => {}),
@@ -39,7 +41,6 @@ vi.mock("@/modules/communication/hooks/chat/useTakeover", () => ({
   useTakeover: () => ({
     ...fsm,
     updatedAt: null,
-    isLoading: false,
     isMutating: false,
   }),
 }));
@@ -52,6 +53,7 @@ function montar(props: Partial<React.ComponentProps<typeof AiStateStrip>> = {}) 
     <TooltipProvider>
       <AiStateStrip
         conversationId="conv-1"
+        copilotAvailability="available"
         aiDisabled={false}
         onToggleAi={onToggleAi}
         toggleAiPending={false}
@@ -67,7 +69,74 @@ const botao = (nome: string) => screen.queryByRole("button", { name: nome });
 beforeEach(() => {
   fsm.state = "AI_ACTIVE";
   fsm.resumeMode = null;
+  fsm.isLoading = false;
+  fsm.isError = false;
   vi.clearAllMocks();
+});
+
+describe("AiStateStrip — só confirma IA ativa com Copilot disponível", () => {
+  it.each([null, "conv-1"])("sem agente ativo, mesmo com conversa %s e toggle ligado", async (conversationId) => {
+    const user = userEvent.setup();
+    const { onToggleAi } = montar({ conversationId, copilotAvailability: "unavailable" });
+    expect(screen.getByText("Sem Copilot ativo", { selector: "p" })).toBeInTheDocument();
+    expect(screen.queryByText("IA ativa")).not.toBeInTheDocument();
+    expect(botao("Pausar IA")).not.toBeInTheDocument();
+    const sw = screen.getByRole("switch");
+    expect(sw).toBeDisabled();
+    expect(sw).toHaveAttribute("aria-checked", "false");
+    await user.click(sw);
+    expect(onToggleAi).not.toHaveBeenCalled();
+  });
+
+  it.each(["loading", "error"] as const)("não anuncia atendimento automático com disponibilidade %s", (copilotAvailability) => {
+    montar({ copilotAvailability });
+    expect(screen.queryByText("IA ativa")).not.toBeInTheDocument();
+    expect(screen.queryByRole("group", { name: "IA está respondendo automaticamente" })).not.toBeInTheDocument();
+    expect(screen.getByRole("switch")).toBeDisabled();
+  });
+
+  it("aguarda a preferência do lead antes de anunciar IA ativa", () => {
+    montar({ aiStatusLoading: true });
+    expect(screen.getByTestId("ai-state-strip")).toHaveAttribute("data-state", "CHECKING");
+    expect(screen.queryByText("IA ativa")).not.toBeInTheDocument();
+  });
+
+  it.each(["isLoading", "isError"] as const)("não usa o estado padrão enquanto a conversa está em %s", (flag) => {
+    fsm[flag] = true;
+    montar();
+    expect(screen.queryByText("IA ativa")).not.toBeInTheDocument();
+    expect(screen.getByRole("switch")).toBeDisabled();
+  });
+
+  it("agente disponível pode iniciar atendimento mesmo sem conversa anterior da IA", () => {
+    montar({ conversationId: null });
+    expect(screen.getByText("IA ativa")).toBeInTheDocument();
+    expect(screen.getByRole("switch")).toBeEnabled();
+    expect(botao("Pausar IA")).not.toBeInTheDocument();
+  });
+
+  it("uma pausa humana não aparece como IA ativa", () => {
+    montar({ humanPaused: true });
+    expect(screen.getByTestId("ai-state-strip")).toHaveAttribute("data-state", "HUMAN_PAUSE");
+    expect(screen.queryByText("IA ativa")).not.toBeInTheDocument();
+  });
+
+  it("preserva pedido de atendimento humano sem oferecer um Copilot indisponível", async () => {
+    fsm.state = "WAITING_HUMAN";
+    const user = userEvent.setup();
+    montar({ copilotAvailability: "unavailable" });
+    expect(screen.getByRole("alert")).toHaveAttribute("data-state", "WAITING_HUMAN");
+    expect(botao("Deixar com a IA")).not.toBeInTheDocument();
+    await user.click(botao("Assumir conversa")!);
+    expect(fsm.markHumanActive).toHaveBeenCalledOnce();
+  });
+
+  it("mantém o humano no controle quando o agente é desativado", () => {
+    fsm.state = "HUMAN_ACTIVE";
+    montar({ copilotAvailability: "unavailable" });
+    expect(screen.getByText("Você assumiu")).toBeInTheDocument();
+    expect(botao("Devolver para a IA")).not.toBeInTheDocument();
+  });
 });
 
 describe("AiStateStrip — transições por estado (as do menu de TakeoverControls)", () => {
