@@ -35,6 +35,8 @@ export interface LeadsFilterParams {
   usaLeiDoErp?: boolean;
   /** Piloto da página da Café Jurerê, habilitado por flag da organização. */
   usaCadastroErpCafeJurere?: boolean;
+  /** A org tem a Lista fria (flag)? Só então a lista separa a seção. */
+  usaListaFria?: boolean;
   filterUf?: string;
   /** Instante ISO (inclusive) — limite inferior de `created_at`. */
   createdFrom?: string;
@@ -91,11 +93,11 @@ function applyLeadsFilters(
  * Retorna até LEADS_PAGE_SIZE leads por página.
  */
 export function useLeads(params: LeadsFilterParams = {}, options: { enabled?: boolean } = {}) {
-  const { page = 0, searchQuery, filterOrigin, filterQualification, filterClassificacao, usaLeiDoErp, usaCadastroErpCafeJurere, filterUf, createdFrom, createdTo, filterAssignment, filterResponsible, donosMultiplos, sort = DEFAULT_LEAD_SORT } = params;
+  const { page = 0, searchQuery, filterOrigin, filterQualification, filterClassificacao, usaLeiDoErp, usaCadastroErpCafeJurere, usaListaFria, filterUf, createdFrom, createdTo, filterAssignment, filterResponsible, donosMultiplos, sort = DEFAULT_LEAD_SORT } = params;
   const { organizationId, isReady } = useOrganization();
   const queryClient = useQueryClient();
   const enabled = isReady && options.enabled !== false;
-  const filters = { searchQuery, filterOrigin, filterQualification, filterClassificacao, usaLeiDoErp, usaCadastroErpCafeJurere, filterUf, createdFrom, createdTo, filterAssignment, filterResponsible, ...(donosMultiplos ? { donosMultiplos } : {}) };
+  const filters = { searchQuery, filterOrigin, filterQualification, filterClassificacao, usaLeiDoErp, usaCadastroErpCafeJurere, usaListaFria, filterUf, createdFrom, createdTo, filterAssignment, filterResponsible, ...(donosMultiplos ? { donosMultiplos } : {}) };
   const queryKey = leadsKeys.list(organizationId, page, filters, sort);
 
   // UM canal (em `leads`), classificado por evento — ver `useLeadsRealtime`.
@@ -189,11 +191,11 @@ export function useLeads(params: LeadsFilterParams = {}, options: { enabled?: bo
  * FILTROS da lista, e com TETO: acima de `LEADS_COUNT_CAP` devolve
  * `{ capped: true }` em vez do total. Ver `lib/capped-count`.
  */
-export function useLeadsCount(filters: Omit<LeadsFilterParams, "page"> = {}) {
-  const { searchQuery, filterOrigin, filterQualification, filterClassificacao, usaLeiDoErp, usaCadastroErpCafeJurere, filterUf, createdFrom, createdTo, filterAssignment, filterResponsible, donosMultiplos } = filters;
+export function useLeadsCount(filters: Omit<LeadsFilterParams, "page"> = {}, options: { enabled?: boolean } = {}) {
+  const { searchQuery, filterOrigin, filterQualification, filterClassificacao, usaLeiDoErp, usaCadastroErpCafeJurere, usaListaFria, filterUf, createdFrom, createdTo, filterAssignment, filterResponsible, donosMultiplos } = filters;
   const { organizationId, isReady } = useOrganization();
   const queryClient = useQueryClient();
-  const recorte = { searchQuery, filterOrigin, filterQualification, filterClassificacao, usaLeiDoErp, usaCadastroErpCafeJurere, filterUf, createdFrom, createdTo, filterAssignment, filterResponsible, ...(donosMultiplos ? { donosMultiplos } : {}) };
+  const recorte = { searchQuery, filterOrigin, filterQualification, filterClassificacao, usaLeiDoErp, usaCadastroErpCafeJurere, usaListaFria, filterUf, createdFrom, createdTo, filterAssignment, filterResponsible, ...(donosMultiplos ? { donosMultiplos } : {}) };
 
   return useQuery<CappedCount>({
     queryKey: leadsKeys.count(organizationId, recorte),
@@ -206,7 +208,7 @@ export function useLeadsCount(filters: Omit<LeadsFilterParams, "page"> = {}) {
       const query = applyLeadsFilters(supabase.from("leads").select("id"), organizationId, recorte, secundarios, coDonos);
       return runCappedCount(query);
     },
-    enabled: isReady,
+    enabled: isReady && options.enabled !== false,
     staleTime: 60000, // 1 minuto
   });
 }

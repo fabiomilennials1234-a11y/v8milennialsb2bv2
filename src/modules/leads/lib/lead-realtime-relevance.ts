@@ -69,6 +69,8 @@ export const LEAD_MEMBERSHIP_COLUMNS: ReadonlySet<string> = new Set([
   "classificacao",
   "relacao_negocios",
   "cafe_jurere_erp_elegivel",
+  // Lista fria: a seção é por esta coluna (aba Lista fria × demais abas).
+  "lista_fria_busca_id",
   // Dono / atribuição — e as FKs dos joins embutidos na lista.
   "responsible_id",
   "pre_sale_responsible_id",

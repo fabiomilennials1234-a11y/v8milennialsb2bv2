@@ -68,7 +68,7 @@ describe("/leads não carrega mais a carteira", () => {
   });
 
   it("as abas vêm de leadsPageTabOptions e o `cliente` antigo passa pelo redirect", () => {
-    expect(leadsPage).toMatch(/leadsPageTabOptions\(usaLeiDoErp, usaCadastroErpCafeJurere\)/);
+    expect(leadsPage).toMatch(/leadsPageTabOptions\(usaLeiDoErp, usaCadastroErpCafeJurere, podeVerListaFria\)/);
     expect(leadsPage).toMatch(/useRedirecionaAbaClientes\(filterClassificacao, filterState, setFilterState\)/);
   });
 });

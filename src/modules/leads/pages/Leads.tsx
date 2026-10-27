@@ -117,6 +117,8 @@ import { useLeadOwnersEnabled } from "../hooks/useLeadOwners";
 import { normalizarAbaCafeJurere } from "../lib/cafe-jurere-classificacao";
 import { useOrgUsaLeiDoErp } from "../hooks/useOrgUsaLeiDoErp";
 import { useSearchParams } from "react-router-dom";
+import { BuscasCard, NovaBuscaDialog, useListaFriaAcesso, useSaldoDeCreditos } from "@/modules/lista-fria";
+import { ABA_LISTA_FRIA } from "../lib/lead-list-filters";
 import { useCurrentTeamMember, useResponsibleMembers } from "@/modules/identity";
 import { usePipeOps } from "../pipe-ops";
 import { destinosDeSistema } from "@/contracts/pipe";
@@ -260,8 +262,17 @@ function LeadsInner() {
   // N donos por lead (Chamado 793f4b05): lista traz todos os donos e o filtro
   // casa qualquer um. Org sem a flag: `false`, a tela de sempre.
   const donosMultiplos = useLeadOwnersEnabled();
-  const abaSalva = filterState.filterClassificacao ?? CLASSIFICACAO_TODAS;
+  // Lista fria (ADR-0042): seção separada, só em org com a flag. `usaListaFria`
+  // (flag) separa os leads da seção das demais abas; a aba só aparece para quem
+  // tem `lista_fria.view`.
+  const { habilitada: usaListaFria, podeVer: podeVerListaFria, podeEditar: podeEditarListaFria, carregando: carregandoListaFria } = useListaFriaAcesso();
+  const { data: saldoListaFria } = useSaldoDeCreditos({ enabled: podeVerListaFria });
+  const [novaBuscaAberta, setNovaBuscaAberta] = useState(false);
+  const abaSalvaBruta = filterState.filterClassificacao ?? CLASSIFICACAO_TODAS;
+  // Aba salva de quando a flag estava ligada (ou link antigo): sem acesso, volta para Todos.
+  const abaSalva = abaSalvaBruta === ABA_LISTA_FRIA && !podeVerListaFria ? CLASSIFICACAO_TODAS : abaSalvaBruta;
   const filterClassificacao = usaCadastroErpCafeJurere ? normalizarAbaCafeJurere(abaSalva) : abaSalva;
+  const naAbaListaFria = filterClassificacao === ABA_LISTA_FRIA;
   // A aba Clientes saiu de `/leads` (CTO 2026-10-16): `"cliente"` vindo de
   // estado persistido ou visão salva vira redirect para `/carteira`.
   const redirecionarParaCarteira = useRedirecionaAbaClientes(filterClassificacao, filterState, setFilterState);
@@ -290,6 +301,18 @@ function LeadsInner() {
   );
 
   const [searchParams, setSearchParams] = useSearchParams();
+  // `?aba=lista_fria` (voltar da revisão da busca): abre a aba e limpa o parâmetro.
+  // Espera o acesso carregar — sem isso o parâmetro some antes de a permissão chegar.
+  useEffect(() => {
+    if (searchParams.get("aba") !== ABA_LISTA_FRIA || carregandoListaFria) return;
+    if (podeVerListaFria) setFilterState((f) => ({ ...f, filterClassificacao: ABA_LISTA_FRIA }));
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.delete("aba");
+      return next;
+    }, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams, carregandoListaFria, podeVerListaFria]);
   const [activeViewId, setActiveViewId] = useState<string | null>(searchParams.get("view"));
   const handleActiveViewChange = useCallback((viewId: string | null) => {
     setActiveViewId(viewId);
@@ -367,19 +390,20 @@ function LeadsInner() {
     }, { replace: true });
   }, [setSearchParams]);
 
-  const filterParams = { page, searchQuery, filterOrigin, filterQualification, filterClassificacao, usaLeiDoErp, usaCadastroErpCafeJurere, filterUf: ufFilter, createdFrom, createdTo, filterAssignment, filterResponsible, donosMultiplos, sort };
+  const filterParams = { page, searchQuery, filterOrigin, filterQualification, filterClassificacao, usaLeiDoErp, usaCadastroErpCafeJurere, usaListaFria, filterUf: ufFilter, createdFrom, createdTo, filterAssignment, filterResponsible, donosMultiplos, sort };
   const leadsQuery = useLeads(filterParams, { enabled: !redirecionarParaCarteira });
   const { data: loadedLeads = [], isLoading } = leadsQuery;
   const leads = useMemo(() => redirecionarParaCarteira ? [] : loadedLeads, [redirecionarParaCarteira, loadedLeads]);
-  const { data: totalLeads } = useLeadsCount({ searchQuery, filterOrigin, filterQualification, filterClassificacao, usaLeiDoErp, usaCadastroErpCafeJurere, filterUf: ufFilter, createdFrom, createdTo, filterAssignment, filterResponsible, donosMultiplos });
-  const tabFilters = { searchQuery, filterOrigin, filterQualification, usaLeiDoErp, usaCadastroErpCafeJurere, filterUf: ufFilter, createdFrom, createdTo, filterAssignment, filterResponsible, donosMultiplos };
+  const { data: totalLeads } = useLeadsCount({ searchQuery, filterOrigin, filterQualification, filterClassificacao, usaLeiDoErp, usaCadastroErpCafeJurere, usaListaFria, filterUf: ufFilter, createdFrom, createdTo, filterAssignment, filterResponsible, donosMultiplos });
+  const tabFilters = { searchQuery, filterOrigin, filterQualification, usaLeiDoErp, usaCadastroErpCafeJurere, usaListaFria, filterUf: ufFilter, createdFrom, createdTo, filterAssignment, filterResponsible, donosMultiplos };
   const { data: allTabCount } = useLeadsCount({ ...tabFilters, filterClassificacao: "all" });
   const { data: leadTabCount } = useLeadsCount({ ...tabFilters, filterClassificacao: "lead" });
   const finalTab = usaLeiDoErp && !usaCadastroErpCafeJurere ? "indefinido" : "perdido";
   const { data: finalTabCount } = useLeadsCount({ ...tabFilters, filterClassificacao: finalTab });
-  const tabCounts = { all: allTabCount, lead: leadTabCount, [finalTab]: finalTabCount };
+  const { data: listaFriaTabCount } = useLeadsCount({ ...tabFilters, filterClassificacao: ABA_LISTA_FRIA }, { enabled: podeVerListaFria });
+  const tabCounts = { all: allTabCount, lead: leadTabCount, [finalTab]: finalTabCount, [ABA_LISTA_FRIA]: listaFriaTabCount };
   // Sem `cliente`: esse recorte é a Carteira, em rota própria.
-  const tabOptions = leadsPageTabOptions(usaLeiDoErp, usaCadastroErpCafeJurere);
+  const tabOptions = leadsPageTabOptions(usaLeiDoErp, usaCadastroErpCafeJurere, podeVerListaFria);
   // Paginação sobre contagem COM TETO — ver `cappedPagination`.
   const { lastPage, hasNext: hasNextPage } = cappedPagination(totalLeads, page, LEADS_PAGE_SIZE, leads.length);
   const { data: currentTeamMember, isLoading: isLoadingTeamMember, isFetching: isFetchingTeamMember } = useCurrentTeamMember();
@@ -535,7 +559,7 @@ function LeadsInner() {
    * org, que é o que o resto do produto usa.
    */
   const { data: orgStats, isLoading: isLoadingStats } = useLeadsStats({
-    searchQuery, filterOrigin, filterQualification, filterClassificacao, usaLeiDoErp, usaCadastroErpCafeJurere, filterResponsible,
+    searchQuery, filterOrigin, filterQualification, filterClassificacao, usaLeiDoErp, usaCadastroErpCafeJurere, usaListaFria, filterResponsible,
     filterUf: ufFilter, createdFrom, createdTo, donosMultiplos,
   });
 
@@ -764,10 +788,17 @@ function LeadsInner() {
           >
             <FileDown />
           </Button>
-          <Button onClick={() => handleOpenDialog()} disabled={!canCreateLead}>
-            <Plus />
-            Novo lead
-          </Button>
+          {naAbaListaFria ? (
+            <Button onClick={() => setNovaBuscaAberta(true)} disabled={!podeEditarListaFria}>
+              <Plus />
+              Nova busca
+            </Button>
+          ) : (
+            <Button onClick={() => handleOpenDialog()} disabled={!canCreateLead}>
+              <Plus />
+              Novo lead
+            </Button>
+          )}
         </>}
         tabs={
           /* A gaveta recorta a lista — pílula escura, mesmos valores. Clientes
@@ -786,6 +817,9 @@ function LeadsInner() {
           </Tabs>
         }
       />
+      {/* Lista fria: as buscas (em andamento e a revisar) moram no topo da aba. */}
+      {naAbaListaFria && <BuscasCard podeEditar={podeEditarListaFria} />}
+
       {/* Stats */}
       {isV2 ? (
         <LeadsStatsV2
@@ -1157,10 +1191,12 @@ function LeadsInner() {
 
       <ImportLeadsModal open={isImportModalOpen} onOpenChange={setIsImportModalOpen} />
 
+      <NovaBuscaDialog aberto={novaBuscaAberta} onFechar={() => setNovaBuscaAberta(false)} saldo={saldoListaFria} />
+
       <ExportLeadsModal
         open={isExportModalOpen}
         onOpenChange={setIsExportModalOpen}
-        listFilters={{ searchQuery, filterOrigin, filterQualification, filterClassificacao, usaLeiDoErp, usaCadastroErpCafeJurere, filterResponsible, filterUf: ufFilter, createdFrom, createdTo, donosMultiplos }}
+        listFilters={{ searchQuery, filterOrigin, filterQualification, filterClassificacao, usaLeiDoErp, usaCadastroErpCafeJurere, usaListaFria, filterResponsible, filterUf: ufFilter, createdFrom, createdTo, donosMultiplos }}
       />
 
       <Dialog open={isImportHistoryOpen} onOpenChange={setIsImportHistoryOpen}>

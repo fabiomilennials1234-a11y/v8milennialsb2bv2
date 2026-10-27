@@ -27,6 +27,8 @@
  * organização prevalece sobre as duas leis sem mudar o vocabulário gravável.
  */
 
+import { ABA_LISTA_FRIA } from "./lead-list-filters";
+
 export const LEAD_CLASSIFICACOES = ["lead", "cliente", "indefinido"] as const;
 
 export type LeadClassificacao = (typeof LEAD_CLASSIFICACOES)[number];
@@ -81,10 +83,19 @@ export function leadClassificacaoOptions(usaLeiDoErp: boolean, usaCadastroErpCaf
  * 2026-10-16). O seletor de classificação do lead (gravável) continua com as
  * quatro — sair da aba não muda o vocabulário do dado.
  */
-export function leadsPageTabOptions(usaLeiDoErp: boolean, usaCadastroErpCafeJurere = false) {
-  return leadClassificacaoOptions(usaLeiDoErp, usaCadastroErpCafeJurere).filter(
+export function leadsPageTabOptions(
+  usaLeiDoErp: boolean,
+  usaCadastroErpCafeJurere = false,
+  usaListaFria = false,
+) {
+  const abas = leadClassificacaoOptions(usaLeiDoErp, usaCadastroErpCafeJurere).filter(
     (option) => option.value !== "cliente",
   );
+  if (!usaListaFria) return abas;
+  // A Lista fria (ADR-0042) é uma seção, não uma classificação: entra depois de
+  // Leads e antes das demais, só em org com a flag.
+  const depoisDeLeads = abas.findIndex((o) => o.value === "lead") + 1;
+  return [...abas.slice(0, depoisDeLeads), { value: ABA_LISTA_FRIA, label: "Lista fria" }, ...abas.slice(depoisDeLeads)];
 }
 
 export function isLeadClassificacao(v: unknown): v is LeadClassificacao {
