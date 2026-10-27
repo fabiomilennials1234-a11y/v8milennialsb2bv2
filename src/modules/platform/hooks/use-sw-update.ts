@@ -130,8 +130,10 @@ export function useServiceWorkerUpdate(): UseServiceWorkerUpdateReturn {
           try {
             // Match the registration used by registerSW, including on deep links.
             const registration = await navigator.serviceWorker.getRegistration('/sw.js');
-            const waiting = registration?.waiting;
-            if (waiting && await workerContainsEntry(waiting, entry) && registration.waiting === waiting) {
+            // Another tab can finish activation while this check is in flight.
+            const worker = registration?.waiting ?? registration?.active;
+            if (registration && worker && await workerContainsEntry(worker, entry) &&
+                (registration.waiting ?? registration.active) === worker) {
               if (!disposed) {
                 notifiedRef.current = false; // A later, different build must still notify.
                 setNeedRefresh(false);

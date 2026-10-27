@@ -17,7 +17,7 @@ vi.mock('@/shared/pwa/build-identity', async importOriginal => ({
 }));
 import { useServiceWorkerUpdate } from '@/modules/platform/hooks/use-sw-update';
 
-let registration: { waiting: object | null };
+let registration: { waiting: object | null; active?: object };
 let script: HTMLScriptElement;
 beforeEach(() => {
   vi.clearAllMocks();
@@ -59,6 +59,17 @@ it('keeps the update action for older workers or an unknown build', async () => 
   const { result } = renderHook(() => useServiceWorkerUpdate());
   await act(async () => state.signal?.());
   expect(result.current.needRefresh).toBe(true);
+});
+
+it('also suppresses the obsolete signal when another tab finishes activation', async () => {
+  state.contains.mockImplementation(async () => {
+    registration.active = registration.waiting!;
+    registration.waiting = null;
+    return true;
+  });
+  const { result } = renderHook(() => useServiceWorkerUpdate());
+  await act(async () => state.signal?.());
+  expect(result.current.needRefresh).toBe(false);
 });
 
 it('does not trust a matching response from a worker that was replaced meanwhile', async () => {
