@@ -105,3 +105,21 @@ Deno.test("nome de LEAD não é razão social — a lista não cobre o que não 
   assertEquals(out.name, "Contato X");
   assertEquals(out.company, "Empresa Y");
 });
+
+Deno.test("documentos do lead (lead_documents): coluna, trilha e p_docs são mascarados; document_id não", () => {
+  const out = redactSecrets({
+    document: "12345678000195",
+    old_document: "12345678000195",
+    new_document: "98765432000110",
+    erp_document: "11222333000181",
+    p_document: "11222333000181",
+    p_docs: [{ document: "12345678000195", label: "Filial" }],
+    document_id: "5b7e1f3e-0000-4000-8000-000000000001",
+  }) as Record<string, unknown>;
+  for (const k of ["document", "old_document", "new_document", "erp_document", "p_document"]) {
+    const v = out[k] as string;
+    assert(v.startsWith("*") && !v.includes("12345678"), `${k} devia estar mascarado`);
+  }
+  assertEquals(out.p_docs, "***REDACTED***");
+  assertEquals(out.document_id, "5b7e1f3e-0000-4000-8000-000000000001");
+});

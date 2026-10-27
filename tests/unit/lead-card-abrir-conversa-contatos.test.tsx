@@ -28,6 +28,8 @@ vi.mock("@/modules/leads/hooks/useLeads", () => ({
 }));
 vi.mock("@/modules/leads/hooks/useLeadDocument", () => ({
   useLeadDocument: () => ({ data: null }),
+  useLeadDocuments: () => ({ data: [] }),
+  useSalvarLeadDocuments: () => ({ mutateAsync: vi.fn().mockResolvedValue({}) }),
   useSetLeadDocument: () => ({ mutateAsync: vi.fn().mockResolvedValue({}) }),
 }));
 vi.mock("@/modules/leads/hooks/useLeadCustomFields", () => ({

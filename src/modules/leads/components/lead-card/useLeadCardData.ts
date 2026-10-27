@@ -14,7 +14,7 @@ import { deriveLeadStanding } from "../../lib/lead-relacao-situacao";
 import { useOrgUsaLeiDoErp } from "../../hooks/useOrgUsaLeiDoErp";
 import { useCafeJurereCadastro } from "../../hooks/useCafeJurereCadastro";
 import { aplicarCadastroCafeJurere } from "../../lib/cafe-jurere-cadastro";
-import { useLeadDocument } from "../../hooks/useLeadDocument";
+import { useLeadDocument, useLeadDocuments } from "../../hooks/useLeadDocument";
 import { camposDeOrigemDaCampanha } from "./campos-de-origem-da-campanha";
 import { resolveLeadOwners, rotuloDoPapel, type LeadOwnersSource } from "../../lib/lead-owners";
 import { useLeadOwners, useLeadOwnersEnabled } from "../../hooks/useLeadOwners";
@@ -180,6 +180,9 @@ export function useLeadCardData(leadId: string | null, isOpen: boolean): LeadCar
   const { organizationId, teamMemberId, role } = useOrganization();
   const cadastroErp = useCafeJurereCadastro(leadId, isOpen && !!lead && !!texto(lead as Linha, "erp_code") && (lead as Linha).cafe_jurere_erp_elegivel === true);
   const { data: documentoLocal } = useLeadDocument(leadId, isOpen && !!lead);
+  // Mesma consulta do principal (mesma queryKey): a lista completa não custa
+  // uma ida a mais ao banco.
+  const { data: documentosDoLead } = useLeadDocuments(leadId, isOpen && !!lead);
   const { allowed: podeEditarDocumento } = useFeaturePermission("leads.edit_document");
   // N donos por lead (Chamado 793f4b05): consulta própria e só na org com a
   // flag — `useLeadDetail` (e o cache que tanta gente escreve) fica intocado.
@@ -339,6 +342,7 @@ export function useLeadCardData(leadId: string | null, isOpen: boolean): LeadCar
             rotulo: "CPF / CNPJ",
             valor: documentoLocal?.document ?? null,
             alteradoLocalmente: !!documentoLocal,
+            documentos: documentosDoLead ?? [],
             tipo: "documento",
             vazio: "Informe o documento",
           },
@@ -458,6 +462,7 @@ export function useLeadCardData(leadId: string | null, isOpen: boolean): LeadCar
     cadastroErp.isFetching,
     cadastroErp.isError,
     documentoLocal,
+    documentosDoLead,
     podeEditarDocumento,
     lead,
     donosDoLead,

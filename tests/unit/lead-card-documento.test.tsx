@@ -39,17 +39,23 @@ const DOC_DV_ERRADO = DOC.slice(0, -1) + String((Number(DOC.at(-1)) + 1) % 10);
 // ── Banco ───────────────────────────────────────────────────────────────────
 const rpc = vi.fn();
 const overrideNoBanco: { value: Record<string, unknown> | null } = { value: null };
+/** Linhas ATIVAS de lead_documents; o override legado vira a linha principal. */
+function linhasDeDocumento(): Record<string, unknown>[] {
+  return overrideNoBanco.value
+    ? [{ id: "doc-1", label: null, is_primary: true, source: "manual", ...overrideNoBanco.value }]
+    : [];
+}
 vi.mock("@/integrations/supabase/client", () => ({
   supabase: {
     rpc: (...args: unknown[]) => rpc(...args),
-    from: (tabela: string) => ({
-      select: () => ({
-        eq: () => ({
-          maybeSingle: async () =>
-            tabela === "lead_documents" ? { data: overrideNoBanco.value, error: null } : { data: null, error: null },
-        }),
-      }),
-    }),
+    // select().eq().is().order().order() — a leitura de lead_documents é uma lista.
+    from: (tabela: string) => {
+      const q: Record<string, unknown> = {};
+      for (const k of ["select", "eq", "is", "order"]) q[k] = () => q;
+      q.then = (resolve: (r: unknown) => unknown, reject?: (e: unknown) => unknown) =>
+        Promise.resolve({ data: tabela === "lead_documents" ? linhasDeDocumento() : [], error: null }).then(resolve, reject);
+      return q;
+    },
   },
 }));
 
