@@ -353,6 +353,12 @@ export interface DealCardData {
 
   movimentacoes: DealCardMove[];
   nota: string;
+  /**
+   * A leitura da entrada falhou ou voltou vazia (timeout, RLS). `nota` é `""`
+   * por falta de dado, NÃO porque a anotação esteja vazia — e um campo editável
+   * ali deixa a pessoa sobrescrever a anotação real ao sair do campo.
+   */
+  notaIndisponivel?: boolean;
 
   /** `activities` do lead — a aba "Atividades" do print. */
   atividades: DealCardActivity[];
