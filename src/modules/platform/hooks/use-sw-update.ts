@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { registerSW } from 'virtual:pwa-register';
+import { currentAppEntry, workerContainsEntry } from '@/shared/pwa/build-identity';
 
 /**
  * Browsers only re-check sw.js on navigation, and a SPA tab can stay open for
@@ -105,6 +106,7 @@ export function useServiceWorkerUpdate(): UseServiceWorkerUpdateReturn {
 
   useEffect(() => {
     let intervalId: number | undefined;
+    let disposed = false;
 
     updateSWRef.current = registerSW({
       immediate: true,
@@ -119,7 +121,28 @@ export function useServiceWorkerUpdate(): UseServiceWorkerUpdateReturn {
         // prompt então chama onNeedRefresh duas vezes. Sinaliza só uma.
         if (notifiedRef.current) return;
         notifiedRef.current = true;
-        setNeedRefresh(true);
+        const entry = currentAppEntry();
+        if (!entry || !navigator.serviceWorker?.getRegistration) {
+          setNeedRefresh(true);
+          return;
+        }
+        void (async () => {
+          try {
+            // Match the registration used by registerSW, including on deep links.
+            const registration = await navigator.serviceWorker.getRegistration('/sw.js');
+            const waiting = registration?.waiting;
+            if (waiting && await workerContainsEntry(waiting, entry) && registration.waiting === waiting) {
+              if (!disposed) {
+                notifiedRef.current = false; // A later, different build must still notify.
+                setNeedRefresh(false);
+              }
+              return;
+            }
+          } catch {
+            // Failure to identify a build is not evidence that the page is current.
+          }
+          if (!disposed) setNeedRefresh(true);
+        })();
       },
       onRegisteredSW(swUrl: string, registration?: ServiceWorkerRegistration) {
         if (!registration) return;
@@ -141,6 +164,7 @@ export function useServiceWorkerUpdate(): UseServiceWorkerUpdateReturn {
     });
 
     return () => {
+      disposed = true;
       if (intervalId !== undefined) window.clearInterval(intervalId);
       cleanupUpdateRef.current?.();
     };
