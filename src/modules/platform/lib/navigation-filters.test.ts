@@ -64,7 +64,7 @@ describe("filterByMaster", () => {
 });
 
 describe("filterByGate", () => {
-  const gates = { metaPagesConnected: false, cobranca: false };
+  const gates = { metaPagesConnected: false, cobranca: false, listaFria: false };
 
   it("respeita o gate de páginas Meta conectadas", () => {
     const items = [node("/dashboard"), node("/atendimento/meta", { gate: "meta_pages_connected" })];
@@ -78,6 +78,31 @@ describe("filterByGate", () => {
     const comFlag = filterByGate(SIDEBAR_PRIMARY, { ...gates, cobranca: true });
     expect(semFlag.some((i) => i.path === "/cobranca")).toBe(false);
     expect(comFlag.some((i) => i.path === "/cobranca")).toBe(true);
+  });
+
+  // ADR-0042: piloto interno. Sem a flag a porta some, e ligar uma flag não liga a outra.
+  it("Lista fria só aparece com a flag da org, e a flag da Cobrança não a liga", () => {
+    const semFlag = filterByGate(SIDEBAR_PRIMARY, gates);
+    const comFlag = filterByGate(SIDEBAR_PRIMARY, { ...gates, listaFria: true });
+    const soCobranca = filterByGate(SIDEBAR_PRIMARY, { ...gates, cobranca: true });
+    expect(semFlag.some((i) => i.path === "/lista-fria")).toBe(false);
+    expect(comFlag.some((i) => i.path === "/lista-fria")).toBe(true);
+    expect(soCobranca.some((i) => i.path === "/lista-fria")).toBe(false);
+    expect(comFlag.some((i) => i.path === "/cobranca")).toBe(false);
+  });
+
+  it("Lista fria fica logo depois da Carteira, que segue colada em Leads", () => {
+    const paths = SIDEBAR_PRIMARY.map((i) => i.path);
+    expect(paths.indexOf("/carteira")).toBe(paths.indexOf("/leads") + 1);
+    expect(paths.indexOf("/lista-fria")).toBe(paths.indexOf("/carteira") + 1);
+  });
+
+  it("Lista fria exige a permissão própria lista_fria.view (default false para membro)", () => {
+    expect(NAV_VIEW_PERMISSIONS["/lista-fria"]).toBe("lista_fria.view");
+    const membroSemChave = makeCanViewRoute({ isMaster: false, isAdmin: false, featurePerms: { "lista_fria.view": false } });
+    const membroLiberado = makeCanViewRoute({ isMaster: false, isAdmin: false, featurePerms: { "lista_fria.view": true } });
+    expect(membroSemChave("/lista-fria")).toBe(false);
+    expect(membroLiberado("/lista-fria")).toBe(true);
   });
 
   it("Cobrança exige a permissão própria cobranca.view (setor separado)", () => {
@@ -127,9 +152,10 @@ describe("inventário da navegação", () => {
     expect(itensPitstop.some((item) => item.path === "/metricas")).toBe(false);
   });
 
-  it("a lateral tem nove portas (Carteira entrou em 2026-10-16, Cobrança em 2026-10-21 atrás de flag)", () => {
-    expect(SIDEBAR_PRIMARY).toHaveLength(9);
+  it("a lateral tem dez portas (Carteira entrou em 2026-10-16; Cobrança em 2026-10-21 e Lista fria em 2026-10-27, as duas atrás de flag)", () => {
+    expect(SIDEBAR_PRIMARY).toHaveLength(10);
     expect(SIDEBAR_PRIMARY.find((i) => i.path === "/cobranca")?.gate).toBe("cobranca");
+    expect(SIDEBAR_PRIMARY.find((i) => i.path === "/lista-fria")?.gate).toBe("lista_fria");
   });
 
   // SCRUM-430. As duas travas de Métricas são independentes e ambas precisam
@@ -272,7 +298,7 @@ describe("native metrics navigation", () => {
   it.each([false, true])("shows metrics to a regular member (outbound=%s)", (outbound) => {
     const visible = filterByGate(
       filterByMaster(filterByOutbound(SIDEBAR_PRIMARY, outbound), false),
-      { metaPagesConnected: false, cobranca: false },
+      { metaPagesConnected: false, cobranca: false, listaFria: false },
     );
     expect(visible.some((item) => item.path === "/metricas")).toBe(true);
   });

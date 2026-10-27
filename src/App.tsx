@@ -504,6 +504,18 @@ function AppRoutes() {
           </ProtectedRoute>
         }
       />
+      {/* Atalho da barra lateral: a Lista fria é uma aba de /leads, então `/lista-fria`
+          só abre essa aba. Sem a flag, `ListaFriaRoute` devolve a /leads. */}
+      <Route
+        path="/lista-fria"
+        element={
+          <ProtectedRoute>
+            <ListaFriaRoute>
+              <Navigate to="/leads?aba=lista_fria" replace />
+            </ListaFriaRoute>
+          </ProtectedRoute>
+        }
+      />
       {/* Carteira em rota própria (CTO 2026-10-16) — era a aba Clientes de
           /leads, então herda EXATAMENTE as guardas de /leads: permissão
           `leads.view` + feature `leads`. NÃO `feature="carteira"`: essa chave

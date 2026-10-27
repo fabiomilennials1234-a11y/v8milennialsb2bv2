@@ -79,6 +79,8 @@ export function useNavigationModel(): NavigationModel {
   const metaPagesConnected = (metaPages?.pages.length ?? 0) > 0;
   // Piloto da Cobrança (ADR-0040): só orgs com a flag veem a porta. Fail-closed.
   const { enabled: cobranca } = useFeatureFlag("cobranca");
+  // Piloto da Lista fria (ADR-0042): mesma regra, fail-closed.
+  const { enabled: listaFria } = useFeatureFlag("lista_fria");
 
   const canViewRoute = useMemo(
     () => makeCanViewRoute({ isMaster, isAdmin, featurePerms }),
@@ -139,7 +141,7 @@ export function useNavigationModel(): NavigationModel {
     const filtered = filterByPermission(
       filterByGate(
         filterByMaster(filterByOutbound(withChildren, isOutboundMember), isMaster),
-        { metaPagesConnected, cobranca },
+        { metaPagesConnected, cobranca, listaFria },
       ),
       canViewRoute,
     );
@@ -150,6 +152,7 @@ export function useNavigationModel(): NavigationModel {
     isMaster,
     metaPagesConnected,
     cobranca,
+    listaFria,
     canViewRoute,
   ]);
 
@@ -167,12 +170,12 @@ export function useNavigationModel(): NavigationModel {
       .map((group) => ({
         ...group,
         // O Pitstop respeita os mesmos gates de runtime e permissões da lateral.
-        items: filterByGate(group.items, { metaPagesConnected, cobranca }).filter(
+        items: filterByGate(group.items, { metaPagesConnected, cobranca, listaFria }).filter(
           (item) => canViewRoute(item.path),
         ),
       }))
       .filter((group) => group.items.length > 0);
-  }, [canViewRoute, isAdmin, isOutboundMember, metaPagesConnected, cobranca, orgType]);
+  }, [canViewRoute, isAdmin, isOutboundMember, metaPagesConnected, cobranca, listaFria, orgType]);
 
   const isActive = useMemo(
     () =>

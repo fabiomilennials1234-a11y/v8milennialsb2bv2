@@ -22,6 +22,7 @@ import {
   Gauge,
   GitBranch,
   HandCoins,
+  Snowflake,
   ListChecks,
   MoreHorizontal,
   Package,
@@ -57,7 +58,7 @@ export interface NavNode {
    * piloto da org (`organizations.feature_flags`) para áreas que não existem
    * fora dela — sem cadeado, sem upsell: o item simplesmente não aparece.
    */
-  gate?: "meta_pages_connected" | "cobranca";
+  gate?: "meta_pages_connected" | "cobranca" | "lista_fria";
   /** Cor própria do item. Nenhum item usa hoje — funil não tem mais classe. */
   color?: string;
   /**
@@ -128,6 +129,10 @@ export const SIDEBAR_PRIMARY: NavNode[] = [
   { label: "Funis", icon: GitBranch, path: "/funis", children: [] },
   { label: "Leads", icon: Fuel, path: "/leads" },
   { label: "Carteira", icon: Wallet, path: "/carteira" },
+  // Lista fria (ADR-0042): atalho para a aba de /leads (fica depois da Carteira: a Carteira segue colada em Leads), piloto só na TorqueCRM. O
+  // gate é a flag da org; a permissão `lista_fria.view` vem em NAV_VIEW_PERMISSIONS.
+  // `/lista-fria` só redireciona para `/leads?aba=lista_fria` (ver App.tsx).
+  { label: "Lista fria", icon: Snowflake, path: "/lista-fria", gate: "lista_fria" },
   // Cobrança (ADR-0040): setor à parte, piloto só na TorqueCRM. O gate é a
   // flag da org; a permissão `cobranca.view` vem em NAV_VIEW_PERMISSIONS.
   { label: "Cobrança", icon: HandCoins, path: "/cobranca", gate: "cobranca" },
@@ -288,6 +293,8 @@ export const NAV_VIEW_PERMISSIONS: Record<string, string> = {
   "/carteira": "leads.view",
   // Setor separado: chave própria, default false para membro (ADR-0040).
   "/cobranca": "cobranca.view",
+  // Seção de /leads com flag própria; chave própria, default false para membro (ADR-0042).
+  "/lista-fria": "lista_fria.view",
   "/checklists": "checklists.view",
   "/templates": "message_templates.view",
   "/duplicatas": "leads.view",

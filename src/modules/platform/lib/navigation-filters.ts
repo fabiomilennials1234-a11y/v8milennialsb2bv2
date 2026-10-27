@@ -37,12 +37,15 @@ export interface RuntimeGates {
   metaPagesConnected: boolean;
   /** Flag `cobranca` da org (fail-closed: `false` enquanto carrega). */
   cobranca: boolean;
+  /** Flag `lista_fria` da org (ADR-0042). Fail-closed. */
+  listaFria: boolean;
 }
 
 export function filterByGate(items: NavNode[], gates: RuntimeGates): NavNode[] {
   return items.filter((item) => {
     if (item.gate === "meta_pages_connected") return gates.metaPagesConnected;
     if (item.gate === "cobranca") return gates.cobranca;
+    if (item.gate === "lista_fria") return gates.listaFria;
     return true;
   });
 }
