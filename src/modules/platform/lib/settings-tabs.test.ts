@@ -51,8 +51,8 @@ describe("registro das abas de Configurações", () => {
     expect(settingsTabPath(tab("webhooks"))).toBe("/configuracoes/api-webhooks?secao=webhooks");
   });
 
-  it("Checklists saiu das Configurações — o link antigo vai para /checklists", () => {
-    expect(settingsTabPath(tab("checklists"))).toBe("/checklists");
+  it("Checklists saiu das Configurações — o link antigo vai para os playbooks de tarefas", () => {
+    expect(settingsTabPath(tab("checklists"))).toBe("/tarefas?tab=playbooks");
     expect(visibleSettingsTabs(ADMIN_OUTBOUND).map((t) => t.value)).not.toContain("checklists");
   });
 

@@ -370,8 +370,10 @@ describe("venda (guarda de valor → metadata → move)", () => {
 describe("reunião", () => {
   it("agendar (etapa de sucesso → Confirmação): card sai do funil; board consistente", async () => {
     const qc = await montar("whatsapp", STAGES_WA, "novo");
-    fireEvent.click(screen.getByRole("button", { name: "mover-agendado" }));
-    await act(async () => { fireEvent.click(await screen.findByRole("button", { name: /stub-agendar/i })); });
+    // A conferência de tarefas é assíncrona; conclui o clique antes de buscar o modal.
+    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "mover-agendado" })); });
+    const agendar = await screen.findByRole("button", { name: /stub-agendar/i });
+    await act(async () => { fireEvent.click(agendar); });
     await assentar(qc, 4800);
     expect(onde()).toEqual([]);
     expect(boardAtual.stageCounts.novo).toBe(2);
@@ -385,8 +387,9 @@ describe("reunião", () => {
 
   it("reagendar (trilho D-x): etapa recalculada pela data aparece no board", async () => {
     const qc = await montar("confirmacao", STAGES_CONF, "novo");
-    fireEvent.click(screen.getByRole("button", { name: "mover-reuniao_marcada" }));
-    await act(async () => { fireEvent.click(await screen.findByRole("button", { name: /stub-reagendar-salvar/i })); });
+    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "mover-reuniao_marcada" })); });
+    const reagendar = await screen.findByRole("button", { name: /stub-reagendar-salvar/i });
+    await act(async () => { fireEvent.click(reagendar); });
     await assentar(qc, 4800);
     expect(onde()).toEqual(["confirmar_d1"]);
     expect(boardAtual.stageCounts.confirmar_d1).toBe(3);

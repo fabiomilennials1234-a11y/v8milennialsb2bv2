@@ -667,9 +667,11 @@ CREATE TRIGGER zzz_task_daily_org_guard BEFORE INSERT OR UPDATE OF organization_
   FOR EACH ROW EXECUTE FUNCTION private.task_validate_daily_action_org();
 
 -- A single set-based job, timezone-aware; the queue also syncs on opening.
+-- Four runs/hour, staggered away from heavy purges and the cron connection peak.
+-- No regular 15-minute phase fits both guards; the longest interval is 20 minutes.
 DO $$ BEGIN
   IF EXISTS(SELECT 1 FROM pg_extension WHERE extname='pg_cron') THEN
-    PERFORM cron.schedule('task-routines-roll-day','*/15 * * * *','SELECT private.task_roll_day()');
+    PERFORM cron.schedule('task-routines-roll-day','10,20,40,50 * * * *','SELECT private.task_roll_day()');
   END IF;
 END $$;
 COMMIT;

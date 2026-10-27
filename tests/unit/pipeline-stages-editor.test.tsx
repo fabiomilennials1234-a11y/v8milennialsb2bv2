@@ -13,8 +13,13 @@
  *     stage_role (nunca rebaixar won/lost governado — ADR-0017 §1).
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { render as renderComponent, screen, fireEvent, waitFor } from "@testing-library/react";
 import React from "react";
+import { MemoryRouter } from "react-router-dom";
+
+// O editor oferece ao admin um link para os playbooks na Gestão de tarefas.
+vi.mock("@/modules/identity", () => ({ useIdentity: () => ({ isAdmin: true }) }));
+const render = (ui: React.ReactNode) => renderComponent(<MemoryRouter>{ui}</MemoryRouter>);
 
 // ── Trilho de SISTEMA (usePipelineStages) ───────────────────────────────────
 const deleteStageMutate = vi.fn().mockResolvedValue({

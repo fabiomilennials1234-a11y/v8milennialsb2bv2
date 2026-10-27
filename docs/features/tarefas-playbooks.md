@@ -33,7 +33,9 @@ permanece pendente. A autorização tem prazo e é consumida uma única vez.
 Rotinas respeitam os dias e o fuso da organização. Uma ocorrência não executada
 encerra como **Não feita** após a virada do dia. O próximo dia gera outra
 ocorrência, sem acumular a anterior na fila. Há sincronização ao abrir/refrescar
-a fila e um job a cada 15 minutos quando `pg_cron` está instalado.
+a fila e um job quatro vezes por hora quando `pg_cron` está instalado, nos
+minutos 10, 20, 40 e 50. Os intervalos alternam entre 10 e 20 minutos para não
+coincidir com purgas pesadas nem exceder o teto de conexões simultâneas.
 
 ## Preservação e autorização
 
