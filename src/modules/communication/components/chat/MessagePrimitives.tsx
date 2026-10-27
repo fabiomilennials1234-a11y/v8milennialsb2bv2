@@ -36,6 +36,8 @@ import {
   lerBolha,
   TIPOS_NORMALIZADOS,
 } from "@/modules/communication/lib/inbound-metadata";
+import { splitQuotedReplyPrefix } from "@/modules/communication/lib/quotedReplyPrefix";
+import { scrollToQuotedMessage } from "@/modules/communication/lib/scrollToQuotedMessage";
 import { isInteractiveResponseType } from "@/modules/communication/lib/interactiveMessageType";
 import { UazapiMenuBubble } from "./bubbles/UazapiMenuBubble";
 import { readUazapiMenu, type UazapiMenuFields } from "@/modules/communication/lib/uazapiMenuDisplay";
@@ -268,6 +270,14 @@ export function MessageBubble({
   const botoesDoTemplate = botoesDaMensagem((message as { metadata?: unknown }).metadata ?? null);
   const replyContext = "reply_context" in message ? message.reply_context : "replyContext" in message ? message.replyContext : null;
   const citacao = citacaoDaMensagem((message as { metadata?: unknown }).metadata ?? null) ?? (replyContext ? { providerMessageId: replyContext.messageId, de: null } : null);
+  // O webhook dobra a citada em `content` como `[Em resposta a: "..."]` (a IA e a
+  // busca leem o content cru). Na bolha ela já é desenhada no bloco de citação:
+  // o corpo sai sem o prefixo, e a mensagem ANTIGA, sem reply_context, ganha o
+  // bloco derivado do próprio prefixo.
+  const conteudoCru = (message as { content?: string | null }).content ?? null;
+  const prefixoCitado = splitQuotedReplyPrefix(conteudoCru);
+  const citacaoDoPrefixo = !citacao ? prefixoCitado.quoted : null;
+  const corpoDoTexto = prefixoCitado.quoted !== null ? prefixoCitado.body : conteudoCru;
 
 
   const isInteractive = messageType === "interactive" || messageType === "collection" || messageType === "list" || isTemplate || messageType === "url";
@@ -439,8 +449,10 @@ export function MessageBubble({
       )}
 
       <div
+        data-wa-message-id={isWhatsAppMsg ? (message as WhatsAppMessage).message_id : undefined}
+        data-provider-message-id={alvoDaAcao.provider_message_id ?? undefined}
         className={cn(
-          "max-w-[75%] min-w-0 px-4 py-2.5 overflow-hidden",
+          "max-w-[75%] min-w-0 px-4 py-2.5 overflow-hidden transition-shadow",
           radiusClass,
           bubbleColorClass,
           isFailed && "border-destructive/60 !bg-destructive/15 !text-destructive",
@@ -503,12 +515,24 @@ export function MessageBubble({
 {/* A MENSAGEM CITADA, dentro da bolha e acima do conteúdo — como no
                 próprio WhatsApp. Sem ela, um "Sim" clicado num botão aparece
                 solto na thread, sem dizer a que ele responde. */}
-            {citacao && (
-              <div className="mb-1.5 border-l-2 border-current/30 pl-2 opacity-70">
-                <p className="truncate text-xs">
-                  {replyContext?.text || textoCitado?.(citacao.providerMessageId)?.trim() || "Mensagem citada"}
-                </p>
-              </div>
+            {(citacao || citacaoDoPrefixo) && (
+              <button
+                type="button"
+                data-quoted-reply
+                disabled={!citacao}
+                onClick={citacao ? () => scrollToQuotedMessage(citacao.providerMessageId) : undefined}
+                aria-label="Ir para a mensagem citada"
+                className={cn(
+                  "mb-1.5 block w-full min-w-0 border-l-2 border-current/30 pl-2 text-left opacity-70",
+                  citacao ? "cursor-pointer hover:opacity-100" : "cursor-default",
+                )}
+              >
+                <span className="block truncate text-xs">
+                  {(citacao
+                    ? replyContext?.text || textoCitado?.(citacao.providerMessageId)?.trim()
+                    : citacaoDoPrefixo) || "Mensagem citada"}
+                </span>
+              </button>
             )}
 
             {pix ? <PixMessage pix={pix} /> : usaBolhaNormalizada ? (
@@ -520,17 +544,17 @@ export function MessageBubble({
             ) : isLocation || isContact ? (
               <RichContactBubble content={message.content} location={isLocation} />
             ) : isInteractiveResponse ? (
-              <InteractiveResponseBubble content={message.content} messageType={messageType!} isOutgoing={isOutgoing} />
+              <InteractiveResponseBubble content={corpoDoTexto ?? null} messageType={messageType!} isOutgoing={isOutgoing} />
             ) : (
               <>
             {/* Texto / Legenda */}
-            {message.content && (
+            {corpoDoTexto && (
               <p className={cn(
                 "text-sm whitespace-pre-wrap break-words",
                 hasMedia && "mt-2"
               )}>
                 <MessageText
-                  content={message.content}
+                  content={corpoDoTexto}
                   mentionedJids={readMentionedJids(message as GroupMentionFields)}
                   names={mentionNames}
                   // O realce que a bolha já usa: o azul `insights` (link de

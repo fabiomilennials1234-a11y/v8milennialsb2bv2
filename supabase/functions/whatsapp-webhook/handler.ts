@@ -55,7 +55,13 @@ import {
   makePoisonChecker,
   POISON_DROP_LOG_SAMPLE,
 } from "./poison-denylist.ts";
-import { extractQuotedText } from "./quoted-text.ts";
+import {
+  buildReplyContext,
+  extractQuotedMessageId,
+  extractQuotedParticipant,
+  extractQuotedSnapshotText,
+  extractQuotedText,
+} from "./quoted-text.ts";
 import { echoStatus, statusesBeforeEcho } from "./echo-status.ts";
 import { uazapiIngestRpcEnabled } from "./ingest-rpc-flag.ts";
 import { extractInteractiveSelection } from "./interactive-reply.ts";
@@ -625,6 +631,80 @@ function normalizeMessage(data: any, instance: ResolvedInstance) {
       instance.id,
     ),
   };
+}
+
+// ============================================================================
+// attachReplyContext — grava o snapshot da mensagem CITADA em reply_context
+// ============================================================================
+
+/**
+ * Best-effort, depois da persistência: a coluna `reply_context` não passa pela
+ * RPC `ingest_uazapi_message` (c_allowed recusa chave desconhecida e mandaria a
+ * mensagem inteira para a DLQ), então vai por UPDATE separado na linha já
+ * gravada. `reply_context IS NULL` no filtro: o eco de um envio nosso já traz o
+ * snapshot do proxy e não é sobrescrito; reentrega é idempotente. O `content`
+ * (com o prefixo `[Em resposta a:`) não é tocado. Nunca lança.
+ */
+export async function attachReplyContext(
+  supabase: SupabaseClient,
+  instance: ResolvedInstance,
+  normalized: NormalizedMessage,
+  rowId: string | null | undefined,
+): Promise<void> {
+  try {
+    if (!rowId) return;
+    const data = normalized.raw_payload;
+    const quotedId = extractQuotedMessageId(data);
+    const payloadText = extractQuotedSnapshotText(data);
+    if (!quotedId && !payloadText) return;
+
+    let original: { message_id: string; content: string | null; message_type: string | null; direction: string | null } | null = null;
+    if (quotedId) {
+      const ids = buildMessageIdCandidates(quotedId, instance.phone_number, (data as any).owner);
+      const { data: row } = await supabase.from("whatsapp_messages")
+        .select("message_id,content,message_type,direction,phone_number,remote_jid")
+        .eq("organization_id", instance.organization_id)
+        .eq("instance_id", instance.id)
+        .in("message_id", ids)
+        .is("deleted_at", null)
+        .limit(1)
+        .maybeSingle();
+      const r = row as (typeof original & { phone_number: string | null; remote_jid: string | null }) | null;
+      // Mesma conversa: telefone OU jid. Id de outra conversa não vira citação.
+      if (r && ((r.phone_number && r.phone_number === normalized.phone_number) || r.remote_jid === normalized.remote_jid)) {
+        original = r;
+      }
+    }
+
+    const participant = extractQuotedParticipant(data);
+    const selfDigits = (instance.phone_number ?? "").replace(/\D/g, "");
+    const participantDigits = (participant ?? "").split("@")[0].replace(/\D/g, "");
+    const snapshot = buildReplyContext({
+      quotedId,
+      payloadText,
+      original,
+      citingDirection: normalized.direction,
+      participantIsSelf: selfDigits && participantDigits ? participantDigits === selfDigits : null,
+    });
+    if (!snapshot) return;
+
+    const { error } = await supabase.from("whatsapp_messages")
+      .update({ reply_context: snapshot })
+      .eq("id", rowId)
+      .eq("organization_id", instance.organization_id)
+      .eq("instance_id", instance.id)
+      .is("reply_context", null);
+    if (error) throw error;
+  } catch (e) {
+    await logRuntime({
+      organizationId: instance.organization_id,
+      module: "webhook",
+      action: "uazapi_reply_context_failed",
+      status: "error",
+      errorMessage: e instanceof Error ? e.message.slice(0, 200) : "reply_context_failed",
+      payloadSnapshot: { instance_id: instance.id, message_id: normalized.message_id },
+    });
+  }
 }
 
 // ============================================================================
@@ -1422,6 +1502,7 @@ async function handleMessagesEvent(
   if (uazapiIngestRpcEnabled(instance.organization_id)) {
     const ingested = await ingestMessageViaRpc(supabase, instance, data, receivedVia);
     if (!ingested?.persisted || ingested.normalized.is_group) return;
+    await attachReplyContext(supabase, instance, ingested.normalized, ingested.persisted.row_id);
     await triggerReactions(supabase, ingested.persisted, {
       shouldTriggerCopilot: computeShouldTriggerCopilot(ingested.normalized),
       shouldResolveWaitResponse: ingested.normalized.direction === "incoming" && !!ingested.normalized.phone_number,
@@ -1460,6 +1541,7 @@ async function handleMessagesEvent(
 
   if (normalized.is_group) return; // groups: persist only
 
+  await attachReplyContext(supabase, instance, normalized, persisted.row_id);
   await triggerReactions(supabase, persisted, {
     shouldTriggerCopilot: computeShouldTriggerCopilot(normalized),
     shouldResolveWaitResponse: normalized.direction === "incoming" && !!normalized.phone_number,
