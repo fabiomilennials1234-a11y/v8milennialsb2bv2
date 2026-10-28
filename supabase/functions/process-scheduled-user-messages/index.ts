@@ -112,6 +112,142 @@ async function emitirAviso(supabase: any, params: Record<string, unknown>): Prom
   }
 }
 
+/**
+ * Tipos de anexo em que o WhatsApp mostra o texto como legenda do próprio anexo.
+ * Conferido nos providers: Uazapi manda `text` em /send/media; Meta Cloud só
+ * aceita caption em image/video/document (meta-cloud-provider.ts: allowsCaption);
+ * Notificame ignora a legenda do áudio (fixa "Áudio"). Áudio não tem legenda —
+ * o texto precisa ir como mensagem própria.
+ */
+const TIPOS_COM_LEGENDA = new Set(["image", "video", "document"]);
+
+/** Folga abaixo do limite de legenda do WhatsApp (1024). */
+const LIMITE_LEGENDA = 1000;
+
+/** Mesma regra de filtro do fallback: nunca Meta, nunca número reservado. */
+const PROVIDERS_LEGADOS = ["uazapi", "evolution"];
+const STATUS_CONECTADO = ["connected", "open"];
+
+/** Quantas mensagens recentes olhar atrás de uma caixa elegível. */
+const JANELA_DE_CONVERSA = 30;
+
+/** Quantas agendadas recentes do criador olhar, e até quantos dias atrás. */
+const JANELA_DO_CRIADOR = 50;
+const DIAS_DO_CRIADOR = 20;
+
+type RegraDaCaixa =
+  | "conversa_do_lead"
+  | "conversa_do_telefone"
+  | "caixa_mais_usada_pelo_criador";
+
+/**
+ * Agendada sem caixa escolhida: a resposta certa é a caixa DA CONVERSA do
+ * cliente, não a mais antiga da org (a Tatiane agendava e a mensagem saía pelo
+ * número da Envase Carolini). Olha a mensagem mais recente do lead e, sem lead
+ * ou sem histórico, a do mesmo telefone (últimos 8 dígitos, o padrão do
+ * agent-message). Sempre dentro da MESMA org e só entre caixas que o fallback
+ * também aceitaria — conectada, uazapi/evolution, não reservada.
+ */
+async function resolverCaixaDaConversa(
+  supabase: any,
+  msg: {
+    organization_id: string;
+    lead_id?: string | null;
+    phone_number?: string | null;
+    created_by?: string | null;
+  },
+): Promise<{ instance: any; regra: RegraDaCaixa } | null> {
+  /** Das caixas candidatas, as que passam nos filtros do fallback (mesma org). */
+  const elegiveisEntre = async (ids: string[]): Promise<any[]> => {
+    const { data } = await supabase
+      .from("whatsapp_instances")
+      .select("*")
+      .eq("organization_id", msg.organization_id)
+      .in("id", ids)
+      .in("provider", PROVIDERS_LEGADOS)
+      .in("status", STATUS_CONECTADO)
+      .is("reserved_for", null);
+    return data ?? [];
+  };
+
+  const buscar = async (
+    regra: RegraDaCaixa,
+    aplicar: (q: any) => any,
+  ): Promise<{ instance: any; regra: RegraDaCaixa } | null> => {
+    const { data: recentes } = await aplicar(
+      supabase
+        .from("whatsapp_messages")
+        .select("instance_id")
+        .eq("organization_id", msg.organization_id),
+    )
+      .order("timestamp", { ascending: false })
+      .limit(JANELA_DE_CONVERSA);
+
+    const ordem: string[] = [];
+    for (const r of recentes ?? []) {
+      if (r?.instance_id && !ordem.includes(r.instance_id)) ordem.push(r.instance_id);
+    }
+    if (ordem.length === 0) return null;
+
+    const elegiveis = await elegiveisEntre(ordem);
+
+    // A mais recente da conversa que passa nos filtros.
+    for (const id of ordem) {
+      const instance = elegiveis.find((i: any) => i.id === id);
+      if (instance) return { instance, regra };
+    }
+    return null;
+  };
+
+  if (msg.lead_id) {
+    const porLead = await buscar("conversa_do_lead", (q) => q.eq("lead_id", msg.lead_id));
+    if (porLead) return porLead;
+  }
+
+  const digitos = (msg.phone_number ?? "").replace(/\D/g, "");
+  if (digitos.length >= 8) {
+    const porTelefone = await buscar("conversa_do_telefone", (q) =>
+      q.ilike("phone_number", `%${digitos.slice(-8)}%`));
+    if (porTelefone) return porTelefone;
+  }
+
+  // Sem conversa conhecida: a caixa que quem agendou mais usa nas próprias
+  // agendadas recentes (a Tatiane não escolhe a Carolini). Empate: a mais recente.
+  if (msg.created_by) {
+    const desde = new Date(Date.now() - DIAS_DO_CRIADOR * 86_400_000).toISOString();
+    const { data: historico } = await supabase
+      .from("scheduled_user_messages")
+      .select("whatsapp_instance_id")
+      .eq("organization_id", msg.organization_id)
+      .eq("created_by", msg.created_by)
+      .not("whatsapp_instance_id", "is", null)
+      .gte("created_at", desde)
+      .order("created_at", { ascending: false })
+      .limit(JANELA_DO_CRIADOR);
+
+    const uso = new Map<string, number>(); // Map preserva a ordem: mais recente primeiro
+    for (const r of historico ?? []) {
+      if (r?.whatsapp_instance_id) {
+        uso.set(r.whatsapp_instance_id, (uso.get(r.whatsapp_instance_id) ?? 0) + 1);
+      }
+    }
+    if (uso.size > 0) {
+      const elegiveis = await elegiveisEntre([...uso.keys()]);
+      let melhor: any = null;
+      let melhorUso = 0;
+      for (const [id, n] of uso) {
+        const instance = elegiveis.find((i: any) => i.id === id);
+        if (instance && n > melhorUso) {
+          melhor = instance;
+          melhorUso = n;
+        }
+      }
+      if (melhor) return { instance: melhor, regra: "caixa_mais_usada_pelo_criador" };
+    }
+  }
+  return null;
+}
+
 Deno.serve(withErrorBoundary("process-scheduled-user-messages", async (req) => {
   const corsHeaders = withSecurityHeaders(getCorsHeaders(req.headers.get("origin")));
   if (req.method === "OPTIONS") {
@@ -226,20 +362,45 @@ Deno.serve(withErrorBoundary("process-scheduled-user-messages", async (req) => {
           isSzChat = inst?.metadata?.provider === "szchat";
         }
 
+        // Só quando a linha não escolheu caixa (e o strict não decidiu): a
+        // caixa da conversa do cliente vence a mais antiga da org.
+        let regraDaCaixa: string | null = null;
+        if (!instance && !msg.whatsapp_instance_id) {
+          const daConversa = await resolverCaixaDaConversa(supabase, msg);
+          if (daConversa) {
+            instance = daConversa.instance;
+            isSzChat = instance?.metadata?.provider === "szchat";
+            regraDaCaixa = daConversa.regra;
+          }
+        }
+
         if (!instance) {
           const { data: defaultInst } = await supabase
             .from("whatsapp_instances")
             .select("*")
             .eq("organization_id", msg.organization_id)
             // Meta isolation (cert Rule 2): never auto-pick a Meta number for a legacy send.
-            .in("provider", ["uazapi", "evolution"])
-            .in("status", ["connected", "open"])
+            .in("provider", PROVIDERS_LEGADOS)
+            .in("status", STATUS_CONECTADO)
             // Número reservado (cobrança, ADR-0040) nunca é escolhido por fallback.
             .is("reserved_for", null)
             .limit(1)
             .single();
           instance = defaultInst;
           isSzChat = defaultInst?.metadata?.provider === "szchat";
+          if (instance && !msg.whatsapp_instance_id) regraDaCaixa = "fallback_mais_antiga_da_org";
+        }
+
+        if (regraDaCaixa) {
+          await logRuntime({
+            module: "scheduled_user_messages",
+            action: "resolve_instance",
+            status: "success",
+            organizationId: msg.organization_id,
+            entityType: "scheduled_user_message",
+            entityId: msg.id,
+            payloadSnapshot: { regra: regraDaCaixa, instance_id: instance.id, lead_id: msg.lead_id ?? null },
+          });
         }
 
         if (!instance) {
@@ -254,13 +415,21 @@ Deno.serve(withErrorBoundary("process-scheduled-user-messages", async (req) => {
         if (dispatched > 0) await sleepJitter();
         dispatched++;
 
-        // Texto e mídia saem como DUAS mensagens no WhatsApp, cada uma com o seu
-        // id no provider. Coletar os dois resultados aqui, em vez de descartá-los,
-        // é o que permite gravar o que de fato saiu — e só o que saiu.
+        // Cada envio vira uma mensagem no WhatsApp, com o seu id no provider.
+        // Coletar os resultados aqui, em vez de descartá-los, é o que permite
+        // gravar o que de fato saiu — e só o que saiu.
         const sendOpts = { trackSource: "scheduled-user-message", trackId: msg.id };
         const deliveries: Delivery[] = [];
+        const temAnexo = Boolean(msg.media_url && msg.media_type);
+        // Anexo com legenda: o texto vai NA legenda e só ela — mandar também o
+        // texto solto fazia o cliente receber a mesma frase duas vezes.
+        // Legenda do WhatsApp tem limite (~1024 caracteres). Texto maior que isso vai
+        // solto e o anexo vai SEM legenda: nunca a mesma frase duas vezes, e nunca um
+        // texto cortado ou recusado por caber só como legenda.
+        const cabeNaLegenda = (msg.message_content?.length ?? 0) <= LIMITE_LEGENDA;
+        const textoVaiNaLegenda = temAnexo && TIPOS_COM_LEGENDA.has(msg.media_type) && cabeNaLegenda;
 
-        if (msg.message_content) {
+        if (msg.message_content && !textoVaiNaLegenda) {
           deliveries.push({
             messageType: "text",
             content: msg.message_content,
@@ -277,10 +446,10 @@ Deno.serve(withErrorBoundary("process-scheduled-user-messages", async (req) => {
           });
         }
 
-        if (msg.media_url && msg.media_type) {
+        if (temAnexo) {
           deliveries.push({
             messageType: msg.media_type,
-            content: msg.message_content || null,
+            content: textoVaiNaLegenda ? (msg.message_content || null) : null,
             mediaUrl: msg.media_url,
             result:
               msg.media_type === "audio"
@@ -299,7 +468,7 @@ Deno.serve(withErrorBoundary("process-scheduled-user-messages", async (req) => {
                       type: msg.media_type as "image" | "video" | "document",
                       file: msg.media_url,
                       filename: msg.media_filename || undefined,
-                      caption: msg.message_content || undefined,
+                      caption: textoVaiNaLegenda ? (msg.message_content || undefined) : undefined,
                     },
                     sendOpts,
                   ),

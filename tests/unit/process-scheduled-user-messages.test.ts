@@ -139,13 +139,20 @@ interface Seed {
   scheduled: Record<string, unknown>[];
   instances?: Record<string, unknown>[];
   teamMembers?: Record<string, unknown>[];
+  /** Histórico pré-existente — é dele que a caixa da conversa é deduzida. */
+  messages?: Record<string, unknown>[];
+  /** Agendadas já criadas (status != scheduled) — histórico de caixa do criador. */
+  scheduledHistory?: Record<string, unknown>[];
 }
 
 async function runTick(seed: Seed) {
   const mock = createMockSupabase();
-  mock.mockTable("scheduled_user_messages", seed.scheduled);
+  mock.mockTable("scheduled_user_messages", [
+    ...seed.scheduled,
+    ...(seed.scheduledHistory ?? []),
+  ]);
   mock.mockTable("whatsapp_instances", seed.instances ?? [CHIP_CONECTADO]);
-  mock.mockTable("whatsapp_messages", []);
+  mock.mockTable("whatsapp_messages", seed.messages ?? []);
   mock.mockTable("team_members", seed.teamMembers ?? []);
   mock.mockTable("notifications", []);
   mock.mockRpc("fn_emit_aviso", "aviso-1");
@@ -276,8 +283,7 @@ describe("process-scheduled-user-messages — message_id é o do provider", () =
     expect(segundo.historico[0].message_id).toBe(primeiro.historico[0].message_id);
   });
 
-  it("texto e mídia viram DUAS linhas, cada uma com o id do seu próprio envio", async () => {
-    sendText.mockResolvedValue({ success: true, messageId: "BATATA:TEXTO" });
+  it("anexo com legenda: UMA mensagem, a mídia com o texto na legenda — nada de texto solto", async () => {
     sendMedia.mockResolvedValue({ success: true, messageId: "BATATA:IMAGEM" });
 
     const { historico } = await runTick({
@@ -289,11 +295,14 @@ describe("process-scheduled-user-messages — message_id é o do provider", () =
       }],
     });
 
-    expect(historico).toHaveLength(2);
-    expect(historico.map((r) => [r.message_id, r.message_type, r.media_url])).toEqual([
-      ["BATATA:TEXTO", "text", null],
-      ["BATATA:IMAGEM", "image", "https://cdn.test/tabela.png"],
-    ]);
+    expect(sendText).not.toHaveBeenCalled();
+    expect(historico).toHaveLength(1);
+    expect(historico[0]).toMatchObject({
+      message_id: "BATATA:IMAGEM",
+      message_type: "image",
+      media_url: "https://cdn.test/tabela.png",
+      content: "Bom dia! Fechamos o pedido?",
+    });
   });
 });
 
@@ -335,8 +344,24 @@ describe("process-scheduled-user-messages — envio recusado não vira 'sent'", 
     });
   });
 
-  it("parcial: grava só o que saiu e registra a falha na linha, sem retry do que já chegou", async () => {
+  it("parcial (áudio): o texto saiu e o áudio não — grava só o texto e não faz retry", async () => {
     sendText.mockResolvedValue({ success: true, messageId: "BATATA:TEXTO" });
+    sendAudio.mockResolvedValue({ success: false, error: "media 500" });
+
+    const { historico, fila } = await runTick({
+      scheduled: [{
+        ...AGENDADA,
+        media_url: "https://cdn.test/voz.ogg",
+        media_type: "audio",
+      }],
+    });
+
+    expect(historico).toHaveLength(1);
+    expect(historico[0]).toMatchObject({ message_id: "BATATA:TEXTO", message_type: "text" });
+    expect(fila[0]).toMatchObject({ status: "sent", error_message: "media 500" });
+  });
+
+  it("mídia com legenda recusada: nenhum texto saiu, então a linha volta para retry sem duplicar", async () => {
     sendMedia.mockResolvedValue({ success: false, error: "media 500" });
 
     const { historico, fila } = await runTick({
@@ -347,9 +372,10 @@ describe("process-scheduled-user-messages — envio recusado não vira 'sent'", 
       }],
     });
 
-    expect(historico).toHaveLength(1);
-    expect(historico[0]).toMatchObject({ message_id: "BATATA:TEXTO", message_type: "text" });
-    expect(fila[0]).toMatchObject({ status: "sent", error_message: "media 500" });
+    expect(sendText).not.toHaveBeenCalled();
+    expect(historico).toHaveLength(0);
+    expect(fila.some((v) => v.status === "sent")).toBe(false);
+    expect(fila[0]).toMatchObject({ status: "scheduled", retry_count: 1 });
   });
 
   it("linha sem texto e sem mídia não vira entrega — não envia nem grava", async () => {
@@ -542,5 +568,344 @@ describe("process-scheduled-user-messages — o aviso abre a conversa", () => {
 
     expect(avisos).toHaveLength(1);
     expect(avisos[0]).toMatchObject({ p_type: "scheduled_message_failed", p_link: null });
+  });
+});
+
+// ─── Texto + anexo: uma mensagem só ───────────────────────────────────────
+
+describe("process-scheduled-user-messages — texto com anexo não duplica", () => {
+  const TEXTO = "Segue o catálogo";
+
+  it.each(["document", "image", "video"])(
+    "%s com texto: um envio de mídia com caption, nenhum texto solto",
+    async (tipo) => {
+      const { historico, body } = await runTick({
+        scheduled: [{
+          ...AGENDADA,
+          message_content: TEXTO,
+          media_url: "https://cdn.test/arquivo",
+          media_type: tipo,
+          media_filename: "catalogo.pdf",
+        }],
+      });
+
+      expect(body).toMatchObject({ sent: 1, failed: 0 });
+      expect(sendText).not.toHaveBeenCalled();
+      expect(sendAudio).not.toHaveBeenCalled();
+      expect(sendMedia).toHaveBeenCalledTimes(1);
+      expect(sendMedia.mock.calls[0][3]).toMatchObject({
+        type: tipo,
+        file: "https://cdn.test/arquivo",
+        caption: TEXTO,
+      });
+      expect(historico).toHaveLength(1);
+      expect(historico[0]).toMatchObject({ message_type: tipo, content: TEXTO });
+    },
+  );
+
+  it("áudio com texto: áudio não tem legenda, então texto e depois o áudio (2 envios)", async () => {
+    const { historico } = await runTick({
+      scheduled: [{
+        ...AGENDADA,
+        message_content: TEXTO,
+        media_url: "https://cdn.test/voz.ogg",
+        media_type: "audio",
+      }],
+    });
+
+    expect(sendText).toHaveBeenCalledTimes(1);
+    expect(sendAudio).toHaveBeenCalledTimes(1);
+    expect(sendMedia).not.toHaveBeenCalled();
+    expect(historico.map((r) => r.message_type)).toEqual(["text", "audio"]);
+    // O texto já tem a sua própria linha: a do áudio não o repete (content null).
+    expect(historico.map((r) => r.content)).toEqual([TEXTO, null]);
+  });
+
+  it.each([
+    [900, "1 mídia com caption", true],
+    [1000, "exatamente 1000 ainda é legenda", true],
+    [1001, "1001 vai solto e o documento sem legenda", false],
+    [1500, "1500 vai solto e o documento sem legenda", false],
+  ])("documento com texto de %i caracteres: %s", async (tamanho, _desc, naLegenda) => {
+    const texto = "a".repeat(tamanho);
+    const { historico } = await runTick({
+      scheduled: [{
+        ...AGENDADA,
+        message_content: texto,
+        media_url: "https://cdn.test/catalogo.pdf",
+        media_type: "document",
+        media_filename: "catalogo.pdf",
+      }],
+    });
+
+    expect(sendMedia).toHaveBeenCalledTimes(1);
+    if (naLegenda) {
+      expect(sendText).not.toHaveBeenCalled();
+      expect(sendMedia.mock.calls[0][3].caption).toBe(texto);
+      expect(historico).toHaveLength(1);
+      expect(historico[0]).toMatchObject({ message_type: "document", content: texto });
+    } else {
+      expect(sendText).toHaveBeenCalledTimes(1);
+      expect(sendText.mock.calls[0][3]).toBe(texto);
+      expect(sendMedia.mock.calls[0][3].caption).toBeUndefined();
+      expect(historico.map((r) => [r.message_type, r.content])).toEqual([
+        ["text", texto],
+        ["document", null],
+      ]);
+    }
+  });
+
+  it("só texto: um texto", async () => {
+    const { historico } = await runTick({
+      scheduled: [{ ...AGENDADA, message_content: TEXTO }],
+    });
+
+    expect(sendText).toHaveBeenCalledTimes(1);
+    expect(sendMedia).not.toHaveBeenCalled();
+    expect(historico).toHaveLength(1);
+  });
+
+  it("anexo sem texto: só a mídia, sem legenda", async () => {
+    await runTick({
+      scheduled: [{
+        ...AGENDADA,
+        message_content: null,
+        media_url: "https://cdn.test/arquivo.pdf",
+        media_type: "document",
+      }],
+    });
+
+    expect(sendText).not.toHaveBeenCalled();
+    expect(sendMedia).toHaveBeenCalledTimes(1);
+    expect(sendMedia.mock.calls[0][3].caption).toBeUndefined();
+  });
+});
+
+// ─── Caixa da conversa quando a linha não escolheu chip ───────────────────
+
+describe("process-scheduled-user-messages — instância nula resolve pela conversa", () => {
+  const CAROLINI = { ...CHIP_CONECTADO, id: "inst-carolini", instance_name: "carolini" };
+  const TATIANE = { ...CHIP_CONECTADO, id: "inst-tatiane", instance_name: "tatiane" };
+  const usada = () => sendText.mock.calls[0][1].id;
+
+  it("lead com conversa na caixa X: usa X, não a mais antiga da org", async () => {
+    const { historico } = await runTick({
+      scheduled: [{ ...AGENDADA, lead_id: "lead-1" }],
+      instances: [CAROLINI, TATIANE],
+      messages: [
+        { organization_id: "org-1", lead_id: "lead-1", instance_id: "inst-tatiane", phone_number: "5511999887766", timestamp: "2026-10-01T10:00:00Z" },
+      ],
+    });
+
+    expect(usada()).toBe("inst-tatiane");
+    expect(historico.at(-1)!.instance_id).toBe("inst-tatiane");
+  });
+
+  it("várias caixas na conversa: vale a da mensagem mais recente", async () => {
+    await runTick({
+      scheduled: [{ ...AGENDADA, lead_id: "lead-1" }],
+      instances: [CAROLINI, TATIANE],
+      messages: [
+        { organization_id: "org-1", lead_id: "lead-1", instance_id: "inst-carolini", timestamp: "2026-10-01T10:00:00Z" },
+        { organization_id: "org-1", lead_id: "lead-1", instance_id: "inst-tatiane", timestamp: "2026-10-20T10:00:00Z" },
+      ],
+    });
+
+    expect(usada()).toBe("inst-tatiane");
+  });
+
+  it("sem lead: o mesmo telefone (últimos dígitos, com máscara) acha a caixa", async () => {
+    await runTick({
+      scheduled: [{ ...AGENDADA, lead_id: null, phone_number: "+55 (11) 99988-7766" }],
+      instances: [CAROLINI, TATIANE],
+      messages: [
+        { organization_id: "org-1", lead_id: null, instance_id: "inst-tatiane", phone_number: "5511999887766", timestamp: "2026-10-01T10:00:00Z" },
+      ],
+    });
+
+    expect(usada()).toBe("inst-tatiane");
+  });
+
+  it("sem conversa nenhuma: cai no fallback atual (primeira conectada da org)", async () => {
+    await runTick({
+      scheduled: [{ ...AGENDADA, lead_id: "lead-1" }],
+      instances: [CAROLINI, TATIANE],
+    });
+
+    expect(usada()).toBe("inst-carolini");
+  });
+
+  it("a caixa da conversa desconectada não vale: segue para o fallback", async () => {
+    await runTick({
+      scheduled: [{ ...AGENDADA, lead_id: "lead-1" }],
+      instances: [CAROLINI, { ...TATIANE, status: "disconnected" }],
+      messages: [{ organization_id: "org-1", lead_id: "lead-1", instance_id: "inst-tatiane", timestamp: "2026-10-01T10:00:00Z" }],
+    });
+
+    expect(usada()).toBe("inst-carolini");
+  });
+
+  it("número reservado (cobrança) e Meta nunca são escolhidos pela conversa", async () => {
+    await runTick({
+      scheduled: [{ ...AGENDADA, lead_id: "lead-1" }],
+      instances: [
+        CAROLINI,
+        { ...TATIANE, reserved_for: "cobranca" },
+        { ...TATIANE, id: "inst-meta", provider: "meta_cloud" },
+      ],
+      messages: [
+        { organization_id: "org-1", lead_id: "lead-1", instance_id: "inst-tatiane", timestamp: "2026-10-02T10:00:00Z" },
+        { organization_id: "org-1", lead_id: "lead-1", instance_id: "inst-meta", timestamp: "2026-10-01T10:00:00Z" },
+      ],
+    });
+
+    expect(usada()).toBe("inst-carolini");
+  });
+
+  it("nunca instância de outra org, nem com a conversa do mesmo telefone lá", async () => {
+    const OUTRA = { ...TATIANE, id: "inst-outra-org", organization_id: "org-2" };
+    await runTick({
+      scheduled: [{ ...AGENDADA, lead_id: "lead-1" }],
+      instances: [CAROLINI, OUTRA],
+      messages: [
+        { organization_id: "org-2", lead_id: "lead-1", instance_id: "inst-outra-org", phone_number: "5511999887766", timestamp: "2026-10-20T10:00:00Z" },
+      ],
+    });
+
+    expect(usada()).toBe("inst-carolini");
+  });
+
+  it("instância preenchida na linha: intocada, mesmo com conversa em outra caixa", async () => {
+    await runTick({
+      scheduled: [{ ...AGENDADA, lead_id: "lead-1", whatsapp_instance_id: "inst-carolini" }],
+      instances: [CAROLINI, TATIANE],
+      messages: [{ organization_id: "org-1", lead_id: "lead-1", instance_id: "inst-tatiane", timestamp: "2026-10-20T10:00:00Z" }],
+    });
+
+    expect(usada()).toBe("inst-carolini");
+  });
+
+  it("o strict do responsável segue vencendo a conversa", async () => {
+    strictResolve.mockResolvedValue({ ...CHIP_CONECTADO, id: "inst-do-responsavel" });
+    await runTick({
+      scheduled: [{ ...AGENDADA, lead_id: "lead-1" }],
+      instances: [CAROLINI, TATIANE],
+      messages: [{ organization_id: "org-1", lead_id: "lead-1", instance_id: "inst-tatiane", timestamp: "2026-10-20T10:00:00Z" }],
+    });
+
+    expect(usada()).toBe("inst-do-responsavel");
+  });
+});
+
+// ─── Regra 3: caixa que o criador mais usa ────────────────────────────────
+
+describe("process-scheduled-user-messages — instância nula sem conversa usa a caixa do criador", () => {
+  const CAROLINI = { ...CHIP_CONECTADO, id: "inst-carolini" };
+  const TATIANE = { ...CHIP_CONECTADO, id: "inst-tatiane" };
+  const OUTRA = { ...CHIP_CONECTADO, id: "inst-outra" };
+  const usada = () => sendText.mock.calls[0][1].id;
+  const diasAtras = (d: number) => new Date(Date.now() - d * 86_400_000).toISOString();
+  let n = 0;
+  const hist = (instancia: string, dias: number, extra: Record<string, unknown> = {}) => ({
+    id: `h-${++n}`,
+    organization_id: "org-1",
+    created_by: "tm-1",
+    status: "sent",
+    whatsapp_instance_id: instancia,
+    created_at: diasAtras(dias),
+    scheduled_at: "2026-01-01T00:00:00.000Z",
+    ...extra,
+  });
+  const pendente = () => ({ ...AGENDADA, lead_id: "lead-1" });
+
+  it("criador com histórico usa a caixa mais frequente dele, não a mais antiga da org", async () => {
+    await runTick({
+      scheduled: [pendente()],
+      instances: [CAROLINI, TATIANE],
+      scheduledHistory: [hist("inst-tatiane", 1), hist("inst-tatiane", 2), hist("inst-carolini", 3)],
+    });
+    expect(usada()).toBe("inst-tatiane");
+  });
+
+  it("empate: a mais recente", async () => {
+    await runTick({
+      scheduled: [pendente()],
+      instances: [CAROLINI, TATIANE],
+      scheduledHistory: [hist("inst-carolini", 5), hist("inst-tatiane", 1)],
+    });
+    expect(usada()).toBe("inst-tatiane");
+  });
+
+  it("a conversa do lead vence a caixa do criador", async () => {
+    await runTick({
+      scheduled: [pendente()],
+      instances: [CAROLINI, TATIANE, OUTRA],
+      messages: [{ organization_id: "org-1", lead_id: "lead-1", instance_id: "inst-outra", timestamp: "2026-10-01T10:00:00Z" }],
+      scheduledHistory: [hist("inst-tatiane", 1)],
+    });
+    expect(usada()).toBe("inst-outra");
+  });
+
+  it("caixa do histórico desconectada, reservada ou Meta é ignorada — vale a próxima elegível", async () => {
+    await runTick({
+      scheduled: [pendente()],
+      instances: [
+        CAROLINI,
+        { ...TATIANE, status: "disconnected" },
+        { ...OUTRA, reserved_for: "cobranca" },
+        { ...OUTRA, id: "inst-meta", provider: "meta_cloud" },
+      ],
+      scheduledHistory: [
+        hist("inst-tatiane", 1), hist("inst-tatiane", 1), hist("inst-outra", 1),
+        hist("inst-meta", 1), hist("inst-carolini", 2),
+      ],
+    });
+    expect(usada()).toBe("inst-carolini");
+  });
+
+  it("caixa do histórico de outra org é ignorada", async () => {
+    await runTick({
+      scheduled: [pendente()],
+      instances: [CAROLINI, { ...TATIANE, organization_id: "org-2" }],
+      scheduledHistory: [hist("inst-tatiane", 1)],
+    });
+    expect(usada()).toBe("inst-carolini");
+  });
+
+  it("histórico de outro criador, de outra org ou com mais de 20 dias não conta", async () => {
+    await runTick({
+      scheduled: [pendente()],
+      instances: [CAROLINI, TATIANE],
+      scheduledHistory: [
+        hist("inst-tatiane", 1, { created_by: "tm-2" }),
+        hist("inst-tatiane", 1, { organization_id: "org-2" }),
+        hist("inst-tatiane", 30),
+      ],
+    });
+    expect(usada()).toBe("inst-carolini");
+  });
+
+  it("sem histórico: fallback atual", async () => {
+    await runTick({ scheduled: [pendente()], instances: [CAROLINI, TATIANE] });
+    expect(usada()).toBe("inst-carolini");
+  });
+
+  it("instância preenchida: intocada", async () => {
+    await runTick({
+      scheduled: [{ ...pendente(), whatsapp_instance_id: "inst-carolini" }],
+      instances: [CAROLINI, TATIANE],
+      scheduledHistory: [hist("inst-tatiane", 1), hist("inst-tatiane", 2)],
+    });
+    expect(usada()).toBe("inst-carolini");
+  });
+
+  it("o strict do responsável segue vencendo", async () => {
+    strictResolve.mockResolvedValue({ ...CHIP_CONECTADO, id: "inst-do-responsavel" });
+    await runTick({
+      scheduled: [pendente()],
+      instances: [CAROLINI, TATIANE],
+      scheduledHistory: [hist("inst-tatiane", 1)],
+    });
+    expect(usada()).toBe("inst-do-responsavel");
   });
 });
