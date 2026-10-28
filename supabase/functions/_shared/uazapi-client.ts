@@ -691,6 +691,15 @@ export class UazapiClient {
     return this.request<unknown>("POST", "/message/find", { ...input, limit: 2, offset: 0 }, { noRetry: true, timeoutMs: 10_000 });
   }
 
+  /**
+   * Bounded read of a chat's most recent messages, used only to reconcile an
+   * ambiguous send (timeout / 5xx). Short deadline and no replay: this call
+   * must never extend the caller's budget meaningfully.
+   */
+  async findRecentMessages(input: { chatid: string; limit: number }): Promise<unknown> {
+    return this.request<unknown>("POST", "/message/find", { chatid: input.chatid, limit: input.limit, offset: 0 }, { noRetry: true, timeoutMs: 5_000 });
+  }
+
   async historySync(input: {
     number: string;
     limit?: number;
