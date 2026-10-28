@@ -36,7 +36,10 @@ docker compose -f services/lista-fria-worker/compose.yaml up -d --build
 | `GOSOM_URL` | padrão `http://gosom:8080` |
 | `ANTHROPIC_API_KEY` | opcional. Liga a expansão por bairro/sinônimo e o filtro de nicho (Claude Haiku 4.5) |
 | `GOSOM_MAX_TIME_S` | teto do job no gosom, padrão 3600 |
-| `APIFY_TOKEN` | opcional. Liga as buscas de Instagram |
+| `INSTAGRAM_COLETOR_URL` | opcional. Liga o Instagram pelo **coletor com login real** (`services/instagram-coletor`): sem custo em dólar, com risco de conta. Tem precedência sobre a Apify |
+| `INSTAGRAM_COLETOR_SEGREDO` | Bearer do coletor, se ele exigir |
+| `INSTAGRAM_SEGUNDOS_POR_CONTA` | 9. No coletor, o prazo da busca é contas × segundos (o ritmo da conta) |
+| `APIFY_TOKEN` | opcional. Liga o Instagram pela Apify (paga), usada só se não houver coletor |
 | `APIFY_INSTAGRAM_ACTOR` | padrão `data-slayer~instagram-followers-scraper---no-login` |
 | `APIFY_MAX_USD_POR_BUSCA` | teto de gasto nosso por busca de Instagram, padrão 25. A Apify aborta a execução ao chegar nele |
 | `INSTAGRAM_MAX_SEGUIDORES` | contas processadas por busca, no máximo (padrão 5000) |
@@ -52,6 +55,10 @@ Pode haver mais de um worker: a fila usa `FOR UPDATE SKIP LOCKED`.
 - **Leitura de site é SSRF-safe** (`src/ssrf.ts`). O endereço vem do listing do Maps, texto de terceiro, e o worker tem a chave de serviço no ambiente. O IP é validado na conexão (não antes, por causa de DNS rebinding), só portas 80/443, sem credencial na URL, redirecionamento seguido à mão com as mesmas regras, corpo e tempo limitados, só `text/html`.
 - **Texto do Maps nunca é instrução para a IA.** Título e categoria entram como JSON de dado, a saída é forçada por ferramenta e só booleanos/strings curtas validadas voltam.
 - **Termos de uso.** Raspar o Google Maps contraria os termos do Google; o risco é nosso (decisão do CTO, ADR-0042). Ritmo baixo, um job por vez por worker, e só dado de listagem pública.
+
+## Instagram: dois provedores, a mesma fonte
+
+O worker escolhe o provedor pelo ambiente: **`INSTAGRAM_COLETOR_URL`** (login real, sem custo em dólar, **risco de conta**, lento: cerca de 2 h por 800 contas) ou **`APIFY_TOKEN`** (paga, sem risco de conta, rápida). Os dois entregam itens no mesmo formato e passam pelo mesmo fluxo (`fonte-instagram.ts` + `instagram.ts`); o que muda é só quem coleta. O coletor com login real tem README próprio com os riscos e o passo a passo do primeiro uso: [`services/instagram-coletor`](../instagram-coletor/README.md).
 
 ## Instagram (Apify)
 

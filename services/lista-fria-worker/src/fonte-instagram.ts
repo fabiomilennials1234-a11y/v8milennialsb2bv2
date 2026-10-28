@@ -33,7 +33,21 @@ export interface CfgInstagram {
   maxSeguidores: number;
   /** Quantas contas processar por crédito pedido (rendimento presumido). */
   contasPorCredito: number;
+  /**
+   * Coletor com login real: o tempo é o ritmo da conta (pausa entre perfis), não a velocidade do
+   * provedor. Define o prazo da busca como contas × segundos. Sem isto vale a conta da Apify.
+   */
+  segundosPorConta?: number;
 }
+
+/** Coletor com login real: sem custo em dólar, limitado pelo ritmo e pelas contas. */
+export const CFG_INSTAGRAM_SESSAO_PADRAO: Omit<CfgInstagram, "actorId"> = {
+  precoPorSeguidorUsd: 0,
+  maxUsdPorBusca: 0,
+  maxSeguidores: 800,
+  contasPorCredito: 8,
+  segundosPorConta: 9,
+};
 
 export const CFG_INSTAGRAM_PADRAO: Omit<CfgInstagram, "actorId"> = {
   precoPorSeguidorUsd: 0.012,
@@ -49,7 +63,9 @@ export function planoDaBusca(creditos: number, cfg: CfgInstagram) {
   const maxPages = Math.ceil(maxItems / CONTAS_POR_PAGINA);
   // 15% de folga sobre o preço de tabela (add-ons, arredondamento); nunca acima do teto.
   const maxTotalChargeUsd = Math.min(cfg.maxUsdPorBusca, Number((maxItems * cfg.precoPorSeguidorUsd * 1.15 + 0.01).toFixed(4)));
-  const timeoutS = clamp(maxPages * 45, 300, 3_600);
+  const timeoutS = cfg.segundosPorConta
+    ? clamp(maxItems * cfg.segundosPorConta, 300, 6 * 3_600)
+    : clamp(maxPages * 45, 300, 3_600);
   return { maxItems, maxPages, maxTotalChargeUsd, timeoutS };
 }
 

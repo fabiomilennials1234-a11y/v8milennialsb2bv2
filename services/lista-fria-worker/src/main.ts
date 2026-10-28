@@ -5,7 +5,9 @@
  *   SUPABASE_SERVICE_ROLE_KEY    obrigatória
  *   GOSOM_URL                    padrão http://gosom:8080 (rede interna; sem autenticação)
  *   ANTHROPIC_API_KEY            opcional: liga expansão de busca e filtro de nicho (Haiku)
- *   APIFY_TOKEN                  opcional: liga as buscas de Instagram (sem ele, fecham como indisponíveis)
+ *   INSTAGRAM_COLETOR_URL        opcional: liga o Instagram pelo coletor com LOGIN REAL (services/instagram-coletor)
+ *   INSTAGRAM_COLETOR_SEGREDO    Bearer do coletor, se ele exigir
+ *   APIFY_TOKEN                  opcional: liga o Instagram pela Apify (usado só se não houver coletor)
  *   APIFY_INSTAGRAM_ACTOR        padrão data-slayer~instagram-followers-scraper---no-login
  *   APIFY_PRECO_POR_SEGUIDOR_USD 0.012   (tabela do Actor, modo enriched)
  *   APIFY_MAX_USD_POR_BUSCA      25      (teto de gasto nosso por busca; a Apify aborta ao chegar)
@@ -21,8 +23,9 @@ import { setTimeout as dormir } from "node:timers/promises";
 import { bancoPelaRede } from "./db.ts";
 import { abortarExecucao, iniciarExecucao, lerExecucao, lerItens, type ApifyCfg } from "./apify.ts";
 import { CFG_PADRAO, executarBusca, executarMaps, type Ambiente, type CfgDoExecutor } from "./executor.ts";
+import { coletorApi } from "./coletor-instagram.ts";
 import { ACTOR_PADRAO } from "./instagram.ts";
-import { CFG_INSTAGRAM_PADRAO, fonteInstagram, type ApifyApi, type CfgInstagram } from "./fonte-instagram.ts";
+import { CFG_INSTAGRAM_PADRAO, CFG_INSTAGRAM_SESSAO_PADRAO, fonteInstagram, type ApifyApi, type CfgInstagram } from "./fonte-instagram.ts";
 import { apagarJob, baixarCsv, criarJob, lerJob, type GosomCfg } from "./gosom.ts";
 import { aderentes, expandirBusca, type IaCfg } from "./ia.ts";
 import { lerSite } from "./site.ts";
@@ -61,11 +64,25 @@ async function main() {
   const iaCfg: IaCfg | null = process.env.ANTHROPIC_API_KEY ? { apiKey: process.env.ANTHROPIC_API_KEY } : null;
   const banco = bancoPelaRede({ url, chaveDeServico: chave });
 
-  // Instagram só liga com token da Apify. A Apify aborta a execução ao chegar em maxUsdPorBusca.
-  let instagram: { api: ApifyApi; cfg: CfgInstagram } | null = null;
-  if (process.env.APIFY_TOKEN) {
+  // Instagram: coletor com login real (sem custo em dólar) tem precedência; senão a Apify; senão desligado.
+  // Na Apify, ela mesma aborta a execução ao chegar em maxUsdPorBusca.
+  let instagram: { api: ApifyApi; cfg: CfgInstagram; provedor: "coletor" | "apify" } | null = null;
+  if (process.env.INSTAGRAM_COLETOR_URL) {
+    instagram = {
+      provedor: "coletor",
+      api: coletorApi({ baseUrl: process.env.INSTAGRAM_COLETOR_URL, segredo: process.env.INSTAGRAM_COLETOR_SEGREDO || undefined }),
+      cfg: {
+        actorId: "coletor",
+        ...CFG_INSTAGRAM_SESSAO_PADRAO,
+        maxSeguidores: numero("INSTAGRAM_MAX_SEGUIDORES", CFG_INSTAGRAM_SESSAO_PADRAO.maxSeguidores),
+        contasPorCredito: numero("INSTAGRAM_CONTAS_POR_CREDITO", CFG_INSTAGRAM_SESSAO_PADRAO.contasPorCredito),
+        segundosPorConta: numero("INSTAGRAM_SEGUNDOS_POR_CONTA", CFG_INSTAGRAM_SESSAO_PADRAO.segundosPorConta ?? 9),
+      },
+    };
+  } else if (process.env.APIFY_TOKEN) {
     const ac: ApifyCfg = { token: process.env.APIFY_TOKEN };
     instagram = {
+      provedor: "apify",
       api: {
         iniciar: (actor, input, o) => iniciarExecucao(ac, actor, input, o),
         execucao: (id) => lerExecucao(ac, id),
@@ -110,7 +127,7 @@ async function main() {
     log,
   };
 
-  log("worker_iniciado", { workerId, gosom: gosomCfg.baseUrl, ia: iaCfg !== null, instagram: instagram !== null, actor: instagram?.cfg.actorId });
+  log("worker_iniciado", { workerId, gosom: gosomCfg.baseUrl, ia: iaCfg !== null, instagram: instagram?.provedor ?? null, actor: instagram?.cfg.actorId });
   let ultimaLimpeza = 0;
   while (!parar) {
     try {
@@ -130,7 +147,7 @@ async function main() {
       } else if (instagram) {
         await executarBusca(busca, fonteInstagram(busca, instagram.api, instagram.cfg, log), amb, cfg);
       } else {
-        // Sem APIFY_TOKEN: fecha e devolve a reserva em vez de segurar a fila.
+        // Sem coletor nem APIFY_TOKEN: fecha e devolve a reserva em vez de segurar a fila.
         await banco.encerrar(busca.id, workerId, "falhou", "instagram_indisponivel");
       }
     } catch (e) {
