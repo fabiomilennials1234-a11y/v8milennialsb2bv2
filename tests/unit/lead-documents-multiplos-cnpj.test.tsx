@@ -399,7 +399,7 @@ describe("o CRM não vaza documento extra para o ERP", () => {
 
 // ── A migration não toca `leads` ────────────────────────────────────────────
 describe("migration 20271217000000", () => {
-  const sql = readFileSync("supabase/migrations/20271217000000_lead_documents_multiplos_cnpj.sql", "utf8");
+  const sql = readFileSync("supabase/migrations/20271217000001_lead_documents_multiplos_cnpj.sql", "utf8");
   const codigo = sql.replace(/--.*$/gm, "");
 
   it("decisão (d): nenhuma coluna nem DML em public.leads", () => {
