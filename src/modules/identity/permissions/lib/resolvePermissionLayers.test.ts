@@ -82,3 +82,47 @@ describe("buildPermissionMap — cascata de permissão", () => {
     expect(m["leads.view_all"]).toBe(false);
   });
 });
+
+describe("pipeline.view_all — a chave nova passa pela cascata sem tratamento especial", () => {
+  const withKey = [...catalog, { key: "pipeline.view_all", default_value: true }];
+
+  it("catálogo: default TRUE — ninguém muda de comportamento no rollout", () => {
+    expect(buildPermissionMap(layers({ catalog: withKey }))["pipeline.view_all"]).toBe(true);
+  });
+
+  it("default da org desligado vale para quem não tem override", () => {
+    const m = buildPermissionMap(
+      layers({ catalog: withKey, orgDefaults: { "pipeline.view_all": false } }),
+    );
+    expect(m["pipeline.view_all"]).toBe(false);
+  });
+
+  it("override do membro (true) vence a política da org (false)", () => {
+    const m = buildPermissionMap(
+      layers({
+        catalog: withKey,
+        orgDefaults: { "pipeline.view_all": false },
+        memberOverrides: { "pipeline.view_all": true },
+      }),
+    );
+    expect(m["pipeline.view_all"]).toBe(true);
+  });
+
+  it("a edição local vence tudo, e false não cai no global", () => {
+    const m = buildPermissionMap(
+      layers({ catalog: withKey, localOverrides: { "pipeline.view_all": false } }),
+    );
+    expect(m["pipeline.view_all"]).toBe(false);
+  });
+
+  it("no escopo da org, a linha de um membro não participa", () => {
+    const m = buildPermissionMap(
+      layers({
+        catalog: withKey,
+        memberOverrides: { "pipeline.view_all": false },
+      }),
+      { scope: "org" },
+    );
+    expect(m["pipeline.view_all"]).toBe(true);
+  });
+});

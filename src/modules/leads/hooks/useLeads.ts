@@ -1,4 +1,4 @@
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import type { Tables, TablesInsert, TablesUpdate } from "@/integrations/supabase/types";
 import { useOrganization } from "@/modules/identity";
@@ -15,6 +15,24 @@ import { prepareLeadForCreate } from "../lib/lead-create-payload";
 import { EMPTY_COUNT, runCappedCount, type CappedCount } from "../lib/capped-count";
 import { useLeadsRealtime } from "./useLeadsRealtime";
 import { buscarLeadIdsPorTelefoneSecundario } from "./useLeadPhones";
+import { buscarLeadIdsPorDocumento } from "./useLeadDocument";
+
+/**
+ * Leads achados pelo que NÃO é coluna de `leads`: telefone secundário
+ * (`lead_phones`) e CPF/CNPJ (`lead_documents`, principal e extras). Entram no
+ * mesmo `or()` da busca. As duas consultas vão em paralelo.
+ */
+async function buscarLeadIdsSecundarios(
+  queryClient: QueryClient,
+  organizationId: string,
+  search: string | null | undefined,
+): Promise<string[]> {
+  const [telefones, documentos] = await Promise.all([
+    buscarLeadIdsPorTelefoneSecundario(queryClient, organizationId, search),
+    buscarLeadIdsPorDocumento(queryClient, organizationId, search),
+  ]);
+  return [...new Set([...telefones, ...documentos])];
+}
 import { coDonosDoFiltro } from "./useLeadOwners";
 import { comEmbedDosDonos } from "../lib/lead-owners";
 
@@ -141,7 +159,7 @@ export function useLeads(params: LeadsFilterParams = {}, options: { enabled?: bo
 
       // Telefone secundário (lead_phones) — Chamado 82c50502.
       const [secundarios, coDonos] = await Promise.all([
-        buscarLeadIdsPorTelefoneSecundario(queryClient, organizationId, searchQuery),
+        buscarLeadIdsSecundarios(queryClient, organizationId, searchQuery),
         coDonosDoFiltro(organizationId, filters),
       ]);
       query = applyLeadsFilters(query, organizationId, filters, secundarios, coDonos);
@@ -202,7 +220,7 @@ export function useLeadsCount(filters: Omit<LeadsFilterParams, "page"> = {}, opt
     queryFn: async () => {
       if (!organizationId) return EMPTY_COUNT;
       const [secundarios, coDonos] = await Promise.all([
-        buscarLeadIdsPorTelefoneSecundario(queryClient, organizationId, searchQuery),
+        buscarLeadIdsSecundarios(queryClient, organizationId, searchQuery),
         coDonosDoFiltro(organizationId, recorte),
       ]);
       const query = applyLeadsFilters(supabase.from("leads").select("id"), organizationId, recorte, secundarios, coDonos);

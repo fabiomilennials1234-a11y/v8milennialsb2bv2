@@ -132,6 +132,85 @@ export function levelFromPermissions(
   return "own";
 }
 
+// ───────────────────────────────────────────────────────────────────────────
+// Visualização no FUNIL — a segunda régua (ADR-0042)
+// ───────────────────────────────────────────────────────────────────────────
+//
+// Leads (acima) e Funil são duas réguas. `pipeline.view_all` governa só o Funil
+// e é aplicada pelo banco (RLS RESTRICTIVE em `pipeline_entries`): desligada,
+// o Funil mostra os cards dos leads em que a pessoa é responsável, ainda que a
+// tela Leads mostre todos.
+//
+// O Funil NUNCA é mais largo que Leads: a RLS de `leads` é AND da de
+// `pipeline_entries`. Por isso o nível de funil é DERIVADO — com Leads em `own`
+// o Funil é "só os meus" qualquer que seja o valor gravado em
+// `pipeline.view_all`, e a tela não grava nada por baixo (o valor guardado
+// reaparece se o admin voltar Leads para um nível maior).
+
+export const PIPELINE_VIEW_ALL_KEY = "pipeline.view_all" as const;
+
+export type FunnelVisibilityLevel = "all" | "own";
+
+export interface FunnelVisibilityOption {
+  level: FunnelVisibilityLevel;
+  label: string;
+  description: string;
+}
+
+/** Ordem crescente de alcance, como a escala de Leads. */
+export const FUNNEL_VISIBILITY_OPTIONS: readonly FunnelVisibilityOption[] = [
+  {
+    level: "own",
+    label: "Só os meus",
+    description:
+      "O Funil mostra apenas os cards dos leads em que a pessoa é responsável (ou co-dona). Na tela Leads ela continua vendo o que a visualização de leads permitir — inclusive leads de outras pessoas, sem o card do funil.",
+  },
+  {
+    level: "all",
+    label: "Todos",
+    description:
+      "O Funil mostra os cards de todos os leads que a visualização de leads permite ver.",
+  },
+] as const;
+
+/**
+ * Valor gravado → nível pedido. Chave ausente = `all`: é o default do
+ * catálogo, e um banco sem a migration não pode virar "só os meus" por engano.
+ */
+export function funnelLevelFromPermissions(
+  map: Record<string, boolean | undefined>,
+): FunnelVisibilityLevel {
+  return map[PIPELINE_VIEW_ALL_KEY] === false ? "own" : "all";
+}
+
+/** Nível → a chave que a tela grava. UMA chave só: o resto é derivado. */
+export function permissionsFromFunnelLevel(
+  level: FunnelVisibilityLevel,
+): Record<typeof PIPELINE_VIEW_ALL_KEY, boolean> {
+  return { [PIPELINE_VIEW_ALL_KEY]: level === "all" };
+}
+
+/**
+ * O que o Funil de fato mostra: o pedido em `pipeline.view_all` limitado pelo
+ * nível de Leads. `own` em Leads força `own` no Funil.
+ */
+export function effectiveFunnelLevel(
+  map: Record<string, boolean | undefined>,
+): FunnelVisibilityLevel {
+  if (levelFromPermissions(map) === "own") return "own";
+  return funnelLevelFromPermissions(map);
+}
+
+/**
+ * `true` quando Leads em `own` rebaixa o Funil por cima do valor gravado — o
+ * controle do Funil fica desabilitado e mostra "Só os meus" sem gravar.
+ */
+export function isFunnelLevelForcedByLeads(
+  map: Record<string, boolean | undefined>,
+): boolean {
+  return levelFromPermissions(map) === "own";
+}
+
 /**
  * `true` quando o estado gravado não corresponde exatamente ao que o nível
  * exibido escreveria. Serve para a tela avisar que salvar vai normalizar as

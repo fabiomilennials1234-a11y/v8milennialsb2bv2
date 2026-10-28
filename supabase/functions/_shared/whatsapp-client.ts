@@ -262,6 +262,11 @@ export interface WhatsAppProvider {
   sendMenu?(opts: SendMenuOptions): Promise<SendMenuResult>;
   /** Read-only reconciliation. Absence/uncertainty never authorizes a resend. */
   findTrackedMenu?(opts: TrackedMenuQuery): Promise<TrackedMenuResult>;
+  /**
+   * Read-only: recent messages of a chat, to reconcile an ambiguous send.
+   * Only the Uazapi provider implements it. Failure means "unknown", never "not sent".
+   */
+  findRecentMessages?(opts: { number: string; limit: number }): Promise<unknown[]>;
   /** Canal oficial (Meta) — ponto no mapa. */
   sendLocation?(opts: {
     number: string;

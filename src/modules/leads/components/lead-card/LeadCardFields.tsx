@@ -4,6 +4,8 @@ import { cn } from "@/lib/utils";
 import { useInlineEdit } from "../lead-detail/hooks/useInlineEdit";
 import { formatBrDocument } from "../../lib/document";
 import type { LeadCardField, LeadCardFieldGroup } from "./types";
+import { LeadCardDocumentos } from "./LeadCardDocumentos";
+import type { DocumentoEditado } from "../../lib/lead-documents";
 
 /**
  * Dados do lead — campos de sistema e campos da organização, sem separação de
@@ -160,10 +162,13 @@ function Linha({
 export function LeadCardFields({
   grupos,
   onSave,
+  onSaveDocumentos,
 }: {
   grupos: LeadCardFieldGroup[];
   /** Persiste o campo. Sem ela o bloco fica só de leitura (visualização). */
   onSave?: (chave: string, valor: string) => Promise<void>;
+  /** Persiste a lista de documentos (vários CNPJ). Sem ela a lista não aparece. */
+  onSaveDocumentos?: (lista: DocumentoEditado[]) => Promise<void>;
 }) {
   return (
     <div className="flex flex-col gap-5">
@@ -187,7 +192,17 @@ export function LeadCardFields({
 
             <div className="flex flex-col">
               {grupo.campos.map((campo) => (
-                <Linha key={campo.chave} campo={campo} onSave={onSave} />
+                <div key={campo.chave} className="flex flex-col">
+                  <Linha campo={campo} onSave={onSave} />
+                  {/* CPF/CNPJ é lista: a linha acima é o principal; aqui os outros CNPJ. */}
+                  {campo.tipo === "documento" && !campo.personalizado && campo.documentos && onSaveDocumentos && (
+                    <LeadCardDocumentos
+                      documentos={campo.documentos}
+                      podeEditar={!campo.somenteLeitura}
+                      onSalvar={onSaveDocumentos}
+                    />
+                  )}
+                </div>
               ))}
             </div>
           </section>
