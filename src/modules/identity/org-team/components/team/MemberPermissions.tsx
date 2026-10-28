@@ -13,13 +13,20 @@ import { supabase } from "@/integrations/supabase/client";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { buildPermissionMap } from "@/modules/identity/permissions/lib/resolvePermissionLayers";
 import {
+  FUNNEL_VISIBILITY_OPTIONS,
   LEAD_VISIBILITY_KEYS,
   LEAD_VISIBILITY_OPTIONS,
+  PIPELINE_VIEW_ALL_KEY,
+  funnelLevelFromPermissions,
+  isFunnelLevelForcedByLeads,
   isLegacyCombination,
   levelFromPermissions,
+  permissionsFromFunnelLevel,
   permissionsFromLevel,
+  type FunnelVisibilityLevel,
   type LeadVisibilityLevel,
 } from "@/modules/identity/permissions/lib/leadVisibility";
+import { VisibilityScaleField } from "./VisibilityScaleField";
 import { toast } from "sonner";
 import { notifyError } from "@/shared/errors";
 import { useFeatureFlag } from "@/modules/platform";
@@ -82,6 +89,9 @@ function toModuleGroups(features: FeaturePermission[]): ModuleGroup[] {
 /** O grupo de visibilidade de leads vira um controle só. Ver `leadVisibility.ts`. */
 const LEAD_VISIBILITY_KEY_SET = new Set<string>(LEAD_VISIBILITY_KEYS);
 
+/** `pipeline.view_all` também vira controle próprio (Funil), não um switch. */
+const FUNNEL_VISIBILITY_KEY_SET = new Set<string>([PIPELINE_VIEW_ALL_KEY]);
+
 /**
  * Escala de alcance, não três interruptores.
  *
@@ -105,57 +115,57 @@ function LeadVisibilityField({
   const active = LEAD_VISIBILITY_OPTIONS.find((o) => o.level === level);
 
   return (
-    <div className={cn("px-4 py-3", disabled && "opacity-50")}>
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div className="min-w-0 flex-1">
-          <span className="text-sm font-semibold">Visualização de leads</span>
-          <p className="mt-0.5 text-xs text-muted-foreground">
-            {active?.description}
+    <VisibilityScaleField
+      title="Visualização de leads"
+      options={LEAD_VISIBILITY_OPTIONS}
+      level={level}
+      disabled={disabled}
+      onChange={onChange}
+      footer={
+        /* O admin precisa saber que salvar normaliza as três chaves. Mudança de
+           permissão que acontece de lado, sem ninguém pedir, é a que ninguém
+           audita depois. */
+        isLegacy && !disabled ? (
+          <p className="mt-2 rounded-xl bg-warning/15 px-3 py-2 text-xs leading-relaxed text-warning-strong">
+            A configuração atual mistura as três chaves antigas
+            (`leads.view_all`, `leads.view_unassigned`, `leads.view_subordinates`)
+            num estado que o banco já resolve como &ldquo;{active?.label}&rdquo;.
+            Salvar grava as três de forma coerente, sem mudar quem enxerga o quê.
           </p>
-        </div>
+        ) : null
+      }
+    />
+  );
+}
 
-        <div
-          className="inline-flex shrink-0 items-center gap-0.5 rounded-full bg-muted p-[3px]"
-          role="radiogroup"
-          aria-label="Visualização de leads"
-        >
-          {LEAD_VISIBILITY_OPTIONS.map((option) => {
-            const isActive = option.level === level;
-            return (
-              <button
-                key={option.level}
-                type="button"
-                role="radio"
-                aria-checked={isActive}
-                disabled={disabled}
-                onClick={() => onChange(option.level)}
-                className={cn(
-                  "whitespace-nowrap rounded-full px-3 py-1.5 text-xs font-semibold transition-[background-color,color,box-shadow] duration-150",
-                  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed",
-                  isActive
-                    ? "bg-card text-foreground shadow-relevo"
-                    : "text-muted-foreground hover:text-foreground",
-                )}
-              >
-                {option.label}
-              </button>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* O admin precisa saber que salvar normaliza as três chaves. Mudança de
-          permissão que acontece de lado, sem ninguém pedir, é a que ninguém
-          audita depois. */}
-      {isLegacy && !disabled && (
-        <p className="mt-2 rounded-xl bg-warning/15 px-3 py-2 text-xs leading-relaxed text-warning-strong">
-          A configuração atual mistura as três chaves antigas
-          (`leads.view_all`, `leads.view_unassigned`, `leads.view_subordinates`)
-          num estado que o banco já resolve como &ldquo;{active?.label}&rdquo;.
-          Salvar grava as três de forma coerente, sem mudar quem enxerga o quê.
-        </p>
-      )}
-    </div>
+/**
+ * Segunda régua: o que o FUNIL mostra (`pipeline.view_all`, aplicada pelo banco
+ * em `pipeline_entries`). Independente da tela Leads — o admin pode deixar
+ * "Todos" em Leads e "Só os meus" no Funil —, mas nunca mais larga: com Leads
+ * em "Só os meus" o Funil é "Só os meus" por derivação, o controle fica
+ * desabilitado e NADA é gravado por baixo (ver `leadVisibility.ts`, ADR-0042).
+ */
+function FunnelVisibilityField({
+  level,
+  forced,
+  disabled,
+  onChange,
+}: {
+  level: FunnelVisibilityLevel;
+  forced: boolean;
+  disabled: boolean;
+  onChange: (level: FunnelVisibilityLevel) => void;
+}) {
+  return (
+    <VisibilityScaleField
+      title="Visualização no Funil"
+      options={FUNNEL_VISIBILITY_OPTIONS}
+      level={level}
+      forcedLevel={forced ? "own" : undefined}
+      forcedNotice="Derivado da visualização de leads: com “Só os meus” em leads, o Funil também mostra só os meus. Nada é gravado aqui até a visualização de leads subir."
+      disabled={disabled}
+      onChange={onChange}
+    />
   );
 }
 
@@ -350,8 +360,18 @@ export function MemberPermissions() {
     setLocalOverrides((prev) => ({ ...prev, ...permissionsFromLevel(level) }));
   };
 
+  /**
+   * Grava SÓ `pipeline.view_all`. O rebaixamento por "leads: só os meus" é
+   * derivado na leitura (`isFunnelLevelForcedByLeads`), nunca escrito.
+   */
+  const handleFunnelVisibilityChange = (level: FunnelVisibilityLevel) => {
+    setLocalOverrides((prev) => ({ ...prev, ...permissionsFromFunnelLevel(level) }));
+  };
+
   const leadVisibilityLevel = levelFromPermissions(permissionMap);
   const leadVisibilityIsLegacy = isLegacyCombination(permissionMap);
+  const funnelVisibilityLevel = funnelLevelFromPermissions(permissionMap);
+  const funnelVisibilityForced = isFunnelLevelForcedByLeads(permissionMap);
 
   // Save permissions
   const handleSave = async () => {
@@ -669,6 +689,9 @@ export function MemberPermissions() {
                     const showLeadVisibility =
                       slug === "leads" &&
                       features.some((f) => LEAD_VISIBILITY_KEY_SET.has(f.key));
+                    const showFunnelVisibility =
+                      slug === "pipeline" &&
+                      features.some((f) => FUNNEL_VISIBILITY_KEY_SET.has(f.key));
 
                     return (
                       <div
@@ -698,12 +721,13 @@ export function MemberPermissions() {
                         <div className="divide-y divide-border">
                           {(() => {
                             // A porta do módulo já é o switch do cabeçalho, e as
-                            // três chaves de visibilidade de leads viraram um
-                            // controle só — nenhuma das duas volta como linha.
+                            // chaves de visibilidade (leads e funil) viraram
+                            // controles próprios — nenhuma volta como linha.
                             const nonViewFeatures = features.filter(
                               (f) =>
                                 f.key !== viewKey &&
-                                !(showLeadVisibility && LEAD_VISIBILITY_KEY_SET.has(f.key)),
+                                !(showLeadVisibility && LEAD_VISIBILITY_KEY_SET.has(f.key)) &&
+                                !(showFunnelVisibility && FUNNEL_VISIBILITY_KEY_SET.has(f.key)),
                             );
                             // Visualização = quem governa O QUE se enxerga
                             // (`*.view_all`, `leads.view_general_info`);
@@ -759,7 +783,7 @@ export function MemberPermissions() {
 
                             return (
                               <>
-                                {(showLeadVisibility || viewFeatures.length > 0) && (
+                                {(showLeadVisibility || showFunnelVisibility || viewFeatures.length > 0) && (
                                   <>
                                     <div className="px-4 pb-1 pt-3">
                                       <p className="text-[11px] font-bold uppercase tracking-[.06em] text-muted-foreground">
@@ -772,6 +796,14 @@ export function MemberPermissions() {
                                         isLegacy={leadVisibilityIsLegacy}
                                         disabled={!moduleEnabled}
                                         onChange={handleLeadVisibilityChange}
+                                      />
+                                    )}
+                                    {showFunnelVisibility && (
+                                      <FunnelVisibilityField
+                                        level={funnelVisibilityLevel}
+                                        forced={funnelVisibilityForced}
+                                        disabled={!moduleEnabled}
+                                        onChange={handleFunnelVisibilityChange}
                                       />
                                     )}
                                     {viewFeatures.map(renderFeature)}

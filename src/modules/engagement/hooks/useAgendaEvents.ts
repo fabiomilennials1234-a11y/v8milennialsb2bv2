@@ -92,19 +92,37 @@ export function useAgendaEvents(startDate?: Date, endDate?: Date) {
     queryFn: async () => {
       if (!organizationId || !startDate || !endDate) return [];
 
-      const args = {
-        p_organization_id: organizationId,
-        p_start: startDate.toISOString(),
-        p_end: endDate.toISOString(),
-      } as never;
+      // O PostgREST corta a resposta de RPC em 1.000 linhas, em silêncio. A
+      // janela da tela (~3 meses) estoura isso em agendas cheias, então a
+      // busca é por janelas de tempo adaptativas (ver o helper abaixo).
+      let usarBase = false;
+      const fetchWindow: AgendaWindowFetcher = async (inicio, fim) => {
+        const args = {
+          p_organization_id: organizationId,
+          p_start: inicio.toISOString(),
+          p_end: fim.toISOString(),
+        } as never;
 
-      let { data, error } = await supabase.rpc(RPC_COM_RECORTE, args);
+        let data: unknown;
+        let error: unknown = null;
+        if (!usarBase) {
+          ({ data, error } = await supabase.rpc(RPC_COM_RECORTE, args));
+          if (error && isMissingFunctionError(error)) usarBase = true;
+        }
+        if (usarBase) {
+          ({ data, error } = await supabase.rpc(RPC_BASE, args));
+        }
+        if (error) throw error;
+        return (data ?? []) as unknown as AgendaEvent[];
+      };
 
-      if (error && isMissingFunctionError(error)) {
-        ({ data, error } = await supabase.rpc(RPC_BASE, args));
-      }
-
-      if (error) {
+      try {
+        return await fetchAgendaEventsAdaptativo(
+          fetchWindow,
+          startDate,
+          endDate,
+        );
+      } catch (error) {
         // Dev-environment drift fallback: get_agenda_events UNIONs several
         // source tables; if one is missing on a partially-migrated database
         // (e.g. scheduled_user_messages on dev), the whole RPC throws 42P01.
@@ -116,11 +134,73 @@ export function useAgendaEvents(startDate?: Date, endDate?: Date) {
         }
         throw error;
       }
-      return (data ?? []) as unknown as AgendaEvent[];
     },
     enabled: isReady && !!organizationId && !!startDate && !!endDate,
     staleTime: 30_000,
   });
+}
+
+// ─── Busca por janelas adaptativas ───────────────────────────────────────────
+
+/** Teto de linhas por resposta de RPC no PostgREST (`max-rows`). */
+export const AGENDA_RPC_ROW_CAP = 1000;
+/** Não divide a janela abaixo disto: metades ficam com >= 1 hora. */
+const AGENDA_MIN_WINDOW_MS = 60 * 60_000;
+
+/** Busca uma janela [inicio, fim) e devolve as linhas; lança em caso de erro. */
+export type AgendaWindowFetcher = (
+  inicio: Date,
+  fim: Date,
+) => Promise<AgendaEvent[]>;
+
+function compareAgendaEvents(a: AgendaEvent, b: AgendaEvent): number {
+  const byStart = new Date(a.start_at).getTime() - new Date(b.start_at).getTime();
+  if (byStart !== 0) return byStart;
+  if (a.source !== b.source) return a.source < b.source ? -1 : 1;
+  if (a.id !== b.id) return a.id < b.id ? -1 : 1;
+  return 0;
+}
+
+/**
+ * A RPC ordena só por `start_at` (sem desempate), então paginar por `range()`
+ * pularia/duplicaria eventos com o mesmo horário. Em vez disso, particionamos
+ * por TEMPO: se a resposta bateu o teto, a janela é dividida ao meio (em
+ * paralelo, recursivamente) até cada resposta caber. Quem tem poucos eventos
+ * paga UMA chamada. Evento que cruza a fronteira vem nas duas metades e é
+ * deduplicado por `source:id`.
+ */
+export async function fetchAgendaEventsAdaptativo(
+  fetchWindow: AgendaWindowFetcher,
+  start: Date,
+  end: Date,
+): Promise<AgendaEvent[]> {
+  const coletar = async (inicio: Date, fim: Date): Promise<AgendaEvent[]> => {
+    const rows = await fetchWindow(inicio, fim);
+    if (rows.length < AGENDA_RPC_ROW_CAP) return rows;
+
+    const span = fim.getTime() - inicio.getTime();
+    if (span < AGENDA_MIN_WINDOW_MS * 2) {
+      console.warn(
+        `[agenda] janela de ${inicio.toISOString()} a ${fim.toISOString()} atingiu o teto de ${AGENDA_RPC_ROW_CAP} linhas e não pode ser dividida; eventos podem estar faltando.`,
+      );
+      return rows;
+    }
+
+    const meio = new Date(inicio.getTime() + Math.floor(span / 2));
+    const [a, b] = await Promise.all([
+      coletar(inicio, meio),
+      coletar(meio, fim),
+    ]);
+    return [...a, ...b];
+  };
+
+  const todos = await coletar(start, end);
+  const unicos = new Map<string, AgendaEvent>();
+  for (const e of todos) {
+    const key = `${e.source}:${e.id}`;
+    if (!unicos.has(key)) unicos.set(key, e);
+  }
+  return [...unicos.values()].sort(compareAgendaEvents);
 }
 
 // ─── Dev-drift fallback ────────────────────────────────────────────────────────

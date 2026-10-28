@@ -53,6 +53,12 @@ import {
   sendMediaViaInstance,
   sendTextViaInstance,
 } from "../_shared/whatsapp-dispatch.ts";
+import {
+  isAmbiguousSendFailure,
+  RECONCILE_FIND_LIMIT,
+  reconcileAmbiguousSend,
+  SEND_OUTCOME_UNKNOWN,
+} from "../_shared/send-outcome-reconcile.ts";
 
 // Force bundler to include provider modules (used via dynamic import in
 // whatsapp-client). meta-cloud is force-imported too so the human composer can
@@ -1211,14 +1217,83 @@ Deno.serve(
           if (!number || !text) {
             return jsonResponse(400, { error: "Missing number/text" }, corsHeaders);
           }
-          result = await provider.sendText({
-            number,
-            text,
-            delay,
-            replyid,
-            trackSource: "whatsapp-api-proxy",
-            trackId: callerTeamMemberId ?? undefined,
-          });
+          const sentAtMs = Date.now();
+          try {
+            result = await provider.sendText({
+              number,
+              text,
+              delay,
+              replyid,
+              trackSource: "whatsapp-api-proxy",
+              trackId: callerTeamMemberId ?? undefined,
+            });
+          } catch (sendErr) {
+            // Timeout / 5xx do Uazapi NÃO provam que a mensagem não saiu (o
+            // provedor responde assim para entregas que aceitou). Antes de
+            // devolver erro, pergunta a ele. Nunca reenvia.
+            if (instance.provider !== "uazapi" || !provider.findRecentMessages || !isAmbiguousSendFailure(sendErr)) {
+              throw sendErr;
+            }
+            const sendErrMessage = (sendErr as { message?: string }).message ?? "Uazapi send failed";
+            const providerCode = (sendErr as { provider_code?: unknown }).provider_code;
+            const outcome = await reconcileAmbiguousSend({
+              findRecent: () => provider.findRecentMessages!({ number, limit: RECONCILE_FIND_LIMIT }),
+              existingIds: async (ids) => {
+                const { data } = await supabaseAdmin.from("whatsapp_messages").select("message_id")
+                  .eq("organization_id", callerOrgId).eq("instance_id", instanceId).in("message_id", ids);
+                return new Set((data ?? []).map((r: { message_id: string }) => r.message_id));
+              },
+              sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+              now: () => Date.now(),
+            }, { text, sentAtMs });
+            // O log de erro do envio permanece; `reconciled` permite medir depois.
+            await logRuntime({
+              organizationId: callerOrgId,
+              module: "whatsapp",
+              action,
+              status: "error",
+              errorMessage: sendErrMessage,
+              entityType: instanceId ? "whatsapp_instances" : undefined,
+              entityId: instanceId,
+              payloadSnapshot: {
+                reconciled: !!outcome.found,
+                reconcile_attempts: outcome.attempts,
+                provider_code: providerCode != null ? String(providerCode) : null,
+              },
+            });
+            if (!outcome.found) {
+              return jsonResponse(504, {
+                error: "Não foi possível confirmar se a mensagem foi entregue. Confira no WhatsApp antes de reenviar.",
+                code: SEND_OUTCOME_UNKNOWN,
+              }, corsHeaders);
+            }
+            const found = outcome.found;
+            const isGroupChat = String(number).endsWith("@g.us");
+            try {
+              const persisted = await supabaseAdmin.from("whatsapp_messages").upsert({
+                organization_id: callerOrgId,
+                instance_id: instanceId,
+                message_id: found.messageId,
+                remote_jid: String(number).includes("@") ? String(number) : `${number}@s.whatsapp.net`,
+                phone_number: isGroupChat ? String(number).replace(/@g\.us$/, "") : String(number),
+                ...(isGroupChat ? { is_group: true } : {}),
+                direction: "outgoing",
+                message_type: "text",
+                content: text,
+                status: "sent",
+                timestamp: new Date(found.timestampMs).toISOString(),
+              }, { onConflict: "message_id,instance_id", ignoreDuplicates: true });
+              if (persisted.error) throw persisted.error;
+            } catch {
+              // A mensagem foi entregue: falhar a persistência não pode virar erro.
+              console.warn("[whatsapp-api-proxy] reconciled send persistence failed");
+            }
+            result = {
+              message_id: found.messageId,
+              status: "sent",
+              timestamp: Math.floor(found.timestampMs / 1000),
+            };
+          }
           break;
         }
 

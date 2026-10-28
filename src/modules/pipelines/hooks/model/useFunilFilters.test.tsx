@@ -2,17 +2,43 @@ import { renderHook, act } from "@testing-library/react";
 import { useFunilFilters, createInitialFunilFilterState } from "./useFunilFilters";
 
 // ── Mocks ──────────────────────────────────────────────────────────────────
+const funnelLevel = vi.hoisted(() => ({ value: "all" as "all" | "own" }));
 vi.mock("@/modules/identity", () => ({
   useResponsibleMembers: () => [
     { id: "m-1", name: "Ana" },
     { id: "m-2", name: "Bruno" },
   ],
+  useFunnelVisibilityLevel: () => funnelLevel.value,
 }));
 vi.mock("@/modules/leads", () => ({
   useTags: () => ({ data: [{ id: "t-1", name: "Ouro", color: "#fc0" }] }),
 }));
 
 describe("useFunilFilters — controller plugável por pipeline_id (SCRUM-633)", () => {
+  beforeEach(() => {
+    funnelLevel.value = "all";
+  });
+
+  it("Funil 'só os meus' (pipeline.view_all): a seção Responsável — e o 'todos' dela — some", () => {
+    funnelLevel.value = "own";
+    const { result } = renderHook(() => useFunilFilters("pipe-1"));
+    const types = result.current.sections.map((s) => s.type);
+    expect(types).not.toContain("responsible");
+    // O resto do painel segue inteiro.
+    expect(types).toEqual([
+      "created-period",
+      "stalled-days",
+      "origin-multi",
+      "tags",
+      "qualification-tier",
+      "pre-qualification-tier",
+      "scheduled",
+    ]);
+    // E o recorte server-side não filtra por responsável.
+    expect(result.current.paginatedFilters.responsibleId).toBe("all");
+    expect(result.current.activeCount).toBe(0);
+  });
+
   it("monta as seções universais na ordem do painel, com dicionários de dentro (contexto = só pipelineId)", () => {
     const { result } = renderHook(() => useFunilFilters("pipe-1"));
     const types = result.current.sections.map((s) => s.type);

@@ -31,6 +31,7 @@ export {
 } from "./hooks/useUserRole";
 export type { AppRole, UserRole } from "./hooks/useUserRole";
 export { useCanDo } from "./hooks/useCanDo";
+export { useFunnelVisibilityLevel } from "./hooks/useFunnelVisibility";
 
 // ── Hooks: permissions (granular) ──────────────────────────────────────────
 // (Hooks org-wide do Pitstop > Permissões removidos em 2026-07-02: consultavam

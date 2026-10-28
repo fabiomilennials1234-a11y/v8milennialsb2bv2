@@ -16,7 +16,7 @@ import { useChatReply } from "../../../hooks/chat/useChatReply";
 import { useRef, useState, useCallback, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "framer-motion";
-import { Plus, Send, Mic, Camera, Paperclip, FileText, Film, Clock, Loader2, X } from "lucide-react";
+import { Plus, Send, Mic, Camera, Paperclip, FileText, Film, Clock, CalendarPlus, Loader2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
@@ -40,6 +40,7 @@ import {
 import type { LeadContext, AttendantContext } from "@/lib/template-variables";
 import type { MessageTemplate } from "@/modules/communication/hooks/useMessageTemplates";
 import { notifyError } from "@/shared/errors";
+import { CreateMeetingDialog } from "@/modules/engagement";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -70,6 +71,7 @@ const TRAY_ITEMS = [
   { id: "file", icon: Paperclip, label: "Arquivo" },
   { id: "template", icon: FileText, label: "Template" },
   { id: "schedule", icon: Clock, label: "Agendar" },
+  { id: "meeting", icon: CalendarPlus, label: "Reunião" },
 ] as const;
 
 type TrayAction = typeof TRAY_ITEMS[number]["id"];
@@ -114,6 +116,10 @@ export function MobileComposerContextual({
   });
 
   const [scheduleModalOpen, setScheduleModalOpen] = useState(false);
+  const [meetingDialogOpen, setMeetingDialogOpen] = useState(false);
+  // Reunião só existe para lead (meetings.lead_id é FK): conversa sem lead não oferece.
+  const meetingLeadId = selectedContact?.lead_id ?? null;
+  const trayItems = meetingLeadId ? TRAY_ITEMS : TRAY_ITEMS.filter((i) => i.id !== "meeting");
   const [isRecording, setIsRecording] = useState(false);
   const [trayOpen, setTrayOpen] = useState(false);
   const [showSlashPopover, setShowSlashPopover] = useState(false);
@@ -298,6 +304,10 @@ export function MobileComposerContextual({
         setTrayOpen(false);
         setScheduleModalOpen(true);
         break;
+      case "meeting":
+        setTrayOpen(false);
+        setMeetingDialogOpen(true);
+        break;
     }
   }, [setMessage]);
 
@@ -382,7 +392,7 @@ export function MobileComposerContextual({
             data-testid="action-tray"
           >
             <div className="flex items-center justify-around px-4 py-3">
-              {TRAY_ITEMS.map((item) => (
+              {trayItems.map((item) => (
                 <button
                   key={item.id}
                   type="button"
@@ -562,6 +572,15 @@ export function MobileComposerContextual({
           phoneNumber={selectedContact.phone_number}
           instanceId={instanceId}
           initialMessage={message}
+        />
+      )}
+
+      {meetingLeadId && (
+        <CreateMeetingDialog
+          open={meetingDialogOpen}
+          onOpenChange={setMeetingDialogOpen}
+          initialLeadId={meetingLeadId}
+          initialLeadName={selectedContact?.lead_name || selectedContact?.push_name || undefined}
         />
       )}
     </div>
