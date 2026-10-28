@@ -166,12 +166,22 @@ Parâmetros:
 - `phone` (string): Telefone. É a chave de deduplicação.
 - `email` (string): E-mail.
 - `company` (string): Empresa.
-- `Idempotency-Key` (string): Cabeçalho. Mesma chave devolve o MESMO Lead (200) em vez de criar outro (201).
+- `origin` (string): Origem do Lead. Padrão: "api".
+- `notes` (string): Observações.
+- `segment` (string): Segmento.
+- `faturamento` (string): Faixa de faturamento.
+- `utm_source` (string): UTM source.
+- `utm_medium` (string): UTM medium.
+- `utm_campaign` (string): UTM campaign.
+- `utm_content` (string): UTM content.
+- `utm_term` (string): UTM term.
+- `Idempotency-Key` (string): Cabeçalho. Mesma chave com o mesmo corpo devolve o MESMO Lead (200) em vez de criar outro (201). Mesma chave com corpo diferente → 409 com details.reason = idempotency_key_reused.
 
 Resposta (exemplo): `{"id":"9f1c…","name":"João","phone":"11999990000"}`
 
-Nota: 409 lead_already_exists quando o telefone já existe na org — o corpo traz details.lead_id e details.name. Siga para POST /api/v1/deals com aquele lead_id.
-Nota: Retentativa com a mesma Idempotency-Key devolve 200 e o mesmo Lead: nada é criado duas vezes.
+Nota: 409 lead_already_exists quando o telefone já existe na org — o corpo traz details.lead_id, details.name e details.reason. O Lead existente NÃO é alterado. Siga para POST /api/v1/deals com aquele lead_id.
+Nota: Retentativa com a mesma Idempotency-Key e o mesmo corpo devolve 200 e o mesmo Lead: nada é criado duas vezes.
+Nota: 422 unknown_fields para chave fora da lista (details.fields + details.hint): responsáveis, tier e qualification_score vão por PATCH /api/v1/leads/{id}; campos personalizados por PUT /api/v1/leads/{id}/custom-fields. 422 invalid_value para objeto/array/booleano; 422 missing_name sem name. Nada é gravado em 422.
 
 ## GET /api/v1/leads/search
 Lookup por telefone ou e-mail, para deduplicar antes de criar. Escopo: lead:read.
