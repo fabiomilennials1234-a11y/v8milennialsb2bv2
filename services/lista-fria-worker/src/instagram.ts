@@ -4,7 +4,7 @@
  * Actor: `data-slayer/instagram-followers-scraper---no-login`, modo `enriched`.
  * Campos conforme o README do Actor (build lido na API pública em 27/10/2026):
  *   username, full_name, is_private, is_business, enrichment_status,
- *   public_email, biography_email, email_found, contact_phone_number,
+ *   public_email, biography_email, email_found, contact_phone_number, public_phone_number,
  *   external_url, bio_links[{title,url}], biography, category, country.
  *
  * Só dado que o próprio perfil publica. Conta privada volta com
@@ -43,6 +43,8 @@ export function candidatoDoItem(item: Record<string, unknown>): Candidato | null
   const externa = texto(item.external_url);
   const candidatos = [
     normalizarTelefoneBR(texto(item.contact_phone_number)),
+    // O Actor devolve também `public_phone_number` (conferido na execução real em 28/10/2026).
+    normalizarTelefoneBR(texto(item.public_phone_number)),
     ...[externa, ...links].map((u) => whatsappDoLink(u)),
     ...telefonesDaBio(bio),
   ].filter((t): t is string => t !== null);

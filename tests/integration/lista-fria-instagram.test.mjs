@@ -39,6 +39,12 @@ describe('candidatoDoItem (campos do Actor)', () => {
     assert.equal(candidatoDoItem({ ...EXEMPLO, biography: 'Agende: (11) 99319-5517 | Rua X' }).telefone, '5511993195517');
   });
 
+  test('public_phone_number (campo real do Actor) também vira telefone', () => {
+    assert.equal(candidatoDoItem({ ...EXEMPLO, contact_phone_number: null, public_phone_number: '11993195517' }).telefone, '5511993195517');
+    assert.equal(candidatoDoItem({ ...EXEMPLO, contact_phone_number: null, public_phone_number: '(11) 3081-9404' }).telefone, '551130819404');
+    assert.equal(candidatoDoItem({ ...EXEMPLO, contact_phone_number: null, public_phone_number: '12345' }).telefone, null);
+  });
+
   test('wa.me não é site; o primeiro link comum vira o site', () => {
     const c = candidatoDoItem({ ...EXEMPLO, external_url: 'https://wa.me/5511993195517', bio_links: [{ url: 'https://wa.me/5511993195517' }, { url: 'https://clinica.com.br/' }] });
     assert.equal(c.site, 'https://clinica.com.br/');

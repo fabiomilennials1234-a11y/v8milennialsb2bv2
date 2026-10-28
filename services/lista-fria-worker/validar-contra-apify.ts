@@ -1,7 +1,7 @@
 /**
  * Validação MANUAL do adaptador do Instagram contra a Apify de verdade (não roda no CI).
  *
- *   APIFY_TOKEN=apify_api_... node services/lista-fria-worker/validar-contra-apify.ts <conta> [creditos]
+ *   APIFY_TOKEN=apify_api_... node services/lista-fria-worker/validar-contra-apify.ts <conta> [creditos] [--mostrar]
  *
  * Use uma conta PÚBLICA pequena ou média (poucos milhares de seguidores). Com 5
  * créditos o plano processa 50 contas (uma página): custo de uns US$ 0,60 no plano FREE.
@@ -24,12 +24,21 @@ if (!token) {
   console.error("Defina APIFY_TOKEN (Apify Console > Settings > API & Integrations).");
   process.exit(1);
 }
-const [conta, creditosArg = "5"] = process.argv.slice(2);
+const mostrar = process.argv.includes("--mostrar");
+const [conta, creditosArg = "5"] = process.argv.slice(2).filter((a) => !a.startsWith("--"));
 if (!conta) {
   console.error("Uso: node validar-contra-apify.ts <conta> [creditos]");
   process.exit(1);
 }
 const creditos = Number(creditosArg);
+
+/** Seguidores são terceiros: e-mail e telefone saem mascarados, a menos que se peça `--mostrar`. */
+const mascarar = (v: string | null | undefined): string => {
+  if (!v) return "-";
+  if (mostrar) return v;
+  const [u, d] = v.split("@");
+  return d ? `${u.slice(0, 1)}***@${d.slice(0, 1)}***${d.slice(d.lastIndexOf("."))}` : `${v.slice(0, 4)}*****${v.slice(-2)}`;
+};
 const ac: ApifyCfg = { token };
 const cfgIg = { actorId: process.env.APIFY_INSTAGRAM_ACTOR || ACTOR_PADRAO, ...CFG_INSTAGRAM_PADRAO };
 
@@ -89,4 +98,4 @@ console.log(faltando.length ? `ATENÇÃO: campos do README que NÃO vieram: ${fa
 const mapeados = brutos.map((i) => candidatoDoItem(i)).filter(Boolean);
 console.log(`Mapeados: ${mapeados.length}/${brutos.length}. Com e-mail: ${mapeados.filter((c) => c!.emails.length).length}. Com telefone: ${mapeados.filter((c) => c!.telefone).length}.`);
 console.log(`${registrados.length} contatos registrados:`);
-for (const r of registrados) console.log(`  - @${r.instagram} | ${r.nome} | tel=${r.telefone ?? "-"} | email=${r.email ?? "-"} | ${r.qualidade} | site=${r.site ?? "-"}`);
+for (const r of registrados) console.log(`  - @${r.instagram} | tel=${mascarar(r.telefone)} | email=${mascarar(r.email)} | ${r.qualidade} | site=${r.site ? "sim" : "-"}`);
