@@ -1,13 +1,16 @@
 /**
- * Executa UMA busca do Maps do começo ao fim.
+ * Executa UMA busca (Maps ou Instagram) do começo ao fim.
  *
- * O gosom coleta; o worker lê o CSV PARCIAL a cada volta e ingere só o que é
- * novo (`ref` ainda não visto). Por isso "parar e ficar com o que achou" funciona:
- * o que já foi achado já está no banco, cobrado e importável. O banco é a fonte da
- * verdade do saldo: o worker nunca decide gasto, só pede `registrar` e obedece
- * `limite_atingido`.
+ * O coletor (gosom, Apify) trabalha por fora; o worker lê o resultado PARCIAL a
+ * cada volta e ingere só o que é novo (`ref` ainda não visto). Por isso "parar e
+ * ficar com o que achou" funciona: o que já foi achado já está no banco, cobrado e
+ * importável. O banco é a fonte da verdade do saldo: o worker nunca decide gasto,
+ * só pede `registrar` e obedece `limite_atingido`.
  *
- * Tudo que toca o mundo (banco, gosom, IA, sites, DNS, relógio) entra por
+ * O que muda de uma fonte para outra fica em `Fonte`; o resto (contato, IA,
+ * validação, cobrança, limite, parada, prazo) é um fluxo só.
+ *
+ * Tudo que toca o mundo (banco, coletor, IA, sites, DNS, relógio) entra por
  * `Ambiente`, então o fluxo inteiro roda em teste sem rede.
  */
 import type { Banco, BuscaDaFila, ItemParaRegistrar, Progresso } from "./db.ts";
@@ -16,6 +19,42 @@ import type { ContatosDoSite } from "./site.ts";
 import type { Expansao } from "./ia.ts";
 import { linhasDoCsv, type LinhaDoMaps, type NovoJob } from "./gosom.ts";
 import { qualidadeDoContato, type ResolverMx } from "./validar.ts";
+
+/** O que as duas fontes devolvem para o mesmo fluxo. */
+export interface Candidato {
+  /** Chave única na busca: place_id do Maps, @ do Instagram. */
+  ref: string;
+  titulo: string;
+  categoria: string | null;
+  endereco: string | null;
+  bairro: string | null;
+  telefone: string | null;
+  site: string | null;
+  emails: string[];
+  /** Maps: situação do negócio (ex.: fechado). */
+  situacao: string | null;
+  /** Instagram: o @ do perfil. */
+  instagram?: string;
+}
+
+export interface Leitura {
+  linhas: Candidato[];
+  /** O coletor acabou (com ou sem sucesso). */
+  terminou: boolean;
+  /** Terminou mal (falha, estouro de tempo). Com resultado parcial a busca ainda conclui. */
+  falhou: boolean;
+}
+
+export interface Fonte {
+  /** Cria o job no coletor. `maxTimeS` define o prazo da busca. */
+  iniciar(): Promise<{ id: string; maxTimeS: number }>;
+  /** Lê o que já saiu. Pode devolver linhas repetidas: o executor deduplica por `ref`. */
+  ler(id: string): Promise<Leitura>;
+  /** Para e limpa o job no coletor (para de gastar). Nunca lança. */
+  encerrar(id: string): Promise<void>;
+  /** Nicho para o filtro de IA. Fonte sem nicho (Instagram) não filtra. */
+  nicho: string | null;
+}
 
 export interface Ambiente {
   banco: Banco;
@@ -55,7 +94,7 @@ export const CFG_PADRAO: Omit<CfgDoExecutor, "workerId"> = {
   concorrenciaSite: 4,
 };
 
-const clamp = (n: number, min: number, max: number) => Math.min(max, Math.max(min, n));
+export const clamp = (n: number, min: number, max: number) => Math.min(max, Math.max(min, n));
 
 /**
  * Buscas do Maps: o nicho (e as variantes) na cidade inteira primeiro, depois a
@@ -79,6 +118,7 @@ export function montarKeywords(nicho: string, cidade: string, exp: Expansao | nu
 
 const REDES_E_AGREGADORES = /(^|\.)(facebook|instagram|linkedin|tiktok|youtube|google|goo\.gl|linktr\.ee|bit\.ly|wa\.me|whatsapp)\./i;
 const NEGOCIO_FECHADO = /permanent|definitiv|fechad|closed/i;
+const HANDLE = /^[A-Za-z0-9._]{1,30}$/;
 
 function deveLerSite(url: string | null): url is string {
   if (!url || !/^https?:\/\//i.test(url)) return false;
@@ -97,11 +137,65 @@ async function emPool<T>(itens: T[], n: number, fn: (x: T) => Promise<void>): Pr
   await Promise.all(trabalhadores);
 }
 
-type Estado = "ok" | "limite" | "inativa";
+function doMaps(l: LinhaDoMaps): Candidato {
+  return {
+    ref: l.ref, titulo: l.titulo, categoria: l.categoria, endereco: l.endereco, bairro: l.bairro,
+    telefone: l.telefone, site: l.site, emails: l.emails, situacao: l.situacao,
+  };
+}
 
-export async function executarMaps(busca: BuscaDaFila, amb: Ambiente, cfg: CfgDoExecutor): Promise<void> {
+/**
+ * Fonte Maps: expande a busca (IA opcional) e roda um job no gosom.
+ * O job do gosom devolve o CSV inteiro a cada leitura, parcial enquanto roda.
+ */
+export function fonteMaps(busca: BuscaDaFila, amb: Ambiente, cfg: CfgDoExecutor): Fonte {
   const nicho = busca.nicho ?? "";
   const cidade = busca.cidade ?? "";
+  const limite = busca.creditos_limite;
+  return {
+    nicho,
+    async iniciar() {
+      let exp: Expansao | null = null;
+      if (amb.ia) {
+        try {
+          exp = await amb.ia.expandir(nicho, cidade);
+        } catch (e) {
+          amb.log("ia_expandir_falhou_segue_sem", { busca: busca.id, erro: String(e) });
+        }
+      }
+      const keywords = montarKeywords(nicho, cidade, exp);
+      const depth = clamp(Math.ceil((limite * 2) / (keywords.length * 20)), 1, 20);
+      const maxTimeS = clamp(keywords.length * depth * 45, 300, cfg.maxTimeMaxS);
+      const id = await amb.gosom.criar({ nome: `lf-${busca.id}`, keywords, depth, maxTimeS, email: true });
+      amb.log("busca_iniciada", { busca: busca.id, fonte: "maps", jobId: id, keywords: keywords.length, depth, maxTimeS, limite });
+      return { id, maxTimeS };
+    },
+    async ler(id) {
+      const job = await amb.gosom.ler(id);
+      const terminou = job === null || job.status === "ok" || job.status === "failed";
+      let csv: string | null = null;
+      try {
+        csv = await amb.gosom.csv(id);
+      } catch (e) {
+        // CSV parcial pode falhar enquanto o gosom escreve: tenta de novo na volta seguinte.
+        amb.log("csv_falhou_tenta_de_novo", { busca: busca.id, erro: String(e) });
+      }
+      return { linhas: csv ? linhasDoCsv(csv).map(doMaps) : [], terminou, falhou: job?.status === "failed" };
+    },
+    async encerrar(id) {
+      try {
+        await amb.gosom.apagar(id);
+      } catch (e) {
+        amb.log("gosom_apagar_falhou", { busca: busca.id, erro: String(e) });
+      }
+    },
+  };
+}
+
+type Estado = "ok" | "limite" | "inativa";
+
+/** O fluxo único: ingere o que a fonte devolve, cobra no banco e encerra a busca. */
+export async function executarBusca(busca: BuscaDaFila, fonte: Fonte, amb: Ambiente, cfg: CfgDoExecutor): Promise<void> {
   const limite = busca.creditos_limite;
   const inicio = amb.agora();
   const vistos = new Set<string>();
@@ -116,26 +210,21 @@ export async function executarMaps(busca: BuscaDaFila, amb: Ambiente, cfg: CfgDo
       ...n,
     });
 
-  const apagar = async () => {
-    if (!jobId) return;
-    try {
-      await amb.gosom.apagar(jobId);
-    } catch (e) {
-      amb.log("gosom_apagar_falhou", { busca: busca.id, erro: String(e) });
-    }
+  const largar = async () => {
+    if (jobId) await fonte.encerrar(jobId);
   };
 
-  async function processar(linhas: LinhaDoMaps[]): Promise<Estado> {
+  async function processar(linhas: Candidato[]): Promise<Estado> {
     const abertas = linhas.filter((l) => !NEGOCIO_FECHADO.test(l.situacao ?? ""));
 
     // 1. IA: o que não é do nicho sai antes de gastar leitura de site e crédito.
     let dosNicho = abertas;
-    if (amb.ia && abertas.length > 0) {
+    if (amb.ia && fonte.nicho && abertas.length > 0) {
       const veredito = new Map<string, boolean>();
       for (let i = 0; i < abertas.length; i += 40) {
         try {
           const parte = abertas.slice(i, i + 40);
-          const r = await amb.ia.aderentes(nicho, parte.map((l) => ({ id: l.ref, titulo: l.titulo, categoria: l.categoria })));
+          const r = await amb.ia.aderentes(fonte.nicho, parte.map((l) => ({ id: l.ref, titulo: l.titulo, categoria: l.categoria })));
           for (const [k, v] of r) veredito.set(k, v);
         } catch (e) {
           amb.log("ia_falhou_segue_sem", { busca: busca.id, erro: String(e) });
@@ -144,7 +233,7 @@ export async function executarMaps(busca: BuscaDaFila, amb: Ambiente, cfg: CfgDo
       dosNicho = abertas.filter((l) => veredito.get(l.ref) !== false);
     }
 
-    // 2. Contato: o que o gosom trouxe + WhatsApp/e-mail do site quando falta.
+    // 2. Contato: o que o coletor trouxe + WhatsApp/e-mail do site quando falta.
     // Na ordem do CSV, não na ordem em que as leituras terminam: no limite de créditos,
     // quem entra tem de ser o primeiro achado, não o que o site respondeu mais rápido.
     const porPosicao: Array<ItemParaRegistrar | null> = new Array(dosNicho.length).fill(null);
@@ -177,6 +266,8 @@ export async function executarMaps(busca: BuscaDaFila, amb: Ambiente, cfg: CfgDo
           site: l.site && /^https?:\/\//i.test(l.site) && !whatsappDoLink(l.site) ? l.site : null,
           endereco: l.endereco,
           bairro: l.bairro,
+          // O banco confere o formato do @ com CHECK; um @ fora dele derrubaria o lote inteiro.
+          instagram: l.instagram && HANDLE.test(l.instagram) ? l.instagram : null,
           qualidade: await qualidadeDoContato({ telefone, email, celular: ehCelular(telefone) }, amb.mx),
         };
       } catch (e) {
@@ -197,81 +288,57 @@ export async function executarMaps(busca: BuscaDaFila, amb: Ambiente, cfg: CfgDo
   }
 
   try {
-    // Expansão (IA opcional): sem ela, nicho × cidade.
-    let exp: Expansao | null = null;
-    if (amb.ia) {
-      try {
-        exp = await amb.ia.expandir(nicho, cidade);
-      } catch (e) {
-        amb.log("ia_expandir_falhou_segue_sem", { busca: busca.id, erro: String(e) });
-      }
-    }
-    const keywords = montarKeywords(nicho, cidade, exp);
-    const depth = clamp(Math.ceil((limite * 2) / (keywords.length * 20)), 1, 20);
-    const maxTimeS = clamp(keywords.length * depth * 45, 300, cfg.maxTimeMaxS);
-
     if ((await progresso("coletando", 0)) !== "executando") return;
-    jobId = await amb.gosom.criar({ nome: `lf-${busca.id}`, keywords, depth, maxTimeS, email: true });
-    amb.log("busca_iniciada", { busca: busca.id, jobId, keywords: keywords.length, depth, maxTimeS, limite });
-
+    const { id, maxTimeS } = await fonte.iniciar();
+    jobId = id;
     const prazo = inicio + (maxTimeS + 120) * 1000;
+
     for (;;) {
       await amb.esperar(cfg.pollMs);
 
       if (amb.abortar()) {
-        await apagar();
+        await largar();
         await amb.banco.encerrar(busca.id, cfg.workerId, "parada");
         return;
       }
 
-      const job = await amb.gosom.ler(jobId);
-      const terminou = job === null || job.status === "ok" || job.status === "failed";
+      const { linhas, terminou, falhou } = await fonte.ler(id);
 
-      let csv: string | null = null;
-      try {
-        csv = await amb.gosom.csv(jobId);
-      } catch (e) {
-        // CSV parcial pode falhar enquanto o gosom escreve: tenta de novo na volta seguinte.
-        amb.log("csv_falhou_tenta_de_novo", { busca: busca.id, erro: String(e) });
-      }
-
-      if (csv) {
-        const novas = linhasDoCsv(csv).filter((l) => !vistos.has(l.ref));
-        for (const l of novas) vistos.add(l.ref);
-        n.encontrados = vistos.size;
-        if (novas.length > 0) {
-          const estado = await processar(novas);
-          if (estado === "inativa") {
-            // Parada ou cancelada pelo usuário no meio do lote: o banco já fechou a busca.
-            await apagar();
-            return;
-          }
-          if (estado === "limite") {
-            await apagar();
-            await progresso("validando", 1);
-            await amb.banco.encerrar(busca.id, cfg.workerId, "parada");
-            amb.log("busca_no_limite", { busca: busca.id, registrados });
-            return;
-          }
+      const novas = linhas.filter((l) => !vistos.has(l.ref));
+      for (const l of novas) vistos.add(l.ref);
+      n.encontrados = vistos.size;
+      if (novas.length > 0) {
+        const estado = await processar(novas);
+        if (estado === "inativa") {
+          // Parada ou cancelada pelo usuário no meio do lote: o banco já fechou a busca.
+          await largar();
+          return;
+        }
+        if (estado === "limite") {
+          await largar();
+          await progresso("validando", 1);
+          await amb.banco.encerrar(busca.id, cfg.workerId, "parada");
+          amb.log("busca_no_limite", { busca: busca.id, registrados });
+          return;
         }
       }
 
       const pctTempo = (amb.agora() - inicio) / (prazo - inicio);
       const status = await progresso(terminou ? "validando" : "coletando", pctTempo);
       if (status !== "executando") {
-        await apagar();
+        await largar();
         return;
       }
 
       if (terminou) {
-        const sem = job?.status === "failed" && vistos.size === 0;
-        await apagar();
-        await amb.banco.encerrar(busca.id, cfg.workerId, sem ? "falhou" : "concluida", sem ? "gosom_falhou" : undefined);
+        const sem = falhou && vistos.size === 0;
+        await largar();
+        await amb.banco.encerrar(busca.id, cfg.workerId, sem ? "falhou" : "concluida", sem ? "coletor_falhou" : undefined);
         amb.log("busca_encerrada", { busca: busca.id, registrados, encontrados: vistos.size });
         return;
       }
       if (amb.agora() > prazo) {
-        await apagar();
+        await largar();
         const algo = vistos.size > 0;
         await amb.banco.encerrar(busca.id, cfg.workerId, algo ? "concluida" : "falhou", algo ? undefined : "tempo_esgotado");
         return;
@@ -279,11 +346,15 @@ export async function executarMaps(busca: BuscaDaFila, amb: Ambiente, cfg: CfgDo
     }
   } catch (e) {
     amb.log("busca_falhou", { busca: busca.id, erro: String(e) });
-    await apagar();
+    await largar();
     try {
       await amb.banco.encerrar(busca.id, cfg.workerId, "falhou", String(e).slice(0, 300));
     } catch (e2) {
       amb.log("encerrar_falhou", { busca: busca.id, erro: String(e2) });
     }
   }
+}
+
+export async function executarMaps(busca: BuscaDaFila, amb: Ambiente, cfg: CfgDoExecutor): Promise<void> {
+  await executarBusca(busca, fonteMaps(busca, amb, cfg), amb, cfg);
 }

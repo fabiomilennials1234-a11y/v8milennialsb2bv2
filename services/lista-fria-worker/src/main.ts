@@ -5,6 +5,12 @@
  *   SUPABASE_SERVICE_ROLE_KEY    obrigatória
  *   GOSOM_URL                    padrão http://gosom:8080 (rede interna; sem autenticação)
  *   ANTHROPIC_API_KEY            opcional: liga expansão de busca e filtro de nicho (Haiku)
+ *   APIFY_TOKEN                  opcional: liga as buscas de Instagram (sem ele, fecham como indisponíveis)
+ *   APIFY_INSTAGRAM_ACTOR        padrão data-slayer~instagram-followers-scraper---no-login
+ *   APIFY_PRECO_POR_SEGUIDOR_USD 0.012   (tabela do Actor, modo enriched)
+ *   APIFY_MAX_USD_POR_BUSCA      25      (teto de gasto nosso por busca; a Apify aborta ao chegar)
+ *   INSTAGRAM_MAX_SEGUIDORES     5000    (contas processadas por busca, no máximo)
+ *   INSTAGRAM_CONTAS_POR_CREDITO 8       (rendimento presumido para dimensionar a busca)
  *   WORKER_ID                    padrão <host>-<pid>
  *   POLL_MS, IDLE_MS             5000 / 5000
  *   GOSOM_MAX_TIME_S             3600
@@ -13,11 +19,19 @@ import os from "node:os";
 import { setTimeout as dormir } from "node:timers/promises";
 
 import { bancoPelaRede } from "./db.ts";
-import { CFG_PADRAO, executarMaps, type Ambiente, type CfgDoExecutor } from "./executor.ts";
+import { abortarExecucao, iniciarExecucao, lerExecucao, lerItens, type ApifyCfg } from "./apify.ts";
+import { CFG_PADRAO, executarBusca, executarMaps, type Ambiente, type CfgDoExecutor } from "./executor.ts";
+import { ACTOR_PADRAO } from "./instagram.ts";
+import { CFG_INSTAGRAM_PADRAO, fonteInstagram, type ApifyApi, type CfgInstagram } from "./fonte-instagram.ts";
 import { apagarJob, baixarCsv, criarJob, lerJob, type GosomCfg } from "./gosom.ts";
 import { aderentes, expandirBusca, type IaCfg } from "./ia.ts";
 import { lerSite } from "./site.ts";
 import { mxPelaRede } from "./validar.ts";
+
+const numero = (nome: string, padrao: number): number => {
+  const n = Number(process.env[nome]);
+  return Number.isFinite(n) && n > 0 ? n : padrao;
+};
 
 function exigir(nome: string): string {
   const v = process.env[nome];
@@ -46,6 +60,27 @@ async function main() {
   const gosomCfg: GosomCfg = { baseUrl: process.env.GOSOM_URL || "http://gosom:8080" };
   const iaCfg: IaCfg | null = process.env.ANTHROPIC_API_KEY ? { apiKey: process.env.ANTHROPIC_API_KEY } : null;
   const banco = bancoPelaRede({ url, chaveDeServico: chave });
+
+  // Instagram só liga com token da Apify. A Apify aborta a execução ao chegar em maxUsdPorBusca.
+  let instagram: { api: ApifyApi; cfg: CfgInstagram } | null = null;
+  if (process.env.APIFY_TOKEN) {
+    const ac: ApifyCfg = { token: process.env.APIFY_TOKEN };
+    instagram = {
+      api: {
+        iniciar: (actor, input, o) => iniciarExecucao(ac, actor, input, o),
+        execucao: (id) => lerExecucao(ac, id),
+        itens: (ds, off, lim) => lerItens(ac, ds, off, lim),
+        abortar: (id) => abortarExecucao(ac, id),
+      },
+      cfg: {
+        actorId: process.env.APIFY_INSTAGRAM_ACTOR || ACTOR_PADRAO,
+        precoPorSeguidorUsd: numero("APIFY_PRECO_POR_SEGUIDOR_USD", CFG_INSTAGRAM_PADRAO.precoPorSeguidorUsd),
+        maxUsdPorBusca: numero("APIFY_MAX_USD_POR_BUSCA", CFG_INSTAGRAM_PADRAO.maxUsdPorBusca),
+        maxSeguidores: numero("INSTAGRAM_MAX_SEGUIDORES", CFG_INSTAGRAM_PADRAO.maxSeguidores),
+        contasPorCredito: numero("INSTAGRAM_CONTAS_POR_CREDITO", CFG_INSTAGRAM_PADRAO.contasPorCredito),
+      },
+    };
+  }
   let parar = false;
   const acordar = new AbortController();
   for (const sinal of ["SIGTERM", "SIGINT"] as const) process.on(sinal, () => {
@@ -75,7 +110,7 @@ async function main() {
     log,
   };
 
-  log("worker_iniciado", { workerId, gosom: gosomCfg.baseUrl, ia: iaCfg !== null });
+  log("worker_iniciado", { workerId, gosom: gosomCfg.baseUrl, ia: iaCfg !== null, instagram: instagram !== null, actor: instagram?.cfg.actorId });
   let ultimaLimpeza = 0;
   while (!parar) {
     try {
@@ -92,8 +127,10 @@ async function main() {
       log("busca_reivindicada", { busca: busca.id, fonte: busca.fonte });
       if (busca.fonte === "maps") {
         await executarMaps(busca, amb, cfg);
+      } else if (instagram) {
+        await executarBusca(busca, fonteInstagram(busca, instagram.api, instagram.cfg, log), amb, cfg);
       } else {
-        // Sem adaptador do Instagram: fecha e devolve a reserva em vez de segurar a fila.
+        // Sem APIFY_TOKEN: fecha e devolve a reserva em vez de segurar a fila.
         await banco.encerrar(busca.id, workerId, "falhou", "instagram_indisponivel");
       }
     } catch (e) {

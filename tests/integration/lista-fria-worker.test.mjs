@@ -464,7 +464,7 @@ describe('executarMaps (ambiente falso)', () => {
   test('gosom falhou: sem nenhum resultado a busca falha (devolve a reserva); com resultado, conclui', async () => {
     const vazio = ambienteFalso({ ticks: [{ status: 'failed', csv: null }] });
     await executarMaps(BUSCA, vazio.amb, CFG);
-    assert.deepEqual(vazio.reg.encerrar, [['falhou', 'gosom_falhou']]);
+    assert.deepEqual(vazio.reg.encerrar, [['falhou', 'coletor_falhou']]);
 
     const parcial = ambienteFalso({ ticks: [{ status: 'failed', csv: csvDe([lugar({ titulo: 'A', phone: '(11) 99319-5517' })]) }] });
     await executarMaps(BUSCA, parcial.amb, CFG);

@@ -1,0 +1,112 @@
+/**
+ * Fonte Instagram: seguidores de uma conta pública, com o contato que cada perfil
+ * publica, via Actor da Apify. Plugada no mesmo `executarBusca` do Maps.
+ *
+ * Custo: o Actor cobra por SEGUIDOR PROCESSADO (modo enriched), não por contato
+ * achado. O cliente paga por contato novo e válido. A distância entre as duas
+ * contas é o rendimento da conta alvo, que ninguém sabe de antemão. Dois freios
+ * limitam o gasto nosso por busca, e o preço do crédito tem de cobrir o pior caso:
+ *   - `maxSeguidores`: quantas contas processar, no máximo;
+ *   - `maxTotalChargeUsd` na Apify: ela mesma aborta ao chegar nesse valor.
+ */
+import type { Execucao, EstadoDaExecucao } from "./apify.ts";
+import { execucaoTerminou } from "./apify.ts";
+import type { BuscaDaFila } from "./db.ts";
+import type { Fonte, Leitura } from "./executor.ts";
+import { clamp } from "./executor.ts";
+import { CONTAS_POR_PAGINA, candidatoDoItem } from "./instagram.ts";
+
+export interface ApifyApi {
+  iniciar(actorId: string, input: Record<string, unknown>, opcoes: { maxTotalChargeUsd: number; timeoutS: number }): Promise<Execucao>;
+  execucao(runId: string): Promise<EstadoDaExecucao | null>;
+  itens(datasetId: string, offset: number, limit: number): Promise<Array<Record<string, unknown>>>;
+  abortar(runId: string): Promise<void>;
+}
+
+export interface CfgInstagram {
+  actorId: string;
+  /** Preço por seguidor enriquecido (US$). Tabela da Apify no plano FREE em 27/10/2026: 0,012. */
+  precoPorSeguidorUsd: number;
+  /** Teto de gasto por busca (US$), sempre. */
+  maxUsdPorBusca: number;
+  /** Teto de contas processadas por busca. */
+  maxSeguidores: number;
+  /** Quantas contas processar por crédito pedido (rendimento presumido). */
+  contasPorCredito: number;
+}
+
+export const CFG_INSTAGRAM_PADRAO: Omit<CfgInstagram, "actorId"> = {
+  precoPorSeguidorUsd: 0.012,
+  maxUsdPorBusca: 25,
+  maxSeguidores: 5_000,
+  contasPorCredito: 8,
+};
+
+const PAGINA_DO_DATASET = 500;
+
+export function planoDaBusca(creditos: number, cfg: CfgInstagram) {
+  const maxItems = clamp(creditos * cfg.contasPorCredito, CONTAS_POR_PAGINA, cfg.maxSeguidores);
+  const maxPages = Math.ceil(maxItems / CONTAS_POR_PAGINA);
+  // 15% de folga sobre o preço de tabela (add-ons, arredondamento); nunca acima do teto.
+  const maxTotalChargeUsd = Math.min(cfg.maxUsdPorBusca, Number((maxItems * cfg.precoPorSeguidorUsd * 1.15 + 0.01).toFixed(4)));
+  const timeoutS = clamp(maxPages * 45, 300, 3_600);
+  return { maxItems, maxPages, maxTotalChargeUsd, timeoutS };
+}
+
+export function fonteInstagram(
+  busca: BuscaDaFila,
+  api: ApifyApi,
+  cfg: CfgInstagram,
+  log: (evento: string, dados?: Record<string, unknown>) => void,
+): Fonte {
+  let datasetId = "";
+  let offset = 0;
+  let terminal = false;
+
+  return {
+    nicho: null,
+    async iniciar() {
+      const handle = busca.instagram_handle;
+      if (!handle) throw new Error("busca de Instagram sem @");
+      const plano = planoDaBusca(busca.creditos_limite, cfg);
+      const exec = await api.iniciar(
+        cfg.actorId,
+        { username: handle, mode: "enriched", maxPages: plano.maxPages, maxItems: plano.maxItems },
+        { maxTotalChargeUsd: plano.maxTotalChargeUsd, timeoutS: plano.timeoutS },
+      );
+      datasetId = exec.datasetId;
+      log("busca_iniciada", { busca: busca.id, fonte: "instagram", runId: exec.runId, ...plano, limite: busca.creditos_limite });
+      return { id: exec.runId, maxTimeS: plano.timeoutS };
+    },
+
+    async ler(runId): Promise<Leitura> {
+      // Status ANTES dos itens: se a execução já terminou, os itens lidos em seguida são todos.
+      const estado = await api.execucao(runId);
+      const terminou = estado === null || execucaoTerminou(estado.status);
+      const linhas = [];
+      for (;;) {
+        const itens = await api.itens(datasetId, offset, PAGINA_DO_DATASET);
+        offset += itens.length;
+        for (const item of itens) {
+          const c = candidatoDoItem(item);
+          if (c) linhas.push(c);
+        }
+        if (itens.length < PAGINA_DO_DATASET) break;
+      }
+      if (terminou && estado) {
+        terminal = true;
+        log("apify_encerrada", { busca: busca.id, status: estado.status, gastoUsd: estado.gastoUsd });
+      }
+      return { linhas, terminou, falhou: estado === null || estado.status !== "SUCCEEDED" };
+    },
+
+    async encerrar(runId) {
+      if (terminal) return;
+      try {
+        await api.abortar(runId);
+      } catch (e) {
+        log("apify_abortar_falhou", { busca: busca.id, erro: String(e) });
+      }
+    },
+  };
+}

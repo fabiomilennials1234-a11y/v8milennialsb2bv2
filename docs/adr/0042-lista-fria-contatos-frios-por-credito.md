@@ -46,7 +46,9 @@ A marca só muda pelas RPCs (`BEFORE INSERT/UPDATE` com `app.lista_fria_rpc`), n
 
 **5. Execução fora do banco.** O banco é a fila (`lista_fria_worker_reivindicar` com `FOR UPDATE SKIP LOCKED`, heartbeat, recuperação de busca travada que devolve a reserva). Quem executa é um **worker em container**, fora das edge functions: coletar no Maps e ler sites passa do limite de tempo delas. O contrato do worker é só o conjunto de RPCs acima; trocar o provedor (gosom, Apify) não toca no banco. O worker do Maps está em `services/lista-fria-worker` (Node 24, sem dependências): lê o CSV **parcial** do gosom a cada 5 s e ingere só o que é novo, por isso "parar e ficar com o que achou" funciona. Contrato do gosom **medido na imagem real** (o spec que ela serve diverge da resposta: chaves maiúsculas, `lang` ISO curto); detalhes no README do worker.
 
-**6. Leitura de site e IA são cercadas.** O endereço do site vem do Maps (texto de terceiro) e o worker tem a chave de serviço no ambiente: a leitura valida o IP na conexão, só 80/443, redirecionamento à mão, corpo e tempo limitados (`ssrf.ts`). A API do gosom não tem autenticação e nunca é publicada. Título e categoria do Maps entram na IA como dado, com saída forçada por ferramenta; IA fora do ar nunca derruba nem decide gasto.
+**6. Instagram via Apify, Actor `data-slayer/instagram-followers-scraper---no-login` (modo enriched).** Único dos avaliados que devolve o contato publicado no perfil (e-mail comercial, e-mail da bio, telefone, links); o Actor oficial da Apify declara que não extrai e-mail nem telefone. Só dado público, sem login. A execução é abortada ao atingir o limite de créditos, e `maxTotalChargeUsd` limita o gasto nosso por busca. O Actor cobra por seguidor processado (US$ 0,012), o cliente por contato válido: o preço do crédito tem de cobrir o rendimento real, que ainda não foi medido.
+
+**7. Leitura de site e IA são cercadas.** O endereço do site vem do Maps (texto de terceiro) e o worker tem a chave de serviço no ambiente: a leitura valida o IP na conexão, só 80/443, redirecionamento à mão, corpo e tempo limitados (`ssrf.ts`). A API do gosom não tem autenticação e nunca é publicada. Título e categoria do Maps entram na IA como dado, com saída forçada por ferramenta; IA fora do ar nunca derruba nem decide gasto.
 
 ## Consequences
 
@@ -58,7 +60,7 @@ A marca só muda pelas RPCs (`BEFORE INSERT/UPDATE` com `app.lista_fria_rpc`), n
 
 ## Fora desta entrega
 
-- O adaptador do Instagram (o worker fecha a busca como `instagram_indisponivel` e devolve a reserva).
+- **Instagram em produção:** o adaptador (Apify) está escrito e testado contra o contrato documentado, mas falta uma execução real com `APIFY_TOKEN` (`validar-contra-apify.ts`). Sem o token, o worker fecha a busca como `instagram_indisponivel` e devolve a reserva. Custo por contato válido ainda não medido: o Actor cobra por seguidor processado.
 - Checar se o número tem WhatsApp (exige instância conectada da própria org). "Verificado" hoje é formato válido / MX.
 - Cobertura por grade de coordenadas; hoje a cidade é coberta por sinônimos e bairros que a IA sugere.
 - A IA do worker só foi exercitada com `fetch` falso, não contra a API da Anthropic.

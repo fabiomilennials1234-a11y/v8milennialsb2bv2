@@ -28,6 +28,11 @@ services:
       # Opcional. Sem ela a busca roda sem expansão por bairro e sem filtro de nicho.
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       GOSOM_MAX_TIME_S: ${GOSOM_MAX_TIME_S:-3600}
+      # Opcional. Sem ele, as buscas de Instagram fecham como indisponíveis e devolvem a reserva.
+      APIFY_TOKEN: ${APIFY_TOKEN:-}
+      APIFY_INSTAGRAM_ACTOR: ${APIFY_INSTAGRAM_ACTOR:-data-slayer~instagram-followers-scraper---no-login}
+      APIFY_MAX_USD_POR_BUSCA: ${APIFY_MAX_USD_POR_BUSCA:-25}
+      INSTAGRAM_MAX_SEGUIDORES: ${INSTAGRAM_MAX_SEGUIDORES:-5000}
 
 volumes:
   gmapsdata:
