@@ -96,6 +96,7 @@ const linhaDaBusca = {
   nicho: "Dentistas",
   cidade: "São Paulo - SP",
   instagram_handle: null,
+  filtros: null,
   status: "executando",
   etapa: "lendo_sites",
   progresso: 62,

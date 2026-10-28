@@ -1,0 +1,66 @@
+name: Lista fria · base de CNPJ
+
+# Reconstrói a base enxuta de CNPJ (ADR-0043) a partir da base aberta da Receita e publica no
+# Storage do Supabase (bucket privado lista-fria-base). O worker da Lista fria baixa sozinho quando o
+# hash do manifesto muda. Idempotente: rodar duas vezes no mesmo mês publica o mesmo conteúdo.
+#
+# Precisa dos secrets do repositório SUPABASE_URL e SUPABASE_SERVICE_ROLE_KEY (produção).
+# NÃO foi exercitado no GitHub Actions ainda: o primeiro disparo manual é o teste (workflow_dispatch).
+
+on:
+  schedule:
+    # Dia 12, 06:00 UTC: a Receita costuma publicar a pasta do mês nos primeiros dias.
+    - cron: '0 6 12 * *'
+  workflow_dispatch:
+    inputs:
+      mes:
+        description: 'Mês da Receita (AAAA-MM). Vazio = o mais recente.'
+        required: false
+        default: ''
+
+permissions:
+  contents: read
+
+concurrency:
+  group: lista-fria-base
+  cancel-in-progress: false
+
+jobs:
+  base:
+    name: Construir e publicar
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Liberar disco (o maior CSV da Receita passa de 8 GB)
+        run: |
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/lib/android /opt/hostedtoolcache/CodeQL
+          df -h /
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Instalar DuckDB (versão fixada)
+        run: pip install --no-cache-dir duckdb==2.0.0
+
+      - name: Construir o Parquet enxuto
+        run: python services/lista-fria-base/construir.py --saida "$RUNNER_TEMP/base" ${{ inputs.mes && format('--mes {0}', inputs.mes) || '' }}
+
+      - name: Conferir o resultado antes de publicar
+        run: |
+          cat "$RUNNER_TEMP/base/manifesto.json"
+          python - <<'PY'
+          import json, os
+          m = json.load(open(os.environ["RUNNER_TEMP"] + "/base/manifesto.json"))
+          # Um mês com menos de 5 milhões de linhas é base quebrada (o normal passa de 10 milhões).
+          assert m["linhas"] > 5_000_000, f"base pequena demais: {m['linhas']}"
+          assert m["bytes"] > 100_000_000, f"arquivo pequeno demais: {m['bytes']}"
+          PY
+
+      - name: Publicar no Storage
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: python services/lista-fria-base/publicar.py --saida "$RUNNER_TEMP/base"

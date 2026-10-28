@@ -13,6 +13,7 @@
  *   APIFY_MAX_USD_POR_BUSCA      25      (teto de gasto nosso por busca; a Apify aborta ao chegar)
  *   INSTAGRAM_MAX_SEGUIDORES     5000    (contas processadas por busca, no máximo)
  *   INSTAGRAM_CONTAS_POR_CREDITO 8       (rendimento presumido para dimensionar a busca)
+ *   LISTA_FRIA_BASE_DIR          padrão /data/base (volume): base enxuta de CNPJ em Parquet, baixada do Storage (bucket lista-fria-base)
  *   WORKER_ID                    padrão <host>-<pid>
  *   POLL_MS, IDLE_MS             5000 / 5000
  *   GOSOM_MAX_TIME_S             3600
@@ -28,6 +29,9 @@ import { ACTOR_PADRAO } from "./instagram.ts";
 import { CFG_INSTAGRAM_PADRAO, CFG_INSTAGRAM_SESSAO_PADRAO, fonteInstagram, type ApifyApi, type CfgInstagram } from "./fonte-instagram.ts";
 import { apagarJob, baixarCsv, criarJob, lerJob, type GosomCfg } from "./gosom.ts";
 import { aderentes, expandirBusca, type IaCfg } from "./ia.ts";
+import { ARQUIVO_BASE, sincronizarBase, type BaseLocal } from "./base-cnpj.ts";
+import type { ConsultaCnpj } from "./fonte-cnpj.ts";
+import { CFG_CNPJ_PADRAO, fonteCnpj } from "./fonte-cnpj.ts";
 import { lerSite } from "./site.ts";
 import { mxPelaRede } from "./validar.ts";
 
@@ -44,6 +48,8 @@ function exigir(nome: string): string {
   }
   return v;
 }
+
+const SEIS_HORAS = 6 * 3_600_000;
 
 const log = (evento: string, dados: Record<string, unknown> = {}) =>
   console.log(JSON.stringify({ t: new Date().toISOString(), evento, ...dados }));
@@ -98,6 +104,28 @@ async function main() {
       },
     };
   }
+  // Base de CNPJ: sincronizada no boot e, ociosa, a cada 6 h. A consulta (DuckDB) é aberta sob demanda
+  // e só é trocada quando o arquivo muda, nunca no meio de uma busca.
+  const dirBase = process.env.LISTA_FRIA_BASE_DIR || "/data/base";
+  let baseCnpj: BaseLocal | null = null;
+  let ultimaSyncBase = 0;
+  let consulta: (ConsultaCnpj & { fechar(): void }) | null = null;
+  let consultaSha = "";
+  const manterBase = async () => {
+    ultimaSyncBase = Date.now();
+    baseCnpj = (await sincronizarBase({ url, chave, dir: dirBase }, log)) ?? baseCnpj;
+  };
+  const consultaCnpj = async (): Promise<ConsultaCnpj | null> => {
+    if (!baseCnpj) return null;
+    if (consultaSha !== baseCnpj.manifesto.sha256) {
+      consulta?.fechar();
+      const { consultaDuckdb } = await import("./consulta-duckdb.ts");
+      consulta = await consultaDuckdb(baseCnpj.arquivo);
+      consultaSha = baseCnpj.manifesto.sha256;
+    }
+    return consulta;
+  };
+
   let parar = false;
   const acordar = new AbortController();
   for (const sinal of ["SIGTERM", "SIGINT"] as const) process.on(sinal, () => {
@@ -128,6 +156,8 @@ async function main() {
   };
 
   log("worker_iniciado", { workerId, gosom: gosomCfg.baseUrl, ia: iaCfg !== null, instagram: instagram?.provedor ?? null, actor: instagram?.cfg.actorId });
+  await manterBase();
+  log("base_cnpj", { disponivel: baseCnpj !== null, mes: baseCnpj?.manifesto.mes ?? null, arquivo: ARQUIVO_BASE });
   let ultimaLimpeza = 0;
   while (!parar) {
     try {
@@ -138,12 +168,21 @@ async function main() {
       }
       const busca = await banco.reivindicar(workerId);
       if (!busca) {
+        if (Date.now() - ultimaSyncBase > SEIS_HORAS) await manterBase();
         await pausa(idleMs);
         continue;
       }
       log("busca_reivindicada", { busca: busca.id, fonte: busca.fonte });
       if (busca.fonte === "maps") {
         await executarMaps(busca, amb, cfg);
+      } else if (busca.fonte === "cnpj") {
+        const c = await consultaCnpj();
+        if (c) {
+          await executarBusca(busca, fonteCnpj(busca, c, CFG_CNPJ_PADRAO, log), amb, cfg);
+        } else {
+          // Sem base publicada: fecha e devolve a reserva em vez de segurar a fila.
+          await banco.encerrar(busca.id, workerId, "falhou", "base_cnpj_indisponivel");
+        }
       } else if (instagram) {
         await executarBusca(busca, fonteInstagram(busca, instagram.api, instagram.cfg, log), amb, cfg);
       } else {

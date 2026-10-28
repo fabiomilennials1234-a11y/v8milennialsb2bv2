@@ -3,7 +3,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useOrganization } from "@/modules/identity";
 
 import { rpcListaFria } from "../lib/rpc";
-import type { FonteDaBusca } from "../lib/tipos";
+import type { ContatoExigido, FonteDaBusca } from "../lib/tipos";
 import { CHAVE_LISTA_FRIA } from "./useListaFriaDados";
 
 /**
@@ -21,17 +21,21 @@ function useInvalidarListaFria() {
 
 export type AlvoDaBusca =
   | { fonte: Extract<FonteDaBusca, "maps">; nicho: string; cidade: string }
-  | { fonte: Extract<FonteDaBusca, "instagram">; url: string };
+  | { fonte: Extract<FonteDaBusca, "instagram">; url: string }
+  | { fonte: Extract<FonteDaBusca, "cnpj">; cnaes: string[]; uf: string; municipio: string; contato: ContatoExigido };
 
 export function useCriarBusca() {
   const { organizationId } = useOrganization();
   const invalidar = useInvalidarListaFria();
   return useMutation({
     mutationFn: async (v: { alvo: AlvoDaBusca; creditos: number }) => {
+      const a = v.alvo;
       const params =
-        v.alvo.fonte === "maps"
-          ? { nicho: v.alvo.nicho.trim(), cidade: v.alvo.cidade.trim() }
-          : { url: v.alvo.url.trim() };
+        a.fonte === "maps"
+          ? { nicho: a.nicho.trim(), cidade: a.cidade.trim() }
+          : a.fonte === "cnpj"
+            ? { cnaes: a.cnaes, uf: a.uf, municipio: a.municipio.trim(), contato: a.contato }
+            : { url: a.url.trim() };
       const { data, error } = await rpcListaFria("lista_fria_busca_criar", {
         p_org: organizationId as string,
         p_fonte: v.alvo.fonte,

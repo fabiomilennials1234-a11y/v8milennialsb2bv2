@@ -6,10 +6,12 @@
 export interface BuscaDaFila {
   id: string;
   organization_id: string;
-  fonte: "maps" | "instagram";
+  fonte: "maps" | "instagram" | "cnpj";
   nicho: string | null;
   cidade: string | null;
   instagram_handle: string | null;
+  /** Alvo da busca de CNPJ (jsonb): { cnaes, uf, municipio?, contato }. Nulo nas outras fontes. */
+  filtros?: Record<string, unknown> | null;
   creditos_limite: number;
   creditos_usados: number;
 }

@@ -20,6 +20,9 @@ services:
       context: ../..
       dockerfile: services/lista-fria-worker/Dockerfile
     depends_on: [gosom]
+    volumes:
+      # Base de CNPJ (Parquet, ~0,4 GB): baixada do Storage e mantida aqui.
+      - cnpjbase:/data/base
     restart: unless-stopped
     environment:
       GOSOM_URL: http://gosom:8080
@@ -28,6 +31,7 @@ services:
       # Opcional. Sem ela a busca roda sem expansão por bairro e sem filtro de nicho.
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       GOSOM_MAX_TIME_S: ${GOSOM_MAX_TIME_S:-3600}
+      LISTA_FRIA_BASE_DIR: /data/base
       # Instagram: coletor com login real (precedência) ou Apify. Sem nenhum dos dois, as buscas de
       # Instagram fecham como indisponíveis e devolvem a reserva.
       INSTAGRAM_COLETOR_URL: ${INSTAGRAM_COLETOR_URL:-}
@@ -39,3 +43,4 @@ services:
 
 volumes:
   gmapsdata:
+  cnpjbase:

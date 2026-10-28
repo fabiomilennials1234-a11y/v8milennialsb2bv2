@@ -10699,6 +10699,7 @@ export type Database = {
           encontrados: number
           erro: string | null
           etapa: string | null
+          filtros: Json | null
           finished_at: string | null
           fonte: string
           heartbeat_at: string | null
@@ -10728,6 +10729,7 @@ export type Database = {
           encontrados?: number
           erro?: string | null
           etapa?: string | null
+          filtros?: Json | null
           finished_at?: string | null
           fonte: string
           heartbeat_at?: string | null
@@ -10757,6 +10759,7 @@ export type Database = {
           encontrados?: number
           erro?: string | null
           etapa?: string | null
+          filtros?: Json | null
           finished_at?: string | null
           fonte?: string
           heartbeat_at?: string | null
