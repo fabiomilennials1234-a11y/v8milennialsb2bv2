@@ -10,6 +10,7 @@ import { useChatReply } from "./useChatReply";
  */
 import { useMutation, useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import type { Json } from "@/integrations/supabase/types";
 import { useCurrentTeamMember } from "@/modules/identity";
 import { track } from "@/lib/analytics";
 import { resolveWhatsAppDestination, type WhatsAppDestination } from "@/modules/communication/lib/whatsapp";
@@ -315,7 +316,7 @@ export function useSendWhatsAppMessage() {
         direction: "outgoing",
         message_type: "text",
         content: message,
-        ...(replyContext ? { reply_context: replyContext } : {}),
+        ...(replyContext ? { reply_context: replyContext as unknown as Json } : {}),
         status: providerSendStatus(data),
         timestamp,
       }, { onConflict: "message_id,instance_id", ignoreDuplicates: true })
@@ -602,7 +603,7 @@ export function useSendWhatsAppMedia() {
         // Este fallback não tem raw_payload: sem isto o trigger não acha nome
         // e, se ele chegar antes do eco do webhook, o nome se perde.
         ...(mediaType === "document" && fileName?.trim() ? { media_file_name: fileName.trim().slice(0, 255) } : {}),
-        ...(replyContext ? { reply_context: replyContext } : {}),
+        ...(replyContext ? { reply_context: replyContext as unknown as Json } : {}),
         status: providerSendStatus(data),
         timestamp: new Date().toISOString(),
       }, { onConflict: "message_id,instance_id", ignoreDuplicates: true })

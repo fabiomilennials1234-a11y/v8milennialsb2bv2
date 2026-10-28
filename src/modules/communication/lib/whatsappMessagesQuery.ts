@@ -118,6 +118,8 @@ export async function fetchConversationMessages(
   if (error) throw error;
   // O resto da UI (auto-scroll, divisor de não-lidas, merge com ligações)
   // assume ordem ascendente — desfaz o DESC que só serviu pra ancorar a janela.
-  // reply_context is added by 20271019000001; generated schema types are refreshed separately.
+  // O cast fica: o select usa aliases JSON (raw_payload->...) e colunas que o
+  // types.ts gerado ainda não tem (ex.: forwarded_from_message_id). reply_context
+  // (20271019000001) já consta no types.ts, mas isso sozinho não dispensa o cast.
   return ((data ?? []) as unknown as WhatsAppMessage[]).reverse();
 }

@@ -19976,6 +19976,7 @@ export type Database = {
           reactions: Json
           received_via: string
           remote_jid: string
+          reply_context: Json | null
           search_tsv: unknown
           sent_by_ai: boolean | null
           sent_by_team_member_id: string | null
@@ -20009,6 +20010,7 @@ export type Database = {
           reactions?: Json
           received_via?: string
           remote_jid: string
+          reply_context?: Json | null
           search_tsv?: unknown
           sent_by_ai?: boolean | null
           sent_by_team_member_id?: string | null
@@ -20042,6 +20044,7 @@ export type Database = {
           reactions?: Json
           received_via?: string
           remote_jid?: string
+          reply_context?: Json | null
           search_tsv?: unknown
           sent_by_ai?: boolean | null
           sent_by_team_member_id?: string | null
