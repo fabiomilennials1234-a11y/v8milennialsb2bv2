@@ -137,16 +137,21 @@ describe('cliente da Apify', () => {
 
 // ── plano de custo ─────────────────────────────────────────────────────────
 describe('planoDaBusca', () => {
-  const cfg = { actorId: ACTOR_PADRAO, ...CFG_INSTAGRAM_PADRAO };
-  test('100 créditos: 800 contas, 16 páginas, freio de custo com folga de 15%', () => {
-    assert.deepEqual(planoDaBusca(100, cfg), { maxItems: 800, maxPages: 16, maxTotalChargeUsd: 11.05, timeoutS: 720 });
+  const cfg = { actorId: ACTOR_PADRAO, ...CFG_INSTAGRAM_PADRAO, maxSeguidores: 5_000 };
+  test('o padrão real: o acesso sem login entrega ~50 seguidores por conta, então o plano não pede mais (medido)', () => {
+    const p = planoDaBusca(100, { actorId: ACTOR_PADRAO, ...CFG_INSTAGRAM_PADRAO });
+    assert.deepEqual(p, { maxItems: 50, maxPages: 1, maxTotalChargeUsd: 0.7, timeoutS: 600 });
+    assert.equal(CFG_INSTAGRAM_PADRAO.maxSeguidores, 50);
+  });
+  test('100 créditos: 800 contas, 16 páginas, prazo de 12 s por conta, freio de custo com folga de 15%', () => {
+    assert.deepEqual(planoDaBusca(100, cfg), { maxItems: 800, maxPages: 16, maxTotalChargeUsd: 11.05, timeoutS: 9_600 });
   });
   test('piso: 1 crédito ainda processa uma página inteira', () => assert.deepEqual(planoDaBusca(1, cfg).maxItems, 50));
   test('teto: busca enorme é limitada em contas E em dólares', () => {
     const p = planoDaBusca(100_000, cfg);
     assert.equal(p.maxItems, 5_000);
     assert.equal(p.maxTotalChargeUsd, 25, 'US$ 25 por busca, mesmo que a conta pedisse US$ 69');
-    assert.ok(p.timeoutS <= 3_600);
+    assert.ok(p.timeoutS <= 6 * 3_600, 'o prazo tem teto de 6 h');
   });
   test('o freio nunca passa do teto configurado', () => {
     for (const c of [1, 10, 50, 100, 500, 5_000, 1e6]) assert.ok(planoDaBusca(c, { ...cfg, maxUsdPorBusca: 5 }).maxTotalChargeUsd <= 5);
@@ -207,7 +212,9 @@ const bancoMemoria = ({ limiteAposItens = Infinity } = {}) => {
 
 const BUSCA_IG = { id: 'bi', organization_id: 'o', fonte: 'instagram', nicho: null, cidade: null, instagram_handle: 'clinicaodontovida', creditos_limite: 100, creditos_usados: 0 };
 const CFG = { ...CFG_PADRAO, workerId: 'w1', pollMs: 5_000, lote: 50 };
-const cfgIg = { actorId: ACTOR_PADRAO, ...CFG_INSTAGRAM_PADRAO };
+// O padrão real limita a 50 seguidores (teto medido do acesso sem login). Aqui o teto é alto de propósito:
+// os testes exercitam o dimensionamento do plano, não o limite do Instagram.
+const cfgIg = { actorId: ACTOR_PADRAO, ...CFG_INSTAGRAM_PADRAO, maxSeguidores: 5_000 };
 const perfil = (username, extra = {}) => ({ username, full_name: `Nome ${username}`, enrichment_status: 'success', ...extra });
 
 describe('executarBusca com a fonte Instagram', () => {

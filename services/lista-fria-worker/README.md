@@ -81,6 +81,19 @@ O Actor cobra **por seguidor processado**, não por contato achado (US$ 0,012 po
 
 Os rendimentos acima são os que o **fornecedor do Actor** anuncia ("10 a 30% para público geral"); **não foram medidos por nós**. Isso é o que a validação com `APIFY_TOKEN` mede. Os freios limitam o prejuízo, não o rendimento: `maxSeguidores` e `maxTotalChargeUsd` (a Apify mesma aborta).
 
+### Medido na Apify real (28/10/2026)
+
+| Conta-alvo | Seguidores processados | Contatos válidos | Gasto | Por contato válido |
+|---|---|---|---|---|
+| conta pública generalista (muito grande) | 45 | 1 (2%) | US$ 0,53 | US$ 0,53 |
+| `crm.datacrazy` (CRM: seguidores são gente de vendas e de negócio) | 51 | **11 (21,6%)** | US$ 0,60 | **US$ 0,055** |
+
+- **O rendimento depende do tipo de conta, e varia ~10x.** O de uma conta de nicho de negócios ficou perto do que o fornecedor anuncia; o de uma conta generalista, muito abaixo. O preço do crédito tem de cobrir o pior caso, ou a busca tem de avisar o cliente.
+- O custo real por seguidor foi US$ 0,0117, igual à tabela (US$ 0,012).
+- Parte do contato vem **da nossa leitura do site do perfil**, não do Actor (e-mail de bio/site, `wa.me`).
+- **Teto: ~50 seguidores por conta-alvo, sem login.** O `data-slayer` pediu 3 páginas e parou em "No more pages available" (51 itens). O `thenetaji`, pedindo 200, entregou 50. Os dois Actors batem no mesmo limite, então é do acesso sem login do Instagram, não de um Actor. **Uma busca de Instagram por Apify rende, no máximo, ~10 contatos** (50 seguidores × ~20%). Por isso `maxSeguidores` padrão é 50. Para ir mais fundo: várias contas-alvo na mesma busca, ou o coletor com login real (a paginação mais funda com login **não foi testada**).
+- **Prazo:** o Actor levou 4,8 s por seguidor numa conta e 30 s em outra (a execução de 120 itens com prazo de 300 s morreu em `TIMED-OUT` com 10 itens). O prazo agora é 12 s por seguidor, com o freio de gasto como limite real.
+
 ### Validar com a Apify de verdade
 
 ```

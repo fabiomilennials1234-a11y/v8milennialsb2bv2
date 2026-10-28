@@ -52,8 +52,17 @@ export const CFG_INSTAGRAM_SESSAO_PADRAO: Omit<CfgInstagram, "actorId"> = {
 export const CFG_INSTAGRAM_PADRAO: Omit<CfgInstagram, "actorId"> = {
   precoPorSeguidorUsd: 0.012,
   maxUsdPorBusca: 25,
-  maxSeguidores: 5_000,
+  // MEDIDO na Apify real em 28/10/2026: o acesso SEM LOGIN devolve só a PRIMEIRA PÁGINA de seguidores
+  // (~50) por conta-alvo. O Actor data-slayer pediu 3 páginas e parou em "No more pages available"
+  // (51 itens); o thenetaji, pedindo 200, entregou 50. Pedir mais só alonga o prazo e promete o que
+  // não vem. Para ir mais fundo é preciso login (coletor com conta real) ou várias contas-alvo.
+  maxSeguidores: 50,
   contasPorCredito: 8,
+  // MEDIDO na Apify real em 28/10/2026: 45 itens em 216 s (4,8 s por conta) numa conta, 10 itens em
+  // 300 s (30 s por conta) em outra. Prazo curto demais mata a execução no meio (TIMED-OUT) e
+  // subestima o rendimento; 12 s por conta é folga para o caso comum, e o freio de gasto
+  // (maxTotalChargeUsd) é quem limita o custo, não o relógio.
+  segundosPorConta: 12,
 };
 
 const PAGINA_DO_DATASET = 500;

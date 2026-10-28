@@ -58,7 +58,11 @@ describe('plano de prazo do coletor com login real', () => {
   test('sem custo em dólar a configuração padrão do coletor não promete freio de gasto', () => {
     assert.equal(CFG_INSTAGRAM_SESSAO_PADRAO.precoPorSeguidorUsd, 0);
   });
-  test('o plano da Apify não mudou', () => assert.equal(planoDaBusca(100, { actorId: 'a', ...CFG_INSTAGRAM_PADRAO }).timeoutS, 720));
+  test('Apify: o prazo agora também é contas × segundos (12 s medido como folga), não páginas × 45', () => {
+    const alto = { actorId: 'a', ...CFG_INSTAGRAM_PADRAO, maxSeguidores: 5_000 };
+    assert.equal(planoDaBusca(100, alto).timeoutS, 9_600);
+    assert.equal(planoDaBusca(15, alto).timeoutS, 1_440, '120 contas × 12 s: o caso que estourou com 300 s');
+  });
 });
 
 // ── o serviço Python de verdade ────────────────────────────────────────────
