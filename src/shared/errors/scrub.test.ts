@@ -19,6 +19,13 @@ describe("scrubPii", () => {
     expect(scrubPii("cnpj 12.345.678/0001-95")).toBe("cnpj **.***.***/****-95");
   });
 
+  it("mascara CNPJ/CPF só com dígitos (como sai da RPC de documentos do lead)", () => {
+    expect(scrubPii("salvar_documentos_do_lead falhou para 12345678000195")).toBe(
+      "salvar_documentos_do_lead falhou para 1234******0195",
+    );
+    expect(scrubPii("p_document=12345678909")).toBe("p_document=1234***8909");
+  });
+
   it("não mexe em número curto nem em código de erro", () => {
     expect(scrubPii("PGRST116 retornou 42 linhas (23505)")).toBe("PGRST116 retornou 42 linhas (23505)");
   });

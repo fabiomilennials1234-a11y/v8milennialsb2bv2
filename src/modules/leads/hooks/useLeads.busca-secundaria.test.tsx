@@ -24,7 +24,8 @@ vi.mock("@/integrations/supabase/client", () => {
       q[k] = encadeia;
     }
     q.ilike = (_col: string, padrao: string) => {
-      m.ilikes.push(padrao);
+      // O teste mede a pré-consulta de TELEFONE; a de documento tem teste próprio.
+      if (tabela === "lead_phones") m.ilikes.push(padrao);
       return q;
     };
     q.then = (resolve: (r: unknown) => unknown, reject?: (e: unknown) => unknown) => {

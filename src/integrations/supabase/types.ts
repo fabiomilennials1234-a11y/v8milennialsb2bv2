@@ -9646,12 +9646,17 @@ export type Database = {
       lead_documents: {
         Row: {
           created_at: string
+          deleted_at: string | null
+          deleted_by: string | null
           document: string
           document_kind: string | null
           erp_document_at_set: string | null
           erp_writeback_attempted_at: string | null
           erp_writeback_error: string | null
           erp_writeback_status: string
+          id: string
+          is_primary: boolean
+          label: string | null
           lead_id: string
           organization_id: string
           source: string
@@ -9660,12 +9665,17 @@ export type Database = {
         }
         Insert: {
           created_at?: string
+          deleted_at?: string | null
+          deleted_by?: string | null
           document: string
           document_kind?: never
           erp_document_at_set?: string | null
           erp_writeback_attempted_at?: string | null
           erp_writeback_error?: string | null
           erp_writeback_status: string
+          id?: string
+          is_primary?: boolean
+          label?: string | null
           lead_id: string
           organization_id: string
           source?: string
@@ -9674,12 +9684,17 @@ export type Database = {
         }
         Update: {
           created_at?: string
+          deleted_at?: string | null
+          deleted_by?: string | null
           document?: string
           document_kind?: never
           erp_document_at_set?: string | null
           erp_writeback_attempted_at?: string | null
           erp_writeback_error?: string | null
           erp_writeback_status?: string
+          id?: string
+          is_primary?: boolean
+          label?: string | null
           lead_id?: string
           organization_id?: string
           source?: string
@@ -9690,7 +9705,7 @@ export type Database = {
           {
             foreignKeyName: "lead_documents_lead_id_fkey"
             columns: ["lead_id"]
-            isOneToOne: true
+            isOneToOne: false
             referencedRelation: "leads"
             referencedColumns: ["id"]
           },
@@ -24580,6 +24595,10 @@ export type Database = {
       restore_lead: { Args: { p_lead_id: string }; Returns: undefined }
       restore_leads_bulk: { Args: { p_lead_ids: string[] }; Returns: number }
       rollback_import_batch: { Args: { p_batch_id: string }; Returns: Json }
+      salvar_documentos_do_lead: {
+        Args: { p_docs: Json; p_lead_id: string }
+        Returns: Json
+      }
       salvar_telefones_do_lead: {
         Args: {
           p_lead_id: string
