@@ -18,7 +18,7 @@
 --   (DR) can_update_lead == USING da policy de UPDATE de leads, medido por
 --        SELECT ... FOR KEY SHARE como authenticated.
 --
---   (MU) vários CNPJ (migration 20271217000000_lead_documents_multiplos_cnpj.sql):
+--   (MU) vários CNPJ (migration 20271217000001_lead_documents_multiplos_cnpj.sql):
 --        salvar_documentos_do_lead adiciona, remove (soft delete), troca o
 --        principal, é idempotente e tudo-ou-nada; duplicado na org (contra outro
 --        lead e contra upsell_clients.cnpj de OUTRO lead); 1 CPF OU vários CNPJ;
