@@ -27,6 +27,7 @@ import {
   type InboxContact,
 } from "@/modules/communication/hooks/chat/types";
 import { ConversationListItem, contactDisplayName } from "./ConversationListItem";
+import { paraBusca } from "@/modules/communication/lib/nomeDaConversa";
 import { useNomeDoLeadPrimeiro } from "@/modules/communication/hooks/chat/useNomeDoLeadPrimeiro";
 import { useNomeCodContatoLead } from "@/modules/communication/hooks/chat/useNomeCodContatoLead";
 import { SeletorDeCaixas } from "./SeletorDeCaixas";
@@ -299,6 +300,12 @@ export function ConversationList({
     [stageLabelIndex],
   );
 
+  // Nome exibido na linha, para a busca achar o que o usuário está vendo.
+  const nomeExibido = useCallback(
+    (c: ChatContact) => contactDisplayName(c as InboxContact, nomeDoLeadPrimeiro, nomeCodContato),
+    [nomeDoLeadPrimeiro, nomeCodContato],
+  );
+
   // ── Caixa social: só busca local. ─────────────────────────────────────────
   // Nenhuma das dimensões do filtro tem dado para avaliar aqui, e o `activeTab`
   // não existe (não há arquivamento). Uma lista curta e honesta.
@@ -312,15 +319,15 @@ export function ConversationList({
         ? contacts
         : ([] as InboxContact[]);
     if (universo.length === 0) return universo;
-    const q = searchQuery.trim().toLowerCase();
+    const q = paraBusca(searchQuery);
     if (!q) return universo;
-    return universo.filter((c) => contactDisplayName(c, nomeDoLeadPrimeiro, nomeCodContato).toLowerCase().includes(q));
+    return universo.filter((c) => paraBusca(contactDisplayName(c, nomeDoLeadPrimeiro, nomeCodContato)).includes(q));
   }, [isSocialBox, modoUnificado, contacts, searchQuery, nomeDoLeadPrimeiro, nomeCodContato]);
 
   // ── Desktop: engine puro. Mobile: header próprio (all/unread/groups + vendedor).
   const whatsappFiltered = useMemo(() => {
     if (!isMobile) {
-      return applyInboxFilters(whatsappContacts, filter, filterCtx, { searchQuery, tab: activeTab, includeGroups: abasDeGrupos });
+      return applyInboxFilters(whatsappContacts, filter, filterCtx, { searchQuery, tab: activeTab, includeGroups: abasDeGrupos, displayName: nomeExibido });
     }
     return applyInboxFilters(whatsappContacts, {
       ...DEFAULT_INBOX_FILTER,
@@ -330,8 +337,9 @@ export function ConversationList({
       searchQuery,
       tab: mobileFilter === "grupos" ? "grupos" : "active",
       includeGroups: abasDeGrupos,
+      displayName: nomeExibido,
     });
-  }, [isMobile, whatsappContacts, filter, filterCtx, searchQuery, activeTab, mobileFilter, abasDeGrupos]);
+  }, [isMobile, whatsappContacts, filter, filterCtx, searchQuery, activeTab, mobileFilter, abasDeGrupos, nomeExibido]);
 
   /**
    * A lista final.
@@ -368,8 +376,8 @@ export function ConversationList({
 
   // Contagens reagem ao filtro aplicado (menos a própria tab).
   const archivedCount = useMemo(
-    () => applyInboxFilters(whatsappContacts, filter, filterCtx, { searchQuery, tab: "archived", includeGroups: abasDeGrupos }).length,
-    [whatsappContacts, filter, filterCtx, searchQuery, abasDeGrupos],
+    () => applyInboxFilters(whatsappContacts, filter, filterCtx, { searchQuery, tab: "archived", includeGroups: abasDeGrupos, displayName: nomeExibido }).length,
+    [whatsappContacts, filter, filterCtx, searchQuery, abasDeGrupos, nomeExibido],
   );
   /**
    * Org sem a flag não paga nem a varredura: a lista dela não tem grupo nenhum e
