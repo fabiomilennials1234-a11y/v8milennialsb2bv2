@@ -13,7 +13,7 @@
  *   APIFY_MAX_USD_POR_BUSCA      25      (teto de gasto nosso por busca; a Apify aborta ao chegar)
  *   INSTAGRAM_MAX_SEGUIDORES     5000    (contas processadas por busca, no máximo)
  *   INSTAGRAM_CONTAS_POR_CREDITO 8       (rendimento presumido para dimensionar a busca)
- *   LISTA_FRIA_BASE_DIR          padrão /data/base (volume): base enxuta de CNPJ em Parquet, baixada do Storage (bucket lista-fria-base)
+ *   LISTA_FRIA_BASE_DIR          padrão /data/base (volume): base enxuta de CNPJ em partes Parquet, baixada do Storage (bucket lista-fria-base)
  *   WORKER_ID                    padrão <host>-<pid>
  *   POLL_MS, IDLE_MS             5000 / 5000
  *   GOSOM_MAX_TIME_S             3600
@@ -29,7 +29,7 @@ import { ACTOR_PADRAO } from "./instagram.ts";
 import { CFG_INSTAGRAM_PADRAO, CFG_INSTAGRAM_SESSAO_PADRAO, fonteInstagram, type ApifyApi, type CfgInstagram } from "./fonte-instagram.ts";
 import { apagarJob, baixarCsv, criarJob, lerJob, type GosomCfg } from "./gosom.ts";
 import { aderentes, expandirBusca, type IaCfg } from "./ia.ts";
-import { ARQUIVO_BASE, sincronizarBase, type BaseLocal } from "./base-cnpj.ts";
+import { sincronizarBase, type BaseLocal } from "./base-cnpj.ts";
 import type { ConsultaCnpj } from "./fonte-cnpj.ts";
 import { CFG_CNPJ_PADRAO, fonteCnpj } from "./fonte-cnpj.ts";
 import { lerSite } from "./site.ts";
@@ -120,7 +120,7 @@ async function main() {
     if (consultaSha !== baseCnpj.manifesto.sha256) {
       consulta?.fechar();
       const { consultaDuckdb } = await import("./consulta-duckdb.ts");
-      consulta = await consultaDuckdb(baseCnpj.arquivo);
+      consulta = await consultaDuckdb(baseCnpj.arquivos);
       consultaSha = baseCnpj.manifesto.sha256;
     }
     return consulta;
@@ -157,7 +157,7 @@ async function main() {
 
   log("worker_iniciado", { workerId, gosom: gosomCfg.baseUrl, ia: iaCfg !== null, instagram: instagram?.provedor ?? null, actor: instagram?.cfg.actorId });
   await manterBase();
-  log("base_cnpj", { disponivel: baseCnpj !== null, mes: baseCnpj?.manifesto.mes ?? null, arquivo: ARQUIVO_BASE });
+  log("base_cnpj", { disponivel: baseCnpj !== null, mes: baseCnpj?.manifesto.mes ?? null, partes: baseCnpj?.arquivos.length ?? 0 });
   let ultimaLimpeza = 0;
   while (!parar) {
     try {

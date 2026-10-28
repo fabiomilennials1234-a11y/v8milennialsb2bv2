@@ -1,4 +1,4 @@
--- ROLLBACK de 20271218000000_lista_fria_fonte_cnpj.sql
+-- ROLLBACK de 20271219000000_lista_fria_fonte_cnpj.sql
 --
 -- Tira a fonte CNPJ: a coluna `filtros`, o valor 'cnpj' e o ramo de `lista_fria_busca_criar`.
 -- Recusa se já existir busca de CNPJ, para não perder histórico nem créditos reservados: cancele ou

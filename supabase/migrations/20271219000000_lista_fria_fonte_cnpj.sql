@@ -1,7 +1,7 @@
--- 20271218000000_lista_fria_fonte_cnpj.sql
+-- 20271219000000_lista_fria_fonte_cnpj.sql
 --
 -- Lista Fria · terceira fonte: CNPJ por CNAE/segmento (base enxuta da Receita em Parquet).
--- Desenho e medição: ADR-0043. ROLLBACK pareado: rollback/20271218000000_lista_fria_fonte_cnpj.sql
+-- Desenho e medição: ADR-0043. ROLLBACK pareado: rollback/20271219000000_lista_fria_fonte_cnpj.sql
 --
 -- O que muda:
 --   1. `lista_fria_buscas.fonte` aceita 'cnpj'.

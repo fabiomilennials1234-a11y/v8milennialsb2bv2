@@ -1,22 +1,26 @@
 """Constrói a base enxuta de CNPJ da Lista Fria (ADR-0043).
 
-Baixa a base aberta do CNPJ da Receita Federal do mês, filtra e grava UM arquivo Parquet de
-~0,4 GB, ordenado por (uf, cnae, municipio) para o worker ler só as fatias que a busca pede.
+Baixa a base aberta do CNPJ da Receita Federal do mês, filtra e grava a base em PARTES Parquet de até
+50 MB (o Storage do Supabase limita cada arquivo a 52 MB no projeto inteiro), ordenadas por
+(uf, cnae, municipio) para o worker ler só as fatias que a busca pede.
 
     python construir.py --saida ./saida                      # baixa o mês mais recente
     python construir.py --saida ./saida --mes 2026-10        # um mês específico
     python construir.py --saida ./saida --zips ./zip         # usa zips já baixados (desenvolvimento)
+    python construir.py --saida ./saida --dividir base.parquet --mes 2026-10   # só refatia um Parquet já pronto
 
 Entra:  só estabelecimento ATIVO, sem empresário individual (natureza 2135: o CNPJ é uma pessoa
         física) e com e-mail ou telefone.
-Sai:    cnpj, razao, fantasia, cnae, cnae_desc, uf, municipio, bairro, endereco, tel, email, porte,
+Sai:    cnpj-enxuto-NNN-<hash>.parquet (partes imutáveis) e manifesto.json com a lista delas.
+Colunas: cnpj, razao, fantasia, cnae, cnae_desc, uf, municipio, bairro, endereco, tel, email, porte,
         matriz, celular, email_compartilhado.
 Marcas: matriz               é a matriz (uma empresa com 5 filiais não vira 5 contatos cobrados);
         celular              telefone de 9 dígitos começando em 9 (serve para WhatsApp);
         email_compartilhado  o mesmo e-mail em 6 ou mais CNPJs (contador provável).
 Fora:   sócios, CPF e qualquer dado que não seja o contato da empresa.
 
-Escreve também `manifesto.json` (mês, linhas, tamanho, sha256) para o worker saber se a base mudou.
+O manifesto traz mês, linhas e, por parte, nome, tamanho e sha256. O nome da parte leva os 12 primeiros
+caracteres do hash: arquivo com aquele nome nunca muda, então o worker nunca mistura versão velha com nova.
 Disco: processa um arquivo por vez e apaga o CSV depois de ler; o pico é o maior CSV (~8 GB).
 Só depende de `duckdb` (pip install duckdb).
 """
@@ -44,6 +48,10 @@ BASE = os.environ.get("RFB_WEBDAV", "https://arquivos.receitafederal.gov.br/publ
 PASTA = "Dados/Cadastros/CNPJ"
 EMAIL_COMPARTILHADO_MINIMO = 6
 NATUREZA_EMPRESARIO_INDIVIDUAL = "2135"
+# O Storage do Supabase recusa arquivo acima de 52.428.800 bytes (limite do projeto). Margem para o cabeçalho.
+TETO_PARTE_BYTES = 50_000_000
+LINHAS_POR_PARTE = 800_000
+VERSAO_LAYOUT = 2
 
 ESTAB_COLS = ["cnpj_basico", "cnpj_ordem", "cnpj_dv", "matriz", "fantasia", "situacao", "dt_situacao", "motivo",
               "cidade_ext", "pais", "dt_inicio", "cnae", "cnae_sec", "tipo_logr", "logradouro", "numero",
@@ -95,6 +103,49 @@ def extrair(zip_path: str, destino: str) -> list[str]:
     with zipfile.ZipFile(zip_path) as z:
         z.extractall(destino)
         return [os.path.join(destino, n) for n in z.namelist()]
+
+
+def sha256_de(caminho: str) -> str:
+    h = hashlib.sha256()
+    with open(caminho, "rb") as f:
+        for bloco in iter(lambda: f.read(1 << 22), b""):
+            h.update(bloco)
+    return h.hexdigest()
+
+
+def dividir(con, tabela: str, saida: str, mes: str | None, linhas_por_parte: int = LINHAS_POR_PARTE) -> dict:
+    """Fatia `tabela` (já ordenada) em partes de até TETO_PARTE_BYTES e grava o manifesto.
+
+    Refaz com partes menores se alguma passar do teto. O nome leva o hash: parte publicada é imutável.
+    """
+    os.makedirs(saida, exist_ok=True)
+    total = con.execute(f"SELECT count(*) FROM {tabela}").fetchone()[0]
+    while True:
+        for velho in os.listdir(saida):
+            if velho.startswith("cnpj-enxuto-") or velho.startswith("parte-"):
+                os.remove(os.path.join(saida, velho))
+        partes = []
+        for n, inicio in enumerate(range(0, total, linhas_por_parte)):
+            tmp = os.path.join(saida, f"parte-{n:03d}.tmp")
+            con.execute(f"""COPY (SELECT * FROM {tabela} LIMIT {linhas_por_parte} OFFSET {inicio}) TO '{tmp}'
+                            (FORMAT parquet, COMPRESSION zstd, ROW_GROUP_SIZE 100000)""")
+            sha = sha256_de(tmp)
+            nome = f"cnpj-enxuto-{n:03d}-{sha[:12]}.parquet"
+            os.replace(tmp, os.path.join(saida, nome))
+            partes.append({"nome": nome, "bytes": os.path.getsize(os.path.join(saida, nome)), "sha256": sha,
+                           "linhas": min(linhas_por_parte, total - inicio)})
+        maior = max(p["bytes"] for p in partes)
+        if maior <= TETO_PARTE_BYTES:
+            break
+        linhas_por_parte = max(10_000, int(linhas_por_parte * TETO_PARTE_BYTES * 0.9 / maior))
+        log(f"parte de {maior / 1e6:.1f} MB passou do teto; refazendo com {linhas_por_parte} linhas por parte")
+    conjunto = hashlib.sha256("\n".join(f"{p['nome']}:{p['sha256']}" for p in partes).encode()).hexdigest()
+    manifesto = {"mes": mes, "linhas": total, "bytes": sum(p["bytes"] for p in partes), "sha256": conjunto,
+                 "construido_em": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "versao_layout": VERSAO_LAYOUT,
+                 "arquivos": partes}
+    with open(os.path.join(saida, "manifesto.json"), "w") as f:
+        json.dump(manifesto, f, indent=1)
+    return manifesto
 
 
 def construir(zips: str | None, mes: str | None, saida: str, trabalho: str) -> None:
@@ -165,9 +216,8 @@ def construir(zips: str | None, mes: str | None, saida: str, trabalho: str) -> N
             os.remove(zp)
         log(f"Estabelecimentos{i} ok")
 
-    saida_parquet = os.path.join(saida, "cnpj-enxuto.parquet")
     log("juntando, marcando e ordenando")
-    con.execute(f"""COPY (
+    con.execute(f"""CREATE OR REPLACE TABLE ordenada AS
         WITH comp AS (SELECT email FROM est WHERE email IS NOT NULL GROUP BY email HAVING count(*) >= {EMAIL_COMPARTILHADO_MINIMO})
         SELECT e.cnpj, p.razao, e.fantasia, e.cnae, c.descricao AS cnae_desc, e.uf,
                upper(strip_accents(e.municipio)) AS municipio, e.bairro, e.endereco, e.tel, e.email, p.porte,
@@ -178,21 +228,11 @@ def construir(zips: str | None, mes: str | None, saida: str, trabalho: str) -> N
         JOIN emp p USING (cnpj_basico)
         LEFT JOIN cnae c ON c.codigo = e.cnae
         WHERE e.tel IS NOT NULL OR e.email IS NOT NULL
-        ORDER BY e.uf, e.cnae, 7, e.cnpj
-    ) TO '{saida_parquet}' (FORMAT parquet, COMPRESSION zstd, ROW_GROUP_SIZE 100000)""")
-
-    linhas = con.execute(f"SELECT count(*) FROM '{saida_parquet}'").fetchone()[0]
-    sha = hashlib.sha256()
-    with open(saida_parquet, "rb") as f:
-        for bloco in iter(lambda: f.read(1 << 22), b""):
-            sha.update(bloco)
-    manifesto = {"mes": mes, "linhas": linhas, "bytes": os.path.getsize(saida_parquet), "sha256": sha.hexdigest(),
-                 "construido_em": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "versao_layout": 1}
-    with open(os.path.join(saida, "manifesto.json"), "w") as f:
-        json.dump(manifesto, f, indent=1)
+        ORDER BY e.uf, e.cnae, 7, e.cnpj""")
+    manifesto = dividir(con, "ordenada", saida, mes)
     con.close()
     shutil.rmtree(csvdir, ignore_errors=True)
-    log(f"pronto: {linhas} linhas, {manifesto['bytes'] / 1e9:.2f} GB, mês {mes}")
+    log(f"pronto: {manifesto['linhas']} linhas em {len(manifesto['arquivos'])} partes, {manifesto['bytes'] / 1e9:.2f} GB, mês {mes}")
 
 
 if __name__ == "__main__":
@@ -200,6 +240,13 @@ if __name__ == "__main__":
     ap.add_argument("--saida", required=True)
     ap.add_argument("--mes")
     ap.add_argument("--zips", help="pasta com os zips já baixados (pula o download)")
+    ap.add_argument("--dividir", help="refatia um Parquet já pronto (ordenado por uf, cnae, municipio, cnpj) e sai")
     ap.add_argument("--trabalho", default=None, help="pasta temporária (padrão: <saida>/_trabalho)")
     a = ap.parse_args()
+    if a.dividir:
+        c = duckdb.connect(":memory:")
+        c.execute(f"CREATE TABLE ordenada AS SELECT * FROM read_parquet('{a.dividir}')")
+        m = dividir(c, "ordenada", a.saida, a.mes or "local")
+        log(f"pronto: {m['linhas']} linhas em {len(m['arquivos'])} partes, {m['bytes'] / 1e9:.2f} GB")
+        sys.exit(0)
     construir(a.zips, a.mes or ("local" if a.zips else None), a.saida, a.trabalho or os.path.join(a.saida, "_trabalho"))

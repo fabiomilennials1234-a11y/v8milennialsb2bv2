@@ -3,30 +3,36 @@
     SUPABASE_URL=... SUPABASE_SERVICE_ROLE_KEY=... python publicar.py --saida ./saida
 
 Cria o bucket privado `lista-fria-base` se não existir e envia, NESSA ORDEM:
-  1. cnpj-enxuto.parquet   (o dado)
-  2. manifesto.json        (o ponteiro: mês, linhas, sha256)
-O manifesto vai por último: ele nunca aponta para um arquivo que ainda não chegou. O worker só baixa
-quando o sha256 do manifesto muda e confere o hash do arquivo antes de trocá-lo.
+  1. as partes `cnpj-enxuto-NNN-<hash>.parquet` que ainda não estão lá (o nome leva o hash do
+     conteúdo, então parte já publicada é idêntica e não precisa subir de novo);
+  2. `manifesto.json` (o ponteiro: mês, linhas, lista de partes com sha256);
+  3. só então apaga do bucket as partes que o manifesto novo não cita.
+O manifesto vai depois das partes: ele nunca aponta para um arquivo que ainda não chegou. O worker só
+baixa quando o hash do manifesto muda e confere o sha256 de cada parte antes de aceitá-la.
 
-Limite de arquivo: o Storage do Supabase tem um teto global por arquivo (padrão 50 MB). O Parquet tem
-~0,4 GB, então o projeto precisa estar com o limite acima disso (Settings > Storage). O script
-confere o tamanho que o servidor aceita e para com uma frase clara em vez de falhar no meio do envio.
+Limite de arquivo: o Storage do Supabase tem um teto global por arquivo no projeto (52.428.800 bytes
+aqui). Por isso a base é dividida em partes de até 50 MB. Este script NÃO mexe na configuração do
+projeto; se uma parte passar do teto, para antes de enviar qualquer coisa.
 Só depende da biblioteca padrão.
 """
 from __future__ import annotations
 
 import argparse
+import hashlib
 import http.client
 import json
 import os
+import re
 import sys
 import urllib.error
 import urllib.parse
 import urllib.request
 
 BUCKET = "lista-fria-base"
-ARQUIVO = "cnpj-enxuto.parquet"
 MANIFESTO = "manifesto.json"
+TETO_ARQUIVO_BYTES = 52_428_800
+NOME_PARTE = re.compile(r"^cnpj-enxuto-\d{3}-[0-9a-f]{12}\.parquet$")
+VERSAO_LAYOUT = 2
 
 
 def sair(msg: str) -> None:
@@ -45,15 +51,22 @@ def chamar(url: str, chave: str, metodo: str = "GET", corpo: dict | None = None)
         return e.code, e.read()
 
 
-def garantir_bucket(base: str, chave: str, limite: int) -> None:
-    status, corpo = chamar(f"{base}/storage/v1/bucket/{BUCKET}", chave)
+def garantir_bucket(base: str, chave: str) -> None:
+    status, _ = chamar(f"{base}/storage/v1/bucket/{BUCKET}", chave)
     if status == 200:
         return
     status, corpo = chamar(f"{base}/storage/v1/bucket", chave, "POST",
-                           {"id": BUCKET, "name": BUCKET, "public": False, "file_size_limit": limite})
+                           {"id": BUCKET, "name": BUCKET, "public": False, "file_size_limit": TETO_ARQUIVO_BYTES})
     if status not in (200, 201):
         sair(f"não consegui criar o bucket {BUCKET}: HTTP {status} {corpo[:200]!r}")
-    print(f"bucket {BUCKET} criado (privado)")
+    print(f"bucket {BUCKET} criado (privado, teto de {TETO_ARQUIVO_BYTES} bytes por arquivo)")
+
+
+def listar(base: str, chave: str) -> list[str]:
+    status, corpo = chamar(f"{base}/storage/v1/object/list/{BUCKET}", chave, "POST", {"prefix": "", "limit": 1000, "offset": 0})
+    if status != 200:
+        sair(f"não consegui listar o bucket: HTTP {status} {corpo[:200]!r}")
+    return [o["name"] for o in json.loads(corpo)]
 
 
 def enviar(base: str, chave: str, caminho_local: str, nome: str, tipo: str) -> None:
@@ -69,9 +82,16 @@ def enviar(base: str, chave: str, caminho_local: str, nome: str, tipo: str) -> N
         corpo = r.read()
     con.close()
     if r.status not in (200, 201):
-        dica = " (o limite de tamanho por arquivo do projeto pode estar abaixo de %.0f MB)" % (tamanho / 1e6) if r.status in (413, 400) else ""
-        sair(f"envio de {nome} falhou: HTTP {r.status} {corpo[:300]!r}{dica}")
+        sair(f"envio de {nome} falhou: HTTP {r.status} {corpo[:300]!r}")
     print(f"enviado {nome} ({tamanho / 1e6:.1f} MB)")
+
+
+def sha256_de(caminho: str) -> str:
+    h = hashlib.sha256()
+    with open(caminho, "rb") as f:
+        for bloco in iter(lambda: f.read(1 << 22), b""):
+            h.update(bloco)
+    return h.hexdigest()
 
 
 def main() -> None:
@@ -82,17 +102,42 @@ def main() -> None:
     chave = os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "")
     if not url or not chave:
         sair("defina SUPABASE_URL e SUPABASE_SERVICE_ROLE_KEY")
-    parquet = os.path.join(a.saida, ARQUIVO)
-    manifesto = os.path.join(a.saida, MANIFESTO)
-    if not (os.path.exists(parquet) and os.path.exists(manifesto)):
-        sair(f"faltam {ARQUIVO} e/ou {MANIFESTO} em {a.saida}: rode construir.py antes")
-    m = json.load(open(manifesto))
-    if os.path.getsize(parquet) != m["bytes"]:
-        sair("o tamanho do parquet não confere com o manifesto")
-    garantir_bucket(url, chave, int(m["bytes"] * 1.5))
-    enviar(url, chave, parquet, ARQUIVO, "application/octet-stream")
-    enviar(url, chave, manifesto, MANIFESTO, "application/json")
-    print(f"publicado: mês {m['mes']}, {m['linhas']} linhas, sha256 {m['sha256'][:12]}…")
+    caminho_manifesto = os.path.join(a.saida, MANIFESTO)
+    if not os.path.exists(caminho_manifesto):
+        sair(f"falta {MANIFESTO} em {a.saida}: rode construir.py antes")
+    m = json.load(open(caminho_manifesto))
+    if m.get("versao_layout") != VERSAO_LAYOUT or not m.get("arquivos"):
+        sair(f"manifesto de layout {m.get('versao_layout')}: este publicador entende o layout {VERSAO_LAYOUT}")
+
+    # Tudo conferido ANTES de enviar qualquer byte.
+    for p in m["arquivos"]:
+        if not NOME_PARTE.match(p["nome"]) or p["nome"].split("-")[-1][:12] != p["sha256"][:12]:
+            sair(f"nome de parte inválido ou fora do hash: {p['nome']}")
+        caminho = os.path.join(a.saida, p["nome"])
+        if not os.path.exists(caminho):
+            sair(f"falta a parte {p['nome']}")
+        if os.path.getsize(caminho) != p["bytes"]:
+            sair(f"tamanho de {p['nome']} não confere com o manifesto")
+        if p["bytes"] > TETO_ARQUIVO_BYTES:
+            sair(f"{p['nome']} tem {p['bytes']} bytes, acima do teto de {TETO_ARQUIVO_BYTES} do Storage: refaça com partes menores")
+        if sha256_de(caminho) != p["sha256"]:
+            sair(f"sha256 de {p['nome']} não confere com o manifesto")
+
+    garantir_bucket(url, chave)
+    ja = set(listar(url, chave))
+    novas = [p for p in m["arquivos"] if p["nome"] not in ja]
+    print(f"{len(m['arquivos'])} partes no manifesto, {len(novas)} novas para enviar")
+    for p in novas:
+        enviar(url, chave, os.path.join(a.saida, p["nome"]), p["nome"], "application/octet-stream")
+    enviar(url, chave, caminho_manifesto, MANIFESTO, "application/json")
+
+    # Só depois do manifesto novo no ar: parte que ele não cita já não tem leitor.
+    manter = {p["nome"] for p in m["arquivos"]}
+    velhas = [n for n in listar(url, chave) if n.startswith("cnpj-enxuto-") and n not in manter]
+    if velhas:
+        status, corpo = chamar(f"{url}/storage/v1/object/{BUCKET}", chave, "DELETE", {"prefixes": velhas})
+        print(f"removidas {len(velhas)} partes antigas" if status == 200 else f"AVISO: limpeza falhou (HTTP {status}): {corpo[:200]!r}")
+    print(f"publicado: mês {m['mes']}, {m['linhas']} linhas em {len(m['arquivos'])} partes, hash {m['sha256'][:12]}…")
 
 
 if __name__ == "__main__":

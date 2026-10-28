@@ -6,7 +6,8 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { mkdtemp, mkdir, readFile, writeFile, rm } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
+import { mkdtemp, readFile, readdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { createRequire } from 'node:module';
@@ -16,7 +17,7 @@ import {
   CFG_CNPJ_PADRAO, candidatoDaLinha, filtrosDaBusca, fonteCnpj, municipioNormalizado, planoDaBuscaCnpj,
 } from '../../services/lista-fria-worker/src/fonte-cnpj.ts';
 import { CFG_PADRAO, executarBusca } from '../../services/lista-fria-worker/src/executor.ts';
-import { ARQUIVO_BASE, VERSAO_LAYOUT, baseLocal, sincronizarBase } from '../../services/lista-fria-worker/src/base-cnpj.ts';
+import { VERSAO_LAYOUT, baseLocal, sincronizarBase } from '../../services/lista-fria-worker/src/base-cnpj.ts';
 
 const busca = (extra = {}) => ({
   id: 'b1', organization_id: 'o', fonte: 'cnpj', nicho: null, cidade: null, instagram_handle: null,
@@ -188,17 +189,29 @@ describe('fluxo completo pelo executor', () => {
   });
 });
 
-describe('sincronização da base (Storage -> disco)', () => {
+describe('sincronização da base em partes (Storage -> disco)', () => {
   const sha = (buf) => createHash('sha256').update(buf).digest('hex');
-  const manifestoDe = (buf, extra = {}) => ({ mes: '2026-10', linhas: 7, bytes: buf.length, sha256: sha(buf), construido_em: '2026-10-28T00:00:00Z', versao_layout: VERSAO_LAYOUT, ...extra });
-  const storage = (arquivos) => {
+  /** Monta o manifesto v2 e o conteúdo das partes, como o construir.py publica. */
+  const base = (conteudos, extra = {}) => {
+    const arquivos = conteudos.map((c, i) => {
+      const buf = Buffer.from(c);
+      return { nome: `cnpj-enxuto-${String(i).padStart(3, '0')}-${sha(buf).slice(0, 12)}.parquet`, bytes: buf.length, sha256: sha(buf), linhas: 10, buf };
+    });
+    const conjunto = sha(Buffer.from(arquivos.map((a) => `${a.nome}:${a.sha256}`).join('\n')));
+    const manifesto = { mes: '2026-10', linhas: 10 * arquivos.length, bytes: arquivos.reduce((t, a) => t + a.bytes, 0), sha256: conjunto,
+      construido_em: '2026-10-28T00:00:00Z', versao_layout: VERSAO_LAYOUT, arquivos: arquivos.map(({ buf, ...a }) => a), ...extra };
+    const objetos = { 'manifesto.json': JSON.stringify(manifesto) };
+    for (const a of arquivos) objetos[a.nome] = a.buf;
+    return { manifesto, objetos, nomes: arquivos.map((a) => a.nome) };
+  };
+  const storage = (objetos) => {
     const pedidos = [];
     return {
       pedidos,
       fetch: async (url, init) => {
-        pedidos.push({ url, auth: init?.headers?.Authorization });
         const nome = url.split('/lista-fria-base/')[1];
-        const corpo = arquivos[nome];
+        pedidos.push({ nome, auth: init?.headers?.Authorization, url });
+        const corpo = objetos[nome];
         if (corpo === undefined) return new Response('{}', { status: 404 });
         if (corpo === 'ERRO') return new Response('x', { status: 500 });
         return new Response(corpo, { status: 200 });
@@ -207,51 +220,74 @@ describe('sincronização da base (Storage -> disco)', () => {
   };
   const cfgDe = async (st) => ({ url: 'https://x.supabase.co/', chave: 'chave-de-servico', dir: await mkdtemp(path.join(tmpdir(), 'lf-base-')), fetch: st.fetch });
   const log = () => {};
+  const limpar = (cfg) => rm(cfg.dir, { recursive: true, force: true });
 
-  test('baixa, confere o sha256 e troca o arquivo; com o mesmo hash não baixa de novo', async () => {
-    const parquet = Buffer.from('PAR1-conteudo-falso');
-    const st = storage({ 'manifesto.json': JSON.stringify(manifestoDe(parquet)), [ARQUIVO_BASE]: parquet });
+  test('baixa e confere cada parte, na ordem do manifesto; com o mesmo hash só pede o manifesto', async () => {
+    const b = base(['parte-um', 'parte-dois', 'parte-tres']);
+    const st = storage(b.objetos);
     const cfg = await cfgDe(st);
     try {
       const a = await sincronizarBase(cfg, log);
       assert.equal(a.trocou, true);
-      assert.deepEqual(await readFile(a.arquivo), parquet);
+      assert.deepEqual(a.arquivos.map((x) => path.basename(x)), b.nomes, 'a ordem das partes é a da busca');
+      assert.deepEqual(await readFile(a.arquivos[1]), Buffer.from('parte-dois'));
       assert.ok(st.pedidos.every((p) => p.auth === 'Bearer chave-de-servico'));
       assert.ok(st.pedidos[0].url.startsWith('https://x.supabase.co/storage/v1/object/authenticated/lista-fria-base/'));
       const antes = st.pedidos.length;
-      const b = await sincronizarBase(cfg, log);
-      assert.equal(b.trocou, false);
+      const seg = await sincronizarBase(cfg, log);
+      assert.equal(seg.trocou, false);
       assert.equal(st.pedidos.length, antes + 1, 'só o manifesto foi pedido');
       assert.equal((await baseLocal(cfg.dir)).manifesto.mes, '2026-10');
-    } finally { await rm(cfg.dir, { recursive: true, force: true }); }
+    } finally { await limpar(cfg); }
   });
 
-  test('arquivo que não confere com o manifesto é descartado e a base antiga fica', async () => {
-    const velho = Buffer.from('PAR1-velho');
-    const novo = Buffer.from('PAR1-novo');
-    const st1 = storage({ 'manifesto.json': JSON.stringify(manifestoDe(velho)), [ARQUIVO_BASE]: velho });
-    const cfg = await cfgDe(st1);
+  test('mês novo baixa só a parte que mudou e apaga as antigas depois', async () => {
+    const v1 = base(['igual-a', 'igual-b', 'velha-c']);
+    const cfg = await cfgDe(storage(v1.objetos));
     try {
       await sincronizarBase(cfg, log);
-      const st2 = storage({ 'manifesto.json': JSON.stringify(manifestoDe(novo, { mes: '2026-11' })), [ARQUIVO_BASE]: Buffer.from('corrompido') });
-      const eventos = [];
-      const r = await sincronizarBase({ ...cfg, fetch: st2.fetch }, (e) => eventos.push(e));
-      assert.equal(r.manifesto.mes, '2026-10', 'continua na base boa');
-      assert.deepEqual(await readFile(path.join(cfg.dir, ARQUIVO_BASE)), velho);
-      assert.ok(eventos.includes('base_cnpj_sync_falhou'));
-    } finally { await rm(cfg.dir, { recursive: true, force: true }); }
+      const v2 = base(['igual-a', 'igual-b', 'nova-c'], { mes: '2026-11' });
+      const st2 = storage(v2.objetos);
+      const r = await sincronizarBase({ ...cfg, fetch: st2.fetch }, log);
+      assert.equal(r.manifesto.mes, '2026-11');
+      assert.deepEqual(st2.pedidos.map((p) => p.nome).filter((n) => n !== 'manifesto.json'), [v2.nomes[2]], 'só a parte nova');
+      assert.deepEqual((await readdir(cfg.dir)).filter((n) => n.endsWith('.parquet')).sort(), [...v2.nomes].sort(), 'a velha saiu');
+    } finally { await limpar(cfg); }
   });
 
-  test('sem publicação (404), erro de rede e layout desconhecido não derrubam: devolvem o que há', async () => {
+  test('parte corrompida ou falha no meio: a base anterior continua inteira e utilizável', async () => {
+    const v1 = base(['a-velha', 'b-velha']);
+    const cfg = await cfgDe(storage(v1.objetos));
+    try {
+      await sincronizarBase(cfg, log);
+      const v2 = base(['a-nova', 'b-nova'], { mes: '2026-11' });
+      const eventos = [];
+      const corrompida = { ...v2.objetos, [v2.nomes[1]]: Buffer.from('lixo') };
+      const r1 = await sincronizarBase({ ...cfg, fetch: storage(corrompida).fetch }, (e) => eventos.push(e));
+      assert.equal(r1.manifesto.mes, '2026-10', 'continua na base boa');
+      assert.ok(eventos.includes('base_cnpj_sync_falhou'));
+      const quebrada = { ...v2.objetos, [v2.nomes[1]]: 'ERRO' };
+      const r2 = await sincronizarBase({ ...cfg, fetch: storage(quebrada).fetch }, log);
+      assert.equal(r2.manifesto.mes, '2026-10');
+      const local = await baseLocal(cfg.dir);
+      assert.equal(local.manifesto.mes, '2026-10', 'o manifesto local não foi promovido');
+      assert.ok(local.arquivos.every((x) => existsSync(x)), 'as partes antigas seguem no disco');
+    } finally { await limpar(cfg); }
+  });
+
+  test('sem publicação (404), erro de rede, layout antigo e nome de parte perigoso não derrubam nem entram', async () => {
     const cfg = await cfgDe(storage({}));
     try {
       assert.equal(await sincronizarBase(cfg, log), null, '404 sem nada no disco = indisponível');
       assert.equal(await sincronizarBase({ ...cfg, fetch: storage({ 'manifesto.json': 'ERRO' }).fetch }, log), null);
       assert.equal(await sincronizarBase({ ...cfg, fetch: async () => { throw new Error('rede caiu'); } }, log), null);
-      const buf = Buffer.from('PAR1-x');
-      const futuro = storage({ 'manifesto.json': JSON.stringify(manifestoDe(buf, { versao_layout: VERSAO_LAYOUT + 1 })), [ARQUIVO_BASE]: buf });
-      assert.equal(await sincronizarBase({ ...cfg, fetch: futuro.fetch }, log), null, 'layout de outra versão é recusado');
-    } finally { await rm(cfg.dir, { recursive: true, force: true }); }
+      const antigo = base(['x'], { versao_layout: 1 });
+      assert.equal(await sincronizarBase({ ...cfg, fetch: storage(antigo.objetos).fetch }, log), null, 'layout de outra versão é recusado');
+      const b = base(['y']);
+      const m = { ...b.manifesto, arquivos: [{ ...b.manifesto.arquivos[0], nome: '../../etc/passwd' }] };
+      assert.equal(await sincronizarBase({ ...cfg, fetch: storage({ 'manifesto.json': JSON.stringify(m) }).fetch }, log), null, 'nome fora do padrão é recusado (path traversal)');
+      assert.deepEqual(await readdir(cfg.dir).catch(() => []), []);
+    } finally { await limpar(cfg); }
   });
 });
 
@@ -287,7 +323,7 @@ describe('SQL no DuckDB real', () => {
   test('UF, CNAE por prefixo, só matriz, e-mail de contador anulado, filtros de contato, cursor', { skip: temDuck ? false : 'DuckDB do worker não instalado' }, async () => {
     const { consultaDuckdb } = await sqlMod;
     const { dir, arquivo } = await parquetDeTeste();
-    const q = await consultaDuckdb(arquivo);
+    const q = await consultaDuckdb([arquivo]);
     try {
       const ref = (rs) => rs.map((l) => l.cnpj.slice(-3));
       const qualquer = await q.buscar(f({}), null, 10);
@@ -308,11 +344,11 @@ describe('SQL no DuckDB real', () => {
   test('nada do usuário vira SQL: aspas no município e CNAE fora do padrão', { skip: temDuck ? false : 'DuckDB do worker não instalado' }, async () => {
     const { consultaDuckdb, sqlDaBusca } = await sqlMod;
     const { dir, arquivo } = await parquetDeTeste();
-    const q = await consultaDuckdb(arquivo);
+    const q = await consultaDuckdb([arquivo]);
     try {
       assert.deepEqual(await q.buscar(f({ municipio: "X' OR '1'='1" }), null, 10), [], 'município é parâmetro, não texto');
-      assert.throws(() => sqlDaBusca(arquivo, f({ cnaes: ["46') OR 1=1 --"] }), null, 5), /CNAE inválido/);
-      const { sql, valores } = sqlDaBusca(arquivo, f({ municipio: 'SAO PAULO' }), '123', 5);
+      assert.throws(() => sqlDaBusca([arquivo], f({ cnaes: ["46') OR 1=1 --"] }), null, 5), /CNAE inválido/);
+      const { sql, valores } = sqlDaBusca([arquivo], f({ municipio: 'SAO PAULO' }), '123', 5);
       assert.ok(!sql.includes('SAO PAULO') && !sql.includes('123'), 'valores só por parâmetro');
       assert.deepEqual(valores, ['SP', 'SAO PAULO', '123', 5]);
     } finally { q.fechar(); await rm(dir, { recursive: true, force: true }); }

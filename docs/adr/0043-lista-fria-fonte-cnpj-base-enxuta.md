@@ -24,7 +24,7 @@ A origem desse dado é pública: a Receita Federal publica todo mês a base do C
 ### Validado contra o Parquet real (28/10/2026)
 
 Executor real + DuckDB real + checagem de MX pela rede, sobre o Parquet construído de verdade
-(10.893.185 linhas, 0,47 GB, construído em ≈ 10 min). Atacadistas (CNAE 46), São Paulo capital, 400 créditos:
+(10.893.185 linhas em 14 partes, 0,47 GB, construído em ≈ 10 min). Atacadistas (CNAE 46), São Paulo capital, 400 créditos:
 
 - 475 candidatos lidos, **400 contatos em 12 segundos**.
 - 65% com e-mail, 88% com telefone, 53% com os dois.
@@ -37,8 +37,8 @@ Executor real + DuckDB real + checagem de MX pela rede, sobre o Parquet constru�
 ## Decision
 
 1. **Base própria e enxuta, não API paga.** O Torque não paga por contato nem depende de terceiro. A origem é a base da Receita, que é a mesma que as ferramentas de mercado revendem.
-2. **Parquet de ~0,4 GB, sem servidor de banco.** Fica em armazenamento de objetos (Supabase Storage ou R2) e o worker lê com DuckDB. O arquivo é ordenado por `uf, cnae`, então uma busca lê só as fatias que casam. Nenhuma tabela nova no banco principal: ele já tem pressão de espaço.
-3. **O arquivo é um artefato construído, não um dado do produto.** `services/lista-fria-base/construir.py` baixa a base do mês, filtra, marca o que precisa e grava o Parquet. Roda por job agendado, uma vez por mês, e é idempotente.
+2. **Parquet de ~0,5 GB em PARTES de até 50 MB, sem servidor de banco.** Fica no Supabase Storage (bucket privado `lista-fria-base`) e o worker lê com DuckDB. O Storage recusa arquivo acima de 52 MB, limite do projeto inteiro; subir esse limite mexeria na configuração de todos os buckets (inclusive o de mídia, sem retenção), então a base é dividida em partes em vez de o limite ser alterado. As partes seguem em sequência ordenada por `uf, cnae, municipio`, então uma busca lê só as fatias que casam. O nome de cada parte leva o hash do conteúdo (imutável): o worker baixa só as que faltam e nunca mistura versão velha com nova. Nenhuma tabela nova no banco principal: ele já tem pressão de espaço.
+3. **A base é um artefato construído, não um dado do produto.** `services/lista-fria-base/construir.py` baixa a base do mês, filtra, marca o que precisa e grava as partes e o manifesto. Roda por job agendado, uma vez por mês, e é idempotente.
 4. **Marcas calculadas na construção, para o worker não recalcular:**
    - `email_compartilhado`: o mesmo e-mail aparece em 6 ou mais CNPJs (contador provável). A busca descarta por padrão.
    - `matriz`: só a matriz entra por padrão, para uma empresa com várias filiais não virar vários contatos cobrados.

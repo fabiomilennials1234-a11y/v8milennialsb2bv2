@@ -1,9 +1,9 @@
 /**
  * `ConsultaCnpj` sobre o Parquet enxuto, com DuckDB (única dependência do worker, ADR-0043).
  *
- * O arquivo é ordenado por (uf, cnae, municipio), então os filtros de UF e CNAE leem só os grupos de
- * linhas que casam. O que é dado do usuário (UF, município, cursor) vai por parâmetro; os CNAEs só
- * entram como texto depois de validados como dígitos; o caminho do arquivo vem da configuração.
+ * A base são partes Parquet ordenadas em sequência por (uf, cnae, municipio), então os filtros de UF e
+ * CNAE leem só os grupos de linhas que casam, mesmo atravessando partes. O que é dado do usuário (UF, município, cursor) vai por parâmetro; os CNAEs só
+ * entram como texto depois de validados como dígitos; os caminhos das partes vêm do manifesto local.
  */
 import { DuckDBInstance } from "@duckdb/node-api";
 
@@ -19,7 +19,7 @@ const CONDICAO_DE_CONTATO: Record<ExigeContato, string> = {
 const literal = (s: string): string => `'${s.replaceAll("'", "''")}'`;
 
 /** SQL e parâmetros de uma página. Exportado para o teste conferir o que vai ao banco. */
-export function sqlDaBusca(arquivo: string, f: FiltrosCnpj, depois: string | null, limite: number): { sql: string; valores: Array<string | number> } {
+export function sqlDaBusca(arquivos: readonly string[], f: FiltrosCnpj, depois: string | null, limite: number): { sql: string; valores: Array<string | number> } {
   const cnaes = f.cnaes.map((c) => {
     if (!/^\d{2,7}$/.test(c)) throw new Error("CNAE inválido");
     return `cnae LIKE '${c}%'`;
@@ -40,7 +40,7 @@ export function sqlDaBusca(arquivo: string, f: FiltrosCnpj, depois: string | nul
     SELECT * FROM (
       SELECT cnpj, razao, fantasia, cnae, cnae_desc, uf, municipio, bairro, endereco, tel,
              CASE WHEN email_compartilhado THEN NULL ELSE email END AS email, porte, celular
-        FROM read_parquet(${literal(arquivo)})
+        FROM read_parquet([${arquivos.map(literal).join(", ")}])
        WHERE ${onde}
     ) WHERE ${CONDICAO_DE_CONTATO[f.contato]}
     ORDER BY cnpj
@@ -48,12 +48,12 @@ export function sqlDaBusca(arquivo: string, f: FiltrosCnpj, depois: string | nul
   return { sql, valores };
 }
 
-export async function consultaDuckdb(arquivo: string): Promise<ConsultaCnpj & { fechar(): void }> {
+export async function consultaDuckdb(arquivos: readonly string[]): Promise<ConsultaCnpj & { fechar(): void }> {
   const instancia = await DuckDBInstance.create(":memory:");
   const conexao = await instancia.connect();
   return {
     async buscar(filtros, depois, limite) {
-      const { sql, valores } = sqlDaBusca(arquivo, filtros, depois, limite);
+      const { sql, valores } = sqlDaBusca(arquivos, filtros, depois, limite);
       const leitor = await conexao.runAndReadAll(sql, valores);
       return leitor.getRowObjectsJson() as unknown as LinhaCnpj[];
     },

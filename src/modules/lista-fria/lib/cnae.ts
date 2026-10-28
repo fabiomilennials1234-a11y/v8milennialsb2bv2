@@ -3,7 +3,7 @@
  *
  * A lista oficial (1.359 subclasses, da Receita) fica em `data/cnaes.json` e só é baixada quando o
  * usuário abre a busca por CNAE. O alvo da busca é uma lista de PREFIXOS de 2 a 7 dígitos: "46" pega
- * o grupo todo, "4639701" um código só. ESPELHA `lista_fria_busca_criar` (migration 20271218000000):
+ * o grupo todo, "4639701" um código só. ESPELHA `lista_fria_busca_criar` (migration 20271219000000):
  * o banco decide; aqui só se avisa antes de gastar uma ida ao servidor.
  */
 

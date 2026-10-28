@@ -1,4 +1,4 @@
-// Lista Fria · fonte CNPJ — a migration 20271218000000 num Postgres real (PGlite).
+// Lista Fria · fonte CNPJ — a migration 20271219000000 num Postgres real (PGlite).
 //
 // Cobre o que mudou no banco: a busca de CNPJ (validação, normalização, reserva), a restrição que
 // liga cada fonte ao seu alvo, a entrega dos filtros ao worker e o rollback. O fluxo de créditos,

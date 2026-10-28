@@ -1,14 +1,17 @@
 /**
  * Validação MANUAL da fonte CNPJ contra o Parquet REAL (não roda no CI).
  *
- *   node services/lista-fria-worker/validar-contra-parquet.ts <arquivo.parquet> <cnaes,sep,virgula> <UF> [municipio] [creditos] [--contato=qualquer|email|telefone|ambos] [--mostrar]
- *   ex.: node services/lista-fria-worker/validar-contra-parquet.ts C:/dados/cnpj-enxuto.parquet 46 SP "SAO PAULO" 300
+ *   node services/lista-fria-worker/validar-contra-parquet.ts <pasta-das-partes|arquivo.parquet> <cnaes,sep,virgula> <UF> [municipio] [creditos] [--contato=qualquer|email|telefone|ambos] [--mostrar]
+ *   ex.: node services/lista-fria-worker/validar-contra-parquet.ts C:/dados/partes 46 SP "SAO PAULO" 300
  *
  * Roda o executor de verdade, a consulta DuckDB de verdade e a checagem de MX pela rede (DNS). Só o
  * banco é em memória. Mostra o rendimento: quantos candidatos viraram contato, a qualidade de cada um
  * e quantos e-mails têm domínio que recebe mensagens. E-mail e telefone saem mascarados, a menos que
  * se peça `--mostrar` (são dados de terceiros).
  */
+import { readdirSync, statSync } from "node:fs";
+import path from "node:path";
+
 import type { Banco, ItemParaRegistrar, Progresso } from "./src/db.ts";
 import { consultaDuckdb } from "./src/consulta-duckdb.ts";
 import { CFG_PADRAO, executarBusca, type Ambiente } from "./src/executor.ts";
@@ -65,7 +68,11 @@ const busca = {
   creditos_limite: creditos, creditos_usados: 0,
 };
 
-const consulta = await consultaDuckdb(arquivo);
+// Pasta = todas as partes (em ordem de nome, que é a ordem da base); arquivo = uma parte só.
+const partes = statSync(arquivo).isDirectory()
+  ? readdirSync(arquivo).filter((n) => /^cnpj-enxuto-\d{3}-[0-9a-f]{12}\.parquet$/.test(n)).sort().map((n) => path.join(arquivo, n))
+  : [arquivo];
+const consulta = await consultaDuckdb(partes);
 const inicio = Date.now();
 try {
   await executarBusca(busca, fonteCnpj(busca, consulta, CFG_CNPJ_PADRAO, amb.log), amb, { ...CFG_PADRAO, workerId: "validacao", pollMs: 1 });

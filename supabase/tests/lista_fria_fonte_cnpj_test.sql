@@ -1,6 +1,6 @@
 -- supabase/tests/lista_fria_fonte_cnpj_test.sql
 --
--- Lista Fria · fonte CNPJ (migration 20271218000000_lista_fria_fonte_cnpj.sql).
+-- Lista Fria · fonte CNPJ (migration 20271219000000_lista_fria_fonte_cnpj.sql).
 -- A LÓGICA (validação, normalização, reserva, restrições, rollback) é do teste de integração
 -- tests/integration/lista-fria-cnpj.test.mjs, num Postgres real (PGlite). Aqui fica o que só o
 -- banco real prova: as permissões da função recriada e a coluna nova atrás da RLS.

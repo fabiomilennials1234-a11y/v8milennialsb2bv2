@@ -1,11 +1,12 @@
 name: Lista fria · base de CNPJ
 
 # Reconstrói a base enxuta de CNPJ (ADR-0043) a partir da base aberta da Receita e publica no
-# Storage do Supabase (bucket privado lista-fria-base). O worker da Lista fria baixa sozinho quando o
+# Storage do Supabase (bucket privado lista-fria-base), em partes de até 50 MB. O worker da Lista fria baixa sozinho quando o
 # hash do manifesto muda. Idempotente: rodar duas vezes no mesmo mês publica o mesmo conteúdo.
 #
 # Precisa dos secrets do repositório SUPABASE_URL e SUPABASE_SERVICE_ROLE_KEY (produção).
 # NÃO foi exercitado no GitHub Actions ainda: o primeiro disparo manual é o teste (workflow_dispatch).
+# O construir.py e o publicar.py JÁ rodaram local contra produção em 28/10/2026 (14 partes, mês 2026-10).
 
 on:
   schedule:
@@ -56,7 +57,9 @@ jobs:
           m = json.load(open(os.environ["RUNNER_TEMP"] + "/base/manifesto.json"))
           # Um mês com menos de 5 milhões de linhas é base quebrada (o normal passa de 10 milhões).
           assert m["linhas"] > 5_000_000, f"base pequena demais: {m['linhas']}"
-          assert m["bytes"] > 100_000_000, f"arquivo pequeno demais: {m['bytes']}"
+          assert m["bytes"] > 100_000_000, f"base pequena demais em bytes: {m['bytes']}"
+          # O Storage recusa arquivo acima de 52.428.800 bytes; o construir.py já garante 50 MB por parte.
+          assert all(p["bytes"] <= 50_000_000 for p in m["arquivos"]), "parte acima do teto"
           PY
 
       - name: Publicar no Storage
