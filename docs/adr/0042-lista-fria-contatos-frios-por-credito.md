@@ -46,7 +46,13 @@ A marca só muda pelas RPCs (`BEFORE INSERT/UPDATE` com `app.lista_fria_rpc`), n
 
 **5. Execução fora do banco.** O banco é a fila (`lista_fria_worker_reivindicar` com `FOR UPDATE SKIP LOCKED`, heartbeat, recuperação de busca travada que devolve a reserva). Quem executa é um **worker em container**, fora das edge functions: coletar no Maps e ler sites passa do limite de tempo delas. O contrato do worker é só o conjunto de RPCs acima; trocar o provedor (gosom, Apify) não toca no banco. O worker do Maps está em `services/lista-fria-worker` (Node 24, sem dependências): lê o CSV **parcial** do gosom a cada 5 s e ingere só o que é novo, por isso "parar e ficar com o que achou" funciona. Contrato do gosom **medido na imagem real** (o spec que ela serve diverge da resposta: chaves maiúsculas, `lang` ISO curto); detalhes no README do worker.
 
-**6. Leitura de site e IA são cercadas.** O endereço do site vem do Maps (texto de terceiro) e o worker tem a chave de serviço no ambiente: a leitura valida o IP na conexão, só 80/443, redirecionamento à mão, corpo e tempo limitados (`ssrf.ts`). A API do gosom não tem autenticação e nunca é publicada. Título e categoria do Maps entram na IA como dado, com saída forçada por ferramenta; IA fora do ar nunca derruba nem decide gasto.
+**6. Instagram via Apify, Actor `data-slayer/instagram-followers-scraper---no-login` (modo enriched).** Único dos avaliados que devolve o contato publicado no perfil (e-mail comercial, e-mail da bio, telefone, links); o Actor oficial da Apify declara que não extrai e-mail nem telefone. Só dado público, sem login. A execução é abortada ao atingir o limite de créditos, e `maxTotalChargeUsd` limita o gasto nosso por busca. O Actor cobra por seguidor processado (US$ 0,012), o cliente por contato válido: o preço do crédito tem de cobrir o rendimento real, que ainda não foi medido.
+
+**Medido (28/10, Apify real):** o acesso sem login do Instagram entrega só a **primeira página (~50) de seguidores** por conta-alvo; dois Actors diferentes bateram no mesmo teto. Rendimento de contato válido: 21,6% numa conta de nicho de negócios (US$ 0,055 por contato) e 2% numa conta generalista (US$ 0,53). Uma busca de Instagram por Apify rende no máximo ~10 contatos. Isso pesa mais que o custo na decisão de produto: volume exige várias contas-alvo por busca ou login real.
+
+**7. Instagram com login real, como segundo provedor (sem custo em dólar).** Decisão do CTO em 28/10 de tentar uma abordagem sem custo de Apify. Serviço Python separado (`services/instagram-coletor`, biblioteca `instagrapi` fixada) com contas dedicadas de Instagram. As credenciais ficam só no volume do serviço (nunca no banco nem no worker; `sessionid` preferível a senha); o worker o consulta pela mesma interface da Apify. Trade-off aceito: troca-se dinheiro por **risco de conta** (viola os termos da Meta; a conta cai) e por **ritmo** (uma requisição por perfil: cerca de 2 h por 800 contas, estimativa de projeto). Proteções: pausa aleatória e pausa longa, teto diário por conta, sessão reutilizada, **parada ao primeiro checkpoint sem tentar outra conta**, cooldown por sinal brando, prazo por chamada, handlers interativos da biblioteca desligados. Seguidores de Instagram são majoritariamente pessoas físicas: o risco de LGPD é maior que o de dado de empresa. **Não foi exercitado contra o Instagram real** (sem conta no ambiente de desenvolvimento).
+
+**8. Leitura de site e IA são cercadas.** O endereço do site vem do Maps (texto de terceiro) e o worker tem a chave de serviço no ambiente: a leitura valida o IP na conexão, só 80/443, redirecionamento à mão, corpo e tempo limitados (`ssrf.ts`). A API do gosom não tem autenticação e nunca é publicada. Título e categoria do Maps entram na IA como dado, com saída forçada por ferramenta; IA fora do ar nunca derruba nem decide gasto.
 
 ## Consequences
 
@@ -58,7 +64,7 @@ A marca só muda pelas RPCs (`BEFORE INSERT/UPDATE` com `app.lista_fria_rpc`), n
 
 ## Fora desta entrega
 
-- O adaptador do Instagram (o worker fecha a busca como `instagram_indisponivel` e devolve a reserva).
+- **Instagram em produção:** o adaptador (Apify) está escrito e testado contra o contrato documentado, mas falta uma execução real com `APIFY_TOKEN` (`validar-contra-apify.ts`). Sem o token, o worker fecha a busca como `instagram_indisponivel` e devolve a reserva. Custo por contato válido ainda não medido: o Actor cobra por seguidor processado.
 - Checar se o número tem WhatsApp (exige instância conectada da própria org). "Verificado" hoje é formato válido / MX.
 - Cobertura por grade de coordenadas; hoje a cidade é coberta por sinônimos e bairros que a IA sugere.
 - A IA do worker só foi exercitada com `fetch` falso, não contra a API da Anthropic.

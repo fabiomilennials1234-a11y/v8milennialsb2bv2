@@ -1,0 +1,137 @@
+/**
+ * Fonte Instagram: seguidores de uma conta pública, com o contato que cada perfil
+ * publica, via Actor da Apify. Plugada no mesmo `executarBusca` do Maps.
+ *
+ * Custo: o Actor cobra por SEGUIDOR PROCESSADO (modo enriched), não por contato
+ * achado. O cliente paga por contato novo e válido. A distância entre as duas
+ * contas é o rendimento da conta alvo, que ninguém sabe de antemão. Dois freios
+ * limitam o gasto nosso por busca, e o preço do crédito tem de cobrir o pior caso:
+ *   - `maxSeguidores`: quantas contas processar, no máximo;
+ *   - `maxTotalChargeUsd` na Apify: ela mesma aborta ao chegar nesse valor.
+ */
+import type { Execucao, EstadoDaExecucao } from "./apify.ts";
+import { execucaoTerminou } from "./apify.ts";
+import type { BuscaDaFila } from "./db.ts";
+import type { Fonte, Leitura } from "./executor.ts";
+import { clamp } from "./executor.ts";
+import { CONTAS_POR_PAGINA, candidatoDoItem } from "./instagram.ts";
+
+export interface ApifyApi {
+  iniciar(actorId: string, input: Record<string, unknown>, opcoes: { maxTotalChargeUsd: number; timeoutS: number }): Promise<Execucao>;
+  execucao(runId: string): Promise<EstadoDaExecucao | null>;
+  itens(datasetId: string, offset: number, limit: number): Promise<Array<Record<string, unknown>>>;
+  abortar(runId: string): Promise<void>;
+}
+
+export interface CfgInstagram {
+  actorId: string;
+  /** Preço por seguidor enriquecido (US$). Tabela da Apify no plano FREE em 27/10/2026: 0,012. */
+  precoPorSeguidorUsd: number;
+  /** Teto de gasto por busca (US$), sempre. */
+  maxUsdPorBusca: number;
+  /** Teto de contas processadas por busca. */
+  maxSeguidores: number;
+  /** Quantas contas processar por crédito pedido (rendimento presumido). */
+  contasPorCredito: number;
+  /**
+   * Coletor com login real: o tempo é o ritmo da conta (pausa entre perfis), não a velocidade do
+   * provedor. Define o prazo da busca como contas × segundos. Sem isto vale a conta da Apify.
+   */
+  segundosPorConta?: number;
+}
+
+/** Coletor com login real: sem custo em dólar, limitado pelo ritmo e pelas contas. */
+export const CFG_INSTAGRAM_SESSAO_PADRAO: Omit<CfgInstagram, "actorId"> = {
+  precoPorSeguidorUsd: 0,
+  maxUsdPorBusca: 0,
+  maxSeguidores: 800,
+  contasPorCredito: 8,
+  segundosPorConta: 9,
+};
+
+export const CFG_INSTAGRAM_PADRAO: Omit<CfgInstagram, "actorId"> = {
+  precoPorSeguidorUsd: 0.012,
+  maxUsdPorBusca: 25,
+  // MEDIDO na Apify real em 28/10/2026: o acesso SEM LOGIN devolve só a PRIMEIRA PÁGINA de seguidores
+  // (~50) por conta-alvo. O Actor data-slayer pediu 3 páginas e parou em "No more pages available"
+  // (51 itens); o thenetaji, pedindo 200, entregou 50. Pedir mais só alonga o prazo e promete o que
+  // não vem. Para ir mais fundo é preciso login (coletor com conta real) ou várias contas-alvo.
+  maxSeguidores: 50,
+  contasPorCredito: 8,
+  // MEDIDO na Apify real em 28/10/2026: 45 itens em 216 s (4,8 s por conta) numa conta, 10 itens em
+  // 300 s (30 s por conta) em outra. Prazo curto demais mata a execução no meio (TIMED-OUT) e
+  // subestima o rendimento; 12 s por conta é folga para o caso comum, e o freio de gasto
+  // (maxTotalChargeUsd) é quem limita o custo, não o relógio.
+  segundosPorConta: 12,
+};
+
+const PAGINA_DO_DATASET = 500;
+
+export function planoDaBusca(creditos: number, cfg: CfgInstagram) {
+  const maxItems = clamp(creditos * cfg.contasPorCredito, CONTAS_POR_PAGINA, cfg.maxSeguidores);
+  const maxPages = Math.ceil(maxItems / CONTAS_POR_PAGINA);
+  // 15% de folga sobre o preço de tabela (add-ons, arredondamento); nunca acima do teto.
+  const maxTotalChargeUsd = Math.min(cfg.maxUsdPorBusca, Number((maxItems * cfg.precoPorSeguidorUsd * 1.15 + 0.01).toFixed(4)));
+  const timeoutS = cfg.segundosPorConta
+    ? clamp(maxItems * cfg.segundosPorConta, 300, 6 * 3_600)
+    : clamp(maxPages * 45, 300, 3_600);
+  return { maxItems, maxPages, maxTotalChargeUsd, timeoutS };
+}
+
+export function fonteInstagram(
+  busca: BuscaDaFila,
+  api: ApifyApi,
+  cfg: CfgInstagram,
+  log: (evento: string, dados?: Record<string, unknown>) => void,
+): Fonte {
+  let datasetId = "";
+  let offset = 0;
+  let terminal = false;
+
+  return {
+    nicho: null,
+    async iniciar() {
+      const handle = busca.instagram_handle;
+      if (!handle) throw new Error("busca de Instagram sem @");
+      const plano = planoDaBusca(busca.creditos_limite, cfg);
+      const exec = await api.iniciar(
+        cfg.actorId,
+        { username: handle, mode: "enriched", maxPages: plano.maxPages, maxItems: plano.maxItems },
+        { maxTotalChargeUsd: plano.maxTotalChargeUsd, timeoutS: plano.timeoutS },
+      );
+      datasetId = exec.datasetId;
+      log("busca_iniciada", { busca: busca.id, fonte: "instagram", runId: exec.runId, ...plano, limite: busca.creditos_limite });
+      return { id: exec.runId, maxTimeS: plano.timeoutS };
+    },
+
+    async ler(runId): Promise<Leitura> {
+      // Status ANTES dos itens: se a execução já terminou, os itens lidos em seguida são todos.
+      const estado = await api.execucao(runId);
+      const terminou = estado === null || execucaoTerminou(estado.status);
+      const linhas = [];
+      for (;;) {
+        const itens = await api.itens(datasetId, offset, PAGINA_DO_DATASET);
+        offset += itens.length;
+        for (const item of itens) {
+          const c = candidatoDoItem(item);
+          if (c) linhas.push(c);
+        }
+        if (itens.length < PAGINA_DO_DATASET) break;
+      }
+      if (terminou && estado) {
+        terminal = true;
+        log("apify_encerrada", { busca: busca.id, status: estado.status, gastoUsd: estado.gastoUsd });
+      }
+      return { linhas, terminou, falhou: estado === null || estado.status !== "SUCCEEDED" };
+    },
+
+    async encerrar(runId) {
+      if (terminal) return;
+      try {
+        await api.abortar(runId);
+      } catch (e) {
+        log("apify_abortar_falhou", { busca: busca.id, erro: String(e) });
+      }
+    },
+  };
+}

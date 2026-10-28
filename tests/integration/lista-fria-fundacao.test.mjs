@@ -237,12 +237,17 @@ test('importação em lotes: a RPC diz quantos faltam; corrida com lead novo vir
 
     await as(db, U_LIBERADO);
     const a = (await one(db, `SELECT lista_fria_importar('${b}', 2) AS r`)).r;
-    assert.deepEqual(a, { importados: 2, ja_eram_leads: 0, restantes: 3 });
+    // Os 5 resultados nascem na mesma transação: quem cai em qual lote depende do desempate
+    // por UUID. O que não depende da ordem: cada lote consome 2, e o total fecha.
+    assert.equal(a.importados + a.ja_eram_leads, 2);
+    assert.equal(a.restantes, 3);
     const c = (await one(db, `SELECT lista_fria_importar('${b}', 2) AS r`)).r;
     assert.equal(c.importados + c.ja_eram_leads, 2);
     assert.equal(c.restantes, 1);
     const d = (await one(db, `SELECT lista_fria_importar('${b}', 2) AS r`)).r;
     assert.equal(d.restantes, 0);
+    assert.equal(a.importados + c.importados + d.importados, 4, 'quatro viram lead');
+    assert.equal(a.ja_eram_leads + c.ja_eram_leads + d.ja_eram_leads, 1, 'e o que chegou pelo WhatsApp conta como já-é-lead, em qualquer lote');
     await asPostgres(db);
     assert.equal(await val(db, `SELECT count(*)::int FROM leads WHERE lista_fria_busca_id = '${b}'`), 4);
     assert.equal(await val(db, `SELECT ja_e_lead FROM lista_fria_resultados WHERE ref_externa = 'p3'`), true);
