@@ -1,4 +1,4 @@
--- Rollback de 20271217000000_lead_documents_multiplos_cnpj.sql
+-- Rollback de 20271217000001_lead_documents_multiplos_cnpj.sql
 --
 -- Volta `lead_documents` para 1 documento por lead e `set_lead_document` para o
 -- corpo de 20271110000000.
