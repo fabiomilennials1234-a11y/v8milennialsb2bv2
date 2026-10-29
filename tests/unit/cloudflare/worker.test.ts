@@ -413,3 +413,9 @@ describe("API e log", () => {
     expect(String(logSpy.mock.calls[0]![0])).not.toContain("token");
   });
 });
+
+ it("allows same-origin geolocation in the app but keeps landing pages blocked", async () => {
+   expect((await call("/")).headers.get("Permissions-Policy")).toBe("geolocation=(self), payment=()");
+   expect((await call("/chat")).headers.get("Permissions-Policy")).toBe("geolocation=(self), payment=()");
+   expect((await call("/lp/v1/")).headers.get("Permissions-Policy")).toBe("geolocation=(), payment=()");
+ });
