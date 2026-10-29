@@ -14,7 +14,7 @@ import { createRequire } from 'node:module';
 import { pathToFileURL } from 'node:url';
 
 import {
-  CFG_CNPJ_PADRAO, candidatoDaLinha, filtrosDaBusca, fonteCnpj, municipioNormalizado, planoDaBuscaCnpj,
+  CFG_CNPJ_PADRAO, candidatoDaLinha, filtrosDaBusca, fonteCnpj, municipioNormalizado, planoDaBuscaCnpj, tamanhoDoLote,
 } from '../../services/lista-fria-worker/src/fonte-cnpj.ts';
 import { CFG_PADRAO, executarBusca } from '../../services/lista-fria-worker/src/executor.ts';
 import { VERSAO_LAYOUT, baseLocal, sincronizarBase } from '../../services/lista-fria-worker/src/base-cnpj.ts';
@@ -49,6 +49,23 @@ describe('filtros da busca', () => {
     assert.deepEqual(planoDaBuscaCnpj(1, CFG_CNPJ_PADRAO), { maxLinhas: 250, maxTimeS: 300 });
     assert.deepEqual(planoDaBuscaCnpj(1_000, CFG_CNPJ_PADRAO), { maxLinhas: 20_000, maxTimeS: 1_000 });
     assert.equal(planoDaBuscaCnpj(100_000, CFG_CNPJ_PADRAO).maxTimeS, 7_200);
+  });
+});
+
+describe('tamanho do lote (ajustado ao saldo)', () => {
+  test('sem saber o saldo, o teto; sabendo, só o que ele pede com folga, entre o piso e o teto', () => {
+    assert.equal(tamanhoDoLote(undefined, CFG_CNPJ_PADRAO), 250);
+    assert.equal(tamanhoDoLote(10, CFG_CNPJ_PADRAO), 20, '10 créditos × 2 = 20');
+    assert.equal(tamanhoDoLote(3, CFG_CNPJ_PADRAO), 20, 'nunca abaixo do piso');
+    assert.equal(tamanhoDoLote(0, CFG_CNPJ_PADRAO), 20);
+    assert.equal(tamanhoDoLote(100, CFG_CNPJ_PADRAO), 200);
+    assert.equal(tamanhoDoLote(125, CFG_CNPJ_PADRAO), 250);
+    assert.equal(tamanhoDoLote(100_000, CFG_CNPJ_PADRAO), 250, 'nunca acima do teto');
+    assert.equal(tamanhoDoLote(7.2, { ...CFG_CNPJ_PADRAO, folga: 3 }), 22, 'arredonda para cima');
+  });
+
+  test('o teto manda mesmo quando menor que o piso (configuração de teste)', () => {
+    assert.equal(tamanhoDoLote(10, { ...CFG_CNPJ_PADRAO, pagina: 5 }), 5);
   });
 });
 
@@ -122,6 +139,20 @@ describe('fonteCnpj', () => {
     assert.equal((await f.ler('b1')).terminou, true, '100 linhas lidas >= teto de max(pagina, 1 × 1)');
   });
 
+  test('lê só o que o saldo restante pede, e a página curta é medida contra o lote pedido (não contra o teto)', async () => {
+    const consulta = consultaDe(Array.from({ length: 30 }, (_, i) => linha(i + 1)));
+    const f = fonteCnpj(busca({ creditos_limite: 10 }), consulta, CFG_CNPJ_PADRAO, log);
+    await f.iniciar();
+    const a = await f.ler('b1', { restantes: 10 });
+    assert.equal(consulta.chamadas[0].limite, 20);
+    assert.equal(a.linhas.length, 20);
+    assert.equal(a.terminou, false, '20 linhas de 20 pedidas: a base ainda tem mais');
+    const b = await f.ler('b1', { restantes: 4 });
+    assert.equal(consulta.chamadas[1].limite, 20, 'piso');
+    assert.equal(b.linhas.length, 10, 'só sobravam 10 linhas na base');
+    assert.equal(b.terminou, true, '10 de 20 pedidas: acabou o alvo');
+  });
+
   test('busca sem filtros válidos falha ao iniciar', async () => {
     const f = fonteCnpj(busca({ filtros: null }), consultaDe([]), CFG_CNPJ_PADRAO, log);
     await assert.rejects(f.iniciar(), /sem filtros/);
@@ -178,6 +209,31 @@ describe('fluxo completo pelo executor', () => {
     await executarBusca(b, fonteCnpj(b, consulta(todas), CFG_CNPJ_PADRAO, () => {}), ambiente(m.banco, async () => false), { ...CFG_PADRAO, workerId: 'w', pollMs: 1 });
     assert.deepEqual(m.reg.registrados.map((r) => r.qualidade), ['verificado', 'nao_verificado', 'email_invalido']);
     assert.deepEqual(m.reg.encerrar, [['concluida', null]]);
+  });
+
+  test('o executor informa os créditos que faltam a cada volta, e a busca de 10 créditos lê 20 linhas, não 250', async () => {
+    const m = bancoMemoria(10);
+    const b = busca({ creditos_limite: 10 });
+    const limites = [];
+    const todas = Array.from({ length: 500 }, (_, i) => linha(i + 1));
+    const consultaRegistrando = { buscar: async (f, depois, limite) => { limites.push(limite); return todas.filter((l) => !depois || l.cnpj > depois).slice(0, limite); } };
+    await executarBusca(b, fonteCnpj(b, consultaRegistrando, CFG_CNPJ_PADRAO, () => {}), ambiente(m.banco), { ...CFG_PADRAO, workerId: 'w', pollMs: 1 });
+    assert.deepEqual(limites, [20], 'uma leitura de 20 linhas bastou para os 10 créditos');
+    assert.equal(m.reg.registrados.length, 10);
+    assert.deepEqual(m.reg.encerrar, [['parada', null]]);
+    assert.ok(m.reg.progressos.at(-1).encontrados <= 20, 'analisou 20, não 243');
+  });
+
+  test('com perda de contatos, lê mais um lote, medido pelo que falta', async () => {
+    const m = bancoMemoria(10);
+    const b = busca({ creditos_limite: 10 });
+    const limites = [];
+    // As 20 primeiras linhas repartem 4 e-mails: o dedupe da fonte deixa 4 candidatos. As seguintes são todas boas.
+    const todas = Array.from({ length: 200 }, (_, i) => linha(i + 1, i < 20 ? { email: `dono${i % 4}@x.com`, tel: `1190000${String(i % 4).padStart(4, '0')}` } : {}));
+    const consultaRegistrando = { buscar: async (f, depois, limite) => { limites.push(limite); return todas.filter((l) => !depois || l.cnpj > depois).slice(0, limite); } };
+    await executarBusca(b, fonteCnpj(b, consultaRegistrando, CFG_CNPJ_PADRAO, () => {}), ambiente(m.banco), { ...CFG_PADRAO, workerId: 'w', pollMs: 1 });
+    assert.deepEqual(limites, [20, 20], 'faltavam 6 créditos depois da 1ª leitura: 6 × 2 = 12 fica abaixo do piso de 20, e o piso vale');
+    assert.equal(m.reg.registrados.length, 10);
   });
 
   test('base vazia para o alvo conclui sem erro e sem cobrar', async () => {

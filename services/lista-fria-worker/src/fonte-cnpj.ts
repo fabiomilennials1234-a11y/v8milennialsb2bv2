@@ -10,7 +10,7 @@
  * no meio de uma busca, e sem reler o que já passou.
  */
 import type { BuscaDaFila } from "./db.ts";
-import type { Candidato, Fonte, Leitura } from "./executor.ts";
+import type { Candidato, ContextoDeLeitura, Fonte, Leitura } from "./executor.ts";
 import { clamp } from "./executor.ts";
 
 export type ExigeContato = "qualquer" | "email" | "telefone" | "ambos";
@@ -47,8 +47,18 @@ export interface ConsultaCnpj {
 }
 
 export interface CfgCnpj {
-  /** Linhas por leitura (cada leitura vira um lote para o executor). */
+  /** Teto de linhas por leitura (cada leitura vira um lote para o executor). */
   pagina: number;
+  /**
+   * Piso de linhas por leitura. Cada leitura custa uma volta do executor (e a espera entre voltas), então um
+   * lote minúsculo, que se esgota em perdas de contato, alongaria a busca à toa.
+   */
+  paginaMinima: number;
+  /**
+   * Linhas lidas por crédito que ainda falta. Nem toda linha vira contato (e-mail repetido, sem MX, já é lead):
+   * 2 dá folga para perder metade sem precisar de uma segunda volta.
+   */
+  folga: number;
   /** Quantas linhas varrer por crédito pedido, no máximo: o rendimento presumido pior. */
   varreduraPorCredito: number;
   /** Segundos por crédito para o prazo da busca (a checagem de MX é o que custa tempo). */
@@ -57,6 +67,8 @@ export interface CfgCnpj {
 
 export const CFG_CNPJ_PADRAO: CfgCnpj = {
   pagina: 250,
+  paginaMinima: 20,
+  folga: 2,
   varreduraPorCredito: 20,
   segundosPorCredito: 1,
 };
@@ -111,6 +123,16 @@ export function candidatoDaLinha(l: LinhaCnpj): Candidato | null {
   };
 }
 
+/**
+ * Quantas linhas ler agora. Sem saber o que falta (`restantes` ausente), o teto. Sabendo, só o que o saldo
+ * pede com folga, nunca menos que o piso nem mais que o teto: uma busca de 10 créditos lê 20 linhas, e não
+ * 250 para entregar 10 (o resto era checagem de e-mail jogada fora).
+ */
+export function tamanhoDoLote(restantes: number | undefined, cfg: CfgCnpj): number {
+  if (restantes === undefined) return cfg.pagina;
+  return Math.min(cfg.pagina, Math.max(cfg.paginaMinima, Math.ceil(restantes * cfg.folga)));
+}
+
 export function planoDaBuscaCnpj(creditos: number, cfg: CfgCnpj) {
   return {
     maxLinhas: Math.max(cfg.pagina, creditos * cfg.varreduraPorCredito),
@@ -141,8 +163,9 @@ export function fonteCnpj(
       return { id: busca.id, maxTimeS: plano.maxTimeS };
     },
 
-    async ler(): Promise<Leitura> {
-      const linhas = await consulta.buscar(filtros, cursor, cfg.pagina);
+    async ler(_id?: string, ctx?: ContextoDeLeitura): Promise<Leitura> {
+      const quanto = tamanhoDoLote(ctx?.restantes, cfg);
+      const linhas = await consulta.buscar(filtros, cursor, quanto);
       if (linhas.length > 0) cursor = linhas[linhas.length - 1].cnpj;
       lidas += linhas.length;
 
@@ -159,7 +182,7 @@ export function fonteCnpj(
       }
 
       // Acabou a base para esse alvo, ou a varredura passou do que vale gastar.
-      const esgotou = linhas.length < cfg.pagina;
+      const esgotou = linhas.length < quanto;
       const limite = lidas >= plano.maxLinhas;
       if (esgotou || limite) log("cnpj_varredura_fim", { busca: busca.id, lidas, esgotou, limite });
       return { linhas: candidatos, terminou: esgotou || limite, falhou: false };
