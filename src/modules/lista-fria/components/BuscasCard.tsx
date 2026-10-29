@@ -15,6 +15,7 @@ import { cn } from "@/lib/utils";
 
 import { usePararBusca } from "../hooks/useListaFriaMutacoes";
 import { useBuscas, useSaldos } from "../hooks/useListaFriaDados";
+import { BotaoComprarCreditos } from "./BotaoComprarCreditos";
 import { recusaDaListaFria } from "../lib/erros";
 import {
   ETAPAS_DA_BUSCA,
@@ -173,6 +174,7 @@ export function BuscasCard({ podeEditar }: { podeEditar: boolean }) {
               <b className="text-sm tabular-nums text-primary">{numero(saldos.meta)}</b> Meta
             </>
           )}
+          {podeEditar && <BotaoComprarCreditos />}
         </p>
       </header>
       {isLoading ? (
