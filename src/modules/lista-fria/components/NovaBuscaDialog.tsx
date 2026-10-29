@@ -18,7 +18,7 @@ import { cn } from "@/lib/utils";
 import { useCriarBusca, type AlvoDaBusca } from "../hooks/useListaFriaMutacoes";
 import { extrairHandleDoInstagram } from "../lib/instagram";
 import { recusaDaListaFria } from "../lib/erros";
-import { CONTATOS_EXIGIDOS, INSTAGRAM_DISPONIVEL, ROTULO_CONTATO, type ContatoExigido } from "../lib/tipos";
+import { CONTATOS_EXIGIDOS, INSTAGRAM_DISPONIVEL, ROTULO_CONTATO, ROTULO_CREDITO, type ContatoExigido, type Saldos, type TipoDeCredito } from "../lib/tipos";
 import { SeletorDeCnae } from "./SeletorDeCnae";
 
 type Passo = "fonte" | "instagram" | "maps" | "cnpj";
@@ -26,6 +26,8 @@ type Passo = "fonte" | "instagram" | "maps" | "cnpj";
 const UFS = ["AC", "AL", "AP", "AM", "BA", "CE", "DF", "ES", "GO", "MA", "MT", "MS", "MG", "PA", "PB", "PR", "PE", "PI", "RJ", "RN", "RS", "RO", "RR", "SC", "SP", "SE", "TO"] as const;
 
 const CREDITOS_SUGERIDOS = 500;
+// Instagram sem login traz ~50 seguidores por conta (≈10 contatos): mais que isso só reserva saldo à toa.
+const CREDITOS_SUGERIDOS_META = 10;
 
 
 function InstagramIcone({ className }: { className?: string }) {
@@ -76,12 +78,12 @@ function CartaoDeFonte({
 export function NovaBuscaDialog({
   aberto,
   onFechar,
-  saldo,
+  saldos,
 }: {
   aberto: boolean;
   onFechar: () => void;
-  /** Créditos disponíveis. `undefined` enquanto carrega. */
-  saldo: number | undefined;
+  /** Os dois saldos (normal e Meta). `undefined` enquanto carrega. */
+  saldos: Saldos | undefined;
 }) {
   const criar = useCriarBusca();
   const [passo, setPasso] = useState<Passo>("fonte");
@@ -104,13 +106,23 @@ export function NovaBuscaDialog({
     setUf("");
     setMunicipio("");
     setContato("qualquer");
-    setCreditos(Math.max(1, Math.min(CREDITOS_SUGERIDOS, saldo ?? CREDITOS_SUGERIDOS)));
+    setCreditos(Math.max(1, Math.min(CREDITOS_SUGERIDOS, saldos?.normal ?? CREDITOS_SUGERIDOS)));
     // Só reinicia ao abrir: o saldo muda com a busca em andamento e não pode apagar o que o usuário digitou.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [aberto]);
 
   const handle = useMemo(() => (url.trim() ? extrairHandleDoInstagram(url) : null), [url]);
-  const disponivel = saldo ?? 0;
+  // Instagram gasta do saldo Meta; Maps e CNPJ, do normal. O banco decide; aqui só se mostra o saldo certo.
+  const tipo: TipoDeCredito = passo === "instagram" ? "meta" : "normal";
+  const disponivel = saldos?.[tipo] ?? 0;
+
+  useEffect(() => {
+    if (passo === "fonte") return;
+    const sugerido = passo === "instagram" ? CREDITOS_SUGERIDOS_META : CREDITOS_SUGERIDOS;
+    setCreditos(Math.max(1, Math.min(sugerido, saldos?.[passo === "instagram" ? "meta" : "normal"] ?? sugerido)));
+    // Só ao trocar de fonte: o saldo muda com a busca em andamento e não pode apagar o que o usuário digitou.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [passo]);
   const creditosOk = Number.isInteger(creditos) && creditos >= 1 && creditos <= disponivel;
   const municipioOk = municipio.trim() === "" || (municipio.trim().length >= 2 && municipio.trim().length <= 80);
   const alvoOk =
@@ -150,7 +162,7 @@ export function NovaBuscaDialog({
 
   const campoDeCreditos = (
     <div className="space-y-2">
-      <Label htmlFor="lf-creditos">Créditos para esta busca</Label>
+      <Label htmlFor="lf-creditos">{tipo === "meta" ? "Créditos Meta para esta busca" : "Créditos para esta busca"}</Label>
       <div className="grid items-center gap-3 sm:grid-cols-[9.5rem_1fr]">
         <div className="relative">
           <Input
@@ -161,10 +173,10 @@ export function NovaBuscaDialog({
             max={disponivel || undefined}
             value={Number.isFinite(creditos) ? creditos : ""}
             onChange={(e) => setCreditos(e.target.value === "" ? Number.NaN : Number(e.target.value))}
-            className="pr-16 font-bold tabular-nums"
+            className="pr-28 font-bold tabular-nums"
             aria-invalid={!creditosOk}
           />
-          <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">créditos</span>
+          <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">{ROTULO_CREDITO[tipo]}</span>
         </div>
         <p className="text-xs leading-relaxed text-muted-foreground">
           {creditosOk ? (
@@ -218,8 +230,9 @@ export function NovaBuscaDialog({
             <p className="flex items-center gap-2 text-[13px] text-muted-foreground">
               <Zap className="size-4" aria-hidden />
               <span>
-                <b className="tabular-nums text-primary">{saldo === undefined ? "·" : saldo} créditos</b> disponíveis · 1 crédito
-                por contato novo e válido
+                <b className="tabular-nums text-primary">{saldos === undefined ? "·" : saldos.normal} créditos</b> e{" "}
+                <b className="tabular-nums text-primary">{saldos === undefined ? "·" : saldos.meta} créditos Meta</b> disponíveis · 1
+                crédito por contato novo e válido (Instagram usa os créditos Meta)
               </span>
             </p>
           </>

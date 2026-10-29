@@ -117,7 +117,7 @@ import { useLeadOwnersEnabled } from "../hooks/useLeadOwners";
 import { normalizarAbaCafeJurere } from "../lib/cafe-jurere-classificacao";
 import { useOrgUsaLeiDoErp } from "../hooks/useOrgUsaLeiDoErp";
 import { useSearchParams } from "react-router-dom";
-import { BuscasCard, NovaBuscaDialog, useListaFriaAcesso, useSaldoDeCreditos } from "@/modules/lista-fria";
+import { BuscasCard, NovaBuscaDialog, useListaFriaAcesso, useSaldos } from "@/modules/lista-fria";
 import { ABA_LISTA_FRIA } from "../lib/lead-list-filters";
 import { useCurrentTeamMember, useResponsibleMembers } from "@/modules/identity";
 import { usePipeOps } from "../pipe-ops";
@@ -266,7 +266,7 @@ function LeadsInner() {
   // (flag) separa os leads da seção das demais abas; a aba só aparece para quem
   // tem `lista_fria.view`.
   const { habilitada: usaListaFria, podeVer: podeVerListaFria, podeEditar: podeEditarListaFria, carregando: carregandoListaFria } = useListaFriaAcesso();
-  const { data: saldoListaFria } = useSaldoDeCreditos({ enabled: podeVerListaFria });
+  const { data: saldosListaFria } = useSaldos({ enabled: podeVerListaFria });
   const [novaBuscaAberta, setNovaBuscaAberta] = useState(false);
   const abaSalvaBruta = filterState.filterClassificacao ?? CLASSIFICACAO_TODAS;
   // Aba salva de quando a flag estava ligada (ou link antigo): sem acesso, volta para Todos.
@@ -1191,7 +1191,7 @@ function LeadsInner() {
 
       <ImportLeadsModal open={isImportModalOpen} onOpenChange={setIsImportModalOpen} />
 
-      <NovaBuscaDialog aberto={novaBuscaAberta} onFechar={() => setNovaBuscaAberta(false)} saldo={saldoListaFria} />
+      <NovaBuscaDialog aberto={novaBuscaAberta} onFechar={() => setNovaBuscaAberta(false)} saldos={saldosListaFria} />
 
       <ExportLeadsModal
         open={isExportModalOpen}

@@ -12,7 +12,10 @@ import { supabase } from "@/integrations/supabase/client";
 import type { Json } from "@/integrations/supabase/types";
 
 export interface FuncoesDaListaFria {
+  /** Saldo NORMAL (Maps, CNPJ). Mantida: o front publicado antes dos dois saldos lê só esta. */
   lista_fria_saldo: { Args: { p_org: string }; Returns: number };
+  /** { normal, meta }: os dois saldos (ADR-0044). */
+  lista_fria_saldos: { Args: { p_org: string }; Returns: Json };
   lista_fria_busca_criar: {
     Args: { p_org: string; p_fonte: string; p_params: Json; p_creditos: number };
     Returns: string;

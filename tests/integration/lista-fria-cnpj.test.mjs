@@ -6,7 +6,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  ROLLBACK_CNPJ, TORQUE, U_ADMIN, read, setup, as, asWorker, asPostgres, one, val, maps, criarBusca, comSaldo,
+  ROLLBACK_CNPJ, ROLLBACK_META, TORQUE, U_ADMIN, read, setup, as, asWorker, asPostgres, one, val, maps, criarBusca, comSaldo,
 } from './helpers/lista-fria-db.mjs';
 
 const cnpj = { cnaes: ['4639'], uf: 'SP' };
@@ -92,6 +92,7 @@ test('Maps e Instagram seguem criando busca sem filtros', async () => {
   const db = await setup();
   try {
     await comSaldo(db, 100);
+    await comSaldo(db, 50, 'meta');
     await as(db, U_ADMIN);
     const m = await criarBusca(db, 'maps', maps, 5);
     const i = await criarBusca(db, 'instagram', { url: 'https://www.instagram.com/clinica/' }, 5);
@@ -125,6 +126,7 @@ test('rollback: recusa com busca de CNPJ; sem ela, devolve as duas fontes antiga
     await as(db, U_ADMIN);
     await criarBusca(db, 'cnpj', cnpj, 10);
     await asPostgres(db);
+    await db.exec(read(ROLLBACK_META)); // empilhadas: a de créditos Meta sai antes da de CNPJ
     await assert.rejects(db.exec(read(ROLLBACK_CNPJ)), /Há buscas de CNPJ/);
     await db.exec('ROLLBACK'); // o script abre BEGIN; ao recusar, a transação fica aberta
     await db.query(`DELETE FROM lista_fria_buscas WHERE fonte = 'cnpj'`);

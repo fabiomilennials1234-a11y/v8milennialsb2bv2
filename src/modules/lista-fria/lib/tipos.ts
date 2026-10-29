@@ -20,6 +20,29 @@ export const ROTULO_FONTE: Record<FonteDaBusca, string> = {
   cnpj: "CNPJ por CNAE",
 };
 
+/** Saldo a que um crédito pertence. Instagram gasta crédito Meta; Maps e CNPJ, crédito normal (ADR-0044). */
+export type TipoDeCredito = "normal" | "meta";
+
+export interface Saldos {
+  normal: number;
+  meta: number;
+}
+
+export const ROTULO_CREDITO: Record<TipoDeCredito, string> = {
+  normal: "créditos",
+  meta: "créditos Meta",
+};
+
+/** ESPELHA `private.lista_fria_tipo_da_fonte` (migration 20271220000000): o banco é quem debita. */
+export const tipoDaFonte = (fonte: FonteDaBusca): TipoDeCredito => (fonte === "instagram" ? "meta" : "normal");
+
+/** Lê o jsonb de `lista_fria_saldos` sem confiar nele: o que não for número vira 0. */
+export function parseSaldos(j: Json | null | undefined): Saldos {
+  const o = j && typeof j === "object" && !Array.isArray(j) ? j : {};
+  const n = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : 0);
+  return { normal: n(o.normal), meta: n(o.meta) };
+}
+
 export const ROTULO_STATUS: Record<StatusDaBusca, string> = {
   na_fila: "Na fila",
   executando: "Em andamento",

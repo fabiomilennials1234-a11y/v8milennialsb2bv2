@@ -102,7 +102,7 @@ jobs:
       - name: Master tasks (deadlines, permissions, audit and concurrent edits)
         run: node --test tests/integration/master-tasks.test.mjs
       - name: Lista fria (banco, worker, fontes Maps/Instagram/CNPJ)
-        run: node --disable-warning=ExperimentalWarning --test tests/integration/lista-fria-fundacao.test.mjs tests/integration/lista-fria-cnpj.test.mjs tests/integration/lista-fria-worker.test.mjs tests/integration/lista-fria-instagram.test.mjs tests/integration/lista-fria-coletor.test.mjs tests/integration/lista-fria-cnpj-worker.test.mjs
+        run: node --disable-warning=ExperimentalWarning --test tests/integration/lista-fria-fundacao.test.mjs tests/integration/lista-fria-cnpj.test.mjs tests/integration/lista-fria-worker.test.mjs tests/integration/lista-fria-instagram.test.mjs tests/integration/lista-fria-coletor.test.mjs tests/integration/lista-fria-cnpj-worker.test.mjs tests/integration/lista-fria-creditos-meta.test.mjs
       - name: Build (prod)
         run: npm run build
         env:

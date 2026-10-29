@@ -583,6 +583,7 @@ describe('executor contra as RPCs reais', () => {
     const db = await setup();
     try {
       await comSaldo(db, 100);
+      await comSaldo(db, 50, 'meta');
       await as(db, U_LIBERADO);
       const id = await criarBusca(db, 'maps', maps, 20);
       const ig = await criarBusca(db, 'instagram', { url: 'https://instagram.com/clinica' }, 10);
@@ -603,6 +604,7 @@ describe('executor contra as RPCs reais', () => {
       assert.equal(await val(db, `SELECT status || ':' || erro FROM lista_fria_buscas WHERE id = '${ig}'`), 'falhou:instagram_indisponivel');
       // 100 - 2 usados (a Maps devolveu 18) - 0 (a do Instagram devolveu os 10)
       assert.equal(await val(db, `SELECT private.lista_fria_saldo_da_org('${TORQUE}')`), 98);
+      assert.equal(await val(db, `SELECT private.lista_fria_saldo_da_org('${TORQUE}', 'meta')`), 50, 'a busca de Instagram devolveu os 10 ao saldo Meta');
     } finally { await db.close(); }
   });
 });

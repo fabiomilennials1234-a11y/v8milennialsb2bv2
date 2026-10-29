@@ -23,6 +23,8 @@ export const MIGRATION = '../../supabase/migrations/20271217000000_lista_fria_fu
 export const ROLLBACK = '../../supabase/migrations/rollback/20271217000000_lista_fria_fundacao.sql';
 export const MIGRATION_CNPJ = '../../supabase/migrations/20271219000000_lista_fria_fonte_cnpj.sql';
 export const ROLLBACK_CNPJ = '../../supabase/migrations/rollback/20271219000000_lista_fria_fonte_cnpj.sql';
+export const MIGRATION_META = '../../supabase/migrations/20271220000000_lista_fria_creditos_meta.sql';
+export const ROLLBACK_META = '../../supabase/migrations/rollback/20271220000000_lista_fria_creditos_meta.sql';
 
 // O que a Lista Fria toca em `leads` e nos gatilhos de lead criado. Os corpos
 // das funções são os de PRODUÇÃO antes da migration — os mesmos que o rollback
@@ -115,6 +117,7 @@ export async function setup() {
   `);
   await db.exec(read(MIGRATION));
   await db.exec(read(MIGRATION_CNPJ));
+  await db.exec(read(MIGRATION_META));
   await db.exec(`
     INSERT INTO member_feature_permissions (team_member_id, feature_key, enabled) VALUES
       ('${TM_LIBERADO}', 'lista_fria.view', true),
@@ -143,8 +146,9 @@ export const item = (ref, extra = {}) => ({ ref_externa: ref, nome: `Negócio ${
 export const registrar = (db, busca, worker, itens) =>
   val(db, `SELECT lista_fria_worker_registrar('${busca}', '${worker}', '${json(itens)}'::jsonb)`);
 
-export async function comSaldo(db, qtd) {
+/** Concede crédito pelo master. `tipo`: 'normal' (Maps, CNPJ) ou 'meta' (Instagram). */
+export async function comSaldo(db, qtd, tipo = 'normal') {
   await as(db, U_MASTER);
-  await db.query(`SELECT lista_fria_creditos_conceder('${TORQUE}', ${qtd}, 'teste')`);
+  await db.query(`SELECT lista_fria_creditos_conceder('${TORQUE}', ${qtd}, 'teste', '${tipo}')`);
 }
 

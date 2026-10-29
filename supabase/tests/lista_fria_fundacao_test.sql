@@ -113,6 +113,8 @@ SELECT set_config('request.jwt.claims', json_build_object('role', 'service_role'
 
 SELECT is(public.lista_fria_creditos_conceder('11f0a000-0000-4000-8000-00000000000a', 100, 'teste'), 100,
   'CR1: concessão devolve o saldo novo');
+-- Instagram gasta do saldo META (ADR-0044): sem isto a busca de Instagram abaixo seria recusada.
+SELECT public.lista_fria_creditos_conceder('11f0a000-0000-4000-8000-00000000000a', 10, 'teste meta', 'meta');
 
 SET LOCAL role authenticated;
 SELECT pg_temp.as_user('11f0a000-0000-4000-8000-0000000000a1');
@@ -239,6 +241,8 @@ SELECT public.lista_fria_worker_encerrar((SELECT id FROM public.lista_fria_busca
 SELECT public.lista_fria_worker_encerrar((SELECT id FROM public.lista_fria_buscas WHERE worker_id = 'w2'), 'w2', 'concluida');
 SELECT is(private.lista_fria_saldo_da_org('11f0a000-0000-4000-8000-00000000000a'), 97,
   'CR5: saldo = 100 - 3 usados (a sobra de 2 voltou uma vez só)');
+SELECT is(private.lista_fria_saldo_da_org('11f0a000-0000-4000-8000-00000000000a', 'meta'), 10,
+  'CR6: a busca de Instagram reservou 2 do saldo Meta e a sobra voltou para ele (10 - 2 + 2)');
 
 -- ===========================================================================
 -- (IM) importação
