@@ -1,3 +1,4 @@
+import { SendRichContactActions } from "./SendRichContactActions";
 import { readMediaAsDataUrl } from "@/modules/communication/lib/media-operation";
 import { ReplyPreview } from "../ReplyContext";
 import { ComposerEmojiPicker } from "./ComposerEmojiPicker";
@@ -409,6 +410,7 @@ export function MobileComposerContextual({
                 </button>
               ))}
             </div>
+            {!isGroup && instanceId && <SendRichContactActions key={conversationKey} mobile instanceId={instanceId} phoneNumber={phoneNumber} leadId={leadId} disabled={!canReply || isSending} />}
           </motion.div>
         )}
       </AnimatePresence>

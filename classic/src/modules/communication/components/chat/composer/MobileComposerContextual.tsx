@@ -1,3 +1,4 @@
+import { SendRichContactActions } from "./SendRichContactActions";
 import { readMediaAsDataUrl } from "@/modules/communication/lib/media-operation";
 import { ReplyPreview } from "../ReplyContext";
 import { useChatReply } from "../../../hooks/chat/useChatReply";
@@ -390,6 +391,7 @@ export function MobileComposerContextual({
                 </button>
               ))}
             </div>
+            {instanceId && <SendRichContactActions key={conversationKey} mobile instanceId={instanceId} phoneNumber={phoneNumber} leadId={leadId} disabled={!canReply || isSending} />}
           </motion.div>
         )}
       </AnimatePresence>
