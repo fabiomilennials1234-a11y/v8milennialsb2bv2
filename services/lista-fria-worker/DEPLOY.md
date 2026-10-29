@@ -47,7 +47,13 @@ SUPABASE_URL=https://jsjsmuncfkbsbzqzqhfq.supabase.co
 SUPABASE_SERVICE_ROLE_KEY=<service_role de PRODUÇÃO>
 LISTA_FRIA_IMAGEM=ghcr.io/<org>/<repo>/lista-fria-worker:sha-abc1234
 ANTHROPIC_API_KEY=            # vazio = sem IA (como hoje)
+APIFY_TOKEN=                  # vazio = Instagram desligado (a busca fecha e devolve o saldo Meta)
 ```
+
+**Instagram (crédito Meta):** para ligar, preencha `APIFY_TOKEN` com um token **dedicado a esta VPS** (Apify > Settings > API &
+Integrations). O gasto da Apify é nosso: o worker aborta a execução ao chegar em `APIFY_MAX_USD_POR_BUSCA` (padrão US$ 2; uma busca
+normal custa ~US$ 0,60). Monitore o consumo no console da Apify e ponha um limite de gasto mensal lá. Depois, valide com uma busca
+pequena antes de abrir a opção na tela (`INSTAGRAM_DISPONIVEL`).
 
 3. **Sem domínio e sem porta**: não crie entrada em Domains/Ports.
 4. Deploy.
