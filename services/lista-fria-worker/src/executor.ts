@@ -45,11 +45,20 @@ export interface Leitura {
   falhou: boolean;
 }
 
+/** O que o executor sabe e a fonte pode usar para não trabalhar a mais. */
+export interface ContextoDeLeitura {
+  /** Créditos que ainda cabem nesta busca (limite − já registrados). */
+  restantes: number;
+}
+
 export interface Fonte {
   /** Cria o job no coletor. `maxTimeS` define o prazo da busca. */
   iniciar(): Promise<{ id: string; maxTimeS: number }>;
-  /** Lê o que já saiu. Pode devolver linhas repetidas: o executor deduplica por `ref`. */
-  ler(id: string): Promise<Leitura>;
+  /**
+   * Lê o que já saiu. Pode devolver linhas repetidas: o executor deduplica por `ref`. `ctx` é opcional e só
+   * serve a fonte que decide quanto ler (CNPJ): coletor externo (gosom, Apify) já trabalha por conta própria.
+   */
+  ler(id: string, ctx?: ContextoDeLeitura): Promise<Leitura>;
   /** Para e limpa o job no coletor (para de gastar). Nunca lança. */
   encerrar(id: string): Promise<void>;
   /** Nicho para o filtro de IA. Fonte sem nicho (Instagram) não filtra. */
@@ -302,7 +311,7 @@ export async function executarBusca(busca: BuscaDaFila, fonte: Fonte, amb: Ambie
         return;
       }
 
-      const { linhas, terminou, falhou } = await fonte.ler(id);
+      const { linhas, terminou, falhou } = await fonte.ler(id, { restantes: Math.max(0, limite - registrados) });
 
       const novas = linhas.filter((l) => !vistos.has(l.ref));
       for (const l of novas) vistos.add(l.ref);
