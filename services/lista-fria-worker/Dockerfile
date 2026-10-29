@@ -13,4 +13,8 @@ ENV NODE_ENV=production
 ENV LISTA_FRIA_BASE_DIR=/data/base
 RUN mkdir -p /data/base && chown -R node:node /data /app
 USER node
+# Saudável = o worker falou com o banco nos últimos 2 min (ver comPulso em src/main.ts). Start period largo:
+# no primeiro boot ele baixa a base de CNPJ (~450 MB) antes de começar a pulsar.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=300s --retries=3 \
+  CMD node -e "const s=require('fs').statSync(process.env.WORKER_PULSO||'/tmp/worker-vivo');process.exit(Date.now()-s.mtimeMs<90000?0:1)"
 CMD ["node", "--disable-warning=ExperimentalWarning", "src/main.ts"]

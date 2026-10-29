@@ -1,0 +1,53 @@
+# Worker da Lista fria na VPS (EasyPanel/Hostinger), a partir da imagem publicada no ghcr.
+# Passo a passo e monitoramento: DEPLOY.md.
+#
+# DIFERENÇA para o compose.yaml (desenvolvimento): aqui NÃO há build (a imagem vem pronta do ghcr),
+# há LIMITE de CPU e memória (a VPS é compartilhada com o Torque), healthcheck, rotação de log e
+# nenhuma porta publicada.
+#
+# Variáveis (no painel do EasyPanel, nunca no repositório):
+#   SUPABASE_URL                 https://jsjsmuncfkbsbzqzqhfq.supabase.co
+#   SUPABASE_SERVICE_ROLE_KEY    chave service_role do projeto (SEGREDO)
+#   LISTA_FRIA_IMAGEM            ghcr.io/<org>/<repo>/lista-fria-worker:sha-<7 caracteres>  (fixe por sha, não use :latest)
+#   ANTHROPIC_API_KEY            opcional (expansão por bairro e filtro de nicho); sem ela, a busca de Maps roda sem IA
+services:
+  gosom:
+    # Fixado por digest: o contrato do gosom mudou entre o spec e a resposta real.
+    image: gosom/google-maps-scraper@sha256:e205c02913c5a69c16fc2094b8e5b194a2f655166d2c1126d50548d216e6b1b2
+    # `-c 2`: duas abas de Chromium por vez, para não derrubar a VPS que também serve o Torque.
+    command: ["-data-folder", "/gmapsdata", "-c", "2"]
+    volumes:
+      - gmapsdata:/gmapsdata
+    shm_size: 1gb
+    mem_limit: 3g
+    cpus: 2
+    restart: unless-stopped
+    logging: &log
+      driver: json-file
+      options: { max-size: "10m", max-file: "5" }
+    # SEM `ports:`. A API do gosom não tem autenticação: só o worker, pela rede interna.
+
+  worker:
+    image: ${LISTA_FRIA_IMAGEM:?defina LISTA_FRIA_IMAGEM (ghcr.io/.../lista-fria-worker:sha-xxxxxxx)}
+    depends_on: [gosom]
+    restart: unless-stopped
+    mem_limit: 1g
+    cpus: 1
+    volumes:
+      # Base de CNPJ (14 partes, ~450 MB): sobrevive a reinício; só baixa de novo quando muda.
+      - cnpjbase:/data/base
+    environment:
+      GOSOM_URL: http://gosom:8080
+      SUPABASE_URL: ${SUPABASE_URL:?defina SUPABASE_URL}
+      SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY:?defina SUPABASE_SERVICE_ROLE_KEY}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      GOSOM_MAX_TIME_S: ${GOSOM_MAX_TIME_S:-3600}
+      LISTA_FRIA_BASE_DIR: /data/base
+      DUCKDB_MEMORIA: 512MB
+      DUCKDB_THREADS: "1"
+      WORKER_ID: lista-fria-vps-1
+    logging: *log
+
+volumes:
+  gmapsdata:
+  cnpjbase:

@@ -51,6 +51,9 @@ export function sqlDaBusca(arquivos: readonly string[], f: FiltrosCnpj, depois: 
 export async function consultaDuckdb(arquivos: readonly string[]): Promise<ConsultaCnpj & { fechar(): void }> {
   const instancia = await DuckDBInstance.create(":memory:");
   const conexao = await instancia.connect();
+  // A VPS é compartilhada com o Torque: teto de memória e de threads para a consulta.
+  await conexao.run(`SET memory_limit='${process.env.DUCKDB_MEMORIA || "768MB"}'`);
+  await conexao.run(`SET threads=${Number(process.env.DUCKDB_THREADS) > 0 ? Number(process.env.DUCKDB_THREADS) : 2}`);
   return {
     async buscar(filtros, depois, limite) {
       const { sql, valores } = sqlDaBusca(arquivos, filtros, depois, limite);
