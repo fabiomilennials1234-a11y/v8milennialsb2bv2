@@ -14,14 +14,16 @@
  *   INSTAGRAM_MAX_SEGUIDORES     5000    (contas processadas por busca, no máximo)
  *   INSTAGRAM_CONTAS_POR_CREDITO 8       (rendimento presumido para dimensionar a busca)
  *   LISTA_FRIA_BASE_DIR          padrão /data/base (volume): base enxuta de CNPJ em partes Parquet, baixada do Storage (bucket lista-fria-base)
+ *   WORKER_PULSO                 padrão /tmp/worker-vivo: arquivo de saúde (HEALTHCHECK); só é renovado se o banco respondeu há < 2 min
  *   WORKER_ID                    padrão <host>-<pid>
  *   POLL_MS, IDLE_MS             5000 / 5000
  *   GOSOM_MAX_TIME_S             3600
  */
+import { writeFileSync } from "node:fs";
 import os from "node:os";
 import { setTimeout as dormir } from "node:timers/promises";
 
-import { bancoPelaRede } from "./db.ts";
+import { bancoPelaRede, type Banco } from "./db.ts";
 import { abortarExecucao, iniciarExecucao, lerExecucao, lerItens, type ApifyCfg } from "./apify.ts";
 import { CFG_PADRAO, executarBusca, executarMaps, type Ambiente, type CfgDoExecutor } from "./executor.ts";
 import { coletorApi } from "./coletor-instagram.ts";
@@ -51,6 +53,36 @@ function exigir(nome: string): string {
 
 const SEIS_HORAS = 6 * 3_600_000;
 
+/** Arquivo que o HEALTHCHECK do container lê (Dockerfile). */
+const ARQUIVO_DE_PULSO = process.env.WORKER_PULSO || "/tmp/worker-vivo";
+/** Sem contato bem-sucedido com o banco por tanto tempo, o worker se declara doente. */
+const PULSO_VALE_MS = 120_000;
+
+/**
+ * Embrulha o banco para saber a última vez que ele respondeu. O pulso só é renovado enquanto isso for
+ * recente: processo vivo que não alcança o banco (chave revogada, rede fora, banco em swap) NÃO é
+ * saudável, e o orquestrador precisa ver isso para reiniciar e alertar.
+ */
+function comPulso(banco: Banco): { banco: Banco; ultimoContatoMs: () => number } {
+  let ultimo = Date.now();
+  const marcar = <A extends unknown[], R>(f: (...a: A) => Promise<R>) =>
+    async (...a: A): Promise<R> => {
+      const r = await f(...a);
+      ultimo = Date.now();
+      return r;
+    };
+  return {
+    ultimoContatoMs: () => ultimo,
+    banco: {
+      reivindicar: marcar(banco.reivindicar.bind(banco)),
+      progresso: marcar(banco.progresso.bind(banco)),
+      registrar: marcar(banco.registrar.bind(banco)),
+      encerrar: marcar(banco.encerrar.bind(banco)),
+      recuperarTravadas: marcar(banco.recuperarTravadas.bind(banco)),
+    },
+  };
+}
+
 const log = (evento: string, dados: Record<string, unknown> = {}) =>
   console.log(JSON.stringify({ t: new Date().toISOString(), evento, ...dados }));
 
@@ -68,7 +100,19 @@ async function main() {
 
   const gosomCfg: GosomCfg = { baseUrl: process.env.GOSOM_URL || "http://gosom:8080" };
   const iaCfg: IaCfg | null = process.env.ANTHROPIC_API_KEY ? { apiKey: process.env.ANTHROPIC_API_KEY } : null;
-  const banco = bancoPelaRede({ url, chaveDeServico: chave });
+  const { banco, ultimoContatoMs } = comPulso(bancoPelaRede({ url, chaveDeServico: chave }));
+  // Renova o pulso a cada 15 s enquanto o banco responder. Se parar de renovar, o HEALTHCHECK reprova.
+  const pulsar = () => {
+    if (Date.now() - ultimoContatoMs() < PULSO_VALE_MS) {
+      try {
+        writeFileSync(ARQUIVO_DE_PULSO, String(Date.now()));
+      } catch {
+        /* disco sem escrita: o healthcheck reprova e o container reinicia */
+      }
+    }
+  };
+  pulsar();
+  setInterval(pulsar, 15_000).unref();
 
   // Instagram: coletor com login real (sem custo em dólar) tem precedência; senão a Apify; senão desligado.
   // Na Apify, ela mesma aborta a execução ao chegar em maxUsdPorBusca.
