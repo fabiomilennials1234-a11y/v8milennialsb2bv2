@@ -4,7 +4,7 @@
  * (mockup 4 do board Miro). A tela confere o banco a cada 4 s enquanto houver
  * busca aberta (ver `useBuscas`).
  */
-import { Check, Loader2, MapPin, Pause, Zap } from "lucide-react";
+import { Building2, Check, Loader2, MapPin, Pause, Zap } from "lucide-react";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
 
@@ -30,6 +30,7 @@ function numero(n: number) {
 }
 
 function FonteIcone({ fonte }: { fonte: Busca["fonte"] }) {
+  if (fonte === "cnpj") return <Building2 className="size-[19px]" aria-hidden />;
   return fonte === "maps" ? (
     <MapPin className="size-[19px]" aria-hidden />
   ) : (
@@ -41,12 +42,16 @@ function FonteIcone({ fonte }: { fonte: Busca["fonte"] }) {
   );
 }
 
+// CNPJ não lê site nem usa IA: a trilha só mostra o que essa fonte faz.
+const ETAPAS_DO_CNPJ: ReadonlySet<string> = new Set(["coletando", "validando"]);
+
 function Trilha({ busca }: { busca: Busca }) {
-  const atual = busca.etapa ? ETAPAS_DA_BUSCA.findIndex((e) => e.chave === busca.etapa) : -1;
+  const etapas = busca.fonte === "cnpj" ? ETAPAS_DA_BUSCA.filter((e) => ETAPAS_DO_CNPJ.has(e.chave)) : ETAPAS_DA_BUSCA;
+  const atual = busca.etapa ? etapas.findIndex((e) => e.chave === busca.etapa) : -1;
   const concluida = busca.status === "concluida" || busca.status === "parada";
   return (
     <ol className="flex flex-wrap gap-1.5" aria-label="Etapas da busca">
-      {ETAPAS_DA_BUSCA.map((e, i) => {
+      {etapas.map((e, i) => {
         const feita = concluida || i < atual;
         const emCurso = !concluida && i === atual;
         return (

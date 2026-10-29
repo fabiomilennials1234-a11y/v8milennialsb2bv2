@@ -5,9 +5,11 @@
  * viram união fechada. Valor fora da lista (migration futura, linha antiga) cai
  * num default seguro em vez de quebrar a tela.
  */
-import type { Database } from "@/integrations/supabase/types";
+import type { Database, Json } from "@/integrations/supabase/types";
 
-export type FonteDaBusca = "maps" | "instagram";
+import { resumoDosCnaes } from "./cnae";
+
+export type FonteDaBusca = "maps" | "instagram" | "cnpj";
 export type StatusDaBusca = "na_fila" | "executando" | "concluida" | "parada" | "falhou" | "cancelada";
 export type EtapaDaBusca = "coletando" | "lendo_sites" | "ia" | "validando";
 export type QualidadeDoContato = "verificado" | "sem_whatsapp" | "email_invalido" | "nao_verificado";
@@ -15,6 +17,7 @@ export type QualidadeDoContato = "verificado" | "sem_whatsapp" | "email_invalido
 export const ROTULO_FONTE: Record<FonteDaBusca, string> = {
   maps: "Google Maps",
   instagram: "Instagram",
+  cnpj: "CNPJ por CNAE",
 };
 
 export const ROTULO_STATUS: Record<StatusDaBusca, string> = {
@@ -94,12 +97,53 @@ const STATUS = new Set<string>(Object.keys(ROTULO_STATUS));
 const ETAPAS = new Set<string>(ETAPAS_DA_BUSCA.map((e) => e.chave));
 const QUALIDADES = new Set<string>(Object.keys(ROTULO_QUALIDADE));
 
+export const CONTATOS_EXIGIDOS = ["qualquer", "email", "telefone", "ambos"] as const;
+export type ContatoExigido = (typeof CONTATOS_EXIGIDOS)[number];
+
+export const ROTULO_CONTATO: Record<ContatoExigido, string> = {
+  qualquer: "E-mail ou telefone",
+  email: "Com e-mail",
+  telefone: "Com telefone",
+  ambos: "E-mail e telefone",
+};
+
+/** Alvo de uma busca de CNPJ, como o banco guarda em `filtros`. */
+export interface FiltrosCnpj {
+  cnaes: string[];
+  uf: string;
+  municipio: string | null;
+  contato: ContatoExigido;
+}
+
+export function parseFiltrosCnpj(j: Json | null): FiltrosCnpj {
+  const o = j && typeof j === "object" && !Array.isArray(j) ? j : {};
+  const cnaes = Array.isArray(o.cnaes) ? o.cnaes.filter((c): c is string => typeof c === "string") : [];
+  const contato = CONTATOS_EXIGIDOS.find((c) => c === o.contato) ?? "qualquer";
+  return {
+    cnaes,
+    uf: typeof o.uf === "string" ? o.uf : "",
+    municipio: typeof o.municipio === "string" && o.municipio ? o.municipio : null,
+    contato,
+  };
+}
+
+/** "CNAE 4639-7/01 · São Paulo - SP" ou "3 CNAEs · SP". */
+export function tituloDaBuscaCnpj(f: FiltrosCnpj): string {
+  const onde = f.municipio ? `${f.municipio} - ${f.uf}` : f.uf;
+  return [resumoDosCnaes(f.cnaes), onde].filter(Boolean).join(" · ");
+}
+
 export function parseBusca(r: LinhaDaBusca): Busca {
-  const fonte: FonteDaBusca = r.fonte === "instagram" ? "instagram" : "maps";
+  const fonte: FonteDaBusca = r.fonte === "instagram" ? "instagram" : r.fonte === "cnpj" ? "cnpj" : "maps";
   return {
     id: r.id,
     fonte,
-    titulo: fonte === "instagram" ? `@${r.instagram_handle ?? ""}` : `${r.nicho ?? ""} · ${r.cidade ?? ""}`,
+    titulo:
+      fonte === "instagram"
+        ? `@${r.instagram_handle ?? ""}`
+        : fonte === "cnpj"
+          ? tituloDaBuscaCnpj(parseFiltrosCnpj(r.filtros))
+          : `${r.nicho ?? ""} · ${r.cidade ?? ""}`,
     status: STATUS.has(r.status) ? (r.status as StatusDaBusca) : "falhou",
     etapa: r.etapa && ETAPAS.has(r.etapa) ? (r.etapa as EtapaDaBusca) : null,
     progresso: r.progresso,

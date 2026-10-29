@@ -3,13 +3,14 @@
  * créditos (mockups 1–3 do board Miro). Valida na tela o que dá para validar e
  * chama UMA RPC; a recusa do banco aparece com a frase que ele escreveu.
  */
-import { ArrowLeft, Loader2, MapPin, Search, Zap } from "lucide-react";
+import { ArrowLeft, Building2, Loader2, MapPin, Search, Zap } from "lucide-react";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { notifyError } from "@/shared/errors";
 import { cn } from "@/lib/utils";
@@ -17,9 +18,12 @@ import { cn } from "@/lib/utils";
 import { useCriarBusca, type AlvoDaBusca } from "../hooks/useListaFriaMutacoes";
 import { extrairHandleDoInstagram } from "../lib/instagram";
 import { recusaDaListaFria } from "../lib/erros";
-import { INSTAGRAM_DISPONIVEL } from "../lib/tipos";
+import { CONTATOS_EXIGIDOS, INSTAGRAM_DISPONIVEL, ROTULO_CONTATO, type ContatoExigido } from "../lib/tipos";
+import { SeletorDeCnae } from "./SeletorDeCnae";
 
-type Passo = "fonte" | "instagram" | "maps";
+type Passo = "fonte" | "instagram" | "maps" | "cnpj";
+
+const UFS = ["AC", "AL", "AP", "AM", "BA", "CE", "DF", "ES", "GO", "MA", "MT", "MS", "MG", "PA", "PB", "PR", "PE", "PI", "RJ", "RN", "RS", "RO", "RR", "SC", "SP", "SE", "TO"] as const;
 
 const CREDITOS_SUGERIDOS = 500;
 
@@ -85,6 +89,10 @@ export function NovaBuscaDialog({
   const [nicho, setNicho] = useState("");
   const [cidade, setCidade] = useState("");
   const [creditos, setCreditos] = useState(CREDITOS_SUGERIDOS);
+  const [cnaes, setCnaes] = useState<string[]>([]);
+  const [uf, setUf] = useState("");
+  const [municipio, setMunicipio] = useState("");
+  const [contato, setContato] = useState<ContatoExigido>("qualquer");
 
   useEffect(() => {
     if (!aberto) return;
@@ -92,6 +100,10 @@ export function NovaBuscaDialog({
     setUrl("");
     setNicho("");
     setCidade("");
+    setCnaes([]);
+    setUf("");
+    setMunicipio("");
+    setContato("qualquer");
     setCreditos(Math.max(1, Math.min(CREDITOS_SUGERIDOS, saldo ?? CREDITOS_SUGERIDOS)));
     // Só reinicia ao abrir: o saldo muda com a busca em andamento e não pode apagar o que o usuário digitou.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -100,14 +112,25 @@ export function NovaBuscaDialog({
   const handle = useMemo(() => (url.trim() ? extrairHandleDoInstagram(url) : null), [url]);
   const disponivel = saldo ?? 0;
   const creditosOk = Number.isInteger(creditos) && creditos >= 1 && creditos <= disponivel;
+  const municipioOk = municipio.trim() === "" || (municipio.trim().length >= 2 && municipio.trim().length <= 80);
   const alvoOk =
-    passo === "instagram" ? handle !== null : passo === "maps" ? nicho.trim().length >= 2 && cidade.trim().length >= 2 : false;
+    passo === "instagram"
+      ? handle !== null
+      : passo === "maps"
+        ? nicho.trim().length >= 2 && cidade.trim().length >= 2
+        : passo === "cnpj"
+          ? cnaes.length >= 1 && uf !== "" && municipioOk
+          : false;
 
   const enviar = (ev: FormEvent) => {
     ev.preventDefault();
     if (!alvoOk || !creditosOk) return;
     const alvo: AlvoDaBusca =
-      passo === "instagram" ? { fonte: "instagram", url } : { fonte: "maps", nicho, cidade };
+      passo === "instagram"
+        ? { fonte: "instagram", url }
+        : passo === "cnpj"
+          ? { fonte: "cnpj", cnaes, uf, municipio, contato }
+          : { fonte: "maps", nicho, cidade };
     criar.mutate(
       { alvo, creditos },
       {
@@ -159,7 +182,7 @@ export function NovaBuscaDialog({
 
   return (
     <Dialog open={aberto} onOpenChange={(v) => !v && onFechar()}>
-      <DialogContent className={cn(passo === "fonte" ? "sm:max-w-3xl" : "sm:max-w-2xl")}>
+      <DialogContent className={cn(passo === "fonte" ? "sm:max-w-4xl" : "sm:max-w-2xl")}>
         {passo === "fonte" ? (
           <>
             <DialogHeader>
@@ -168,7 +191,7 @@ export function NovaBuscaDialog({
                 De onde você quer tirar contatos? A IA encontra telefone e e-mail e você só paga pelo que for válido.
               </DialogDescription>
             </DialogHeader>
-            <div className="grid gap-3.5 sm:grid-cols-2">
+            <div className="grid gap-3.5 sm:grid-cols-3">
               <CartaoDeFonte
                 icone={<InstagramIcone className="size-6" />}
                 titulo="Instagram"
@@ -183,6 +206,13 @@ export function NovaBuscaDialog({
                 texto="Negócios de um nicho em uma cidade. Buscamos telefone no Maps e e-mail no site de cada um."
                 exemplo="Ex.: Dentistas · São Paulo - SP"
                 onEscolher={() => setPasso("maps")}
+              />
+              <CartaoDeFonte
+                icone={<Building2 className="size-6" />}
+                titulo="Empresas por CNAE"
+                texto="Empresas ativas de uma atividade em um estado ou cidade, da base aberta da Receita. Volume alto, com e-mail e telefone cadastrados."
+                exemplo="Ex.: Atacadistas · SP"
+                onEscolher={() => setPasso("cnpj")}
               />
             </div>
             <p className="flex items-center gap-2 text-[13px] text-muted-foreground">
@@ -204,8 +234,14 @@ export function NovaBuscaDialog({
                 <ArrowLeft className="size-4" aria-hidden /> Nova busca
               </button>
               <DialogTitle className="flex items-center gap-2.5">
-                {passo === "instagram" ? <InstagramIcone className="size-5" /> : <MapPin className="size-5" aria-hidden />}
-                {passo === "instagram" ? "Seguidores de uma conta do Instagram" : "Negócios no Google Maps"}
+                {passo === "instagram" ? (
+                  <InstagramIcone className="size-5" />
+                ) : passo === "cnpj" ? (
+                  <Building2 className="size-5" aria-hidden />
+                ) : (
+                  <MapPin className="size-5" aria-hidden />
+                )}
+                {passo === "instagram" ? "Seguidores de uma conta do Instagram" : passo === "cnpj" ? "Empresas por atividade (CNAE)" : "Negócios no Google Maps"}
               </DialogTitle>
               <DialogDescription className="sr-only">Preencha o alvo da busca e o limite de créditos.</DialogDescription>
             </DialogHeader>
@@ -229,6 +265,67 @@ export function NovaBuscaDialog({
                     bio, botão de contato e link da bio.
                   </p>
                 ) : null}
+              </div>
+            ) : passo === "cnpj" ? (
+              <div className="space-y-5">
+                <SeletorDeCnae valor={cnaes} onChange={setCnaes} />
+                <div className="grid gap-4 sm:grid-cols-[9rem_1fr]">
+                  <div className="space-y-2">
+                    <Label htmlFor="lf-uf">Estado</Label>
+                    <Select value={uf} onValueChange={setUf}>
+                      <SelectTrigger id="lf-uf" aria-label="Estado">
+                        <SelectValue placeholder="UF" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {UFS.map((u) => (
+                          <SelectItem key={u} value={u}>
+                            {u}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="lf-municipio">Cidade (opcional)</Label>
+                    <div className="relative">
+                      <MapPin className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden />
+                      <Input
+                        id="lf-municipio"
+                        value={municipio}
+                        onChange={(e) => setMunicipio(e.target.value)}
+                        placeholder="Todas as cidades do estado"
+                        className="pl-9"
+                        maxLength={80}
+                        aria-invalid={!municipioOk}
+                      />
+                    </div>
+                  </div>
+                </div>
+                <fieldset className="space-y-2">
+                  <legend className="text-sm font-medium leading-none">Contato</legend>
+                  <div className="flex flex-wrap gap-2">
+                    {CONTATOS_EXIGIDOS.map((c) => (
+                      <button
+                        key={c}
+                        type="button"
+                        aria-pressed={contato === c}
+                        onClick={() => setContato(c)}
+                        className={cn(
+                          "h-9 rounded-full border px-4 text-[13px] font-semibold transition-colors",
+                          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                          contato === c
+                            ? "border-primary bg-primary-soft text-primary-soft-foreground"
+                            : "border-card-border bg-sunken text-muted-foreground hover:text-foreground",
+                        )}
+                      >
+                        {ROTULO_CONTATO[c]}
+                      </button>
+                    ))}
+                  </div>
+                  <p className="text-xs leading-relaxed text-muted-foreground">
+                    Só matrizes de empresas ativas, sem empresário individual. E-mail de contador (repetido em muitas empresas) é descartado.
+                  </p>
+                </fieldset>
               </div>
             ) : (
               <div className="grid gap-4 sm:grid-cols-2">
