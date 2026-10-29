@@ -14,7 +14,7 @@ import { notifyError } from "@/shared/errors";
 import { cn } from "@/lib/utils";
 
 import { usePararBusca } from "../hooks/useListaFriaMutacoes";
-import { useBuscas, useSaldoDeCreditos } from "../hooks/useListaFriaDados";
+import { useBuscas, useSaldos } from "../hooks/useListaFriaDados";
 import { recusaDaListaFria } from "../lib/erros";
 import {
   ETAPAS_DA_BUSCA,
@@ -156,7 +156,7 @@ function LinhaDeBusca({ busca, podeEditar }: { busca: Busca; podeEditar: boolean
 
 export function BuscasCard({ podeEditar }: { podeEditar: boolean }) {
   const { data: buscas = [], isLoading } = useBuscas();
-  const { data: saldo } = useSaldoDeCreditos();
+  const { data: saldos } = useSaldos();
   // O card mostra o que está aberto e o que terminou há pouco; o resto vira histórico.
   const visiveis = buscas.filter((b) => buscaEstaAberta(b) || buscaPedeRevisao(b) || b.status === "falhou").slice(0, 5);
 
@@ -166,7 +166,13 @@ export function BuscasCard({ podeEditar }: { podeEditar: boolean }) {
         <h2 className="text-[15px] font-extrabold tracking-tight">Buscas</h2>
         <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
           <Zap className="size-3.5" aria-hidden />
-          Saldo: <b className="text-sm tabular-nums text-primary">{saldo === undefined ? "·" : numero(saldo)}</b> créditos
+          Saldo: <b className="text-sm tabular-nums text-primary">{saldos === undefined ? "·" : numero(saldos.normal)}</b> créditos
+          {saldos !== undefined && saldos.meta > 0 && (
+            <>
+              {" · "}
+              <b className="text-sm tabular-nums text-primary">{numero(saldos.meta)}</b> Meta
+            </>
+          )}
         </p>
       </header>
       {isLoading ? (

@@ -66,7 +66,7 @@ vi.mock("../hooks/useOrgUsaLeiDoErp", () => ({ useOrgUsaLeiDoErp: () => ({ usaLe
 // Lista fria (ADR-0042): org sem a flag. A aba e o cartão de buscas nem entram na tela.
 vi.mock("@/modules/lista-fria", () => ({
   useListaFriaAcesso: () => ({ carregando: false, habilitada: false, podeVer: false, podeEditar: false }),
-  useSaldoDeCreditos: () => ({ data: undefined }),
+  useSaldos: () => ({ data: undefined }),
   BuscasCard: () => null,
   NovaBuscaDialog: () => null,
 }));

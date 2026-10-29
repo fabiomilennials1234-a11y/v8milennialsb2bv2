@@ -21,4 +21,4 @@ export { ListaFriaRoute } from "./components/ListaFriaRoute";
 export { NovaBuscaDialog } from "./components/NovaBuscaDialog";
 export { FLAG_LISTA_FRIA, useListaFriaAcesso } from "./hooks/useListaFriaAcesso";
 export type { AcessoListaFria } from "./hooks/useListaFriaAcesso";
-export { useSaldoDeCreditos } from "./hooks/useListaFriaDados";
+export { useSaldos } from "./hooks/useListaFriaDados";

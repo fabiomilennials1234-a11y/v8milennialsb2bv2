@@ -10,7 +10,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  ROLLBACK, TORQUE, OUTRA, U_ADMIN, U_MEMBRO, U_LIBERADO, U_MASTER, U_OUTRA,
+  ROLLBACK, ROLLBACK_CNPJ, ROLLBACK_META, TORQUE, OUTRA, U_ADMIN, U_MEMBRO, U_LIBERADO, U_MASTER, U_OUTRA,
   read, setup, as, asWorker, asPostgres, one, val, maps, criarBusca, item, registrar, comSaldo,
 } from './helpers/lista-fria-db.mjs';
 
@@ -54,6 +54,7 @@ test('créditos: só master concede; a busca reserva; saldo insuficiente recusa;
     await as(db, U_ADMIN);
     await assert.rejects(db.query(`SELECT lista_fria_creditos_conceder('${TORQUE}', 10)`), /Só o time Torque/);
     await comSaldo(db, 100);
+    await comSaldo(db, 30, 'meta'); // Instagram gasta do saldo Meta
 
     await as(db, U_LIBERADO);
     await assert.rejects(criarBusca(db, 'maps', maps, 500), /Saldo de créditos insuficiente/);
@@ -65,7 +66,8 @@ test('créditos: só master concede; a busca reserva; saldo insuficiente recusa;
     const ig = await criarBusca(db, 'instagram', { url: '@Clinica.Odonto_Vida?hl=pt' }, 30);
     assert.equal(await val(db, `SELECT instagram_handle FROM lista_fria_buscas WHERE id = '${ig}'`), 'clinica.odonto_vida');
     const mp = await criarBusca(db, 'maps', maps, 20);
-    assert.equal(await val(db, `SELECT lista_fria_saldo('${TORQUE}')`), 50, 'reserva de 30 + 20 sai do saldo');
+    assert.equal(await val(db, `SELECT lista_fria_saldo('${TORQUE}')`), 80, 'só a reserva de Maps (20) sai do saldo normal');
+    assert.equal(await val(db, `SELECT (lista_fria_saldos('${TORQUE}') ->> 'meta')::int`), 0, 'a reserva do Instagram (30) saiu do saldo Meta');
     assert.equal(await val(db, `SELECT status FROM lista_fria_buscas WHERE id = '${mp}'`), 'na_fila');
 
     // No máximo 3 abertas por org.
@@ -329,6 +331,9 @@ test('RLS: leitura só com flag + lista_fria.view; escrita direta é negada', as
 test('o rollback desfaz tudo e devolve os gatilhos ao corpo anterior', async () => {
   const db = await setup();
   try {
+    // Três migrations empilhadas: desfaz na ordem inversa (meta, CNPJ, fundação).
+    await db.exec(read(ROLLBACK_META));
+    await db.exec(read(ROLLBACK_CNPJ));
     await db.exec(read(ROLLBACK));
     assert.equal(await val(db, `SELECT count(*)::int FROM pg_tables WHERE tablename LIKE 'lista_fria_%'`), 0);
     assert.equal(await val(db, `SELECT count(*)::int FROM information_schema.columns WHERE table_name = 'leads' AND column_name = 'lista_fria_busca_id'`), 0);

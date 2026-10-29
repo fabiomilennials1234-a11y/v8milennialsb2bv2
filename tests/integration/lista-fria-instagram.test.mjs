@@ -318,7 +318,7 @@ describe('Instagram contra as RPCs reais', () => {
   test('o formato que o worker manda (inclusive a coluna `instagram`) é o que o banco aceita; já-é-lead não cobra; limite devolve sobra', async () => {
     const db = await setup();
     try {
-      await comSaldo(db, 100);
+      await comSaldo(db, 100, 'meta');
       await asPostgres(db);
       await db.exec(`INSERT INTO leads (organization_id, name, phone) VALUES ('b2ad1ffb-e136-4356-846b-9f210f902573', 'Já cliente', '5511993195517')`);
       await as(db, U_LIBERADO);
@@ -353,7 +353,7 @@ describe('Instagram contra as RPCs reais', () => {
       assert.equal(r.find((x) => x.ref_externa === 'caio.silva_1').telefone, '5511993195518', 'telefone da bio');
       assert.equal(r.find((x) => x.ref_externa === 'bia').ja_e_lead, true);
       assert.equal(r.find((x) => x.ref_externa === 'ana').categoria, 'Dentista');
-      assert.equal(await val(db, `SELECT private.lista_fria_saldo_da_org('b2ad1ffb-e136-4356-846b-9f210f902573')`), 97);
+      assert.equal(await val(db, `SELECT private.lista_fria_saldo_da_org('b2ad1ffb-e136-4356-846b-9f210f902573', 'meta')`), 97);
     } finally { await db.close(); }
   });
 });

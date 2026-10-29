@@ -3,7 +3,7 @@ import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useOrganization } from "@/modules/identity";
 
-import { type Busca, type Resultado, buscaEstaAberta, parseBusca, parseResultado } from "../lib/tipos";
+import { type Busca, type Resultado, type Saldos, buscaEstaAberta, parseBusca, parseResultado, parseSaldos } from "../lib/tipos";
 import { rpcListaFria } from "../lib/rpc";
 
 /**
@@ -17,16 +17,17 @@ export const TAMANHO_DA_PAGINA = 50;
 /** Enquanto houver busca rodando, a tela confere o banco a cada 4 s. */
 const INTERVALO_DA_BUSCA_ABERTA_MS = 4_000;
 
-export function useSaldoDeCreditos(opcoes: { enabled?: boolean } = {}) {
+/** Os dois saldos: normal (Maps, CNPJ) e Meta (Instagram). */
+export function useSaldos(opcoes: { enabled?: boolean } = {}) {
   const { organizationId } = useOrganization();
-  return useQuery<number>({
-    queryKey: [CHAVE_LISTA_FRIA, organizationId, "saldo"],
+  return useQuery<Saldos>({
+    queryKey: [CHAVE_LISTA_FRIA, organizationId, "saldos"],
     enabled: !!organizationId && opcoes.enabled !== false,
     staleTime: 30_000,
     queryFn: async () => {
-      const { data, error } = await rpcListaFria("lista_fria_saldo", { p_org: organizationId as string });
+      const { data, error } = await rpcListaFria("lista_fria_saldos", { p_org: organizationId as string });
       if (error) throw error;
-      return data ?? 0;
+      return parseSaldos(data);
     },
   });
 }
