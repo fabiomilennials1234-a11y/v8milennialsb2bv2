@@ -505,6 +505,12 @@ export function useSendWhatsAppMedia() {
       const isSzChat = await isSzChatInstanceCached(instanceId);
       const recovery = recoveryContext(queryClient, teamMember.organization_id, phoneNumber, destination, instanceId, _sendId, caption ?? null, mediaUrl);
 
+      // Do not depend on realtime/refetch to display an attachment already uploaded.
+      queryClient.setQueryData<WhatsAppMessage[]>(
+        ["whatsapp_messages", teamMember.organization_id, phoneNumber, instanceId],
+        old => old?.map(message => message.id === _sendId ? { ...message, media_url: mediaUrl } : message),
+      );
+
       let data: Record<string, unknown>;
       let error: unknown;
 
@@ -638,7 +644,7 @@ export function useSendWhatsAppMedia() {
         direction: "outgoing",
         message_type: variables.mediaType,
         content: variables.caption || null,
-        media_url: null,
+        media_url: variables.media,
         media_file_name: variables.mediaType === "document" ? variables.fileName?.trim() || null : null,
         push_name: null,
         status: "pending",
