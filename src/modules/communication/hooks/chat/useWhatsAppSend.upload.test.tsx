@@ -19,7 +19,7 @@ vi.mock("@/integrations/supabase/client", () => ({ supabase: {
   },
 } }));
 import { useSendWhatsAppMedia } from "./useWhatsAppSend";
-import type { FailedMessage } from "./types";
+import type { FailedMessage, WhatsAppMessage } from "./types";
 const variables = { phoneNumber: "5511999999999", instanceName: "sales", instanceId: "upload-instance", mediaType: "document" as const, media: "data:application/pdf;base64,cGRm", fileName: "private.pdf" };
 const failedKey = ["whatsapp_failed_messages", "org", variables.phoneNumber, variables.instanceId];
 beforeEach(() => {
@@ -36,6 +36,29 @@ function setup() {
   const hook = renderHook(useSendWhatsAppMedia, { wrapper: ({ children }: { children: ReactNode }) => <QueryClientProvider client={client}>{children}</QueryClientProvider> });
   return { ...hook, client, close: () => { hook.unmount(); client.clear(); } };
 }
+it("keeps the image visible during upload and after success without realtime or refetch", async () => {
+  let finishUpload!: (value: unknown) => void;
+  mock.fetch.mockReturnValueOnce(new Promise(resolve => { finishUpload = resolve; }));
+  const { result, client, close } = setup();
+  const image = { ...variables, mediaType: "image" as const, media: "data:image/png;base64,aW1hZ2U=", fileName: "photo.png" };
+  const key = ["whatsapp_messages", "org", image.phoneNumber, image.instanceId];
+  let send!: Promise<unknown>;
+  await act(async () => {
+    send = result.current.mutateAsync(image);
+    await vi.advanceTimersByTimeAsync(0);
+  });
+  expect(client.getQueryData<WhatsAppMessage[]>(key)?.[0]).toMatchObject({ media_url: image.media, status: "pending" });
+  await act(async () => {
+    finishUpload({ ok: true });
+    await send;
+  });
+  const messages = client.getQueryData<WhatsAppMessage[]>(key)!;
+  expect(messages).toHaveLength(1);
+  expect(messages[0]).toMatchObject({ message_id: "provider-id", status: "sent", media_url: mock.invoke.mock.calls[0][1].body.payload.file });
+  expect(messages[0].media_url).toContain("https://storage.invalid/whatsapp-media/org/");
+  expect(mock.invoke).toHaveBeenCalledOnce();
+  close();
+});
 it("uploads a PDF with cancellable PUT, then sends the public media URL", async () => {
   const { result, close } = setup();
   await act(async () => { await result.current.mutateAsync({ ...variables }); });

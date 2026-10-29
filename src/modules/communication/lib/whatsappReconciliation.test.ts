@@ -10,6 +10,17 @@ const params = { organizationId: 'org', instanceId: 'chip', phoneNumber: '489100
 const builder = { select: vi.fn(() => builder), eq: vi.fn(() => builder), in: vi.fn(() => builder), then: (fn: (r: typeof mocks.result) => unknown) => Promise.resolve(mocks.result).then(fn) };
 beforeEach(() => { vi.clearAllMocks(); mocks.from.mockReturnValue(builder); mocks.result.data = []; mocks.result.error = null; });
 describe('reconciliation', () => {
+ it('keeps a confirmed local photo until persistence catches up, then replaces it once', async () => {
+  const local = row(1, { id: 'optimistic_photo', message_type: 'image', media_url: 'https://storage.invalid/photo.png' });
+  mocks.rpc.mockResolvedValue({ data: { fingerprint: 'before-save', manifest: [] } });
+  const first = await reconcileConversation(params, [local]);
+  expect(first.messages).toEqual([local]);
+  const saved = row(1, { message_type: 'image', media_url: local.media_url, status: 'delivered' });
+  mocks.rpc.mockResolvedValue({ data: { fingerprint: 'after-save', manifest: [{ id: id(1), revision: '1' }] } });
+  mocks.result.data = [saved];
+  const second = await reconcileConversation(params, first.messages, first.snapshot);
+  expect(second.messages).toEqual([saved]);
+ });
  it('unchanged manifest fetches no bodies', async () => {
   const old = [row(1)]; const snapshot = { fingerprint: 'same', revisions: { [id(1)]: '1' } };
   mocks.rpc.mockResolvedValue({ data: { fingerprint: 'same', unchanged: true }, error: null });
