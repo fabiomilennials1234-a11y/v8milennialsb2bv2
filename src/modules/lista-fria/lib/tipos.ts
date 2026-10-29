@@ -68,12 +68,12 @@ export const ROTULO_QUALIDADE: Record<QualidadeDoContato, string> = {
 };
 
 /**
- * Instagram ainda não tem adaptador no worker (a fonte e o método de coleta sem
- * login estão por validar, ver ADR-0042). O banco já aceita a busca; a tela só a
- * oferece quando o adaptador existir, para ninguém gastar crédito numa busca que
- * não roda.
+ * Instagram disponível na tela (29/10/2026). O worker da VPS roda o adaptador da Apify, validado ponta a
+ * ponta em produção (40 seguidores analisados, 10 contatos verificados, 286 s). Gasta crédito META
+ * (ADR-0044). Sem `APIFY_TOKEN` no worker, a busca fecha como `instagram_indisponivel` e devolve a
+ * reserva ao saldo Meta, então desligar o provedor não faz ninguém perder crédito.
  */
-export const INSTAGRAM_DISPONIVEL = false;
+export const INSTAGRAM_DISPONIVEL = true;
 
 export const STATUS_ABERTOS: readonly StatusDaBusca[] = ["na_fila", "executando"];
 
