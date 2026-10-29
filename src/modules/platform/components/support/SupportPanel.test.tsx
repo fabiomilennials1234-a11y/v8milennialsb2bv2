@@ -182,6 +182,43 @@ describe("SupportPanel", () => {
     );
   });
 
+  it("rascunho de erro (sem tipo) segue indo como defeito", async () => {
+    const user = userEvent.setup();
+    setup();
+    act(() => {
+      openSupport({ title: "Erro: Não foi possível mover o card.", description: "Código do erro: 7F3A9C21" });
+    });
+    await screen.findByLabelText("Assunto");
+    await user.click(screen.getByText("Sim, estou parado"));
+    await user.click(screen.getByRole("button", { name: /^abrir chamado$/i }));
+
+    await waitFor(() => expect(createTicket).toHaveBeenCalledTimes(1));
+    expect(createTicket.mock.calls[0][0].draft.tipo).toBe("bug");
+  });
+
+  // ADR-0045: "Outro" e "Já paguei", na compra de créditos, são pedidos, não defeitos.
+  it("um pedido com tipo e impacto chega ao chamado como solicitação, sem o usuário escolher de novo", async () => {
+    const user = userEvent.setup();
+    setup();
+    act(() => {
+      openSupport({
+        title: "Quero adquirir créditos",
+        description: "Quero adquirir créditos.",
+        tipo: "solicitacao",
+        impacto: "incomodo",
+      });
+    });
+    expect(await screen.findByLabelText("Assunto")).toHaveValue("Quero adquirir créditos");
+    expect(screen.getByLabelText(/detalhes/i)).toHaveValue("Quero adquirir créditos.");
+    await user.click(screen.getByRole("button", { name: /^abrir chamado$/i }));
+
+    await waitFor(() => expect(createTicket).toHaveBeenCalledTimes(1));
+    const { draft } = createTicket.mock.calls[0][0];
+    expect(draft.tipo).toBe("solicitacao");
+    expect(draft.impacto).toBe("incomodo");
+    expect(draft.title).toBe("Quero adquirir créditos");
+  });
+
   it("sem o painel montado, não há para onde levar o erro", () => {
     const { unmount } = setup();
     unmount();
