@@ -19,6 +19,7 @@ import { useCriarBusca, type AlvoDaBusca } from "../hooks/useListaFriaMutacoes";
 import { extrairHandleDoInstagram } from "../lib/instagram";
 import { recusaDaListaFria } from "../lib/erros";
 import { CONTATOS_EXIGIDOS, INSTAGRAM_DISPONIVEL, ROTULO_CONTATO, ROTULO_CREDITO, type ContatoExigido, type Saldos, type TipoDeCredito } from "../lib/tipos";
+import { BotaoComprarCreditos } from "./BotaoComprarCreditos";
 import { SeletorDeCnae } from "./SeletorDeCnae";
 
 type Passo = "fonte" | "instagram" | "maps" | "cnpj";
@@ -185,7 +186,9 @@ export function NovaBuscaDialog({
               <b className="text-foreground tabular-nums">{disponivel - creditos}</b>. O que não render volta para o saldo.
             </>
           ) : (
-            <>Use de 1 até o seu saldo ({disponivel}).</>
+            <span className="inline-flex items-center gap-1.5">
+              Use de 1 até o seu saldo ({disponivel}). Precisa de mais? <BotaoComprarCreditos />
+            </span>
           )}
         </p>
       </div>
@@ -234,6 +237,7 @@ export function NovaBuscaDialog({
                 <b className="tabular-nums text-primary">{saldos === undefined ? "·" : saldos.meta} créditos Meta</b> disponíveis · 1
                 crédito por contato novo e válido (Instagram usa os créditos Meta)
               </span>
+              <BotaoComprarCreditos />
             </p>
           </>
         ) : (
