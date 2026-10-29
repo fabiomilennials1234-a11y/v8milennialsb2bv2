@@ -30,7 +30,7 @@ O ADR-0044 fixou o preço de lista (crédito Google R$ 0,15, crédito Meta R$ 1,
 
    "Google" é o nome comercial do crédito padrão (serve para Maps e CNPJ); "Meta" é o do Instagram.
 2. **PIX estático gerado no navegador** (BR Code, padrão EMV do Banco Central, `lib/pix.ts`), com o valor do pacote e uma **referência** de 25 letras e números. Sem serviço de terceiro e sem segredo: a chave PIX existe para ser divulgada. O QR usa a biblioteca que o projeto já tem (`qrcode.react`).
-3. **A conta que recebe é uma constante** (`RECEBEDOR_PIX`: chave, nome e cidade). Enquanto for `null`, a tela **não mostra QR nenhum** e leva o cliente ao chamado, em vez de mostrar um código que mande o dinheiro para o lugar errado.
+3. **A conta que recebe é uma constante** (`RECEBEDOR_PIX`: chave, nome e cidade). Se for `null`, a tela **não mostra QR nenhum** e leva o cliente ao chamado, em vez de mostrar um código que mande o dinheiro para o lugar errado.
 4. **O pagamento NÃO é confirmado pelo sistema.** O QR estático não avisa ninguém. O cliente clica em **"Já paguei"**, que abre um chamado com pacote, créditos, valor e referência (e pede o comprovante em anexo); o time confere o PIX na conta e **libera o saldo à mão** (`lista_fria_creditos_conceder`, com `p_tipo`).
 5. **"Outro" e "Já paguei" abrem o chamado como `solicitacao`** (não como defeito), com impacto "não é urgente". Para isso o rascunho do painel de suporte (`SupportPrefill`) ganhou `tipo` e `impacto` opcionais. Sem eles nada muda: o rascunho de um erro continua abrindo como `bug`.
 6. **O "+" só aparece para quem pode editar a Lista fria**, e o chamado só abre onde o painel de suporte existe (o perfil gestor não o tem). Nesse caso "Outro" e "Já paguei" ficam desligados, mas o PIX continua visível.
@@ -42,4 +42,4 @@ O ADR-0044 fixou o preço de lista (crédito Google R$ 0,15, crédito Meta R$ 1,
 - **O valor mostrado no front não é uma fonte de verdade.** Quem altera o código no navegador pode gerar um QR de outro valor. Como quem libera o saldo é o time, olhando o extrato, isso não dá crédito de graça: o que importa é o valor que entrou.
 - **"Mais comprado" é um posicionamento**, não um dado: ainda não há nenhuma venda para medir.
 - **Sem nota fiscal nem recibo automático.** Fica por fora do sistema.
-- **Fica pendente** o preenchimento de `RECEBEDOR_PIX` com a conta real (chave, nome do recebedor e cidade).
+- **A conta foi preenchida em 29/10/2026:** chave de telefone, em nome de pessoa física. O número de telefone passa a estar no código que o site entrega (qualquer um que baixe a página o lê); uma chave aleatória ou o CNPJ da empresa evitaria isso e basta trocar o valor da constante.
