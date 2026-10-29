@@ -19,11 +19,13 @@ import { BotaoComprarCreditos } from "./BotaoComprarCreditos";
 import { recusaDaListaFria } from "../lib/erros";
 import {
   ETAPAS_DA_BUSCA,
+  ROTULO_CREDITO,
   ROTULO_FONTE,
   ROTULO_STATUS,
   type Busca,
   buscaEstaAberta,
   buscaPedeRevisao,
+  tipoDaFonte,
 } from "../lib/tipos";
 
 function numero(n: number) {
@@ -141,11 +143,18 @@ function LinhaDeBusca({ busca, podeEditar }: { busca: Busca; podeEditar: boolean
       ) : null}
 
       <div className="flex flex-wrap items-baseline gap-x-6 gap-y-1">
-        <Numero valor={busca.encontrados} rotulo="negócios encontrados" />
-        <Numero valor={busca.comTelefone} rotulo="com telefone" />
-        <Numero valor={busca.comEmail} rotulo="com e-mail" />
+        {/* O que a pessoa recebe e paga: os contatos NOVOS. O resto é contexto. */}
+        <Numero valor={busca.creditosUsados} rotulo="contatos novos" destaque />
+        {busca.jaLeads > 0 && <Numero valor={busca.jaLeads} rotulo="já são seus leads" />}
+        <span
+          className="text-xs text-muted-foreground"
+          title="Negócios que a busca examinou. Só os que cabem nos seus créditos entram na lista; o resto não é cobrado."
+        >
+          <b className="text-[15px] tabular-nums text-foreground">{numero(busca.encontrados)}</b> analisados
+        </span>
         <span className="text-xs text-muted-foreground">
-          <b className="text-[15px] tabular-nums text-primary">{numero(busca.creditosUsados)}</b> de {numero(busca.creditosLimite)} créditos usados
+          limite de <b className="text-[15px] tabular-nums text-foreground">{numero(busca.creditosLimite)}</b>{" "}
+          {ROTULO_CREDITO[tipoDaFonte(busca.fonte)]}
         </span>
         {busca.status === "parada" && busca.creditosUsados >= busca.creditosLimite && (
           <span className="rounded-full bg-muted px-2.5 py-0.5 text-[11px] font-semibold text-muted-foreground">parou no limite de créditos</span>
