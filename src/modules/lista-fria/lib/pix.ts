@@ -19,10 +19,18 @@ export interface RecebedorPix {
 }
 
 /**
- * Conta que recebe. `null` = ainda não configurada: a tela avisa e oferece o Chamado em vez de mostrar um QR
- * que mande o dinheiro para o lugar errado.
+ * Conta que recebe (informada pelo CTO em 29/10/2026). Chave de TELEFONE: no BR Code vai com +55 e sem máscara.
+ * O nome tem exatamente 25 caracteres (o limite do padrão) e a cidade vai sem UF: "Florianópolis - SC" viraria
+ * "FLORIANOPOLIS SC" (16) e o limite é 15, o que cortaria o "SC" pela metade.
+ *
+ * `null` = conta não configurada: a tela avisa e oferece o Chamado em vez de mostrar um QR que mande o
+ * dinheiro para o lugar errado.
  */
-export const RECEBEDOR_PIX: RecebedorPix | null = null;
+export const RECEBEDOR_PIX: RecebedorPix | null = {
+  chave: "+5551985960716",
+  nome: "Marcelo Montemezzo Simoes",
+  cidade: "Florianopolis",
+};
 
 /** CRC-16/CCITT-FALSE (poly 0x1021, início 0xFFFF), em 4 dígitos hexadecimais maiúsculos. */
 export function crc16(texto: string): string {

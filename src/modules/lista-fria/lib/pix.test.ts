@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import { crc16, novaReferencia, payloadPix, referenciaValida, textoParaPix, valorParaPix, type RecebedorPix } from "./pix";
+import { RECEBEDOR_PIX, crc16, novaReferencia, payloadPix, referenciaValida, textoParaPix, valorParaPix, type RecebedorPix } from "./pix";
+import { PACOTES, precoDoPacote } from "./pacotes";
 
 /** Decodifica um nível de campos EMV (id de 2 + tamanho de 2 + valor), para conferir o código campo a campo. */
 function decodifica(payload: string): Record<string, string> {
@@ -98,5 +99,31 @@ describe("auxiliares", () => {
     expect(a).not.toBe(b);
     expect(referenciaValida(a)).toBe(true);
     expect(novaReferencia().length).toBeLessThanOrEqual(25);
+  });
+});
+
+describe("conta que recebe (RECEBEDOR_PIX)", () => {
+  it("está configurada e nada do que o cliente vai ver é cortado ou alterado", () => {
+    expect(RECEBEDOR_PIX).not.toBeNull();
+    const r = RECEBEDOR_PIX!;
+    expect(r.chave).toBe("+5551985960716"); // telefone: +55, DDD e número, sem máscara
+    expect(r.chave).toMatch(/^\+55\d{10,11}$/);
+    // O padrão corta em 25 e 15: se o texto original passa disso, o cliente veria um nome truncado.
+    expect(textoParaPix(r.nome, 99)).toBe(textoParaPix(r.nome, 25));
+    expect(textoParaPix(r.cidade, 99)).toBe(textoParaPix(r.cidade, 15));
+    expect(textoParaPix(r.nome, 25)).toBe("MARCELO MONTEMEZZO SIMOES");
+    expect(textoParaPix(r.cidade, 15)).toBe("FLORIANOPOLIS");
+  });
+
+  it("gera um PIX válido, com o valor certo, para cada um dos seis pacotes", () => {
+    for (const p of PACOTES) {
+      const payload = payloadPix({ recebedor: RECEBEDOR_PIX!, valorCentavos: precoDoPacote(p), referencia: "LFTESTE1" });
+      const campos = decodifica(payload);
+      expect(campos["54"]).toBe(valorParaPix(precoDoPacote(p)));
+      expect(campos["59"]).toBe("MARCELO MONTEMEZZO SIMOES");
+      expect(campos["60"]).toBe("FLORIANOPOLIS");
+      expect(decodifica(campos["26"])["01"]).toBe("+5551985960716");
+      expect(payload.slice(-4)).toBe(crc16(payload.slice(0, -4)));
+    }
   });
 });
