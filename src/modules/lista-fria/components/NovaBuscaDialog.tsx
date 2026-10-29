@@ -207,7 +207,7 @@ export function NovaBuscaDialog({
               <CartaoDeFonte
                 icone={<InstagramIcone className="size-6" />}
                 titulo="Instagram"
-                texto="Seguidores de uma conta. Cole a URL do perfil e buscamos o contato público de cada seguidor."
+                texto="Os primeiros seguidores de uma conta (cerca de 50, o limite do acesso público). Cole a URL do perfil e buscamos o contato público de cada um. Usa créditos Meta."
                 exemplo="Ex.: instagram.com/clinicaodontovida"
                 emBreve={!INSTAGRAM_DISPONIVEL}
                 onEscolher={() => setPasso("instagram")}
@@ -274,8 +274,9 @@ export function NovaBuscaDialog({
                   <p className="text-xs text-destructive-strong">Cole a URL de uma conta, não de um post.</p>
                 ) : handle ? (
                   <p className="text-xs text-muted-foreground">
-                    Vamos buscar nos seguidores de <b className="text-foreground">@{handle}</b>. Só contatos públicos do perfil:
-                    bio, botão de contato e link da bio.
+                    Vamos analisar os primeiros ~50 seguidores de <b className="text-foreground">@{handle}</b>, o limite do acesso
+                    público. Só contatos públicos do perfil (bio, botão de contato e link da bio). Costuma render até uns 10
+                    contatos, e só os contatos válidos gastam créditos Meta; o resto da reserva volta.
                   </p>
                 ) : null}
               </div>
