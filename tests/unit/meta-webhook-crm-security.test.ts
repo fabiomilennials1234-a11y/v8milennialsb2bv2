@@ -37,3 +37,12 @@ describe("CRM webhook durable acknowledgement",()=>{
   expect(call?.params).toEqual(expect.objectContaining({p_existing:"existing",p_event:"111",p_fields:expect.objectContaining({meta_lead_id:"111"})}));
   expect((call?.params as {p_fields:object}).p_fields).not.toHaveProperty("metadata");
  });
+
+ it("logs only an allowlisted failure stage and leaves the receipt retryable", async () => {
+  const { logRuntime } = await import("../../supabase/functions/_shared/logger.ts");
+  f.db.mockRpc("meta_claim_webhooks", [{id:"retry",attempts:1,payload:{object:"unsupported",entry:[{id:"42"}]}}]);
+  const response=await f.handler(new Request("https://edge.test",{method:"POST",headers:{"x-cron-secret":"cron-secret"},body:"{}"}));
+  expect(await response.json()).toEqual({completed:0,claimed:1});
+  expect(logRuntime).toHaveBeenCalledWith(expect.objectContaining({errorMessage:"unsupported_crm_object"}));
+  expect(f.db.getUpdated("meta_webhook_receipts")).toHaveLength(0);
+ });

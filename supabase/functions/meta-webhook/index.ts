@@ -60,9 +60,18 @@ Deno.serve(withErrorBoundary('meta-webhook', async (req) => {
         const { error: updateError } = await supabase.from("meta_webhook_receipts").update({ status: "completed", completed_at: new Date().toISOString() }).eq("id", receipt.id).eq("app_id", appId).eq("attempts", receipt.attempts);
         if (updateError) throw new Error("receipt_update_failed");
         completed++;
-      } catch {
+      } catch (error) {
+        const safeCodes = new Set([
+          "unsupported_crm_object", "meta_binding_lookup_failed", "meta_binding_pending",
+          "meta_page_binding_not_found", "meta_leadgen_fetch_failed", "invalid_meta_lead_payload",
+          "meta_lead_lookup_failed", "meta_lead_transaction_failed", "meta_lead_update_failed",
+          "meta_message_transaction_failed", "meta_message_write_failed", "meta_conversation_write_failed",
+          "meta_campaign_placement_failed", "meta_campaign_tenant_mismatch", "meta_pipeline_write_failed",
+          "meta_tag_write_failed", "receipt_update_failed",
+        ]);
+        const errorCode = error instanceof Error && safeCodes.has(error.message) ? error.message : "meta_crm_processing_failed";
         // Lease expires in five minutes. Payload stays private and replayable; never discard on handler error.
-        await logRuntime({ module: "webhook", action: "meta_crm_retry", status: "error", errorMessage: "meta_crm_processing_failed", payloadSnapshot: { receiptId: receipt.id, attempts: receipt.attempts } });
+        await logRuntime({ module: "webhook", action: "meta_crm_retry", status: "error", errorMessage: errorCode, payloadSnapshot: { receiptId: receipt.id, attempts: receipt.attempts } });
       }
     }
     return new Response(JSON.stringify({ completed, claimed: receipts?.length ?? 0 }), { headers: withSecurityHeaders({ "Content-Type": "application/json" }) });
