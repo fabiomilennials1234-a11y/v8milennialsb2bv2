@@ -125,6 +125,8 @@ export interface Resultado {
   categoria: string | null;
   telefone: string | null;
   email: string | null;
+  /** @ do perfil no Instagram (busca de Instagram, ou o que o site de um negócio publica). */
+  instagram: string | null;
   site: string | null;
   bairro: string | null;
   qualidade: QualidadeDoContato;
@@ -225,6 +227,7 @@ export function parseResultado(r: LinhaDoResultado): Resultado {
     categoria: r.categoria,
     telefone: r.telefone,
     email: r.email,
+    instagram: r.instagram,
     site: r.site,
     bairro: r.bairro,
     qualidade: QUALIDADES.has(r.qualidade) ? (r.qualidade as QualidadeDoContato) : "nao_verificado",
@@ -242,4 +245,54 @@ export const buscaTemResultado = (b: Pick<Busca, "status">) => b.status === "con
 /** Falta importar? Terminou, achou algo novo e ainda não foi tudo para os leads. */
 export function buscaPedeRevisao(b: Busca): boolean {
   return buscaTemResultado(b) && b.contatosNovos > 0 && b.importadaEm === null;
+}
+
+/**
+ * Tipos de contato que um resultado pode ter. Marcar mais de um vale como "E": só entra quem tem TODOS os marcados
+ * (`lista_fria_resultados_selecionar_por_contato`, migration 20271223000000).
+ */
+export interface CriteriosDeContato {
+  comInstagram: boolean;
+  comTelefone: boolean;
+  comEmail: boolean;
+}
+
+export const SEM_CRITERIOS: CriteriosDeContato = { comInstagram: false, comTelefone: false, comEmail: false };
+
+/** "@", "@ e telefone", "@, telefone e e-mail": o que os critérios marcados exigem, em português. */
+export function fraseDosCriterios(c: CriteriosDeContato): string {
+  const partes = [c.comInstagram && "@", c.comTelefone && "telefone", c.comEmail && "e-mail"].filter((p): p is string => p !== false);
+  if (partes.length <= 1) return partes.join("");
+  return `${partes.slice(0, -1).join(", ")} e ${partes[partes.length - 1]}`;
+}
+
+/** A divisão dos contatos NOVOS (que ainda não são lead nem foram importados) por tipo de contato. */
+export interface DivisaoDosContatos {
+  novos: number;
+  comInstagram: number;
+  comTelefone: number;
+  comEmail: number;
+  /** Quantos têm TODOS os tipos marcados nos critérios (sem critério, todos os novos). */
+  combinacao: number;
+  selecionados: number;
+  selecionadosComInstagram: number;
+  selecionadosComTelefone: number;
+  selecionadosComEmail: number;
+}
+
+/** Lê o jsonb de `lista_fria_resultados_divisao` sem confiar nele: o que não for número vira 0. */
+export function parseDivisao(j: Json | null | undefined): DivisaoDosContatos {
+  const o = j && typeof j === "object" && !Array.isArray(j) ? j : {};
+  const n = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : 0);
+  return {
+    novos: n(o.novos),
+    comInstagram: n(o.com_instagram),
+    comTelefone: n(o.com_telefone),
+    comEmail: n(o.com_email),
+    combinacao: n(o.combinacao),
+    selecionados: n(o.selecionados),
+    selecionadosComInstagram: n(o.selecionados_com_instagram),
+    selecionadosComTelefone: n(o.selecionados_com_telefone),
+    selecionadosComEmail: n(o.selecionados_com_email),
+  };
 }

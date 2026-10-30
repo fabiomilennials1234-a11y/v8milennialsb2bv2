@@ -6,7 +6,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  ROLLBACK_VARREDURA, ROLLBACK_POR_CREDITOS, TORQUE, U_ADMIN, U_LIBERADO,
+  ROLLBACK_VARREDURA, ROLLBACK_POR_CREDITOS, ROLLBACK_DIVISAO, TORQUE, U_ADMIN, U_LIBERADO,
   read, setup, as, asWorker, asPostgres, one, val, maps, criarBusca, item, registrar, comSaldo,
 } from './helpers/lista-fria-db.mjs';
 
@@ -350,6 +350,7 @@ test('rollback: recusa com busca por varredura; sem ela, volta ao modo por conta
     await as(db, U_LIBERADO);
     const id = await criarBusca(db, 'instagram', ig, 50);
     await asPostgres(db);
+    await db.exec(read(ROLLBACK_DIVISAO)); // a mais nova sai primeiro
     await db.exec(read(ROLLBACK_POR_CREDITOS)); // empilhada: a por créditos sai antes
     await assert.rejects(db.exec(read(ROLLBACK_VARREDURA)), /cobradas por varredura/);
     await db.exec('ROLLBACK'); // o script abre BEGIN; ao recusar, a transação fica aberta

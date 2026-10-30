@@ -6,7 +6,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  ROLLBACK_META, ROLLBACK_VARREDURA, ROLLBACK_POR_CREDITOS, TORQUE, U_ADMIN, U_MEMBRO, U_LIBERADO, U_MASTER,
+  ROLLBACK_META, ROLLBACK_VARREDURA, ROLLBACK_POR_CREDITOS, ROLLBACK_DIVISAO, TORQUE, U_ADMIN, U_MEMBRO, U_LIBERADO, U_MASTER,
   read, setup, as, asWorker, asPostgres, one, val, maps, criarBusca, item, registrar, comSaldo,
 } from './helpers/lista-fria-db.mjs';
 
@@ -135,6 +135,7 @@ test('rollback: recusa com crédito Meta no livro; sem ele, volta ao saldo únic
     await comSaldo(db, 100);
     await comSaldo(db, 50, 'meta');
     await asPostgres(db);
+    await db.exec(read(ROLLBACK_DIVISAO)); // a mais nova sai primeiro
     await db.exec(read(ROLLBACK_POR_CREDITOS)); // empilhadas: por créditos e varredura saem antes
     await db.exec(read(ROLLBACK_VARREDURA));
     await assert.rejects(db.exec(read(ROLLBACK_META)), /Há créditos Meta no livro/);
