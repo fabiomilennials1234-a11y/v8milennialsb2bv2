@@ -38,7 +38,7 @@ describe("NovaBuscaDialog: onde comprar créditos", () => {
   });
 });
 
-describe("NovaBuscaDialog: Instagram cobrado por seguidor varrido (ADR-0046)", () => {
+describe("NovaBuscaDialog: Instagram cobrado por seguidor varrido, no tamanho que o cliente escolhe (ADR-0047)", () => {
   const abrirInstagram = async (saldos: { normal: number; meta: number }) => {
     const user = userEvent.setup();
     montar(saldos);
@@ -46,29 +46,49 @@ describe("NovaBuscaDialog: Instagram cobrado por seguidor varrido (ADR-0046)", (
     await user.type(await screen.findByLabelText("URL da conta"), "https://www.instagram.com/clinicaodontovida/");
     return user;
   };
+  const digitar = async (user: ReturnType<typeof userEvent.setup>, n: string) => {
+    const campo = screen.getByLabelText("Seguidores a analisar");
+    await user.clear(campo);
+    await user.type(campo, n);
+  };
 
-  it("mostra o preço fixo da busca e o risco, e não pede quantos créditos usar", async () => {
+  it("sugere 50, mostra o preço do que foi escolhido e o risco", async () => {
     await abrirInstagram({ normal: 0, meta: 100 });
-    const preco = screen.getByTestId("preco-instagram");
-    expect(preco).toHaveTextContent(/Esta busca custa 50 créditos Meta/);
-    expect(preco.textContent?.replace(/\s/g, " ")).toContain("R$ 7,50");
-    expect(preco).toHaveTextContent(/Cada seguidor analisado gasta 1 crédito, venha contato ou não/);
-    expect(preco).toHaveTextContent(/metade dos créditos gastos volta/);
-    expect(preco).toHaveTextContent(/Saldo depois:\s*50/);
-    expect(screen.queryByLabelText(/Créditos Meta para esta busca/)).not.toBeInTheDocument();
+    const bloco = screen.getByTestId("preco-instagram");
+    expect(screen.getByLabelText("Seguidores a analisar")).toHaveValue(50);
+    expect(bloco).toHaveTextContent(/Esta busca custa 50 créditos Meta/);
+    expect(bloco.textContent?.replace(/\s/g, " ")).toContain("R$ 7,50");
+    expect(bloco).toHaveTextContent(/Saldo depois:\s*50/);
+    expect(bloco).toHaveTextContent(/Cada seguidor analisado gasta 1 crédito, venha contato ou não/);
+    expect(bloco).toHaveTextContent(/metade dos créditos gastos volta/);
   });
 
-  it("envia sempre a reserva de 50, nunca um número digitado", async () => {
-    const user = await abrirInstagram({ normal: 0, meta: 100 });
+  it("o preço acompanha o que se digita, e envia exatamente esse número", async () => {
+    const user = await abrirInstagram({ normal: 0, meta: 500 });
+    await digitar(user, "200");
+    expect(screen.getByTestId("preco-instagram").textContent?.replace(/\s/g, " ")).toContain("R$ 30,00");
     await user.click(screen.getByRole("button", { name: /Iniciar busca/ }));
     expect(criar).toHaveBeenCalledTimes(1);
-    expect(criar.mock.calls[0][0]).toEqual({ alvo: { fonte: "instagram", url: "https://www.instagram.com/clinicaodontovida/" }, creditos: 50 });
+    expect(criar.mock.calls[0][0]).toEqual({ alvo: { fonte: "instagram", url: "https://www.instagram.com/clinicaodontovida/" }, creditos: 200 });
   });
 
-  it("com menos de 50 créditos Meta, não deixa iniciar e oferece comprar", async () => {
-    await abrirInstagram({ normal: 500, meta: 49 });
+  it("recusa menos de 10, mais de 1.000 e mais que o saldo", async () => {
+    const user = await abrirInstagram({ normal: 0, meta: 300 });
+    const iniciar = () => screen.getByRole("button", { name: /Iniciar busca/ });
+    for (const n of ["9", "1001", "301", "0"]) {
+      await digitar(user, n);
+      expect(iniciar(), `valor ${n}`).toBeDisabled();
+    }
+    await digitar(user, "10");
+    expect(iniciar()).toBeEnabled();
+    await digitar(user, "300");
+    expect(iniciar()).toBeEnabled();
+  });
+
+  it("com menos de 10 créditos Meta, não deixa iniciar e oferece comprar", async () => {
+    await abrirInstagram({ normal: 500, meta: 9 });
     expect(screen.getByRole("button", { name: /Iniciar busca/ })).toBeDisabled();
-    expect(screen.getByTestId("preco-instagram")).toHaveTextContent(/Você tem 49 créditos Meta; a busca precisa de 50/);
+    expect(screen.getByTestId("preco-instagram")).toHaveTextContent(/até o seu saldo \(9\)/);
     expect(screen.getByRole("button", { name: "Comprar créditos" })).toBeInTheDocument();
   });
 

@@ -19,7 +19,7 @@ import { useCriarBusca, type AlvoDaBusca } from "../hooks/useListaFriaMutacoes";
 import { extrairHandleDoInstagram } from "../lib/instagram";
 import { recusaDaListaFria } from "../lib/erros";
 import { formatarReais, PRECO_DO_CREDITO_CENTAVOS } from "../lib/pacotes";
-import { CONTATOS_EXIGIDOS, INSTAGRAM_DISPONIVEL, RESERVA_INSTAGRAM_CREDITOS, ROTULO_CONTATO, ROTULO_CREDITO, type ContatoExigido, type Saldos, type TipoDeCredito } from "../lib/tipos";
+import { CONTATOS_EXIGIDOS, INSTAGRAM_CREDITOS_MAX, INSTAGRAM_CREDITOS_MIN, INSTAGRAM_CREDITOS_SUGERIDO, INSTAGRAM_DISPONIVEL, ROTULO_CONTATO, ROTULO_CREDITO, type ContatoExigido, type Saldos, type TipoDeCredito } from "../lib/tipos";
 import { BotaoComprarCreditos } from "./BotaoComprarCreditos";
 import { SeletorDeCnae } from "./SeletorDeCnae";
 
@@ -118,9 +118,8 @@ export function NovaBuscaDialog({
 
   useEffect(() => {
     if (passo === "fonte") return;
-    // Instagram não tem campo: a reserva é fixa (ADR-0046), então o valor enviado é sempre ela.
     if (passo === "instagram") {
-      setCreditos(RESERVA_INSTAGRAM_CREDITOS);
+      setCreditos(Math.max(INSTAGRAM_CREDITOS_MIN, Math.min(INSTAGRAM_CREDITOS_SUGERIDO, saldos?.meta ?? INSTAGRAM_CREDITOS_SUGERIDO)));
       return;
     }
     setCreditos(Math.max(1, Math.min(CREDITOS_SUGERIDOS, saldos?.normal ?? CREDITOS_SUGERIDOS)));
@@ -129,7 +128,7 @@ export function NovaBuscaDialog({
   }, [passo]);
   const creditosOk =
     passo === "instagram"
-      ? disponivel >= RESERVA_INSTAGRAM_CREDITOS
+      ? Number.isInteger(creditos) && creditos >= INSTAGRAM_CREDITOS_MIN && creditos <= Math.min(INSTAGRAM_CREDITOS_MAX, disponivel)
       : Number.isInteger(creditos) && creditos >= 1 && creditos <= disponivel;
   const municipioOk = municipio.trim() === "" || (municipio.trim().length >= 2 && municipio.trim().length <= 80);
   const alvoOk =
@@ -151,7 +150,7 @@ export function NovaBuscaDialog({
           ? { fonte: "cnpj", cnaes, uf, municipio, contato }
           : { fonte: "maps", nicho, cidade };
     criar.mutate(
-      { alvo, creditos: passo === "instagram" ? RESERVA_INSTAGRAM_CREDITOS : creditos },
+      { alvo, creditos },
       {
         onSuccess: () => {
           toast.success("Busca iniciada. Pode sair desta tela: o resultado aparece em Buscas quando terminar.");
@@ -167,29 +166,49 @@ export function NovaBuscaDialog({
     );
   };
 
-  // Instagram: preço fixo por busca. O cliente paga pelos seguidores analisados, não pelos contatos achados, e
-  // precisa saber disso ANTES de iniciar (o rendimento depende da conta e ninguém sabe de antemão).
-  const precoDaBuscaInstagram = formatarReais(RESERVA_INSTAGRAM_CREDITOS * PRECO_DO_CREDITO_CENTAVOS.meta);
+  // Instagram: o cliente escolhe quantos seguidores analisar (1 crédito Meta cada). Ele paga pelos seguidores
+  // analisados, não pelos contatos achados, e precisa saber disso ANTES de iniciar (o rendimento depende da conta
+  // e ninguém sabe de antemão).
+  const maximoInstagram = Math.min(INSTAGRAM_CREDITOS_MAX, disponivel);
+  const precoDaBuscaInstagram = formatarReais((Number.isFinite(creditos) ? creditos : 0) * PRECO_DO_CREDITO_CENTAVOS.meta);
   const blocoDoInstagram = (
-    <div className="space-y-2 rounded-xl border border-border bg-muted/40 p-3.5" data-testid="preco-instagram">
-      <p className="text-sm font-semibold text-foreground">
-        Esta busca custa {RESERVA_INSTAGRAM_CREDITOS} créditos Meta <span className="font-normal text-muted-foreground">({precoDaBuscaInstagram})</span>
-      </p>
-      <p className="text-xs leading-relaxed text-muted-foreground">
+    <div className="space-y-3" data-testid="preco-instagram">
+      <div className="space-y-2">
+        <Label htmlFor="lf-creditos">Seguidores a analisar</Label>
+        <div className="grid items-center gap-3 sm:grid-cols-[9.5rem_1fr]">
+          <div className="relative">
+            <Input
+              id="lf-creditos"
+              type="number"
+              inputMode="numeric"
+              min={INSTAGRAM_CREDITOS_MIN}
+              max={maximoInstagram || undefined}
+              value={Number.isFinite(creditos) ? creditos : ""}
+              onChange={(e) => setCreditos(e.target.value === "" ? Number.NaN : Number(e.target.value))}
+              className="pr-28 font-bold tabular-nums"
+              aria-invalid={!creditosOk}
+            />
+            <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">{ROTULO_CREDITO.meta}</span>
+          </div>
+          <p className="text-xs leading-relaxed text-muted-foreground">
+            {creditosOk ? (
+              <>
+                Esta busca custa <b className="text-foreground tabular-nums">{creditos} créditos Meta</b> ({precoDaBuscaInstagram}). Saldo depois:{" "}
+                <b className="text-foreground tabular-nums">{disponivel - creditos}</b>.
+              </>
+            ) : (
+              <span className="inline-flex flex-wrap items-center gap-1.5">
+                Use de {INSTAGRAM_CREDITOS_MIN} a {INSTAGRAM_CREDITOS_MAX.toLocaleString("pt-BR")}, até o seu saldo ({disponivel}). Precisa de mais?{" "}
+                <BotaoComprarCreditos />
+              </span>
+            )}
+          </p>
+        </div>
+      </div>
+      <p className="rounded-xl border border-border bg-muted/40 p-3 text-xs leading-relaxed text-muted-foreground">
         Cada seguidor analisado gasta 1 crédito, venha contato ou não: o preço é o mesmo seja qual for o resultado. Contas com
-        pouco contato público rendem pouco. Se a busca terminar sem nenhum contato, metade dos créditos gastos volta para o saldo.
-      </p>
-      <p className="text-xs leading-relaxed text-muted-foreground">
-        {creditosOk ? (
-          <>
-            Saldo depois: <b className="text-foreground tabular-nums">{disponivel - RESERVA_INSTAGRAM_CREDITOS}</b> {ROTULO_CREDITO.meta}. O que a
-            busca não analisar volta para o saldo.
-          </>
-        ) : (
-          <span className="inline-flex items-center gap-1.5">
-            Você tem {disponivel} {ROTULO_CREDITO.meta}; a busca precisa de {RESERVA_INSTAGRAM_CREDITOS}. Precisa de mais? <BotaoComprarCreditos />
-          </span>
-        )}
+        pouco contato público rendem pouco, e a conta pode ter menos seguidores do que você pediu (o que não for analisado volta
+        para o saldo). Se a busca terminar sem nenhum contato, metade dos créditos gastos volta para o saldo.
       </p>
     </div>
   );
@@ -268,7 +287,7 @@ export function NovaBuscaDialog({
               <span>
                 <b className="tabular-nums text-primary">{saldos === undefined ? "·" : saldos.normal} créditos</b> e{" "}
                 <b className="tabular-nums text-primary">{saldos === undefined ? "·" : saldos.meta} créditos Meta</b> disponíveis · Google Maps e CNPJ: 1
-                crédito por contato novo e válido · Instagram: {RESERVA_INSTAGRAM_CREDITOS} créditos Meta por busca (1 por seguidor analisado)
+                crédito por contato novo e válido · Instagram: 1 crédito Meta por seguidor analisado
               </span>
               <BotaoComprarCreditos />
             </p>

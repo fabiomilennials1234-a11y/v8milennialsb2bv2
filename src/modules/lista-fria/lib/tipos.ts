@@ -77,10 +77,12 @@ export const ROTULO_QUALIDADE: Record<QualidadeDoContato, string> = {
 export const INSTAGRAM_DISPONIVEL = true;
 
 /**
- * Quanto o Instagram reserva por busca, em créditos Meta (ADR-0046): 1 crédito = 1 seguidor varrido, e o acesso
- * sem login entrega ~50 por conta. ESPELHA a reserva fixa de `lista_fria_busca_criar` (migration 20271221000000).
+ * Tamanho de uma busca de Instagram, em créditos Meta (ADR-0047): 1 crédito = 1 seguidor varrido e a reserva é
+ * o que o cliente escolhe. ESPELHAM a faixa de `lista_fria_busca_criar` (migration 20271222000000).
  */
-export const RESERVA_INSTAGRAM_CREDITOS = 50;
+export const INSTAGRAM_CREDITOS_MIN = 10;
+export const INSTAGRAM_CREDITOS_MAX = 1000;
+export const INSTAGRAM_CREDITOS_SUGERIDO = 50;
 
 export type CobrancaDaBusca = "por_contato" | "por_varredura";
 

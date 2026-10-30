@@ -52,11 +52,11 @@ export const CFG_INSTAGRAM_SESSAO_PADRAO: Omit<CfgInstagram, "actorId"> = {
 export const CFG_INSTAGRAM_PADRAO: Omit<CfgInstagram, "actorId"> = {
   precoPorSeguidorUsd: 0.012,
   maxUsdPorBusca: 25,
-  // MEDIDO na Apify real em 28/10/2026: o acesso SEM LOGIN devolve só a PRIMEIRA PÁGINA de seguidores
-  // (~50) por conta-alvo. O Actor data-slayer pediu 3 páginas e parou em "No more pages available"
-  // (51 itens); o thenetaji, pedindo 200, entregou 50. Pedir mais só alonga o prazo e promete o que
-  // não vem. Para ir mais fundo é preciso login (coletor com conta real) ou várias contas-alvo.
-  maxSeguidores: 50,
+  // Teto por busca, alinhado ao máximo do banco (10 a 1.000 créditos Meta, ADR-0047). Em 28/10/2026 o Actor
+  // parou em 51 itens pedindo 3 páginas, mas o que se mediu foi o limite configurado e depois o prazo (30/10:
+  // TIMED-OUT aos 300 s); que o Actor entregue acima de 50 AINDA NÃO foi provado. Se não entregar, a busca
+  // conclui com o que veio e o cliente só paga o varrido.
+  maxSeguidores: 1000,
   contasPorCredito: 8,
   // MEDIDO na Apify real em 28/10/2026: 45 itens em 216 s (4,8 s por conta) numa conta, 10 itens em
   // 300 s (30 s por conta) em outra. Prazo curto demais mata a execução no meio (TIMED-OUT) e
@@ -99,8 +99,12 @@ export function tetoDeSeguidores(busca: Pick<BuscaDaFila, "cobranca" | "creditos
 }
 
 export function planoDaBusca(creditos: number, cfg: CfgInstagram, tetoPorVarredura?: number) {
-  const pedido = tetoPorVarredura ?? creditos * cfg.contasPorCredito;
-  const maxItems = clamp(pedido, CONTAS_POR_PAGINA, cfg.maxSeguidores);
+  // Por varredura o pedido é EXATO (1 crédito = 1 seguidor): pedir uma página inteira a mais seria pagar por
+  // seguidores que o cliente não comprou. Por contato é a conta presumida, com piso de uma página.
+  const maxItems =
+    tetoPorVarredura !== undefined
+      ? clamp(tetoPorVarredura, 1, cfg.maxSeguidores)
+      : clamp(creditos * cfg.contasPorCredito, CONTAS_POR_PAGINA, cfg.maxSeguidores);
   const maxPages = Math.ceil(maxItems / CONTAS_POR_PAGINA);
   // 15% de folga sobre o preço de tabela (add-ons, arredondamento); nunca acima do teto.
   const maxTotalChargeUsd = Math.min(cfg.maxUsdPorBusca, Number((maxItems * cfg.precoPorSeguidorUsd * 1.15 + 0.01).toFixed(4)));

@@ -6,7 +6,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  ROLLBACK_VARREDURA, TORQUE, U_ADMIN, U_LIBERADO,
+  ROLLBACK_VARREDURA, ROLLBACK_POR_CREDITOS, TORQUE, U_ADMIN, U_LIBERADO,
   read, setup, as, asWorker, asPostgres, one, val, maps, criarBusca, item, registrar, comSaldo,
 } from './helpers/lista-fria-db.mjs';
 
@@ -18,8 +18,8 @@ const varrer = async (db, id, n, custo = null, worker = 'w1') =>
   val(db, `SELECT lista_fria_worker_varrer('${id}', '${worker}', ${n}, ${custo === null ? 'NULL' : custo})`);
 
 /** Cria a busca de Instagram, deixa o worker w1 reivindicá-la e volta como worker. */
-async function instagramEmAndamento(db, pedido = 10) {
-  await comSaldo(db, 100, 'meta');
+async function instagramEmAndamento(db, pedido = 50) {
+  await comSaldo(db, Math.max(100, pedido), 'meta');
   await as(db, U_LIBERADO);
   const id = await criarBusca(db, 'instagram', ig, pedido);
   await asWorker(db);
@@ -33,31 +33,56 @@ const devolucoes = async (db, id) => {
   return (await db.query(`SELECT delta, nota FROM lista_fria_creditos WHERE busca_id = '${id}' AND motivo = 'devolucao' ORDER BY nota DESC`)).rows;
 };
 
-test('o Instagram reserva 50 créditos Meta, por varredura, não importa o que o cliente pediu; Maps e CNPJ seguem por contato', async () => {
+test('o Instagram reserva o que o cliente pediu (10 a 1.000), por varredura; Maps e CNPJ seguem por contato', async () => {
   const db = await setup();
   try {
     await comSaldo(db, 100);
-    await comSaldo(db, 120, 'meta');
+    await comSaldo(db, 2000, 'meta');
     await as(db, U_LIBERADO);
-    for (const pedido of [1, 10, 100000]) {
+    for (const pedido of [10, 50, 1000]) {
       const i = await criarBusca(db, 'instagram', ig, pedido);
-      assert.deepEqual(await busca(db, i), { status: 'na_fila', contatos_novos: 0, cobranca: 'por_varredura', creditos_limite: 50, creditos_usados: 0, varridos: 0, custo_usd: null, seguidores_por_credito: 1 }, `pedido ${pedido}`);
+      assert.deepEqual(await busca(db, i), { status: 'na_fila', contatos_novos: 0, cobranca: 'por_varredura', creditos_limite: pedido, creditos_usados: 0, varridos: 0, custo_usd: null, seguidores_por_credito: 1 }, `pedido ${pedido}`);
       await db.query(`SELECT lista_fria_busca_cancelar('${i}')`);
     }
     const m = await criarBusca(db, 'maps', maps, 7);
     const c = await criarBusca(db, 'cnpj', { cnaes: ['4639'], uf: 'SP' }, 9);
     assert.deepEqual([(await busca(db, m)).cobranca, (await busca(db, c)).cobranca], ['por_contato', 'por_contato']);
-    assert.deepEqual([(await busca(db, m)).creditos_limite, (await busca(db, c)).creditos_limite], [7, 9], 'só o Instagram ignora o pedido');
   } finally { await db.close(); }
 });
 
-test('com menos de 50 créditos Meta a busca de Instagram é recusada, mesmo pedindo 1', async () => {
+test('fora da faixa de 10 a 1.000 créditos Meta a busca de Instagram é recusada, e nada é reservado', async () => {
+  const db = await setup();
+  try {
+    await comSaldo(db, 5000, 'meta');
+    await as(db, U_LIBERADO);
+    for (const pedido of [1, 9, 1001, 100000]) {
+      await assert.rejects(criarBusca(db, 'instagram', ig, pedido), (e) => /10 a 1\.000/.test(e.message) && e.detail === 'creditos_invalidos', `pedido ${pedido}`);
+    }
+    assert.deepEqual(await saldos(db), { normal: 0, meta: 5000 }, 'nada foi reservado');
+  } finally { await db.close(); }
+});
+
+test('sem saldo para o que pediu, recusa dizendo que faltou Meta; com saldo para o menor, cria', async () => {
   const db = await setup();
   try {
     await comSaldo(db, 49, 'meta');
     await as(db, U_LIBERADO);
-    await assert.rejects(criarBusca(db, 'instagram', ig, 1), (e) => /Meta insuficiente/.test(e.message) && e.detail === 'creditos_meta_insuficientes');
-    assert.deepEqual(await saldos(db), { normal: 0, meta: 49 }, 'nada foi reservado');
+    await assert.rejects(criarBusca(db, 'instagram', ig, 50), (e) => /Meta insuficiente/.test(e.message) && e.detail === 'creditos_meta_insuficientes');
+    assert.deepEqual(await saldos(db), { normal: 0, meta: 49 });
+    await criarBusca(db, 'instagram', ig, 40);
+    assert.deepEqual(await saldos(db), { normal: 0, meta: 9 });
+  } finally { await db.close(); }
+});
+
+test('a reserva maior que 50 também cobra por seguidor, para na reserva e devolve a sobra', async () => {
+  const db = await setup();
+  try {
+    const id = await instagramEmAndamento(db, 200);
+    await varrer(db, id, 120, 1.44);
+    assert.deepEqual(await varrer(db, id, 250, 3), { ativa: true, cobrando: true, creditos_usados: 200, limite_atingido: true });
+    await db.query(`SELECT lista_fria_worker_encerrar('${id}', 'w1', 'concluida')`);
+    assert.deepEqual((await devolucoes(db, id)).map((d) => d.delta), [100], 'zero resultados: devolve metade de 200');
+    assert.equal((await busca(db, id)).creditos_usados, 100);
   } finally { await db.close(); }
 });
 
@@ -207,7 +232,7 @@ test('busca que falha sem resultado também devolve metade; a que o usuário par
 
     // Falhou sem varrer nada: só volta a reserva.
     await as(db, U_LIBERADO);
-    const z = await criarBusca(db, 'instagram', ig, 1);
+    const z = await criarBusca(db, 'instagram', ig, 50);
     await asWorker(db);
     await db.query(`SELECT * FROM lista_fria_worker_reivindicar('w1')`);
     await db.query(`SELECT lista_fria_worker_encerrar('${z}', 'w1', 'falhou', 'coletor_falhou')`);
@@ -215,7 +240,7 @@ test('busca que falha sem resultado também devolve metade; a que o usuário par
 
     // O usuário para a busca depois de varrer 30 (sem resultado): ele mesmo parou, não há "metade".
     await as(db, U_LIBERADO);
-    const c = await criarBusca(db, 'instagram', ig, 1);
+    const c = await criarBusca(db, 'instagram', ig, 50);
     await asWorker(db);
     await db.query(`SELECT * FROM lista_fria_worker_reivindicar('w1')`);
     await varrer(db, c, 30);
@@ -288,7 +313,7 @@ test('busca de Instagram já em andamento ANTES da migration segue por contato',
   try {
     await comSaldo(db, 100, 'meta');
     await as(db, U_LIBERADO);
-    const id = await criarBusca(db, 'instagram', ig, 10);
+    const id = await criarBusca(db, 'instagram', ig, 50);
     // Simula a busca criada antes: modo antigo e reserva de 10.
     await asPostgres(db);
     await db.exec(`UPDATE lista_fria_buscas SET cobranca = 'por_contato', creditos_limite = 10 WHERE id = '${id}'`);
@@ -323,8 +348,9 @@ test('rollback: recusa com busca por varredura; sem ela, volta ao modo por conta
   try {
     await comSaldo(db, 100, 'meta');
     await as(db, U_LIBERADO);
-    const id = await criarBusca(db, 'instagram', ig, 10);
+    const id = await criarBusca(db, 'instagram', ig, 50);
     await asPostgres(db);
+    await db.exec(read(ROLLBACK_POR_CREDITOS)); // empilhada: a por créditos sai antes
     await assert.rejects(db.exec(read(ROLLBACK_VARREDURA)), /cobradas por varredura/);
     await db.exec('ROLLBACK'); // o script abre BEGIN; ao recusar, a transação fica aberta
     await db.exec(`DELETE FROM lista_fria_buscas WHERE id = '${id}'`);
