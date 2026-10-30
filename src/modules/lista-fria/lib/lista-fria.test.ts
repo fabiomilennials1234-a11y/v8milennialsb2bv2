@@ -38,6 +38,7 @@ const resultado = (parcial: Partial<Resultado> = {}): Resultado => ({
   categoria: "Dentista",
   telefone: "5511938142207",
   email: "contato@sorriso.com.br",
+  instagram: null,
   site: "https://sorriso.com.br",
   bairro: "Pinheiros",
   qualidade: "verificado",
