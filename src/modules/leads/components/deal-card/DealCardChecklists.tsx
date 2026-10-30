@@ -399,6 +399,7 @@ function LinhaDoChecklist({
   const [titulo, setTitulo] = useState("");
 
   const completo = checklist.total_items > 0 && checklist.completed_items === checklist.total_items;
+  const historico = !!checklist.playbook_archived_at;
 
   const adicionarItem = async () => {
     const t = titulo.trim();
@@ -433,6 +434,7 @@ function LinhaDoChecklist({
           )}
         >
           {checklist.title}
+          {historico && <span className="ml-2 text-[10px] text-muted-foreground">Histórico</span>}
         </span>
         <span
           className={cn(
@@ -448,6 +450,7 @@ function LinhaDoChecklist({
               type="button"
               className="shrink-0 rounded p-0.5 text-muted-foreground/50 transition-colors hover:text-foreground"
               aria-label={`Opções do checklist ${checklist.title}`}
+              disabled={historico}
             >
               <MoreHorizontal className="size-3.5" />
             </button>
@@ -479,6 +482,7 @@ function LinhaDoChecklist({
               >
                 <Checkbox
                   checked={item.is_completed}
+                  disabled={historico}
                   onCheckedChange={() =>
                     alternarItem.mutate({
                       id: item.id,
@@ -502,6 +506,7 @@ function LinhaDoChecklist({
                 <button
                   type="button"
                   onClick={() => removerItem.mutate(item.id)}
+                  disabled={historico}
                   className="shrink-0 text-muted-foreground/30 opacity-0 transition-colors hover:text-destructive group-hover:opacity-100"
                   aria-label={`Remover item ${item.title}`}
                 >
@@ -531,6 +536,7 @@ function LinhaDoChecklist({
             <button
               type="button"
               onClick={() => setAdicionando(true)}
+              disabled={historico}
               className="mt-1 flex w-full items-center gap-1 rounded-md px-1 py-1 text-left text-[11.5px] text-muted-foreground/60 transition-colors hover:bg-muted/30 hover:text-foreground"
             >
               {criarItem.isPending ? (

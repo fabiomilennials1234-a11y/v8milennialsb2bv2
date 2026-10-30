@@ -59,7 +59,7 @@ module.exports = {
       to: {
         // APIs públicas estreitas evitam carregar diálogos e adaptadores de
         // volta nos cards que esses módulos também podem abrir.
-        path: "^src/modules/(?!engagement/checklists\\.ts$|platform/feature-flags\\.ts$|integrations/toth-order-drafts\\.ts$)(?!\\1)([^/]+)/(?!index\\.ts$|index$)",
+        path: "^src/modules/(?!engagement/(?:checklists|tasks)\\.ts$|platform/feature-flags\\.ts$|integrations/toth-order-drafts\\.ts$)(?!\\1)([^/]+)/(?!index\\.ts$|index$)",
       },
     },
     {

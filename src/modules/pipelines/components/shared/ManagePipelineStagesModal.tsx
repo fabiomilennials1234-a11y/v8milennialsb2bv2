@@ -1,4 +1,6 @@
 import { useState, useEffect } from "react";
+import { Link } from "react-router-dom";
+import { useIdentity } from "@/modules/identity";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -55,7 +57,6 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-import { useChecklistTemplates } from "@/modules/engagement/hooks/useChecklistTemplates";
 import { mensagemDeConflitoDeEtapa } from "@/modules/pipelines/lib/proxima-posicao-de-etapa";
 import { StageDeleteAutomationImpact } from "./StageDeleteAutomationImpact";
 import { ClipboardList } from "lucide-react";
@@ -234,8 +235,6 @@ function SortableStageItem({
   onSaveEdit,
   onCancelEdit,
   isSaving,
-  templates,
-  onChecklistTemplateChange,
 }: {
   stage: EditorStage;
   pipelineType?: StageFamily;
@@ -261,8 +260,6 @@ function SortableStageItem({
   onSaveEdit: () => void;
   onCancelEdit: () => void;
   isSaving: boolean;
-  templates: { id: string; title: string; total_items: number }[];
-  onChecklistTemplateChange: (templateId: string | null) => void;
 }) {
   const {
     attributes,
@@ -274,6 +271,7 @@ function SortableStageItem({
   } = useSortable({ id: stage.id });
 
   const { data: pipelines } = useFunisDaOrg();
+  const { isAdmin } = useIdentity();
   const nomeDoPipeAlvo = (pipeType: string): string => {
     return pipelines.find((pipeline) => pipeline.slug === pipeType)?.label ?? "Funil removido";
   };
@@ -447,25 +445,7 @@ function SortableStageItem({
             </div>
             <div className="flex items-center gap-1.5 mt-1 text-xs text-muted-foreground">
               <ClipboardList className="w-3 h-3 shrink-0" />
-              <Select
-                value={stage.checklist_template_id ?? "__none__"}
-                onValueChange={(v) =>
-                  onChecklistTemplateChange(v === "__none__" ? null : v)
-                }
-              >
-                <SelectTrigger className="h-6 text-xs border-dashed flex-1 max-w-[260px] px-2">
-                  <SelectValue placeholder="Sem checklist automático" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__none__">Sem checklist automático</SelectItem>
-                  {templates.map((t) => (
-                    <SelectItem key={t.id} value={t.id}>
-                      {t.title}{" "}
-                      <span className="text-muted-foreground">({t.total_items})</span>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              {isAdmin ? <Link to={`/tarefas?tab=playbooks&stage=${stage.id}`} className="text-primary hover:underline">Configurar atividades do playbook</Link> : <span>Atividades configuradas pelo administrador</span>}
             </div>
           </div>
           <div className="flex items-center gap-1">
@@ -557,7 +537,6 @@ export function ManagePipelineStagesContent({
   );
   const reorderStages = useReorderPipelineStages();
   const reorderCustomStages = useReorderCustomPipelineStages();
-  const { data: templates = [] } = useChecklistTemplates();
   const { data: stageLeadCounts = {} } = usePipelineStageLeadCounts(
     pipelineType ?? null,
     pipelineId,
@@ -595,35 +574,6 @@ export function ManagePipelineStagesContent({
   const deleteBlocked = blockingRuleCount > 0;
   // Destinos possíveis: outras etapas (exclui a que está sendo removida).
   const migrationTargets = localStages.filter((s) => s.id !== deleteStageId);
-
-  const handleChecklistTemplateChange = async (
-    stage: EditorStage,
-    templateId: string | null,
-  ) => {
-    try {
-      if (isCustom && pipelineId) {
-        await updateCustomStage.mutateAsync({
-          id: stage.id,
-          pipeline_id: pipelineId,
-          checklist_template_id: templateId,
-        });
-      } else if (pipelineType) {
-        await updateStage.mutateAsync({
-          id: stage.id,
-          pipeline_type: pipelineType,
-          checklist_template_id: templateId,
-        });
-      }
-      toast.success(
-        templateId
-          ? "Checklist automático configurado"
-          : "Checklist automático removido",
-      );
-    } catch (error) {
-      console.error("Error updating checklist_template_id:", error);
-      toast.error("Erro ao atualizar checklist automático");
-    }
-  };
 
   const sensors = useSensors(
     useSensor(PointerSensor),
@@ -890,10 +840,6 @@ export function ManagePipelineStagesContent({
                       onSaveEdit={handleSaveEdit}
                       onCancelEdit={cancelEditing}
                       isSaving={isSavingEdit}
-                      templates={templates}
-                      onChecklistTemplateChange={(templateId) =>
-                        handleChecklistTemplateChange(stage, templateId)
-                      }
                     />
                   ))}
                 </div>

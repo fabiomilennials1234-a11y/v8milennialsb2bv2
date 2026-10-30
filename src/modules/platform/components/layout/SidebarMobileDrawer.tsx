@@ -85,6 +85,7 @@ export function SidebarMobileDrawer() {
                 </div>
               ))}
 
+              {model.tasks && <SidebarNavItem item={model.tasks} active={model.isActive(model.tasks.path)} collapsed={false} locked={model.isLocked(model.tasks.path)} />}
               {model.agenda && (
                 <SidebarNavItem
                   item={model.agenda}

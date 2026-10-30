@@ -175,6 +175,10 @@ describe("inventário da navegação", () => {
 });
 
 describe("makeCanViewRoute", () => {
+  it('gestão de tarefas exige admin mesmo com a permissão de revisão liberada',()=>{
+    expect(makeCanViewRoute({isMaster:false,isAdmin:false,featurePerms:{'followups.view':true}})('/tarefas')).toBe(false);
+    expect(makeCanViewRoute({isMaster:false,isAdmin:true,featurePerms:{}})('/tarefas')).toBe(true);
+  });
   it("libera tudo para master e para admin", () => {
     const perms = { "leads.view": false };
     expect(makeCanViewRoute({ isMaster: true, isAdmin: false, featurePerms: perms })("/leads")).toBe(true);

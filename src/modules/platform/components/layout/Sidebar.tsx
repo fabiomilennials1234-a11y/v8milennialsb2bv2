@@ -184,6 +184,7 @@ export function Sidebar() {
         </nav>
 
         <div className="mt-auto flex flex-col items-center gap-1.5 pt-2">
+          {model.tasks && renderItem(model.tasks)}
           {model.agenda && renderItem(model.agenda, { icon: CalendarDays })}
 
           {/* Master, Gestor e "Ativos agora" moram num popover do escudo — no

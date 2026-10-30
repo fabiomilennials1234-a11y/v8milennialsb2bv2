@@ -26,6 +26,7 @@ import {
   PITSTOP_GROUPS,
   buildSettingsGroup,
   SIDEBAR_AGENDA,
+  SIDEBAR_TASKS,
   SIDEBAR_PITSTOP,
   SIDEBAR_PRIMARY,
   TURBO_CHILDREN,
@@ -52,6 +53,7 @@ export interface NavigationModel {
   pitstopGroups: PitstopGroup[];
   /** Agenda e Pitstop vivem no rodapé — `null` quando a permissão nega. */
   agenda: NavNode | null;
+  tasks: NavNode | null;
   pitstop: NavNode | null;
   isOutboundMember: boolean;
   /** Rota bloqueada por plano (não por permissão) — abre o modal de upgrade. */
@@ -205,6 +207,7 @@ export function useNavigationModel(): NavigationModel {
     primary,
     pitstopGroups,
     agenda: canViewRoute(SIDEBAR_AGENDA.path) && !isOutboundMember ? SIDEBAR_AGENDA : null,
+    tasks: isAdmin && canViewRoute(SIDEBAR_TASKS.path) ? SIDEBAR_TASKS : null,
     pitstop: canViewRoute(SIDEBAR_PITSTOP.path) && !isOutboundMember ? SIDEBAR_PITSTOP : null,
     isOutboundMember,
     isLocked,

@@ -1,9 +1,7 @@
 import { useMemo } from "react";
 import { AlarmClock, CalendarCheck, ListChecks, MessageSquareDot } from "lucide-react";
 import { KpiRow, KpiTile } from "@/components/ui/bento";
-import { useAcoesDoDia } from "@/modules/engagement";
-import { useOrganization } from "@/modules/identity";
-import { classificarTarefas } from "@/modules/analytics/lib/tarefas-do-dia";
+import { useComandoTasks } from "@/modules/analytics/hooks/useComandoTasks";
 import { useComandoScope } from "@/modules/analytics/hooks/useComandoScope";
 import { useConversasAguardando } from "@/modules/analytics/hooks/useConversasAguardando";
 import { useComandoAgenda } from "@/modules/analytics/hooks/useComandoAgenda";
@@ -41,7 +39,6 @@ import { CardMetas } from "./CardMetas";
  * fingindo (decisão de 21/08).
  */
 export function TabProximosPassos() {
-  const { timezone } = useOrganization();
   const { isAdmin } = useComandoScope();
 
   // Os dois hooks abaixo rodam TAMBÉM dentro dos cards. Não há fetch dobrado:
@@ -72,12 +69,7 @@ export function TabProximosPassos() {
     );
     return { total: doDia.length, realizadas: doDia.filter((e) => (e.status ?? "").toLowerCase() === "completed").length };
   }, [agendaHoje.data]);
-  const { data: tarefas, isLoading: taskLoading, isError: taskError } = useAcoesDoDia(isAdmin ? "tudo" : "meu");
-
-  const { pendentes, atrasadasCount } = useMemo(
-    () => classificarTarefas(tarefas, timezone),
-    [tarefas, timezone],
-  );
+  const { total:pendentesCount,overdue:atrasadasCount,isLoading:taskLoading,isError:taskError } = useComandoTasks();
 
   const resumo = useMemo(() => {
     if (convError || taskError || chipsComErro > 0) return "Alguns dados não carregaram. Confira os avisos nos cards abaixo.";
@@ -88,9 +80,9 @@ export function TabProximosPassos() {
         `${aguardando} ${aguardando === 1 ? "cliente esperando" : "clientes esperando"}`,
       );
     }
-    if (pendentes.length > 0) {
+    if (pendentesCount > 0) {
       partes.push(
-        `${pendentes.length} ${pendentes.length === 1 ? "tarefa aberta" : "tarefas abertas"}`,
+        `${pendentesCount} ${pendentesCount === 1 ? "tarefa aberta" : "tarefas abertas"}`,
       );
     }
     if (atrasadasCount > 0) {
@@ -105,13 +97,13 @@ export function TabProximosPassos() {
         : "Nada esperando você agora.";
     }
     return partes.join(" · ");
-  }, [aguardando, pendentes.length, atrasadasCount, convLoading, taskLoading, convError, taskError, chipsComErro, isAdmin]);
+  }, [aguardando, pendentesCount, atrasadasCount, convLoading, taskLoading, convError, taskError, chipsComErro, isAdmin]);
 
   // Só os estados que NÃO são número viram frase: carregando, erro, nada a fazer.
   // Com número, os três cartões abaixo já dizem o resumo.
   const resumoEhEstado =
     convError || taskError || chipsComErro > 0 || convLoading || taskLoading ||
-    (aguardando === 0 && pendentes.length === 0 && atrasadasCount === 0);
+    (aguardando === 0 && pendentesCount === 0 && atrasadasCount === 0);
   const carregando = convLoading || taskLoading;
   const valor = (n: number, erro: boolean) => (erro ? "—" : carregando ? "·" : n.toLocaleString("pt-BR"));
 
@@ -164,11 +156,11 @@ export function TabProximosPassos() {
         </KpiTile>
         <KpiTile
           label="Tarefas abertas"
-          value={valor(pendentes.length, taskError)}
+          value={valor(pendentesCount, taskError)}
           icon={ListChecks}
           tone="info"
           loading={taskLoading}
-          note={isAdmin ? "Do time, para hoje" : "Suas, para hoje"}
+          note="Suas, para hoje"
         />
         <KpiTile
           label="Atrasadas"
