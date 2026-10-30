@@ -5,7 +5,7 @@
  * a aba Lista fria da tela de Leads. Importar cria LEAD sem funil e sem card.
  * Sem disparo: a lista só exporta e importa (decisão do CTO, 27/10).
  */
-import { CheckCircle2, FileDown, Loader2, Search, ShieldCheck, Snowflake, UserX, Users } from "lucide-react";
+import { CheckCircle2, FileDown, Loader2, Megaphone, Search, ShieldCheck, Snowflake, UserX, Users } from "lucide-react";
 import { useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { toast } from "sonner";
@@ -22,7 +22,7 @@ import { FilterChip } from "@/shared/components/FilterChip";
 import { notifyError } from "@/shared/errors";
 import { cn } from "@/lib/utils";
 
-import { useExportarBusca } from "../hooks/useExportarBusca";
+import { useExportarBusca, useExportarPublicoMeta } from "../hooks/useExportarBusca";
 import { useListaFriaAcesso } from "../hooks/useListaFriaAcesso";
 import {
   FILTROS_DA_REVISAO,
@@ -58,6 +58,7 @@ export default function RevisarBusca() {
   const selecionar = useSelecionarResultados();
   const importar = useImportarBusca();
   const exportar = useExportarBusca();
+  const exportarMeta = useExportarPublicoMeta();
 
   const mudar = (parcial: Partial<FiltrosDaRevisao>) => setFiltros((f) => ({ ...f, pagina: 0, ...parcial }));
 
@@ -126,22 +127,46 @@ export default function RevisarBusca() {
         title="Revisar busca"
         subtitle={`${ROTULO_FONTE[busca.fonte]} · ${busca.titulo} · ${n(busca.creditosUsados)} créditos usados`}
         actions={
-          <Button
-            variant="outline"
-            onClick={() =>
-              exportar.mutate(
-                { buscaId: busca.id, titulo: busca.titulo },
-                {
-                  onSuccess: (qtd) => toast.success(`${n(qtd)} contatos exportados.`),
-                  onError: erroDeEscrita("Não foi possível exportar."),
-                },
-              )
-            }
-            disabled={exportar.isPending || busca.creditosUsados + busca.jaLeads === 0}
-          >
-            {exportar.isPending ? <Loader2 className="animate-spin" /> : <FileDown />}
-            Exportar CSV
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              variant="outline"
+              onClick={() =>
+                exportarMeta.mutate(busca, {
+                  onSuccess: ({ linhas, descartados }) => {
+                    if (linhas === 0) {
+                      toast.info("Nenhum contato com e-mail ou telefone aproveitável para o Meta.");
+                      return;
+                    }
+                    const fora = descartados > 0 ? ` ${n(descartados)} ficaram de fora (sem contato aproveitável ou repetidos).` : "";
+                    toast.success(
+                      `${n(linhas)} contatos no arquivo. No Meta: Públicos → Criar → Público personalizado → Lista de clientes.${fora}`,
+                    );
+                  },
+                  onError: erroDeEscrita("Não foi possível gerar o arquivo do Meta."),
+                })
+              }
+              disabled={exportarMeta.isPending || busca.creditosUsados + busca.jaLeads === 0}
+            >
+              {exportarMeta.isPending ? <Loader2 className="animate-spin" /> : <Megaphone />}
+              Público do Meta
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() =>
+                exportar.mutate(
+                  { buscaId: busca.id, titulo: busca.titulo },
+                  {
+                    onSuccess: (qtd) => toast.success(`${n(qtd)} contatos exportados.`),
+                    onError: erroDeEscrita("Não foi possível exportar."),
+                  },
+                )
+              }
+              disabled={exportar.isPending || busca.creditosUsados + busca.jaLeads === 0}
+            >
+              {exportar.isPending ? <Loader2 className="animate-spin" /> : <FileDown />}
+              Exportar CSV
+            </Button>
+          </div>
         }
       />
 

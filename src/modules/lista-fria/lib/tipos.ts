@@ -8,6 +8,7 @@
 import type { Database, Json } from "@/integrations/supabase/types";
 
 import { resumoDosCnaes } from "./cnae";
+import { type LocalDaBusca, SEM_LOCAL, localDoTextoDeCidade } from "./meta";
 
 export type FonteDaBusca = "maps" | "instagram" | "cnpj";
 export type StatusDaBusca = "na_fila" | "executando" | "concluida" | "parada" | "falhou" | "cancelada";
@@ -82,6 +83,8 @@ export interface Busca {
   fonte: FonteDaBusca;
   /** "Dentistas · São Paulo - SP" ou "@clinicaodontovida". */
   titulo: string;
+  /** Cidade e UF do alvo, quando a fonte tem (Maps, CNPJ). Alimenta o público do Meta. */
+  local: LocalDaBusca;
   status: StatusDaBusca;
   etapa: EtapaDaBusca | null;
   progresso: number;
@@ -156,6 +159,15 @@ export function tituloDaBuscaCnpj(f: FiltrosCnpj): string {
   return [resumoDosCnaes(f.cnaes), onde].filter(Boolean).join(" · ");
 }
 
+function localDaBusca(fonte: FonteDaBusca, r: LinhaDaBusca): LocalDaBusca {
+  if (fonte === "maps") return localDoTextoDeCidade(r.cidade);
+  if (fonte === "cnpj") {
+    const f = parseFiltrosCnpj(r.filtros);
+    return { cidade: f.municipio, uf: f.uf || null };
+  }
+  return SEM_LOCAL;
+}
+
 export function parseBusca(r: LinhaDaBusca): Busca {
   const fonte: FonteDaBusca = r.fonte === "instagram" ? "instagram" : r.fonte === "cnpj" ? "cnpj" : "maps";
   return {
@@ -167,6 +179,7 @@ export function parseBusca(r: LinhaDaBusca): Busca {
         : fonte === "cnpj"
           ? tituloDaBuscaCnpj(parseFiltrosCnpj(r.filtros))
           : `${r.nicho ?? ""} · ${r.cidade ?? ""}`,
+    local: localDaBusca(fonte, r),
     status: STATUS.has(r.status) ? (r.status as StatusDaBusca) : "falhou",
     etapa: r.etapa && ETAPAS.has(r.etapa) ? (r.etapa as EtapaDaBusca) : null,
     progresso: r.progresso,
