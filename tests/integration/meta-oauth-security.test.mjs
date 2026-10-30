@@ -25,7 +25,7 @@ test('OAuth storage: permissions, one-time nonce, current authority, atomic app/
   await db.exec(conversations);
   await db.exec(readFileSync('supabase/migrations/20270728000003_upsert_meta_conversation_rpc.sql','utf8'));
   await db.exec(readFileSync('supabase/migrations/20271215010000_meta_oauth_security.sql','utf8'));
-  await db.exec(readFileSync('supabase/migrations/20271215040000_meta_lead_schema_compatibility.sql','utf8'));
+  await db.exec(readFileSync('supabase/migrations/20271220010000_meta_lead_schema_compatibility.sql','utf8'));
   for(const role of ['anon','authenticated']) {
    assert.equal((await db.query(`SELECT has_column_privilege($1,'meta_connections','access_token','SELECT') value`,[role])).rows[0].value,false);
    assert.equal((await db.query(`SELECT has_column_privilege($1,'meta_pages','page_access_token','SELECT') value`,[role])).rows[0].value,false);
