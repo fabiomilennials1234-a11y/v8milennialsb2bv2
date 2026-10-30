@@ -24,6 +24,7 @@ let ultimoProgresso: unknown = null;
 
 const banco: Banco = {
   reivindicar: async () => null,
+  varrer: async () => null,
   recuperarTravadas: async () => 0,
   progresso: async (_b, _w, p) => {
     ultimoProgresso = p;

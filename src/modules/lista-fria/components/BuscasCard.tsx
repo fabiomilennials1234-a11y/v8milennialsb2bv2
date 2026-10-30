@@ -89,6 +89,7 @@ function LinhaDeBusca({ busca, podeEditar }: { busca: Busca; podeEditar: boolean
   const parar = usePararBusca();
   const aberta = buscaEstaAberta(busca);
   const naFila = busca.status === "na_fila";
+  const porVarredura = busca.cobranca === "por_varredura";
 
   const pararAgora = () =>
     parar.mutate(busca.id, {
@@ -144,19 +145,34 @@ function LinhaDeBusca({ busca, podeEditar }: { busca: Busca; podeEditar: boolean
 
       <div className="flex flex-wrap items-baseline gap-x-6 gap-y-1">
         {/* O que a pessoa recebe e paga: os contatos NOVOS. O resto é contexto. */}
-        <Numero valor={busca.creditosUsados} rotulo="contatos novos" destaque />
+        <Numero valor={busca.contatosNovos} rotulo="contatos novos" destaque />
         {busca.jaLeads > 0 && <Numero valor={busca.jaLeads} rotulo="já são seus leads" />}
         <span
           className="text-xs text-muted-foreground"
-          title="Negócios que a busca examinou. Só os que cabem nos seus créditos entram na lista; o resto não é cobrado."
+          title={
+            porVarredura
+              ? "Seguidores que a busca analisou. Cada um gasta 1 crédito Meta, venha contato ou não."
+              : "Negócios que a busca examinou. Só os que cabem nos seus créditos entram na lista; o resto não é cobrado."
+          }
         >
-          <b className="text-[15px] tabular-nums text-foreground">{numero(busca.encontrados)}</b> analisados
+          <b className="text-[15px] tabular-nums text-foreground">{numero(porVarredura ? busca.varridos : busca.encontrados)}</b>{" "}
+          {porVarredura ? "seguidores analisados" : "analisados"}
         </span>
-        <span className="text-xs text-muted-foreground">
-          limite de <b className="text-[15px] tabular-nums text-foreground">{numero(busca.creditosLimite)}</b>{" "}
-          {ROTULO_CREDITO[tipoDaFonte(busca.fonte)]}
-        </span>
-        {busca.status === "parada" && busca.creditosUsados >= busca.creditosLimite && (
+        {porVarredura ? (
+          <span
+            className="text-xs text-muted-foreground"
+            title="1 crédito Meta por seguidor analisado. Se a busca terminar sem nenhum contato, metade dos créditos gastos volta para o saldo."
+          >
+            <b className="text-[15px] tabular-nums text-foreground">{numero(busca.creditosUsados)}</b> de{" "}
+            <b className="tabular-nums text-foreground">{numero(busca.creditosLimite)}</b> {ROTULO_CREDITO.meta}
+          </span>
+        ) : (
+          <span className="text-xs text-muted-foreground">
+            limite de <b className="text-[15px] tabular-nums text-foreground">{numero(busca.creditosLimite)}</b>{" "}
+            {ROTULO_CREDITO[tipoDaFonte(busca.fonte)]}
+          </span>
+        )}
+        {busca.status === "parada" && !porVarredura && busca.creditosUsados >= busca.creditosLimite && (
           <span className="rounded-full bg-muted px-2.5 py-0.5 text-[11px] font-semibold text-muted-foreground">parou no limite de créditos</span>
         )}
       </div>

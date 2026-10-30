@@ -14,6 +14,13 @@ export interface BuscaDaFila {
   filtros?: Record<string, unknown> | null;
   creditos_limite: number;
   creditos_usados: number;
+  /**
+   * Como a busca é cobrada (ADR-0046). `por_varredura`: 1 crédito por seguidor varrido, o contato achado não
+   * gasta. Ausente ou `por_contato`: 1 crédito por contato novo (Maps, CNPJ e buscas antigas).
+   */
+  cobranca?: "por_contato" | "por_varredura";
+  /** Seguidores por crédito, gravado na criação da busca. */
+  seguidores_por_credito?: number;
 }
 
 export interface ItemParaRegistrar {
@@ -36,6 +43,16 @@ export interface ResultadoDoRegistro {
   ativa: boolean;
 }
 
+/** Resposta de `lista_fria_worker_varrer`. */
+export interface ResultadoDaVarredura {
+  ativa: boolean;
+  /** A busca é cobrada por varredura (senão a RPC só audita). */
+  cobrando: boolean;
+  creditos_usados: number;
+  /** O débito chegou à reserva: não há mais o que varrer nesta busca. */
+  limite_atingido: boolean;
+}
+
 export interface Progresso {
   etapa: "coletando" | "lendo_sites" | "ia" | "validando";
   progresso: number;
@@ -52,6 +69,12 @@ export interface Banco {
   progresso(busca: string, worker: string, p: Progresso): Promise<string>;
   registrar(busca: string, worker: string, itens: ItemParaRegistrar[]): Promise<ResultadoDoRegistro>;
   encerrar(busca: string, worker: string, status: "concluida" | "parada" | "falhou", erro?: string): Promise<void>;
+  /**
+   * Informa o total CUMULATIVO de seguidores varridos e o custo real do coletor (US$). O banco debita até a
+   * reserva (ADR-0046). `null` = o banco ainda não tem a RPC (worker implantado antes da migration): segue sem
+   * cobrança por varredura.
+   */
+  varrer(busca: string, worker: string, varridos: number, custoUsd: number | null): Promise<ResultadoDaVarredura | null>;
   recuperarTravadas(): Promise<number>;
 }
 
@@ -94,6 +117,21 @@ export function bancoPelaRede(cfg: { url: string; chaveDeServico: string; fetch?
       rpc<ResultadoDoRegistro>("lista_fria_worker_registrar", { p_busca: busca, p_worker: worker, p_itens: itens }),
     async encerrar(busca, worker, status, erro) {
       await rpc("lista_fria_worker_encerrar", { p_busca: busca, p_worker: worker, p_status: status, p_erro: erro ?? null });
+    },
+    async varrer(busca, worker, varridos, custoUsd) {
+      try {
+        return await rpc<ResultadoDaVarredura>("lista_fria_worker_varrer", {
+          p_busca: busca,
+          p_worker: worker,
+          p_varridos: Math.max(0, Math.trunc(varridos)),
+          p_custo_usd: custoUsd,
+        });
+      } catch (e) {
+        // Worker novo com banco antigo: a função ainda não existe (PostgREST 404 / PGRST202). Qualquer outro
+        // erro é real e sobe.
+        if (/\(404\)|PGRST202/.test(String(e))) return null;
+        throw e;
+      }
     },
     recuperarTravadas: () => rpc<number>("lista_fria_worker_recuperar_travadas", {}),
   };

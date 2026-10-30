@@ -9,7 +9,7 @@ import assert from 'node:assert/strict';
 
 import { candidatoDoItem, telefonesDaBio, ACTOR_PADRAO } from '../../services/lista-fria-worker/src/instagram.ts';
 import { abortarExecucao, execucaoTerminou, iniciarExecucao, lerExecucao, lerItens } from '../../services/lista-fria-worker/src/apify.ts';
-import { CFG_INSTAGRAM_PADRAO, fonteInstagram, planoDaBusca } from '../../services/lista-fria-worker/src/fonte-instagram.ts';
+import { CFG_INSTAGRAM_PADRAO, fonteInstagram, planoDaBusca, tetoDeSeguidores } from '../../services/lista-fria-worker/src/fonte-instagram.ts';
 import { CFG_PADRAO, executarBusca } from '../../services/lista-fria-worker/src/executor.ts';
 import { U_LIBERADO, as, asWorker, asPostgres, one, val, criarBusca, comSaldo, setup } from './helpers/lista-fria-db.mjs';
 
@@ -193,8 +193,10 @@ function ambiente({ banco, fa, abortarEm = Infinity }) {
   };
 }
 
-const bancoMemoria = ({ limiteAposItens = Infinity } = {}) => {
-  const reg = { registrados: [], encerrar: [], progressos: [] };
+// `varrer`: null = banco antigo, sem a RPC (o worker segue sem cobrança por varredura). Passe uma função para
+// simular o banco novo; `reg.varreduras` guarda o que o worker informou.
+const bancoMemoria = ({ limiteAposItens = Infinity, varrer = null } = {}) => {
+  const reg = { registrados: [], encerrar: [], progressos: [], varreduras: [] };
   return {
     reg,
     banco: {
@@ -205,6 +207,10 @@ const bancoMemoria = ({ limiteAposItens = Infinity } = {}) => {
         return { aceitos: Math.min(cabem, itens.length), limite_atingido: reg.registrados.length >= limiteAposItens, ativa: true };
       },
       encerrar: async (b, w, s, e) => { reg.encerrar.push([s, e ?? null]); },
+      varrer: async (b, w, varridos, custoUsd) => {
+        reg.varreduras.push([varridos, custoUsd]);
+        return varrer ? varrer(varridos, custoUsd) : null;
+      },
       reivindicar: async () => null, recuperarTravadas: async () => 0,
     },
   };
@@ -310,12 +316,13 @@ function bancoPglite(db) {
     progresso: async (b, w, p) => Object.values((await q('SELECT lista_fria_worker_progresso($1,$2,$3,$4,$5,$6,$7,$8)', [b, w, p.etapa, Math.round(p.progresso), p.encontrados, p.comTelefone, p.comEmail, p.semContato]))[0])[0],
     registrar: async (b, w, itens) => Object.values((await q('SELECT lista_fria_worker_registrar($1,$2,$3::jsonb)', [b, w, JSON.stringify(itens)]))[0])[0],
     encerrar: async (b, w, s, e) => { await q('SELECT lista_fria_worker_encerrar($1,$2,$3,$4)', [b, w, s, e ?? null]); },
+    varrer: async (b, w, v, c) => Object.values((await q('SELECT lista_fria_worker_varrer($1,$2,$3,$4)', [b, w, v, c]))[0])[0],
     recuperarTravadas: async () => 0,
   };
 }
 
 describe('Instagram contra as RPCs reais', () => {
-  test('o formato que o worker manda (inclusive a coluna `instagram`) é o que o banco aceita; já-é-lead não cobra; limite devolve sobra', async () => {
+  test('busca antiga por contato: o formato que o worker manda (inclusive a coluna `instagram`) é o que o banco aceita; já-é-lead não cobra; limite devolve sobra', async () => {
     const db = await setup();
     try {
       await comSaldo(db, 100, 'meta');
@@ -323,6 +330,11 @@ describe('Instagram contra as RPCs reais', () => {
       await db.exec(`INSERT INTO leads (organization_id, name, phone) VALUES ('b2ad1ffb-e136-4356-846b-9f210f902573', 'Já cliente', '5511993195517')`);
       await as(db, U_LIBERADO);
       const id = await criarBusca(db, 'instagram', { url: 'https://www.instagram.com/clinicaodontovida/?hl=pt' }, 3);
+      // Busca ANTIGA, cobrada por contato (criada antes da migration de varredura): a reserva era o que o cliente pedia.
+      await asPostgres(db);
+      await db.exec(`UPDATE lista_fria_buscas SET cobranca = 'por_contato', creditos_limite = 3 WHERE id = '${id}'`);
+      await db.exec(`UPDATE lista_fria_creditos SET delta = -3 WHERE busca_id = '${id}' AND motivo = 'reserva'`);
+      await as(db, U_LIBERADO);
 
       const itens = [
         perfil('ana', { public_email: 'ana@bom.com.br', category: 'Dentista' }),
@@ -343,7 +355,7 @@ describe('Instagram contra as RPCs reais', () => {
 
       await asPostgres(db);
       const b = await one(db, `SELECT status, creditos_usados, ja_leads, sem_contato FROM lista_fria_buscas WHERE id = '${id}'`);
-      assert.equal(b.status, 'parada', 'limite de 3 créditos');
+      assert.equal(b.status, 'parada', 'limite de 3 créditos (busca antiga, por contato)');
       assert.equal(b.creditos_usados, 3);
       assert.equal(b.ja_leads, 1);
       const r = (await db.query(`SELECT ref_externa, nome, telefone, email, instagram, categoria, qualidade, ja_e_lead FROM lista_fria_resultados WHERE busca_id = '${id}' ORDER BY ref_externa`)).rows;
@@ -353,7 +365,179 @@ describe('Instagram contra as RPCs reais', () => {
       assert.equal(r.find((x) => x.ref_externa === 'caio.silva_1').telefone, '5511993195518', 'telefone da bio');
       assert.equal(r.find((x) => x.ref_externa === 'bia').ja_e_lead, true);
       assert.equal(r.find((x) => x.ref_externa === 'ana').categoria, 'Dentista');
-      assert.equal(await val(db, `SELECT private.lista_fria_saldo_da_org('b2ad1ffb-e136-4356-846b-9f210f902573', 'meta')`), 97);
+      assert.equal(await val(db, `SELECT private.lista_fria_saldo_da_org('b2ad1ffb-e136-4356-846b-9f210f902573', 'meta')`), 97); // 100 - 3 contatos
+    } finally { await db.close(); }
+  });
+});
+
+// ── cobrança por varredura (ADR-0046) ──────────────────────────────────────
+const BUSCA_VAR = { ...BUSCA_IG, creditos_limite: 50, cobranca: 'por_varredura', seguidores_por_credito: 1 };
+// O banco novo: debita pelo total informado e avisa quando a reserva acaba.
+const varrerReal = (limite) => (varridos) => ({ ativa: true, cobrando: true, creditos_usados: Math.min(varridos, limite), limite_atingido: varridos >= limite });
+
+describe('tetoDeSeguidores', () => {
+  test('por varredura o crédito é o seguidor; por contato não há teto duro', () => {
+    assert.equal(tetoDeSeguidores(BUSCA_VAR), 50);
+    assert.equal(tetoDeSeguidores({ ...BUSCA_VAR, seguidores_por_credito: 2 }), 100, 'preço futuro: 2 seguidores por crédito');
+    assert.equal(tetoDeSeguidores({ ...BUSCA_VAR, seguidores_por_credito: undefined }), 50);
+    assert.equal(tetoDeSeguidores(BUSCA_IG), Infinity);
+    assert.equal(tetoDeSeguidores({ ...BUSCA_IG, cobranca: 'por_contato' }), Infinity);
+  });
+  test('o plano pede à Apify exatamente a reserva, e o freio de custo acompanha', () => {
+    assert.deepEqual(planoDaBusca(50, cfgIg, 50), { maxItems: 50, maxPages: 1, maxTotalChargeUsd: 0.7, timeoutS: 600 });
+  });
+});
+
+describe('executarBusca com a fonte Instagram, cobrada por varredura', () => {
+  test('informa ao banco o TOTAL varrido a cada volta, com o custo real, e fecha com a medição final', async () => {
+    const A = perfil('ana', { public_email: 'ana@bom.com.br' });
+    const B = perfil('bia');
+    const C = perfil('caio', { contact_phone_number: '(11) 99319-5517' });
+    const D = perfil('dani', { enrichment_status: 'skipped_private' });
+    const fa = apiFalsa({ passos: [
+      { status: 'RUNNING', itens: [A, B] },
+      { status: 'RUNNING', itens: [A, B, C] },
+      { status: 'SUCCEEDED', itens: [A, B, C, D] },
+    ] });
+    const m = bancoMemoria({ varrer: varrerReal(50) });
+    const { amb } = ambiente({ banco: m.banco, fa });
+    await executarBusca(BUSCA_VAR, fonteInstagram(BUSCA_VAR, fa.api, cfgIg, amb.log), amb, CFG);
+
+    assert.deepEqual(m.reg.varreduras, [[2, 0.5], [3, 0.5], [4, 0.5], [4, 0.5]], 'total acumulado (não o delta) e, no fim, a medição final');
+    assert.deepEqual(fa.reg.iniciou.input, { username: 'clinicaodontovida', mode: 'enriched', maxPages: 1, maxItems: 50 });
+    assert.deepEqual(m.reg.registrados.map((r) => r.ref_externa), ['ana', 'caio'], 'o contato entra, mas não é ele que se cobra');
+    assert.deepEqual(m.reg.encerrar, [['concluida', null]]);
+    assert.equal(fa.reg.abortou, 0);
+  });
+
+  test('a reserva acaba: lê SÓ o que foi pago, aborta a execução na Apify e conclui (não é falha nem "parada")', async () => {
+    const itens = Array.from({ length: 10 }, (_, n) => perfil(`u${n}`, { public_email: `u${n}@bom.com.br` }));
+    const fa = apiFalsa({ passos: [{ status: 'RUNNING', itens }, { status: 'RUNNING', itens }] });
+    const busca = { ...BUSCA_VAR, creditos_limite: 4 };
+    const m = bancoMemoria({ varrer: varrerReal(4) });
+    const { amb } = ambiente({ banco: m.banco, fa });
+    await executarBusca(busca, fonteInstagram(busca, fa.api, cfgIg, amb.log), amb, CFG);
+
+    assert.equal(m.reg.registrados.length, 4, 'os 6 itens a mais que a Apify já tinha NÃO entram: o cliente não pagou por eles');
+    assert.deepEqual(fa.reg.lidoOffsets, [0], 'nem chega a pedir o que passa da reserva');
+    assert.equal(fa.reg.abortou, 1, 'ainda RUNNING: abortar é o que para o gasto');
+    assert.deepEqual(m.reg.encerrar, [['concluida', null]]);
+    assert.equal(m.reg.varreduras.at(-1)[0], 4);
+  });
+
+  test('o banco diz "acabou" no meio do lote: o executor registra o lote inteiro antes de terminar', async () => {
+    const itens = Array.from({ length: 3 }, (_, n) => perfil(`u${n}`, { public_email: `u${n}@bom.com.br` }));
+    const fa = apiFalsa({ passos: [{ status: 'RUNNING', itens }] });
+    const busca = { ...BUSCA_VAR, creditos_limite: 3 };
+    const m = bancoMemoria({ varrer: varrerReal(3) });
+    const { amb } = ambiente({ banco: m.banco, fa });
+    await executarBusca(busca, fonteInstagram(busca, fa.api, cfgIg, amb.log), amb, CFG);
+    assert.equal(m.reg.registrados.length, 3);
+  });
+
+  test('banco ANTIGO (RPC ausente): segue sem cobrança por varredura e termina normalmente', async () => {
+    const fa = apiFalsa({ passos: [{ status: 'SUCCEEDED', itens: [perfil('ana', { public_email: 'ana@bom.com.br' })] }] });
+    const m = bancoMemoria(); // varrer devolve null
+    const { amb } = ambiente({ banco: m.banco, fa });
+    await executarBusca(BUSCA_VAR, fonteInstagram(BUSCA_VAR, fa.api, cfgIg, amb.log), amb, CFG);
+    assert.deepEqual(m.reg.encerrar, [['concluida', null]]);
+    assert.equal(m.reg.registrados.length, 1);
+  });
+
+  test('o usuário parou a busca no meio: a varredura devolve ativa=false, o worker aborta e não encerra', async () => {
+    const fa = apiFalsa({ passos: [{ status: 'RUNNING', itens: [perfil('a', { public_email: 'a@bom.com.br' })] }] });
+    const m = bancoMemoria({ varrer: () => ({ ativa: false, cobrando: false, creditos_usados: 0, limite_atingido: false }) });
+    const { amb } = ambiente({ banco: m.banco, fa });
+    await executarBusca(BUSCA_VAR, fonteInstagram(BUSCA_VAR, fa.api, cfgIg, amb.log), amb, CFG);
+    assert.deepEqual(m.reg.encerrar, []);
+    assert.equal(fa.reg.abortou, 1);
+    assert.deepEqual(m.reg.registrados, [], 'nada é registrado depois de parada');
+  });
+
+  test('busca ANTIGA por contato: continua informando varridos (auditoria) e o limite segue sendo o do banco por contato', async () => {
+    const itens = ['a', 'b', 'c', 'd'].map((u) => perfil(u, { public_email: `${u}@bom.com.br` }));
+    const fa = apiFalsa({ passos: [{ status: 'RUNNING', itens }, { status: 'RUNNING', itens }] });
+    const m = bancoMemoria({ limiteAposItens: 2, varrer: () => ({ ativa: true, cobrando: false, creditos_usados: 0, limite_atingido: false }) });
+    const { amb } = ambiente({ banco: m.banco, fa });
+    const antiga = { ...BUSCA_IG, creditos_limite: 2 };
+    await executarBusca(antiga, fonteInstagram(antiga, fa.api, cfgIg, amb.log), amb, CFG);
+    assert.deepEqual(m.reg.encerrar, [['parada', null]]);
+    assert.equal(m.reg.varreduras[0][0], 4, 'lê tudo (sem teto duro) e só audita');
+  });
+
+  test('falha ao medir o custo final não derruba o encerramento', async () => {
+    const fa = apiFalsa({ passos: [{ status: 'SUCCEEDED', itens: [perfil('ana', { public_email: 'ana@bom.com.br' })] }] });
+    const m = bancoMemoria({ varrer: varrerReal(50) });
+    const original = m.banco.varrer;
+    let chamadas = 0;
+    m.banco.varrer = async (...a) => { if (++chamadas > 1) throw new Error('rede caiu'); return original(...a); };
+    const { amb, logs } = ambiente({ banco: m.banco, fa });
+    await executarBusca(BUSCA_VAR, fonteInstagram(BUSCA_VAR, fa.api, cfgIg, amb.log), amb, CFG);
+    assert.deepEqual(m.reg.encerrar, [['concluida', null]]);
+    assert.ok(logs.some(([e]) => e === 'medicao_falhou'));
+  });
+});
+
+describe('Instagram por varredura contra as RPCs reais', () => {
+  const perfis = [
+    perfil('ana', { public_email: 'ana@bom.com.br', category: 'Dentista' }),
+    perfil('bia', { contact_phone_number: '(11) 99319-5517' }), // mesmo número do lead existente
+    perfil('Caio.Silva_1', { biography: 'Whats (11) 99319-5518' }),
+    perfil('duda', { public_email: 'duda@bom.com.br' }),
+    perfil('edu', { public_email: 'edu@bom.com.br' }),
+    perfil('fabi'),
+  ];
+  const rodar = async (db, itens) => {
+    await as(db, U_LIBERADO);
+    const id = await criarBusca(db, 'instagram', { url: 'https://www.instagram.com/clinicaodontovida/' }, 3);
+    const fa = apiFalsa({ passos: [{ status: 'SUCCEEDED', itens }] });
+    const banco = bancoPglite(db);
+    const { amb } = ambiente({ banco, fa });
+    const busca = await banco.reivindicar('w1');
+    assert.equal(busca.id, id);
+    assert.deepEqual([busca.cobranca, busca.creditos_limite, busca.seguidores_por_credito], ['por_varredura', 50, 1], 'a fila entrega o modo e a reserva ao worker');
+    await executarBusca(busca, fonteInstagram(busca, fa.api, cfgIg, amb.log), amb, { ...CFG, workerId: 'w1' });
+    await asPostgres(db);
+    return id;
+  };
+  const META = `SELECT private.lista_fria_saldo_da_org('b2ad1ffb-e136-4356-846b-9f210f902573', 'meta')`;
+
+  test('6 seguidores: paga 6 créditos Meta; todos os contatos entram; a sobra volta; o custo real fica gravado', async () => {
+    const db = await setup();
+    try {
+      await comSaldo(db, 100, 'meta');
+      await asPostgres(db);
+      await db.exec(`INSERT INTO leads (organization_id, name, phone) VALUES ('b2ad1ffb-e136-4356-846b-9f210f902573', 'Já cliente', '5511993195517')`);
+      const id = await rodar(db, perfis);
+      const b = await one(db, `SELECT status, creditos_usados, varridos, contatos_novos, ja_leads, (SELECT custo_usd::float FROM lista_fria_busca_custos WHERE busca_id = b.id) AS custo FROM lista_fria_buscas b WHERE id = '${id}'`);
+      assert.deepEqual(b, { status: 'concluida', creditos_usados: 6, varridos: 6, contatos_novos: 4, ja_leads: 1, custo: 0.5 });
+      const r = (await db.query(`SELECT ref_externa FROM lista_fria_resultados WHERE busca_id = '${id}' ORDER BY ref_externa`)).rows;
+      assert.deepEqual(r.map((x) => x.ref_externa), ['ana', 'bia', 'caio.silva_1', 'duda', 'edu']);
+      assert.equal(await val(db, META), 94, '100 - 6 seguidores varridos');
+    } finally { await db.close(); }
+  });
+
+  test('6 seguidores e NENHUM contato: devolve metade (3) além da sobra', async () => {
+    const db = await setup();
+    try {
+      await comSaldo(db, 100, 'meta');
+      const id = await rodar(db, ['a', 'b', 'c', 'd', 'e', 'f'].map((u) => perfil(u)));
+      const b = await one(db, `SELECT status, creditos_usados, varridos, contatos_novos FROM lista_fria_buscas WHERE id = '${id}'`);
+      assert.deepEqual(b, { status: 'concluida', creditos_usados: 3, varridos: 6, contatos_novos: 0 });
+      assert.equal(await val(db, `SELECT count(*)::int FROM lista_fria_resultados WHERE busca_id = '${id}'`), 0);
+      assert.equal(await val(db, META), 97, '100 - 6 + 3');
+    } finally { await db.close(); }
+  });
+
+  test('a Apify entrega 80 e a reserva é 50: o cliente paga 50, só 50 entram, e o resto não é lido', async () => {
+    const db = await setup();
+    try {
+      await comSaldo(db, 100, 'meta');
+      const muitos = Array.from({ length: 80 }, (_, n) => perfil(`u${n}`, { public_email: `u${n}@bom.com.br` }));
+      const id = await rodar(db, muitos);
+      const b = await one(db, `SELECT status, creditos_usados, varridos, contatos_novos FROM lista_fria_buscas WHERE id = '${id}'`);
+      assert.deepEqual(b, { status: 'concluida', creditos_usados: 50, varridos: 50, contatos_novos: 50 });
+      assert.equal(await val(db, META), 50);
     } finally { await db.close(); }
   });
 });

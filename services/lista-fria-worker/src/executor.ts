@@ -43,6 +43,19 @@ export interface Leitura {
   terminou: boolean;
   /** Terminou mal (falha, estouro de tempo). Com resultado parcial a busca ainda conclui. */
   falhou: boolean;
+  /**
+   * Seguidores que o coletor já processou, TOTAL acumulado (não o delta). A fonte cobrada por varredura
+   * (ADR-0046) informa; o executor repassa ao banco, que debita. Ausente = fonte sem esse conceito.
+   */
+  varridos?: number;
+  /** Custo real do coletor até agora (US$). Auditoria da margem. */
+  custoUsd?: number | null;
+}
+
+/** Medição final do coletor, depois de parado: pega o que a Apify ainda cobrou entre a última leitura e o abort. */
+export interface Medicao {
+  varridos: number;
+  custoUsd: number | null;
 }
 
 /** O que o executor sabe e a fonte pode usar para não trabalhar a mais. */
@@ -61,6 +74,8 @@ export interface Fonte {
   ler(id: string, ctx?: ContextoDeLeitura): Promise<Leitura>;
   /** Para e limpa o job no coletor (para de gastar). Nunca lança. */
   encerrar(id: string): Promise<void>;
+  /** Custo final do job, lido depois de parado. Opcional: só a fonte que cobra por varredura tem. */
+  medir?(id: string): Promise<Medicao | null>;
   /** Nicho para o filtro de IA. Fonte sem nicho (Instagram) não filtra. */
   nicho: string | null;
 }
@@ -210,17 +225,34 @@ export async function executarBusca(busca: BuscaDaFila, fonte: Fonte, amb: Ambie
   const vistos = new Set<string>();
   const n = { encontrados: 0, comTelefone: 0, comEmail: 0, semContato: 0 };
   let registrados = 0;
+  let varridos = 0;
   let jobId: string | null = null;
+  // Cobrada por varredura (ADR-0046): o avanço da busca é o de seguidores varridos, não o de contatos.
+  const porVarredura = busca.cobranca === "por_varredura";
 
   const progresso = async (etapa: Progresso["etapa"], pctTempo: number): Promise<string> =>
     await amb.banco.progresso(busca.id, cfg.workerId, {
       etapa,
-      progresso: Math.max(registrados / limite, pctTempo) * 95,
+      progresso: Math.max((porVarredura ? varridos : registrados) / limite, pctTempo) * 95,
       ...n,
     });
 
   const largar = async () => {
     if (jobId) await fonte.encerrar(jobId);
+  };
+
+  /** Depois de parar o coletor, grava o custo final no banco. Nunca derruba o encerramento da busca. */
+  const medirEGravar = async () => {
+    if (!jobId || !fonte.medir) return;
+    try {
+      const m = await fonte.medir(jobId);
+      if (m) {
+        varridos = Math.max(varridos, m.varridos);
+        await amb.banco.varrer(busca.id, cfg.workerId, varridos, m.custoUsd);
+      }
+    } catch (e) {
+      amb.log("medicao_falhou", { busca: busca.id, erro: String(e) });
+    }
   };
 
   async function processar(linhas: Candidato[]): Promise<Estado> {
@@ -311,7 +343,24 @@ export async function executarBusca(busca: BuscaDaFila, fonte: Fonte, amb: Ambie
         return;
       }
 
-      const { linhas, terminou, falhou } = await fonte.ler(id, { restantes: Math.max(0, limite - registrados) });
+      const leitura = await fonte.ler(id, { restantes: Math.max(0, limite - registrados) });
+      const { linhas, falhou } = leitura;
+      let terminou = leitura.terminou;
+
+      // Cobrança por varredura: o banco debita pelo total informado e diz se a reserva acabou. Vem ANTES de
+      // registrar o lote: o que foi varrido já foi gasto, e o contato dele entra mesmo com a reserva no fim.
+      if (leitura.varridos !== undefined) {
+        const v = await amb.banco.varrer(busca.id, cfg.workerId, leitura.varridos, leitura.custoUsd ?? null);
+        if (v) {
+          if (!v.ativa) {
+            // Parada ou cancelada no meio: o banco já fechou a busca.
+            await largar();
+            return;
+          }
+          varridos = Math.max(varridos, leitura.varridos);
+          if (v.limite_atingido) terminou = true;
+        }
+      }
 
       const novas = linhas.filter((l) => !vistos.has(l.ref));
       for (const l of novas) vistos.add(l.ref);
@@ -342,12 +391,14 @@ export async function executarBusca(busca: BuscaDaFila, fonte: Fonte, amb: Ambie
       if (terminou) {
         const sem = falhou && vistos.size === 0;
         await largar();
+        await medirEGravar();
         await amb.banco.encerrar(busca.id, cfg.workerId, sem ? "falhou" : "concluida", sem ? "coletor_falhou" : undefined);
         amb.log("busca_encerrada", { busca: busca.id, registrados, encontrados: vistos.size });
         return;
       }
       if (amb.agora() > prazo) {
         await largar();
+        await medirEGravar();
         const algo = vistos.size > 0;
         await amb.banco.encerrar(busca.id, cfg.workerId, algo ? "concluida" : "falhou", algo ? undefined : "tempo_esgotado");
         return;

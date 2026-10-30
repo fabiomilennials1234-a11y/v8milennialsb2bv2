@@ -137,7 +137,7 @@ export default function RevisarBusca() {
                 },
               )
             }
-            disabled={exportar.isPending || busca.creditosUsados + busca.jaLeads === 0}
+            disabled={exportar.isPending || busca.contatosNovos + busca.jaLeads === 0}
           >
             {exportar.isPending ? <Loader2 className="animate-spin" /> : <FileDown />}
             Exportar CSV
@@ -153,7 +153,17 @@ export default function RevisarBusca() {
 
       <KpiRow cols={4}>
         <KpiTile label="Negócios encontrados" value={n(busca.encontrados)} icon={Search} tone="info" />
-        <KpiTile label="Contatos novos e válidos" value={n(busca.creditosUsados)} icon={ShieldCheck} tone="good" note={`${n(busca.creditosUsados)} créditos usados`} />
+        <KpiTile
+          label="Contatos novos e válidos"
+          value={n(busca.contatosNovos)}
+          icon={ShieldCheck}
+          tone="good"
+          note={
+            busca.cobranca === "por_varredura"
+              ? `${n(busca.varridos)} seguidores analisados · ${n(busca.creditosUsados)} créditos Meta`
+              : `${n(busca.creditosUsados)} créditos usados`
+          }
+        />
         <KpiTile label="Já são leads" value={n(busca.jaLeads)} icon={Users} note="não cobrados, sem duplicar" />
         <KpiTile label="Sem contato" value={n(busca.semContato)} icon={UserX} note="não cobrados" />
       </KpiRow>

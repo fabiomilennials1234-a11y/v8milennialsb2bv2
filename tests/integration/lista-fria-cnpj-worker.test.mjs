@@ -193,7 +193,8 @@ describe('fluxo completo pelo executor', () => {
           return { aceitos: Math.min(cabem, itens.length), limite_atingido: reg.registrados.length >= limiteReal, ativa: true };
         },
         encerrar: async (b, w, s, e) => { reg.encerrar.push([s, e ?? null]); },
-        reivindicar: async () => null, recuperarTravadas: async () => 0,
+        varrer: async () => null,
+      reivindicar: async () => null, recuperarTravadas: async () => 0,
       },
     };
   };

@@ -23,7 +23,8 @@ import { writeFileSync } from "node:fs";
 import os from "node:os";
 import { setTimeout as dormir } from "node:timers/promises";
 
-import { bancoPelaRede, type Banco } from "./db.ts";
+import { bancoPelaRede } from "./db.ts";
+import { comPulso } from "./pulso.ts";
 import { abortarExecucao, iniciarExecucao, lerExecucao, lerItens, type ApifyCfg } from "./apify.ts";
 import { CFG_PADRAO, executarBusca, executarMaps, type Ambiente, type CfgDoExecutor } from "./executor.ts";
 import { coletorApi } from "./coletor-instagram.ts";
@@ -57,31 +58,6 @@ const SEIS_HORAS = 6 * 3_600_000;
 const ARQUIVO_DE_PULSO = process.env.WORKER_PULSO || "/tmp/worker-vivo";
 /** Sem contato bem-sucedido com o banco por tanto tempo, o worker se declara doente. */
 const PULSO_VALE_MS = 120_000;
-
-/**
- * Embrulha o banco para saber a última vez que ele respondeu. O pulso só é renovado enquanto isso for
- * recente: processo vivo que não alcança o banco (chave revogada, rede fora, banco em swap) NÃO é
- * saudável, e o orquestrador precisa ver isso para reiniciar e alertar.
- */
-function comPulso(banco: Banco): { banco: Banco; ultimoContatoMs: () => number } {
-  let ultimo = Date.now();
-  const marcar = <A extends unknown[], R>(f: (...a: A) => Promise<R>) =>
-    async (...a: A): Promise<R> => {
-      const r = await f(...a);
-      ultimo = Date.now();
-      return r;
-    };
-  return {
-    ultimoContatoMs: () => ultimo,
-    banco: {
-      reivindicar: marcar(banco.reivindicar.bind(banco)),
-      progresso: marcar(banco.progresso.bind(banco)),
-      registrar: marcar(banco.registrar.bind(banco)),
-      encerrar: marcar(banco.encerrar.bind(banco)),
-      recuperarTravadas: marcar(banco.recuperarTravadas.bind(banco)),
-    },
-  };
-}
 
 const log = (evento: string, dados: Record<string, unknown> = {}) =>
   console.log(JSON.stringify({ t: new Date().toISOString(), evento, ...dados }));

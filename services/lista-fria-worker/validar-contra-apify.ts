@@ -58,6 +58,7 @@ const registrados: ItemParaRegistrar[] = [];
 let encerrado: [string, string | undefined] | null = null;
 const banco: Banco = {
   reivindicar: async () => null,
+  varrer: async () => null,
   recuperarTravadas: async () => 0,
   progresso: async (_b, _w, p) => {
     console.log(`  · progresso ${Math.round(p.progresso)}% etapa=${p.etapa} achados=${p.encontrados} tel=${p.comTelefone} email=${p.comEmail} sem=${p.semContato}`);

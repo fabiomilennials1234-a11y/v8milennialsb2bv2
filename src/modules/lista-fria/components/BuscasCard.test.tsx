@@ -14,6 +14,9 @@ const base: Busca = {
   progresso: 100,
   creditosLimite: 10,
   creditosUsados: 10,
+  cobranca: "por_contato",
+  contatosNovos: 10,
+  varridos: 0,
   encontrados: 243,
   comTelefone: 184,
   comEmail: 243,
@@ -62,13 +65,38 @@ describe("BuscasCard: o que a busca entregou x o que analisou", () => {
     expect(screen.getByTitle(/Só os que cabem nos seus créditos entram na lista/)).toBeInTheDocument();
   });
 
-  it("Instagram fala em créditos Meta", () => {
-    montar({ fonte: "instagram", titulo: "@crm.datacrazy", encontrados: 40, creditosUsados: 10, creditosLimite: 10 });
+  it("Instagram antigo (cobrado por contato) fala em créditos Meta e em limite", () => {
+    montar({ fonte: "instagram", titulo: "@crm.datacrazy", encontrados: 40, creditosUsados: 10, creditosLimite: 10, contatosNovos: 10 });
     expect(screen.getByRole("region", { name: "Buscas da Lista fria" })).toHaveTextContent(/limite de\s*10\s*créditos Meta/);
   });
 
+  it("Instagram por varredura: contatos entregues, seguidores analisados e créditos gastos da reserva, sem confundir os três", () => {
+    montar({
+      fonte: "instagram",
+      titulo: "@crm.datacrazy",
+      cobranca: "por_varredura",
+      status: "concluida",
+      creditosLimite: 50,
+      creditosUsados: 50,
+      varridos: 50,
+      encontrados: 50,
+      contatosNovos: 3,
+    });
+    const card = screen.getByRole("region", { name: "Buscas da Lista fria" });
+    expect(card).toHaveTextContent(/3\s*contatos novos/);
+    expect(card).toHaveTextContent(/50\s*seguidores analisados/);
+    expect(card).toHaveTextContent(/50\s*de\s*50\s*créditos Meta/);
+    expect(card).not.toHaveTextContent(/limite de/);
+    expect(screen.getByTitle(/Se a busca terminar sem nenhum contato, metade dos créditos gastos volta/)).toBeInTheDocument();
+  });
+
+  it("busca por varredura sem nenhum contato não oferece revisão (não há o que importar)", () => {
+    montar({ fonte: "instagram", cobranca: "por_varredura", status: "concluida", creditosLimite: 50, creditosUsados: 25, varridos: 50, contatosNovos: 0 });
+    expect(screen.queryByRole("link", { name: /Revisar e importar/ })).not.toBeInTheDocument();
+  });
+
   it("quem já era lead aparece à parte e não conta como contato novo", () => {
-    montar({ creditosUsados: 7, jaLeads: 3 });
+    montar({ contatosNovos: 7, creditosUsados: 7, jaLeads: 3 });
     const card = screen.getByRole("region", { name: "Buscas da Lista fria" });
     expect(card).toHaveTextContent(/7\s*contatos novos/);
     expect(card).toHaveTextContent(/3\s*já são seus leads/);

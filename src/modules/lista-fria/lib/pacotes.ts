@@ -1,8 +1,9 @@
 /**
  * Pacotes de crédito da Lista fria (ADR-0045).
  *
- * Preço de lista (CTO, 29/10/2026, ADR-0044): crédito Google R$ 0,15 e crédito Meta R$ 1,00. Os pacotes de
- * 500 ("+") e 1.000 ("Max") têm 5% e 10% de desconto sobre esse preço. Tudo em CENTAVOS, inteiro: dinheiro
+ * Preço de lista: crédito Google R$ 0,15 (ADR-0044) e crédito Meta R$ 0,15 (ADR-0046: o crédito Meta passou a ser
+ * um seguidor varrido, não um contato, então custa o mesmo que o Google). Os pacotes de 500 ("+") e 1.000
+ * ("Max") têm 5% e 10% de desconto sobre esse preço. Tudo em CENTAVOS, inteiro: dinheiro
  * em ponto flutuante dá centavo errado.
  *
  * "Google" é o nome comercial do crédito padrão (serve para Maps e CNPJ); "Meta" é o do Instagram. O banco
@@ -30,7 +31,7 @@ export interface Pacote {
 /** Preço de lista de UM crédito, em centavos. */
 export const PRECO_DO_CREDITO_CENTAVOS: Record<TipoDeCredito, number> = {
   normal: 15,
-  meta: 100,
+  meta: 15,
 };
 
 export const NOME_COMERCIAL: Record<TipoDeCredito, string> = {

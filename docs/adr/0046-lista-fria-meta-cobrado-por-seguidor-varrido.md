@@ -4,7 +4,7 @@ Date: 2026-10-30
 
 ## Status
 
-Accepted (CTO, 2026-10-30). **Decisão de desenho; ainda não implementada.** Substitui a cobrança por contato do crédito Meta definida no ADR-0044. O crédito Google (Maps e CNPJ) não muda.
+Accepted (CTO, 2026-10-30). **Implementada no código (2026-10-30); aguarda implantação** (ordem na seção Implementação). Substitui a cobrança por contato do crédito Meta definida no ADR-0044. O crédito Google (Maps e CNPJ) não muda.
 
 ## Context
 
@@ -77,10 +77,41 @@ A margem é a mesma nos três (53,7%) porque não depende do rendimento: só da 
 - **Os dois saldos ficam separados** (a unidade é outra, seguidor e contato), mesmo agora com o mesmo preço por crédito. Unificá-los é uma decisão futura.
 - **"Nenhum contato" precisa de definição exata na implementação.** Premissa deste ADR: zero resultados registrados na busca. Se existirem resultados que já são leads, a busca não é "zero".
 
-## Implementação (não feita)
+## Implementação
 
-1. Migration aditiva: `cobranca`, `varridos`, `custo_usd`, `seguidores_por_credito` em `lista_fria_buscas`; RPC de consumo progressivo e monotônico; devolução de metade no encerramento quando não há resultado.
-2. Worker: informar os varridos a cada volta, abortar na reserva e gravar o custo real.
-3. Tela: preço fixo por busca de Instagram (50 créditos Meta, R$ 7,50), sem campo de créditos, com o aviso do risco.
-4. Consulta de margem (receita contra custo real por busca).
-5. Testes de banco (monotonicidade, teto, devolução, rollback), de worker (Apify de teste que entrega itens aos poucos) e de tela.
+Migration `20271221000000_lista_fria_cobranca_por_varredura.sql` (aditiva, com rollback), worker e telas.
+
+**Banco**
+- `lista_fria_buscas` ganha `cobranca` (`por_contato` por padrão, `por_varredura`), `varridos`, `seguidores_por_credito` (1, gravado na criação) e `contatos_novos`. As buscas que já existem ficam `por_contato` e `contatos_novos` recebe o `creditos_usados` delas (até aqui, todo crédito era um contato).
+- **O custo real não fica nessa tabela.** O cliente lê `lista_fria_buscas` com `select *`, então `custo_usd` ali mostraria a margem da casa. Vai para `lista_fria_busca_custos` (RLS ligada, sem grant para o usuário; só o serviço lê e escreve).
+- `lista_fria_busca_criar`: Instagram reserva **50 créditos Meta fixos** e nasce `por_varredura`; o número pedido pelo cliente não vale para essa fonte. Maps e CNPJ não mudam.
+- `lista_fria_worker_varrer(busca, worker, varridos, custo_usd)` (só `service_role`): o total é cumulativo e monotônico (`GREATEST`), o débito sobe até a reserva e para nela. Em busca `por_contato` só audita.
+- `lista_fria_worker_registrar`: em busca por varredura não cobra, não corta o lote e devolve `limite_atingido = false` (quem encerra é a varredura).
+- `private.lista_fria_encerrar`: busca por varredura que fecha como **`concluida` ou `falhou`** sem **nenhuma linha** em `lista_fria_resultados` devolve `floor(creditos_usados / 2)` além da sobra da reserva. `creditos_usados` passa a ser o que o cliente de fato pagou.
+
+**Decisões que o ADR deixava em aberto**
+- "Zero contatos" = zero linhas de resultado (premissa confirmada). Resultado que já é lead conta como resultado.
+- **Parada pelo usuário não devolve metade**: ele escolheu parar. Só o que o coletor varreu até ali é cobrado, e a sobra da reserva volta. Se a regra valesse também ali, bastaria parar cedo numa conta ruim para pagar metade do que ela custou.
+- **Falha sem resultado devolve metade** (o cliente não fica com a falha do coletor); falha antes de varrer qualquer coisa só devolve a reserva.
+- Ao chegar na reserva a busca fecha como **`concluida`** (varreu tudo o que o cliente pagou), não como `parada`.
+
+**Worker**
+- A fonte Instagram lê **no máximo a reserva** (`creditos_limite × seguidores_por_credito`). A Apify pode entregar mais; o excedente não é lido nem entregue, porque o cliente não pagou por ele. Na reserva, a execução é abortada.
+- A cada volta informa `varridos` (itens do dataset) e o custo (`usageTotalUsd`); ao parar o coletor lê o custo final e grava de novo.
+- **Tolera banco antigo**: se `lista_fria_worker_varrer` não existe (404), segue sem cobrança por varredura. Isso permite implantar o worker antes da migration sem janela.
+
+**Telas**
+- Crédito Meta a **R$ 0,15**: Meta 100 = R$ 15,00, Meta + 500 = R$ 71,25, Meta Max 1.000 = R$ 135,00.
+- Instagram não tem mais campo de créditos: mostra "Esta busca custa 50 créditos Meta (R$ 7,50)", o risco (paga-se por seguidor analisado, venha contato ou não) e a devolução de metade. Com menos de 50 créditos Meta, não inicia e oferece comprar.
+- O card mostra contatos entregues, seguidores analisados e "N de 50 créditos Meta". A revisão só é oferecida se vieram contatos.
+
+**Ordem de implantação** (cada passo é seguro sozinho)
+1. Worker novo (imagem), tolerante à RPC ausente.
+2. Migration. A partir daqui o Instagram novo é por varredura.
+3. Front.
+
+Entre 2 e 3, quem ainda tem o front antigo aberto vê o campo de créditos, mas o banco ignora o número e reserva 50.
+
+**Saldo Meta já concedido muda de significado** (de contatos para seguidores): TorqueCRM 10, Improving 100, Milennials 100 na data deste ADR. Com 100, são 2 buscas. Avisar antes de implantar.
+
+**Auditoria**: `scripts/lista-fria-margem-instagram.sql` (receita contra custo real por busca e no total).
