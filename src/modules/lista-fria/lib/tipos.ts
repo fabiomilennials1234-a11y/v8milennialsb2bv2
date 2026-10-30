@@ -8,7 +8,7 @@
 import type { Database, Json } from "@/integrations/supabase/types";
 
 import { resumoDosCnaes } from "./cnae";
-import { type LocalDaBusca, SEM_LOCAL, localDoTextoDeCidade } from "./meta";
+import { type LocalDaBusca, SEM_LOCAL, localDoTextoDeCidade } from "./local";
 
 export type FonteDaBusca = "maps" | "instagram" | "cnpj";
 export type StatusDaBusca = "na_fila" | "executando" | "concluida" | "parada" | "falhou" | "cancelada";

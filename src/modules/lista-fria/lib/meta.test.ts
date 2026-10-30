@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
+import { localDoTextoDeCidade } from "./local";
 import {
-  localDoTextoDeCidade,
   montarArquivoMeta,
   nomeDoArquivoMeta,
   normalizarCidade,

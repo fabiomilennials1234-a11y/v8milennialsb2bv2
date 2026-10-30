@@ -16,16 +16,8 @@
  * Todo valor passa por normalização que só deixa letras, dígitos e `@._+-`: não
  * sobra `=`, `+` ou `@` no começo de célula, então não há CSV injection.
  */
+import { type LocalDaBusca, SEM_LOCAL } from "./local";
 import type { FonteDaBusca, Resultado } from "./tipos";
-
-export interface LocalDaBusca {
-  /** "São Paulo" — vazio quando a busca não é por cidade. */
-  cidade: string | null;
-  /** "SP" */
-  uf: string | null;
-}
-
-export const SEM_LOCAL: LocalDaBusca = { cidade: null, uf: null };
 
 const COLUNAS = ["email", "phone", "fn", "ln", "ct", "st", "country"] as const;
 type Coluna = (typeof COLUNAS)[number];
@@ -33,14 +25,6 @@ type Linha = Record<Coluna, string>;
 
 const EMAIL_SEGURO = /^[a-z0-9_][a-z0-9._%+-]*@[a-z0-9.-]+\.[a-z]{2,}$/;
 const UF = /^[a-z]{2}$/;
-
-/** "São Paulo - SP" → { cidade: "São Paulo", uf: "SP" }. Sem UF no fim, tudo é cidade. */
-export function localDoTextoDeCidade(texto: string | null | undefined): LocalDaBusca {
-  const t = (texto ?? "").trim();
-  const m = /^(.*?)\s*[-–]\s*([A-Za-z]{2})$/.exec(t);
-  if (m && m[1]) return { cidade: m[1].trim(), uf: m[2].toUpperCase() };
-  return { cidade: t || null, uf: null };
-}
 
 const semAcento = (s: string) => s.normalize("NFD").replace(/[̀-ͯ]/g, "");
 
