@@ -12,7 +12,7 @@
 import type { Execucao, EstadoDaExecucao } from "./apify.ts";
 import { execucaoTerminou } from "./apify.ts";
 import type { BuscaDaFila } from "./db.ts";
-import type { Fonte, Leitura } from "./executor.ts";
+import type { Fonte, Leitura, Medicao } from "./executor.ts";
 import { clamp } from "./executor.ts";
 import { CONTAS_POR_PAGINA, candidatoDoItem } from "./instagram.ts";
 
@@ -67,8 +67,17 @@ export const CFG_INSTAGRAM_PADRAO: Omit<CfgInstagram, "actorId"> = {
 
 const PAGINA_DO_DATASET = 500;
 
-export function planoDaBusca(creditos: number, cfg: CfgInstagram) {
-  const maxItems = clamp(creditos * cfg.contasPorCredito, CONTAS_POR_PAGINA, cfg.maxSeguidores);
+/**
+ * Quantos seguidores a busca pode varrer. Por varredura (ADR-0046) o crédito É o seguidor: reserva ×
+ * seguidores por crédito. Por contato é só o presumido (créditos × rendimento esperado), sem teto duro.
+ */
+export function tetoDeSeguidores(busca: Pick<BuscaDaFila, "cobranca" | "creditos_limite" | "seguidores_por_credito">): number {
+  return busca.cobranca === "por_varredura" ? busca.creditos_limite * Math.max(1, busca.seguidores_por_credito ?? 1) : Number.POSITIVE_INFINITY;
+}
+
+export function planoDaBusca(creditos: number, cfg: CfgInstagram, tetoPorVarredura?: number) {
+  const pedido = tetoPorVarredura ?? creditos * cfg.contasPorCredito;
+  const maxItems = clamp(pedido, CONTAS_POR_PAGINA, cfg.maxSeguidores);
   const maxPages = Math.ceil(maxItems / CONTAS_POR_PAGINA);
   // 15% de folga sobre o preço de tabela (add-ons, arredondamento); nunca acima do teto.
   const maxTotalChargeUsd = Math.min(cfg.maxUsdPorBusca, Number((maxItems * cfg.precoPorSeguidorUsd * 1.15 + 0.01).toFixed(4)));
@@ -87,13 +96,15 @@ export function fonteInstagram(
   let datasetId = "";
   let offset = 0;
   let terminal = false;
+  let gastoUsd: number | null = null;
+  const teto = tetoDeSeguidores(busca);
 
   return {
     nicho: null,
     async iniciar() {
       const handle = busca.instagram_handle;
       if (!handle) throw new Error("busca de Instagram sem @");
-      const plano = planoDaBusca(busca.creditos_limite, cfg);
+      const plano = planoDaBusca(busca.creditos_limite, cfg, Number.isFinite(teto) ? teto : undefined);
       const exec = await api.iniciar(
         cfg.actorId,
         { username: handle, mode: "enriched", maxPages: plano.maxPages, maxItems: plano.maxItems },
@@ -108,21 +119,39 @@ export function fonteInstagram(
       // Status ANTES dos itens: se a execução já terminou, os itens lidos em seguida são todos.
       const estado = await api.execucao(runId);
       const terminou = estado === null || execucaoTerminou(estado.status);
+      gastoUsd = estado?.gastoUsd ?? gastoUsd;
       const linhas = [];
       for (;;) {
-        const itens = await api.itens(datasetId, offset, PAGINA_DO_DATASET);
+        // Por varredura nunca se lê além da reserva: o que passar dela a Apify entregou, mas o cliente não pagou.
+        const cabe = Math.min(PAGINA_DO_DATASET, teto - offset);
+        if (cabe <= 0) break;
+        const itens = await api.itens(datasetId, offset, cabe);
         offset += itens.length;
         for (const item of itens) {
           const c = candidatoDoItem(item);
           if (c) linhas.push(c);
         }
-        if (itens.length < PAGINA_DO_DATASET) break;
+        if (itens.length < cabe) break;
       }
       if (terminou && estado) {
         terminal = true;
         log("apify_encerrada", { busca: busca.id, status: estado.status, gastoUsd: estado.gastoUsd });
       }
-      return { linhas, terminou, falhou: estado === null || estado.status !== "SUCCEEDED" };
+      // Reserva toda varrida: acabou, a execução (se ainda roda) é abortada em `encerrar`. Não é falha.
+      const noTeto = offset >= teto;
+      return {
+        linhas,
+        terminou: terminou || noTeto,
+        falhou: !noTeto && (estado === null || estado.status !== "SUCCEEDED"),
+        varridos: offset,
+        custoUsd: gastoUsd,
+      };
+    },
+
+    async medir(runId): Promise<Medicao | null> {
+      const estado = await api.execucao(runId);
+      gastoUsd = estado?.gastoUsd ?? gastoUsd;
+      return { varridos: offset, custoUsd: gastoUsd };
     },
 
     async encerrar(runId) {

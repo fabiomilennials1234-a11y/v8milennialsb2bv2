@@ -83,6 +83,7 @@ const bancoMemoria = () => {
       progresso: async (b, w, p) => { reg.progressos.push(p); return 'executando'; },
       registrar: async (b, w, itens) => { reg.registrados.push(...itens); return { aceitos: itens.length, limite_atingido: false, ativa: true }; },
       encerrar: async (b, w, s, e) => { reg.encerrar.push([s, e ?? null]); },
+      varrer: async () => null,
       reivindicar: async () => null, recuperarTravadas: async () => 0,
     },
   };

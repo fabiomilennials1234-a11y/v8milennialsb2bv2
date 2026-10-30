@@ -32,15 +32,15 @@ describe("pacotes", () => {
     expect(new Set(PACOTES.map((p) => p.id)).size).toBe(6);
   });
 
-  it("os preços batem com o preço de lista (R$ 0,15 e R$ 1,00) e os descontos de 5% e 10%, em centavos inteiros", () => {
+  it("os preços batem com o preço de lista (R$ 0,15 nos dois créditos, ADR-0046) e os descontos de 5% e 10%, em centavos inteiros", () => {
     const preco = Object.fromEntries(PACOTES.map((p) => [p.id, precoDoPacote(p)]));
     expect(preco).toEqual({
       google: 1500, //   100 × 0,15
       google_plus: 7125, // 500 × 0,15 × 0,95
       google_max: 13500, // 1000 × 0,15 × 0,90
-      meta: 10000, //     100 × 1,00
-      meta_plus: 47500, // 500 × 1,00 × 0,95
-      meta_max: 90000, // 1000 × 1,00 × 0,90
+      meta: 1500, //     100 × 0,15
+      meta_plus: 7125, // 500 × 0,15 × 0,95
+      meta_max: 13500, // 1000 × 0,15 × 0,90
     });
     expect(Object.values(preco).every(Number.isInteger)).toBe(true);
   });
@@ -59,12 +59,12 @@ describe("pacotes", () => {
   it("o preço por crédito cai com o desconto", () => {
     const [g, gPlus, gMax] = PACOTES_GOOGLE.map(centavosPorCredito);
     expect([g, gPlus, gMax]).toEqual([15, 14.25, 13.5]);
-    expect(PACOTES_META.map(centavosPorCredito)).toEqual([100, 95, 90]);
+    expect(PACOTES_META.map(centavosPorCredito)).toEqual([15, 14.25, 13.5]);
   });
 
   it("formata em reais", () => {
     expect(normaliza(formatarReais(7125))).toBe("R$ 71,25");
-    expect(normaliza(formatarReais(90000))).toBe("R$ 900,00");
+    expect(normaliza(formatarReais(13500))).toBe("R$ 135,00");
     expect(normaliza(formatarReaisPorCredito(14.25))).toBe("R$ 0,1425");
     expect(normaliza(formatarReaisPorCredito(15))).toBe("R$ 0,15");
   });
@@ -85,7 +85,7 @@ describe("textos dos chamados", () => {
     const c = chamadoDePagamento(p, "LF123ABCD");
     expect(c.title).toBe("Paguei o pacote Meta + (500 créditos)");
     expect(c.tipo).toBe("solicitacao");
-    expect(normaliza(c.description)).toContain("Valor pago: R$ 475,00");
+    expect(normaliza(c.description)).toContain("Valor pago: R$ 71,25");
     expect(c.description).toContain("Créditos: 500 Meta");
     expect(c.description).toContain("Referência do PIX: LF123ABCD");
   });

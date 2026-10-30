@@ -547,6 +547,7 @@ function bancoPglite(db) {
     progresso: async (b, w, p) => Object.values((await q('SELECT lista_fria_worker_progresso($1,$2,$3,$4,$5,$6,$7,$8)', [b, w, p.etapa, Math.round(p.progresso), p.encontrados, p.comTelefone, p.comEmail, p.semContato]))[0])[0],
     registrar: async (b, w, itens) => Object.values((await q('SELECT lista_fria_worker_registrar($1,$2,$3::jsonb)', [b, w, JSON.stringify(itens)]))[0])[0],
     encerrar: async (b, w, s, e) => { await q('SELECT lista_fria_worker_encerrar($1,$2,$3,$4)', [b, w, s, e ?? null]); },
+    varrer: async (b, w, v, c) => Object.values((await q('SELECT lista_fria_worker_varrer($1,$2,$3,$4)', [b, w, v, c]))[0])[0],
     recuperarTravadas: async () => Object.values((await q('SELECT lista_fria_worker_recuperar_travadas()'))[0])[0],
   };
 }

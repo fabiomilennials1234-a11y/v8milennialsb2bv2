@@ -18,7 +18,8 @@ import { cn } from "@/lib/utils";
 import { useCriarBusca, type AlvoDaBusca } from "../hooks/useListaFriaMutacoes";
 import { extrairHandleDoInstagram } from "../lib/instagram";
 import { recusaDaListaFria } from "../lib/erros";
-import { CONTATOS_EXIGIDOS, INSTAGRAM_DISPONIVEL, ROTULO_CONTATO, ROTULO_CREDITO, type ContatoExigido, type Saldos, type TipoDeCredito } from "../lib/tipos";
+import { formatarReais, PRECO_DO_CREDITO_CENTAVOS } from "../lib/pacotes";
+import { CONTATOS_EXIGIDOS, INSTAGRAM_DISPONIVEL, RESERVA_INSTAGRAM_CREDITOS, ROTULO_CONTATO, ROTULO_CREDITO, type ContatoExigido, type Saldos, type TipoDeCredito } from "../lib/tipos";
 import { BotaoComprarCreditos } from "./BotaoComprarCreditos";
 import { SeletorDeCnae } from "./SeletorDeCnae";
 
@@ -27,8 +28,6 @@ type Passo = "fonte" | "instagram" | "maps" | "cnpj";
 const UFS = ["AC", "AL", "AP", "AM", "BA", "CE", "DF", "ES", "GO", "MA", "MT", "MS", "MG", "PA", "PB", "PR", "PE", "PI", "RJ", "RN", "RS", "RO", "RR", "SC", "SP", "SE", "TO"] as const;
 
 const CREDITOS_SUGERIDOS = 500;
-// Instagram sem login traz ~50 seguidores por conta (≈10 contatos): mais que isso só reserva saldo à toa.
-const CREDITOS_SUGERIDOS_META = 10;
 
 
 function InstagramIcone({ className }: { className?: string }) {
@@ -119,12 +118,19 @@ export function NovaBuscaDialog({
 
   useEffect(() => {
     if (passo === "fonte") return;
-    const sugerido = passo === "instagram" ? CREDITOS_SUGERIDOS_META : CREDITOS_SUGERIDOS;
-    setCreditos(Math.max(1, Math.min(sugerido, saldos?.[passo === "instagram" ? "meta" : "normal"] ?? sugerido)));
+    // Instagram não tem campo: a reserva é fixa (ADR-0046), então o valor enviado é sempre ela.
+    if (passo === "instagram") {
+      setCreditos(RESERVA_INSTAGRAM_CREDITOS);
+      return;
+    }
+    setCreditos(Math.max(1, Math.min(CREDITOS_SUGERIDOS, saldos?.normal ?? CREDITOS_SUGERIDOS)));
     // Só ao trocar de fonte: o saldo muda com a busca em andamento e não pode apagar o que o usuário digitou.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [passo]);
-  const creditosOk = Number.isInteger(creditos) && creditos >= 1 && creditos <= disponivel;
+  const creditosOk =
+    passo === "instagram"
+      ? disponivel >= RESERVA_INSTAGRAM_CREDITOS
+      : Number.isInteger(creditos) && creditos >= 1 && creditos <= disponivel;
   const municipioOk = municipio.trim() === "" || (municipio.trim().length >= 2 && municipio.trim().length <= 80);
   const alvoOk =
     passo === "instagram"
@@ -145,7 +151,7 @@ export function NovaBuscaDialog({
           ? { fonte: "cnpj", cnaes, uf, municipio, contato }
           : { fonte: "maps", nicho, cidade };
     criar.mutate(
-      { alvo, creditos },
+      { alvo, creditos: passo === "instagram" ? RESERVA_INSTAGRAM_CREDITOS : creditos },
       {
         onSuccess: () => {
           toast.success("Busca iniciada. Pode sair desta tela: o resultado aparece em Buscas quando terminar.");
@@ -160,6 +166,33 @@ export function NovaBuscaDialog({
       },
     );
   };
+
+  // Instagram: preço fixo por busca. O cliente paga pelos seguidores analisados, não pelos contatos achados, e
+  // precisa saber disso ANTES de iniciar (o rendimento depende da conta e ninguém sabe de antemão).
+  const precoDaBuscaInstagram = formatarReais(RESERVA_INSTAGRAM_CREDITOS * PRECO_DO_CREDITO_CENTAVOS.meta);
+  const blocoDoInstagram = (
+    <div className="space-y-2 rounded-xl border border-border bg-muted/40 p-3.5" data-testid="preco-instagram">
+      <p className="text-sm font-semibold text-foreground">
+        Esta busca custa {RESERVA_INSTAGRAM_CREDITOS} créditos Meta <span className="font-normal text-muted-foreground">({precoDaBuscaInstagram})</span>
+      </p>
+      <p className="text-xs leading-relaxed text-muted-foreground">
+        Cada seguidor analisado gasta 1 crédito, venha contato ou não: o preço é o mesmo seja qual for o resultado. Contas com
+        pouco contato público rendem pouco. Se a busca terminar sem nenhum contato, metade dos créditos gastos volta para o saldo.
+      </p>
+      <p className="text-xs leading-relaxed text-muted-foreground">
+        {creditosOk ? (
+          <>
+            Saldo depois: <b className="text-foreground tabular-nums">{disponivel - RESERVA_INSTAGRAM_CREDITOS}</b> {ROTULO_CREDITO.meta}. O que a
+            busca não analisar volta para o saldo.
+          </>
+        ) : (
+          <span className="inline-flex items-center gap-1.5">
+            Você tem {disponivel} {ROTULO_CREDITO.meta}; a busca precisa de {RESERVA_INSTAGRAM_CREDITOS}. Precisa de mais? <BotaoComprarCreditos />
+          </span>
+        )}
+      </p>
+    </div>
+  );
 
   const campoDeCreditos = (
     <div className="space-y-2">
@@ -234,8 +267,8 @@ export function NovaBuscaDialog({
               <Zap className="size-4" aria-hidden />
               <span>
                 <b className="tabular-nums text-primary">{saldos === undefined ? "·" : saldos.normal} créditos</b> e{" "}
-                <b className="tabular-nums text-primary">{saldos === undefined ? "·" : saldos.meta} créditos Meta</b> disponíveis · 1
-                crédito por contato novo e válido (Instagram usa os créditos Meta)
+                <b className="tabular-nums text-primary">{saldos === undefined ? "·" : saldos.meta} créditos Meta</b> disponíveis · Google Maps e CNPJ: 1
+                crédito por contato novo e válido · Instagram: {RESERVA_INSTAGRAM_CREDITOS} créditos Meta por busca (1 por seguidor analisado)
               </span>
               <BotaoComprarCreditos />
             </p>
@@ -280,7 +313,7 @@ export function NovaBuscaDialog({
                   <p className="text-xs text-muted-foreground">
                     Vamos analisar os primeiros ~50 seguidores de <b className="text-foreground">@{handle}</b>, o limite do acesso
                     público. Só contatos públicos do perfil (bio, botão de contato e link da bio). Costuma render até uns 10
-                    contatos, e só os contatos válidos gastam créditos Meta; o resto da reserva volta.
+                    contatos.
                   </p>
                 ) : null}
               </div>
@@ -364,7 +397,7 @@ export function NovaBuscaDialog({
               </div>
             )}
 
-            {campoDeCreditos}
+            {passo === "instagram" ? blocoDoInstagram : campoDeCreditos}
 
             <div className="flex items-center justify-between gap-3 pt-1">
               <Button type="button" variant="ghost" onClick={onFechar}>

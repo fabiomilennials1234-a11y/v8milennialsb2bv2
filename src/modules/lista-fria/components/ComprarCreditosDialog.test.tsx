@@ -32,9 +32,9 @@ describe("ComprarCreditosDialog", () => {
     expect(botaoDoPacote("Google")).toHaveAccessibleName(/100 créditos por R\$\s15,00/);
     expect(botaoDoPacote("Google +")).toHaveAccessibleName(/500 créditos por R\$\s71,25/);
     expect(botaoDoPacote("Google Max")).toHaveAccessibleName(/1\.000 créditos por R\$\s135,00/);
-    expect(botaoDoPacote("Meta")).toHaveAccessibleName(/100 créditos por R\$\s100,00/);
-    expect(botaoDoPacote("Meta +")).toHaveAccessibleName(/500 créditos por R\$\s475,00/);
-    expect(botaoDoPacote("Meta Max")).toHaveAccessibleName(/1\.000 créditos por R\$\s900,00/);
+    expect(botaoDoPacote("Meta")).toHaveAccessibleName(/100 créditos por R\$\s15,00/);
+    expect(botaoDoPacote("Meta +")).toHaveAccessibleName(/500 créditos por R\$\s71,25/);
+    expect(botaoDoPacote("Meta Max")).toHaveAccessibleName(/1\.000 créditos por R\$\s135,00/);
     expect(screen.getByRole("button", { name: /Outro/ })).toBeEnabled();
   });
 
@@ -75,7 +75,7 @@ describe("ComprarCreditosDialog", () => {
     expect(prefill.title).toBe("Paguei o pacote Meta + (500 créditos)");
     expect(prefill.tipo).toBe("solicitacao");
     expect(prefill.description).toContain("Referência do PIX: LFTESTE1");
-    expect(prefill.description.replace(/\u00a0/g, " ")).toContain("Valor pago: R$ 475,00");
+    expect(prefill.description.replace(/\u00a0/g, " ")).toContain("Valor pago: R$ 71,25");
     expect(onFechar).toHaveBeenCalledTimes(1);
   });
 
@@ -136,7 +136,7 @@ describe("ComprarCreditosDialog", () => {
       );
       await user.click(botaoDoPacote(p.nome));
       const copia = screen.getByLabelText("Pix copia e cola") as HTMLTextAreaElement;
-      const centavos = Math.round((p.creditos * (p.tipo === "meta" ? 100 : 15) * (100 - p.descontoPct)) / 100);
+      const centavos = Math.round((p.creditos * 15 * (100 - p.descontoPct)) / 100);
       expect(copia.value).toContain(`54${String(String(Math.floor(centavos / 100)).length + 3).padStart(2, "0")}${Math.floor(centavos / 100)}.${String(centavos % 100).padStart(2, "0")}`);
       unmount();
     }
