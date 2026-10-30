@@ -389,13 +389,14 @@ export async function getLeadgenData(
   appId?: string | null
 ): Promise<MetaLeadgenData> {
   const res = await metaGraphFetch(
-    `${GRAPH_API_BASE}/${leadgenId}?access_token=${encodeURIComponent(pageAccessToken)}`, undefined, appId
+    `${GRAPH_API_BASE}/${leadgenId}?fields=id,created_time,form_id,field_data&access_token=${encodeURIComponent(pageAccessToken)}`, undefined, appId
   );
 
   const data = await res.json();
 
   if (data.error) {
-    throw new Error(appId !== undefined ? "meta_graph_request_failed" : `Meta getLeadgenData error: ${data.error.message}`);
+    const code = Number.isInteger(data.error.code) && data.error.code >= 0 && data.error.code <= 999999 ? data.error.code : 0;
+    throw new Error(appId !== undefined ? `meta_leadgen_graph_error_${code}` : `Meta getLeadgenData error: ${data.error.message}`);
   }
 
   return data as MetaLeadgenData;
