@@ -51,7 +51,7 @@ describe("NovaBuscaDialog: Instagram cobrado por seguidor varrido (ADR-0046)", (
     await abrirInstagram({ normal: 0, meta: 100 });
     const preco = screen.getByTestId("preco-instagram");
     expect(preco).toHaveTextContent(/Esta busca custa 50 créditos Meta/);
-    expect(preco.textContent?.replace(/ /g, " ")).toContain("R$ 7,50");
+    expect(preco.textContent?.replace(/\s/g, " ")).toContain("R$ 7,50");
     expect(preco).toHaveTextContent(/Cada seguidor analisado gasta 1 crédito, venha contato ou não/);
     expect(preco).toHaveTextContent(/metade dos créditos gastos volta/);
     expect(preco).toHaveTextContent(/Saldo depois:\s*50/);
