@@ -69,7 +69,7 @@ Deno.serve(withErrorBoundary('meta-webhook', async (req) => {
           "meta_campaign_placement_failed", "meta_campaign_tenant_mismatch", "meta_pipeline_write_failed",
           "meta_tag_write_failed", "receipt_update_failed",
         ]);
-        const errorCode = error instanceof Error && safeCodes.has(error.message) ? error.message : "meta_crm_processing_failed";
+        const errorCode = error instanceof Error && (safeCodes.has(error.message) || /^meta_leadgen_graph_error_\d{1,6}$/.test(error.message)) ? error.message : "meta_crm_processing_failed";
         // Lease expires in five minutes. Payload stays private and replayable; never discard on handler error.
         await logRuntime({ module: "webhook", action: "meta_crm_retry", status: "error", errorMessage: errorCode, payloadSnapshot: { receiptId: receipt.id, attempts: receipt.attempts } });
       }
@@ -551,7 +551,10 @@ async function processLeadgen(
   try {
     leadData = await getLeadgenData(leadgenId, await storedMetaToken(page.page_access_token, appId, page.organization_id, `page:${pageId}`), appId);
   } catch (err) {
-    if (appId !== null) throw new Error("meta_leadgen_fetch_failed");
+    if (appId !== null) {
+      if (err instanceof Error && /^meta_leadgen_graph_error_\d{1,6}$/.test(err.message)) throw err;
+      throw new Error("meta_leadgen_fetch_failed");
+    }
     console.error(`[meta-webhook] Error fetching leadgen data:`, err);
     return;
   }

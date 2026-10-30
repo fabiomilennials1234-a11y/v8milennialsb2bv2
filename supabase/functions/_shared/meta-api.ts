@@ -395,7 +395,8 @@ export async function getLeadgenData(
   const data = await res.json();
 
   if (data.error) {
-    throw new Error(appId !== undefined ? "meta_graph_request_failed" : `Meta getLeadgenData error: ${data.error.message}`);
+    const code = Number.isInteger(data.error.code) && data.error.code >= 0 && data.error.code <= 999999 ? data.error.code : 0;
+    throw new Error(appId !== undefined ? `meta_leadgen_graph_error_${code}` : `Meta getLeadgenData error: ${data.error.message}`);
   }
 
   return data as MetaLeadgenData;

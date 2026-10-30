@@ -46,3 +46,13 @@ describe("CRM webhook durable acknowledgement",()=>{
   expect(logRuntime).toHaveBeenCalledWith(expect.objectContaining({errorMessage:"unsupported_crm_object"}));
   expect(f.db.getUpdated("meta_webhook_receipts")).toHaveLength(0);
  });
+
+ it("reports numeric Graph rejection without retaining the event payload in logs", async () => {
+  const { logRuntime } = await import("../../supabase/functions/_shared/logger.ts");
+  f.db.mockRpc("meta_claim_webhooks", [{id:"receipt",attempts:1,payload:{object:"page",entry:[{id:"42",changes:[{field:"leadgen",value:{leadgen_id:"111"}}]}]}}]);
+  f.db.mockTable("meta_pages", [{id:"page",page_id:"42",organization_id:"org",is_active:true,page_access_token:"cipher",meta_connections:{app_id:"123",status:"connected"}}]);
+  vi.mocked(getLeadgenData).mockRejectedValueOnce(new Error("meta_leadgen_graph_error_190"));
+  const response=await f.handler(new Request("https://edge.test",{method:"POST",headers:{"x-cron-secret":"cron-secret"},body:"{}"}));
+  expect(await response.json()).toEqual({completed:0,claimed:1});
+  expect(logRuntime).toHaveBeenCalledWith(expect.objectContaining({errorMessage:"meta_leadgen_graph_error_190",payloadSnapshot:{receiptId:"receipt",attempts:1}}));
+ });
