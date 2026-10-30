@@ -389,7 +389,7 @@ export async function getLeadgenData(
   appId?: string | null
 ): Promise<MetaLeadgenData> {
   const res = await metaGraphFetch(
-    `${GRAPH_API_BASE}/${leadgenId}?access_token=${encodeURIComponent(pageAccessToken)}`, undefined, appId
+    `${GRAPH_API_BASE}/${leadgenId}?fields=id,created_time,form_id,field_data&access_token=${encodeURIComponent(pageAccessToken)}`, undefined, appId
   );
 
   const data = await res.json();
