@@ -9,6 +9,7 @@ const base: Busca = {
   id: "b1",
   fonte: "cnpj",
   titulo: "CNAE 8630-5/04 · SAO PAULO - SP",
+  local: { cidade: "SAO PAULO", uf: "SP" },
   status: "parada",
   etapa: null,
   progresso: 100,
