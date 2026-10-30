@@ -14,7 +14,7 @@ test('OAuth storage: permissions, one-time nonce, current authority, atomic app/
    ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT EXECUTE ON FUNCTIONS TO anon,authenticated;`);
   const baseline=readFileSync('supabase/migrations/20260101000000_baseline_prod_schema.sql','utf8');
   await db.exec(`CREATE TYPE public.channel_type AS ENUM ('whatsapp','messenger','instagram','email','sms');
-   CREATE TABLE public.leads(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),organization_id uuid,name text NOT NULL,origin text,metadata jsonb,deleted_at timestamptz,email text,phone text,company text,segment text,urgency text,faturamento text,notes text,utm_campaign text,utm_source text,utm_medium text,utm_content text,utm_term text,meta_campaign_id text,meta_adset_id text,meta_ad_id text);`);
+   CREATE TABLE public.leads(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),organization_id uuid,name text NOT NULL,origin text,meta_lead_id text,deleted_at timestamptz,email text,phone text,company text,segment text,urgency text,faturamento text,notes text,utm_campaign text,utm_source text,utm_medium text,utm_content text,utm_term text,meta_campaign_id text,meta_adset_id text,meta_ad_id text);`);
   for(const table of ['meta_connections','meta_pages','channel_messages']) {
    const block=baseline.match(new RegExp('CREATE TABLE IF NOT EXISTS "public"\\."'+table+'" \\([\\s\\S]*?\\n\\);'))?.[0]; assert.ok(block); await db.exec(block);
   }
@@ -25,6 +25,7 @@ test('OAuth storage: permissions, one-time nonce, current authority, atomic app/
   await db.exec(conversations);
   await db.exec(readFileSync('supabase/migrations/20270728000003_upsert_meta_conversation_rpc.sql','utf8'));
   await db.exec(readFileSync('supabase/migrations/20271215010000_meta_oauth_security.sql','utf8'));
+  await db.exec(readFileSync('supabase/migrations/20271215040000_meta_lead_schema_compatibility.sql','utf8'));
   for(const role of ['anon','authenticated']) {
    assert.equal((await db.query(`SELECT has_column_privilege($1,'meta_connections','access_token','SELECT') value`,[role])).rows[0].value,false);
    assert.equal((await db.query(`SELECT has_column_privilege($1,'meta_pages','page_access_token','SELECT') value`,[role])).rows[0].value,false);
@@ -49,9 +50,10 @@ test('OAuth storage: permissions, one-time nonce, current authority, atomic app/
   assert.equal((await db.query('SELECT count(*)::int n FROM channel_messages')).rows[0].n,1);
   await assert.rejects(db.query(`SELECT meta_record_message($1,$2,'999',$3)`,[org,pageId,JSON.stringify(message)]),/inactive/);
   const recordLead=(tenant=org,fields={name:'Test',email:'test@example.invalid',metadata:{leadgen_id:'111'}})=>db.query(`SELECT meta_record_lead($1,$2,'123','111',$3,NULL) id`,[tenant,pageId,JSON.stringify(fields)]);
-  const first=(await recordLead(org,{name:'Test',email:'test@example.invalid',metadata:{leadgen_id:'111'},organization_id:other,responsible_id:other})).rows[0].id;
+  const first=(await recordLead(org,{name:'Test',email:'test@example.invalid',metadata:{leadgen_id:'111'},meta_lead_id:'forged',organization_id:other,responsible_id:other})).rows[0].id;
   assert.equal((await db.query('SELECT organization_id FROM leads')).rows[0].organization_id,org); assert.equal((await recordLead()).rows[0].id,first);
   assert.equal((await db.query('SELECT count(*)::int n FROM leads')).rows[0].n,1);
+  assert.equal((await db.query('SELECT meta_lead_id FROM leads')).rows[0].meta_lead_id,'111');
   await assert.rejects(recordLead(other),/inactive/);
   await db.query("UPDATE leads SET deleted_at=now() WHERE id=$1",[first]);assert.equal((await recordLead()).rows[0].id,null);
   await db.query("DELETE FROM leads WHERE id=$1",[first]);assert.equal((await recordLead()).rows[0].id,null);assert.equal((await db.query("SELECT count(*)::int n FROM leads")).rows[0].n,0);

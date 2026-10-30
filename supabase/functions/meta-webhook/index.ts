@@ -586,7 +586,7 @@ async function processLeadgen(
   // Verificar se lead ja existe (por email ou telefone)
   let existingLeadId: string | null = null;
   if (appId !== null) {
-    const { data: delivered, error: lookupError } = await supabase.from("leads").select("id").eq("organization_id", page.organization_id).contains("metadata", { leadgen_id: leadgenId }).limit(1).maybeSingle();
+    const { data: delivered, error: lookupError } = await supabase.from("leads").select("id").eq("organization_id", page.organization_id).eq("meta_lead_id", leadgenId).limit(1).maybeSingle();
     if (lookupError) throw new Error("meta_lead_lookup_failed");
     existingLeadId = delivered?.id ?? null;
   }
@@ -622,7 +622,7 @@ async function processLeadgen(
     console.log(`[meta-webhook] Lead already exists: ${existingLeadId}, updating...`);
     // Atualizar com campos mapeados
     const updateData: Record<string, unknown> = {
-      metadata: { ...formFields, leadgen_id: leadgenId, form_id: leadData.form_id },
+      meta_lead_id: leadgenId,
     };
     // Atualizar campos mapeados no lead existente (exceto name que pode ter sido editado)
     if (email) updateData.email = email;
@@ -650,7 +650,7 @@ async function processLeadgen(
     email,
     phone,
     origin: "meta_ads",
-    metadata: { ...formFields, leadgen_id: leadgenId, form_id: leadData.form_id },
+    meta_lead_id: leadgenId,
   };
 
   // Apply UTM enrichment fields (only if not already set via field_mappings)
