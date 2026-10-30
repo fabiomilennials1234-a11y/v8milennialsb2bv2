@@ -76,6 +76,14 @@ export const ROTULO_QUALIDADE: Record<QualidadeDoContato, string> = {
  */
 export const INSTAGRAM_DISPONIVEL = true;
 
+/**
+ * Quanto o Instagram reserva por busca, em créditos Meta (ADR-0046): 1 crédito = 1 seguidor varrido, e o acesso
+ * sem login entrega ~50 por conta. ESPELHA a reserva fixa de `lista_fria_busca_criar` (migration 20271221000000).
+ */
+export const RESERVA_INSTAGRAM_CREDITOS = 50;
+
+export type CobrancaDaBusca = "por_contato" | "por_varredura";
+
 export const STATUS_ABERTOS: readonly StatusDaBusca[] = ["na_fila", "executando"];
 
 export interface Busca {
@@ -89,7 +97,14 @@ export interface Busca {
   etapa: EtapaDaBusca | null;
   progresso: number;
   creditosLimite: number;
+  /** Créditos que a busca já custou. Por contato = contatos novos; por varredura = seguidores varridos (menos a devolução). */
   creditosUsados: number;
+  /** Como a busca é cobrada: Maps e CNPJ por contato novo; Instagram (a partir do ADR-0046) por seguidor varrido. */
+  cobranca: CobrancaDaBusca;
+  /** Contatos novos e válidos entregues (sem contar quem já é lead). */
+  contatosNovos: number;
+  /** Seguidores que o coletor já varreu (só a busca por varredura usa). */
+  varridos: number;
   encontrados: number;
   comTelefone: number;
   comEmail: number;
@@ -185,6 +200,9 @@ export function parseBusca(r: LinhaDaBusca): Busca {
     progresso: r.progresso,
     creditosLimite: r.creditos_limite,
     creditosUsados: r.creditos_usados,
+    cobranca: r.cobranca === "por_varredura" ? "por_varredura" : "por_contato",
+    contatosNovos: r.contatos_novos,
+    varridos: r.varridos,
     encontrados: r.encontrados,
     comTelefone: r.com_telefone,
     comEmail: r.com_email,
@@ -221,5 +239,5 @@ export const buscaTemResultado = (b: Pick<Busca, "status">) => b.status === "con
 
 /** Falta importar? Terminou, achou algo novo e ainda não foi tudo para os leads. */
 export function buscaPedeRevisao(b: Busca): boolean {
-  return buscaTemResultado(b) && b.creditosUsados > 0 && b.importadaEm === null;
+  return buscaTemResultado(b) && b.contatosNovos > 0 && b.importadaEm === null;
 }

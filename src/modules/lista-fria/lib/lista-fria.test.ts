@@ -102,6 +102,10 @@ const linhaDaBusca = {
   progresso: 62,
   creditos_limite: 800,
   creditos_usados: 612,
+  cobranca: "por_contato",
+  contatos_novos: 612,
+  varridos: 0,
+  seguidores_por_credito: 1,
   creditos_devolvidos: false,
   encontrados: 1904,
   com_telefone: 561,
@@ -137,8 +141,32 @@ describe("parseBusca", () => {
     expect(buscaPedeRevisao(base)).toBe(true);
     expect(buscaPedeRevisao({ ...base, status: "executando" })).toBe(false);
     expect(buscaPedeRevisao({ ...base, status: "falhou" })).toBe(false);
-    expect(buscaPedeRevisao({ ...base, creditosUsados: 0 })).toBe(false);
+    expect(buscaPedeRevisao({ ...base, contatosNovos: 0 })).toBe(false);
     expect(buscaPedeRevisao({ ...base, importadaEm: "2026-10-27T12:00:00Z" })).toBe(false);
+  });
+
+  it("busca por varredura: crédito gasto não é contato; só há o que revisar se vieram contatos", () => {
+    const varrida = parseBusca({
+      ...linhaDaBusca,
+      fonte: "instagram",
+      nicho: null,
+      cidade: null,
+      instagram_handle: "clinica",
+      status: "concluida",
+      finished_at: "2026-10-30T11:00:00Z",
+      cobranca: "por_varredura",
+      creditos_limite: 50,
+      creditos_usados: 50,
+      varridos: 50,
+      contatos_novos: 0,
+    });
+    expect([varrida.cobranca, varrida.creditosUsados, varrida.varridos, varrida.contatosNovos]).toEqual(["por_varredura", 50, 50, 0]);
+    expect(buscaPedeRevisao(varrida)).toBe(false); // gastou 50 créditos e não veio nada
+    expect(buscaPedeRevisao({ ...varrida, contatosNovos: 3 })).toBe(true);
+  });
+
+  it("modo de cobrança desconhecido cai em por contato (o comportamento de antes)", () => {
+    expect(parseBusca({ ...linhaDaBusca, cobranca: "outra" }).cobranca).toBe("por_contato");
   });
 });
 

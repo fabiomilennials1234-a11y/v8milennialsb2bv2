@@ -10704,8 +10704,10 @@ export type Database = {
       lista_fria_buscas: {
         Row: {
           cidade: string | null
+          cobranca: string
           com_email: number
           com_telefone: number
+          contatos_novos: number
           created_at: string
           creditos_devolvidos: boolean
           creditos_limite: number
@@ -10727,15 +10729,19 @@ export type Database = {
           organization_id: string
           progresso: number
           sem_contato: number
+          seguidores_por_credito: number
           started_at: string | null
           status: string
           updated_at: string
+          varridos: number
           worker_id: string | null
         }
         Insert: {
           cidade?: string | null
+          cobranca?: string
           com_email?: number
           com_telefone?: number
+          contatos_novos?: number
           created_at?: string
           creditos_devolvidos?: boolean
           creditos_limite: number
@@ -10757,15 +10763,19 @@ export type Database = {
           organization_id: string
           progresso?: number
           sem_contato?: number
+          seguidores_por_credito?: number
           started_at?: string | null
           status?: string
           updated_at?: string
+          varridos?: number
           worker_id?: string | null
         }
         Update: {
           cidade?: string | null
+          cobranca?: string
           com_email?: number
           com_telefone?: number
+          contatos_novos?: number
           created_at?: string
           creditos_devolvidos?: boolean
           creditos_limite?: number
@@ -10787,9 +10797,11 @@ export type Database = {
           organization_id?: string
           progresso?: number
           sem_contato?: number
+          seguidores_por_credito?: number
           started_at?: string | null
           status?: string
           updated_at?: string
+          varridos?: number
           worker_id?: string | null
         }
         Relationships: []

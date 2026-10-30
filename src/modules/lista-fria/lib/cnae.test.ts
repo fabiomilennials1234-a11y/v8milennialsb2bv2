@@ -128,7 +128,7 @@ describe("busca de CNPJ no vocabulário da tela", () => {
       id: "b", fonte: "cnpj", nicho: null, cidade: null, instagram_handle: null,
       filtros: { cnaes: ["8630504"], uf: "MG", municipio: null, contato: "telefone" },
       status: "concluida", etapa: null, progresso: 100, creditos_limite: 10, creditos_usados: 4,
-      creditos_devolvidos: true, encontrados: 9, com_telefone: 4, com_email: 3, ja_leads: 0, sem_contato: 5,
+      creditos_devolvidos: true, cobranca: "por_contato", contatos_novos: 4, varridos: 0, seguidores_por_credito: 1, encontrados: 9, com_telefone: 4, com_email: 3, ja_leads: 0, sem_contato: 5,
       importados: 0, importada_em: null, erro: null, worker_id: null, heartbeat_at: null,
       started_at: null, finished_at: null, criado_por: null, organization_id: "o",
       created_at: "2026-10-28T00:00:00Z", updated_at: "2026-10-28T00:00:00Z",

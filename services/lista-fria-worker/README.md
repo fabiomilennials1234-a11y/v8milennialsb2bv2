@@ -71,7 +71,9 @@ Actor: [`data-slayer/instagram-followers-scraper---no-login`](https://apify.com/
 
 ### Custo: leia antes de precificar o crédito
 
-O Actor cobra **por seguidor processado**, não por contato achado (US$ 0,012 por seguidor no modo enriched, plano FREE; cai com o plano da conta Apify). O cliente paga **por contato novo e válido**. A conta fecha pelo rendimento da conta-alvo:
+> **Cobrança (ADR-0046).** Desde a migration `20271221000000` o cliente paga **por seguidor varrido** (1 crédito Meta cada), com reserva fixa de 50 por busca, e não mais por contato. O worker informa o total varrido e o custo a cada volta (`lista_fria_worker_varrer`), lê **no máximo a reserva** e aborta a execução ao chegar nela. Busca sem nenhum contato devolve metade. A tabela de rendimento abaixo é o histórico da cobrança por contato (ADR-0044), que ainda vale para buscas criadas antes da migration. Worker novo com banco antigo funciona: sem a RPC, segue sem cobrança por varredura.
+
+O Actor cobra **por seguidor processado**, não por contato achado (US$ 0,012 por seguidor no modo enriched, plano FREE; cai com o plano da conta Apify). No modelo antigo o cliente pagava **por contato novo e válido**. A conta fechava pelo rendimento da conta-alvo:
 
 | Contatos válidos por 100 seguidores | Custo por contato válido (US$) |
 |---|---|

@@ -40,6 +40,7 @@ let ultimo: Progresso | null = null;
 let encerrado: [string, string | undefined] | null = null;
 const banco: Banco = {
   reivindicar: async () => null,
+  varrer: async () => null,
   recuperarTravadas: async () => 0,
   progresso: async (_b, _w, p) => { ultimo = p; return "executando"; },
   registrar: async (_b, _w, itens) => {
