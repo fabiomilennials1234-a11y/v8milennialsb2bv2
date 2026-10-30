@@ -28,17 +28,29 @@ describe('normalizarTelefoneBR', () => {
     ['5511993195517', '5511993195517'],
     ['011 3089-6060', '551130896060'],
     ['1130896060', '551130896060'],
+    // Celular de ANTES do nono dígito (a base da Receita guarda quase todo celular assim): ganha o 9.
+    ['(11) 8999-1234', '5511989991234'],
+    ['4891234504', '5548991234504'],
+    ['(48) 9912-3420', '5548999123420'],
+    // 9 dígitos com um faltando é indistinguível de celular antigo de 8: passa a ganhar o 9 (custo conhecido da regra).
+    ['(11) 99999-999', '5511999999999'],
   ];
   for (const [entrada, saida] of aceita) {
     test(`aceita ${entrada}`, () => assert.equal(normalizarTelefoneBR(entrada), saida));
   }
   const recusa = [
-    '', null, undefined, '123', '(10) 3089-6060', '(11) 8999-1234', '(11) 99999-999', '11111111111',
+    '', null, undefined, '123', '(10) 3089-6060', '11111111111',
+    // 10 dígitos começando em 6 ou 7: celular antigo ou rádio. Ambíguo, não se chuta.
+    '(11) 6999-1234', '(11) 7999-1234',
     '(11) 13089-6060', '+1 415 555 2671', '55 11 3089', '(11) 69319-5517', '(20) 3089-6060',
   ];
   for (const entrada of recusa) {
     test(`recusa ${JSON.stringify(entrada)}`, () => assert.equal(normalizarTelefoneBR(entrada), null));
   }
+  test('o celular sem nono dígito vira celular (WhatsApp), o fixo não', () => {
+    assert.equal(ehCelular(normalizarTelefoneBR('4891234504')), true);
+    assert.equal(ehCelular(normalizarTelefoneBR('4833334504')), false);
+  });
   test('celular = 13 dígitos', () => {
     assert.equal(ehCelular('5511993195517'), true);
     assert.equal(ehCelular('551130896060'), false);

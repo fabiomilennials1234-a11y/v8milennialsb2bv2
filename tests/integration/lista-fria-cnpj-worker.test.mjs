@@ -153,6 +153,27 @@ describe('fonteCnpj', () => {
     assert.equal(b.terminou, true, '10 de 20 pedidas: acabou o alvo');
   });
 
+  test('"Com telefone" vale sobre o telefone USÁVEL: linha cujo número não normaliza não vira candidato', async () => {
+    const consulta = consultaDe([
+      linha(1, { tel: '4891234504' }), //  celular sem nono dígito: normaliza (ganha o 9) e entra
+      linha(2, { tel: '1166667777' }), //  começa em 6: ambíguo, descartado
+      linha(3, { tel: '1130896060' }), //  fixo: entra
+      linha(4, { tel: '1100000000' }), //  lixo
+    ]);
+    const logs = [];
+    const f = fonteCnpj(busca({ filtros: { cnaes: ['4639'], uf: 'SP', contato: 'telefone' } }), consulta, CFG_CNPJ_PADRAO, (e, d) => logs.push([e, d]));
+    await f.iniciar();
+    const r = await f.ler('b1');
+    assert.deepEqual(r.linhas.map((l) => l.ref.slice(-1)), ['1', '3']);
+    assert.equal(logs.find(([e]) => e === 'cnpj_varredura_fim')[1].semTelefoneValido, 2);
+  });
+
+  test('com "e-mail ou telefone" a linha de telefone ruim continua entrando pelo e-mail', async () => {
+    const f = fonteCnpj(busca(), consultaDe([linha(1, { tel: '1166667777' })]), CFG_CNPJ_PADRAO, log);
+    await f.iniciar();
+    assert.deepEqual((await f.ler('b1')).linhas.map((l) => l.ref.slice(-1)), ['1']);
+  });
+
   test('busca sem filtros válidos falha ao iniciar', async () => {
     const f = fonteCnpj(busca({ filtros: null }), consultaDe([]), CFG_CNPJ_PADRAO, log);
     await assert.rejects(f.iniciar(), /sem filtros/);

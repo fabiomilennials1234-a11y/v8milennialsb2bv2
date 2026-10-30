@@ -18,7 +18,7 @@ construído uma vez por mês a partir da base aberta da Receita Federal, não um
 celular, email_compartilhado`
 
 - `matriz`: a busca só devolve matrizes (uma empresa com cinco filiais não vira cinco contatos).
-- `celular`: telefone de 11 dígitos com o nono dígito (serve para WhatsApp).
+- `celular`: telefone de 11 dígitos com o nono dígito. **NÃO use:** a Receita guarda quase todo celular sem o nono dígito, então esta coluna marca só 760 de 9,7 milhões. O worker decide pelo número (`normalizarTelefoneBR`), não por esta coluna.
 - `email_compartilhado`: o mesmo e-mail em 6 ou mais CNPJs (contador provável). O worker anula esse
   e-mail e mantém o telefone.
 - Fora, por desenho: sócios, CPF, qualquer dado que não seja o contato da empresa.
@@ -59,5 +59,5 @@ layout que ele não conhece.
 
 - Qualidade do contato: é o que a empresa declarou à Receita, e pode estar defasado. A checagem de MX
   (no worker) prova que o domínio recebe e-mail, não que a caixa existe.
-- Telefone: 77% a 82% parecem fixos; só `celular` serve para WhatsApp.
+- Telefone: nas matrizes com telefone, 45,5% são fixos e ~50% são celulares de 10 dígitos (sem o nono dígito, que o worker repõe); 3,3% começam em 6 ou 7 e são descartados por serem ambíguos.
 - E-mail de contador com poucos clientes passa pelo filtro de repetição.
