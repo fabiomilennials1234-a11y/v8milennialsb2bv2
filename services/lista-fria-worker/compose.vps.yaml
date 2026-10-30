@@ -12,8 +12,8 @@
 #   ANTHROPIC_API_KEY            opcional (expansão por bairro e filtro de nicho); sem ela, a busca de Maps roda sem IA
 #   APIFY_TOKEN                  opcional (SEGREDO): liga o Instagram pela Apify. Sem ele, a busca de Instagram fecha como
 #                                instagram_indisponivel e devolve a reserva ao saldo Meta. Use um token DEDICADO a esta VPS.
-#   APIFY_MAX_USD_POR_BUSCA      padrão 2: teto de gasto NOSSO por busca (uma busca de 50 seguidores custa ~US$ 0,60)
-#   INSTAGRAM_MAX_SEGUIDORES     padrão 50: o acesso sem login só entrega ~50 por conta (medido); pedir mais só estica o prazo
+#   APIFY_MAX_USD_POR_BUSCA      padrão 15: teto de gasto NOSSO por busca (1.000 seguidores custam ~US$ 12; 50, ~US$ 0,60)
+#   INSTAGRAM_MAX_SEGUIDORES     padrão 1000: teto por busca, igual ao máximo do banco (ADR-0047). A busca pede à Apify o que o cliente reservou
 services:
   gosom:
     # Fixado por digest: o contrato do gosom mudou entre o spec e a resposta real.
@@ -48,8 +48,8 @@ services:
       # Instagram (crédito Meta, ADR-0044). Os tetos são bem mais apertados que os do compose de desenvolvimento.
       APIFY_TOKEN: ${APIFY_TOKEN:-}
       APIFY_INSTAGRAM_ACTOR: ${APIFY_INSTAGRAM_ACTOR:-data-slayer~instagram-followers-scraper---no-login}
-      APIFY_MAX_USD_POR_BUSCA: ${APIFY_MAX_USD_POR_BUSCA:-2}
-      INSTAGRAM_MAX_SEGUIDORES: ${INSTAGRAM_MAX_SEGUIDORES:-50}
+      APIFY_MAX_USD_POR_BUSCA: ${APIFY_MAX_USD_POR_BUSCA:-15}
+      INSTAGRAM_MAX_SEGUIDORES: ${INSTAGRAM_MAX_SEGUIDORES:-1000}
       GOSOM_MAX_TIME_S: ${GOSOM_MAX_TIME_S:-3600}
       LISTA_FRIA_BASE_DIR: /data/base
       DUCKDB_MEMORIA: 512MB

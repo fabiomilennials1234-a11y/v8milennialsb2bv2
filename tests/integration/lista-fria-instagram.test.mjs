@@ -138,10 +138,17 @@ describe('cliente da Apify', () => {
 // ── plano de custo ─────────────────────────────────────────────────────────
 describe('planoDaBusca', () => {
   const cfg = { actorId: ACTOR_PADRAO, ...CFG_INSTAGRAM_PADRAO, maxSeguidores: 5_000 };
-  test('o padrão real: o acesso sem login entrega ~50 seguidores por conta, então o plano não pede mais (medido)', () => {
+  test('o padrão: o teto por busca acompanha o máximo do banco (1.000), e a busca por contato pede o rendimento presumido', () => {
     const p = planoDaBusca(100, { actorId: ACTOR_PADRAO, ...CFG_INSTAGRAM_PADRAO });
-    assert.deepEqual(p, { maxItems: 50, maxPages: 1, maxTotalChargeUsd: 0.7, timeoutS: 1000 });
-    assert.equal(CFG_INSTAGRAM_PADRAO.maxSeguidores, 50);
+    assert.deepEqual(p, { maxItems: 800, maxPages: 16, maxTotalChargeUsd: 11.05, timeoutS: 16000 });
+    assert.equal(CFG_INSTAGRAM_PADRAO.maxSeguidores, 1000);
+  });
+  test('por varredura o pedido é EXATO: 1 crédito = 1 seguidor, sem arredondar para a página', () => {
+    const c = { actorId: ACTOR_PADRAO, ...CFG_INSTAGRAM_PADRAO };
+    assert.deepEqual(planoDaBusca(10, c, 10), { maxItems: 10, maxPages: 1, maxTotalChargeUsd: 0.1480, timeoutS: 300 });
+    assert.deepEqual(planoDaBusca(120, c, 120), { maxItems: 120, maxPages: 3, maxTotalChargeUsd: 1.666, timeoutS: 2400 });
+    assert.equal(planoDaBusca(1000, c, 1000).maxItems, 1000);
+    assert.equal(planoDaBusca(5000, { ...c, maxSeguidores: 200 }, 5000).maxItems, 200, 'o teto configurado vale');
   });
   test('100 créditos: 800 contas, 16 páginas, prazo de 20 s por conta, freio de custo com folga de 15%', () => {
     assert.deepEqual(planoDaBusca(100, cfg), { maxItems: 800, maxPages: 16, maxTotalChargeUsd: 11.05, timeoutS: 16_000 });
@@ -329,7 +336,7 @@ describe('Instagram contra as RPCs reais', () => {
       await asPostgres(db);
       await db.exec(`INSERT INTO leads (organization_id, name, phone) VALUES ('b2ad1ffb-e136-4356-846b-9f210f902573', 'Já cliente', '5511993195517')`);
       await as(db, U_LIBERADO);
-      const id = await criarBusca(db, 'instagram', { url: 'https://www.instagram.com/clinicaodontovida/?hl=pt' }, 3);
+      const id = await criarBusca(db, 'instagram', { url: 'https://www.instagram.com/clinicaodontovida/?hl=pt' }, 10);
       // Busca ANTIGA, cobrada por contato (criada antes da migration de varredura): a reserva era o que o cliente pedia.
       await asPostgres(db);
       await db.exec(`UPDATE lista_fria_buscas SET cobranca = 'por_contato', creditos_limite = 3 WHERE id = '${id}'`);
@@ -385,8 +392,9 @@ describe('cfgInstagramDaApify (a fiação do main)', () => {
   test('o ambiente sobrescreve cada valor; lixo cai no padrão', () => {
     const cfg = cfgInstagramDaApify({ INSTAGRAM_SEGUNDOS_POR_CONTA: '30', INSTAGRAM_MAX_SEGUIDORES: '200', APIFY_MAX_USD_POR_BUSCA: '2', APIFY_INSTAGRAM_ACTOR: 'a~b' });
     assert.deepEqual([cfg.segundosPorConta, cfg.maxSeguidores, cfg.maxUsdPorBusca, cfg.actorId], [30, 200, 2, 'a~b']);
+    assert.equal(cfgInstagramDaApify({}).maxSeguidores, 1000);
     assert.equal(cfgInstagramDaApify({ INSTAGRAM_SEGUNDOS_POR_CONTA: 'abc', INSTAGRAM_MAX_SEGUIDORES: '' }).segundosPorConta, 20);
-    assert.equal(cfgInstagramDaApify({ INSTAGRAM_MAX_SEGUIDORES: '' }).maxSeguidores, 50);
+    assert.equal(cfgInstagramDaApify({ INSTAGRAM_MAX_SEGUIDORES: '' }).maxSeguidores, 1000);
   });
 });
 
@@ -504,7 +512,7 @@ describe('Instagram por varredura contra as RPCs reais', () => {
   ];
   const rodar = async (db, itens) => {
     await as(db, U_LIBERADO);
-    const id = await criarBusca(db, 'instagram', { url: 'https://www.instagram.com/clinicaodontovida/' }, 3);
+    const id = await criarBusca(db, 'instagram', { url: 'https://www.instagram.com/clinicaodontovida/' }, 50);
     const fa = apiFalsa({ passos: [{ status: 'SUCCEEDED', itens }] });
     const banco = bancoPglite(db);
     const { amb } = ambiente({ banco, fa });

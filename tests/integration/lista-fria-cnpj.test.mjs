@@ -6,7 +6,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  ROLLBACK_CNPJ, ROLLBACK_META, ROLLBACK_VARREDURA, TORQUE, U_ADMIN, read, setup, as, asWorker, asPostgres, one, val, maps, criarBusca, comSaldo,
+  ROLLBACK_CNPJ, ROLLBACK_META, ROLLBACK_VARREDURA, ROLLBACK_POR_CREDITOS, TORQUE, U_ADMIN, read, setup, as, asWorker, asPostgres, one, val, maps, criarBusca, comSaldo,
 } from './helpers/lista-fria-db.mjs';
 
 const cnpj = { cnaes: ['4639'], uf: 'SP' };
@@ -95,7 +95,7 @@ test('Maps e Instagram seguem criando busca sem filtros', async () => {
     await comSaldo(db, 50, 'meta');
     await as(db, U_ADMIN);
     const m = await criarBusca(db, 'maps', maps, 5);
-    const i = await criarBusca(db, 'instagram', { url: 'https://www.instagram.com/clinica/' }, 5);
+    const i = await criarBusca(db, 'instagram', { url: 'https://www.instagram.com/clinica/' }, 10);
     await asPostgres(db);
     assert.equal(await val(db, `SELECT filtros IS NULL FROM lista_fria_buscas WHERE id = '${m}'`), true);
     assert.equal(await val(db, `SELECT instagram_handle FROM lista_fria_buscas WHERE id = '${i}'`), 'clinica');
@@ -126,6 +126,7 @@ test('rollback: recusa com busca de CNPJ; sem ela, devolve as duas fontes antiga
     await as(db, U_ADMIN);
     await criarBusca(db, 'cnpj', cnpj, 10);
     await asPostgres(db);
+    await db.exec(read(ROLLBACK_POR_CREDITOS));
     await db.exec(read(ROLLBACK_VARREDURA)); // empilhadas: varredura e créditos Meta saem antes da de CNPJ
     await db.exec(read(ROLLBACK_META)); // empilhadas: a de créditos Meta sai antes da de CNPJ
     await assert.rejects(db.exec(read(ROLLBACK_CNPJ)), /Há buscas de CNPJ/);

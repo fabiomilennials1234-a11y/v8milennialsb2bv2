@@ -6,7 +6,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  ROLLBACK_META, ROLLBACK_VARREDURA, TORQUE, U_ADMIN, U_MEMBRO, U_LIBERADO, U_MASTER,
+  ROLLBACK_META, ROLLBACK_VARREDURA, ROLLBACK_POR_CREDITOS, TORQUE, U_ADMIN, U_MEMBRO, U_LIBERADO, U_MASTER,
   read, setup, as, asWorker, asPostgres, one, val, maps, criarBusca, item, registrar, comSaldo,
 } from './helpers/lista-fria-db.mjs';
 
@@ -50,12 +50,12 @@ test('cada fonte gasta do seu saldo: Maps e CNPJ do normal, Instagram do Meta', 
     await as(db, U_LIBERADO);
     await criarBusca(db, 'maps', maps, 10);
     await criarBusca(db, 'cnpj', { cnaes: ['4639'], uf: 'SP' }, 20);
-    await criarBusca(db, 'instagram', ig, 15); // a reserva do Instagram é fixa em 50 (ADR-0046), não os 15 pedidos
-    assert.deepEqual(await saldos(db), { normal: 70, meta: 50 });
+    await criarBusca(db, 'instagram', ig, 15); // a reserva do Instagram é o que foi pedido (ADR-0047)
+    assert.deepEqual(await saldos(db), { normal: 70, meta: 85 });
     await asPostgres(db);
     const livro = (await db.query(`SELECT tipo, motivo, sum(delta)::int AS soma FROM lista_fria_creditos GROUP BY 1, 2 ORDER BY 1, 2`)).rows;
     assert.deepEqual(livro, [
-      { tipo: 'meta', motivo: 'concessao', soma: 100 }, { tipo: 'meta', motivo: 'reserva', soma: -50 },
+      { tipo: 'meta', motivo: 'concessao', soma: 100 }, { tipo: 'meta', motivo: 'reserva', soma: -15 },
       { tipo: 'normal', motivo: 'concessao', soma: 100 }, { tipo: 'normal', motivo: 'reserva', soma: -30 },
     ]);
   } finally { await db.close(); }
@@ -66,11 +66,11 @@ test('um saldo não paga a fonte do outro (e a recusa diz qual faltou)', async (
   try {
     await comSaldo(db, 1000);               // muito normal, nenhum Meta
     await as(db, U_LIBERADO);
-    await assert.rejects(criarBusca(db, 'instagram', ig, 5), (e) => /Saldo de créditos Meta insuficiente/.test(e.message) && e.detail === 'creditos_meta_insuficientes');
+    await assert.rejects(criarBusca(db, 'instagram', ig, 10), (e) => /Saldo de créditos Meta insuficiente/.test(e.message) && e.detail === 'creditos_meta_insuficientes');
     await comSaldo(db, 50, 'meta');
     await as(db, U_LIBERADO);
     await criarBusca(db, 'instagram', ig, 50);           // a reserva de 50 gasta todo o Meta
-    await assert.rejects(criarBusca(db, 'instagram', ig, 1), /Meta insuficiente/);
+    await assert.rejects(criarBusca(db, 'instagram', ig, 10), /Meta insuficiente/);
     await criarBusca(db, 'maps', maps, 5);              // o normal segue intacto para Maps
     await asPostgres(db);
     await db.exec(`DELETE FROM lista_fria_buscas`);       // zera para testar o inverso
@@ -88,7 +88,7 @@ test('a sobra volta para o saldo de onde a reserva saiu', async () => {
     await comSaldo(db, 50, 'meta');
     await as(db, U_LIBERADO);
     const m = await criarBusca(db, 'maps', maps, 5);
-    const i = await criarBusca(db, 'instagram', ig, 10); // reserva fixa de 50
+    const i = await criarBusca(db, 'instagram', ig, 50);
     await asWorker(db);
     const a = await one(db, `SELECT id, fonte FROM lista_fria_worker_reivindicar('w1')`);
     const b = await one(db, `SELECT id, fonte FROM lista_fria_worker_reivindicar('w1')`);
@@ -112,8 +112,8 @@ test('cancelar a busca de Instagram devolve a reserva inteira ao saldo Meta', as
     await comSaldo(db, 100);
     await comSaldo(db, 50, 'meta');
     await as(db, U_LIBERADO);
-    const i = await criarBusca(db, 'instagram', ig, 20); // reserva fixa de 50
-    assert.deepEqual(await saldos(db), { normal: 100, meta: 0 });
+    const i = await criarBusca(db, 'instagram', ig, 20);
+    assert.deepEqual(await saldos(db), { normal: 100, meta: 30 });
     await db.query(`SELECT lista_fria_busca_cancelar('${i}')`);
     assert.deepEqual(await saldos(db), { normal: 100, meta: 50 }, 'voltou para o Meta, o normal não mexeu');
   } finally { await db.close(); }
@@ -135,7 +135,8 @@ test('rollback: recusa com crédito Meta no livro; sem ele, volta ao saldo únic
     await comSaldo(db, 100);
     await comSaldo(db, 50, 'meta');
     await asPostgres(db);
-    await db.exec(read(ROLLBACK_VARREDURA)); // empilhada: a da varredura sai antes
+    await db.exec(read(ROLLBACK_POR_CREDITOS)); // empilhadas: por créditos e varredura saem antes
+    await db.exec(read(ROLLBACK_VARREDURA));
     await assert.rejects(db.exec(read(ROLLBACK_META)), /Há créditos Meta no livro/);
     await db.exec('ROLLBACK'); // o script abre BEGIN; ao recusar, a transação fica aberta
     await db.exec(`DELETE FROM lista_fria_creditos WHERE tipo = 'meta'`);
@@ -146,7 +147,7 @@ test('rollback: recusa com crédito Meta no livro; sem ele, volta ao saldo únic
     assert.equal(await val(db, `SELECT lista_fria_creditos_conceder('${TORQUE}', 5, 'volta')`), 105, 'a concessão de 3 argumentos voltou');
     await as(db, U_LIBERADO);
     assert.equal(await val(db, `SELECT lista_fria_saldo('${TORQUE}')`), 105);
-    await criarBusca(db, 'instagram', ig, 5); // de novo gasta do saldo único
+    await criarBusca(db, 'instagram', ig, 5); // de novo gasta do saldo único (a faixa de 10 a 1.000 sai com o rollback)
     assert.equal(await val(db, `SELECT lista_fria_saldo('${TORQUE}')`), 100);
   } finally { await db.close(); }
 });
