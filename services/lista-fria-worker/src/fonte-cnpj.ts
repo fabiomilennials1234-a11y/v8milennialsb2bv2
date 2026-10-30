@@ -12,6 +12,7 @@
 import type { BuscaDaFila } from "./db.ts";
 import type { Candidato, ContextoDeLeitura, Fonte, Leitura } from "./executor.ts";
 import { clamp } from "./executor.ts";
+import { normalizarTelefoneBR } from "./contatos.ts";
 
 export type ExigeContato = "qualquer" | "email" | "telefone" | "ambos";
 
@@ -153,6 +154,7 @@ export function fonteCnpj(
   // Dois CNPJs com o mesmo contato são um contato só: a segunda vez não é cobrada de novo.
   const emails = new Set<string>();
   const telefones = new Set<string>();
+  let semTelefoneValido = 0;
 
   return {
     nicho: null,
@@ -170,7 +172,15 @@ export function fonteCnpj(
       lidas += linhas.length;
 
       const candidatos: Candidato[] = [];
+      // "Com telefone" e "E-mail e telefone" valem sobre o telefone que o worker consegue USAR, não sobre
+      // o texto cru da base: o filtro do banco só vê `tel IS NOT NULL`, e o worker descarta número que não
+      // normaliza. Sem esta checagem, a busca entregava (e cobrava) contato sem telefone a quem pediu telefone.
+      const exigeTelefone = filtros.contato === "telefone" || filtros.contato === "ambos";
       for (const l of linhas) {
+        if (exigeTelefone && normalizarTelefoneBR(l.tel) === null) {
+          semTelefoneValido++;
+          continue;
+        }
         const c = candidatoDaLinha(l);
         if (!c) continue;
         const email = c.emails[0]?.toLowerCase();
@@ -184,7 +194,7 @@ export function fonteCnpj(
       // Acabou a base para esse alvo, ou a varredura passou do que vale gastar.
       const esgotou = linhas.length < quanto;
       const limite = lidas >= plano.maxLinhas;
-      if (esgotou || limite) log("cnpj_varredura_fim", { busca: busca.id, lidas, esgotou, limite });
+      if (esgotou || limite) log("cnpj_varredura_fim", { busca: busca.id, lidas, esgotou, limite, semTelefoneValido });
       return { linhas: candidatos, terminou: esgotou || limite, falhou: false };
     },
 

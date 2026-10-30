@@ -16,8 +16,11 @@ export function soDigitos(s: string | null | undefined): string {
  *   - DDD 11 a 99, sem zero no fim (10, 20…, não existem);
  *   - fixo: 8 dígitos começando em 2 a 5;
  *   - celular: 9 dígitos começando em 9;
- *   - número de 10 dígitos começando em 6 a 9 é celular antigo sem o 9: ambíguo,
- *     descarta em vez de chutar;
+ *   - número de 10 dígitos começando em 8 ou 9 é celular de ANTES do nono dígito (o plano de numeração
+ *     reservou 2 a 5 para fixo): ganha o 9 na frente. A base do CNPJ da Receita guarda quase todo celular
+ *     assim (~50% dos telefones), e descartá-los deixava a busca "Com telefone" sem telefone;
+ *   - número de 10 dígitos começando em 6 ou 7 é ambíguo (celular antigo, rádio/trunking): descarta em vez
+ *     de chutar;
  *   - dígitos todos iguais (11 1111-1111) é lixo.
  */
 export function normalizarTelefoneBR(bruto: string | null | undefined): string | null {
@@ -35,6 +38,9 @@ export function normalizarTelefoneBR(bruto: string | null | undefined): string |
   const numero = d.slice(2);
   if (numero.length === 9) {
     if (numero[0] !== "9") return null;
+  } else if (/^[89]/.test(numero)) {
+    // Celular de 8 dígitos (antes do nono dígito): o 9 entra depois do DDD.
+    return `55${d.slice(0, 2)}9${numero}`;
   } else if (!/^[2-5]/.test(numero)) {
     return null;
   }
