@@ -387,13 +387,10 @@ export function useCreateFollowUpAutomation() {
       copilot_can_handle?: boolean;
       filter_stages?: string[];
     }) => {
-      const payload = {
-        ...automation,
-        // Para regras baseadas em tempo, incluir organization_id
-        ...(automation.trigger_type && automation.trigger_type !== "stage_change"
-          ? { organization_id: organizationId }
-          : {}),
-      };
+      // Toda automação pertence à org de quem cria. Sem org ela nascia global
+      // (aplicada em todas as orgs) — a policy recusa desde 20271215000001.
+      if (!organizationId) throw new Error("Organização não disponível");
+      const payload = { ...automation, organization_id: organizationId };
       const { data, error } = await supabase
         .from("follow_up_automations")
         .insert(payload)
@@ -497,7 +494,10 @@ export function useCreateAutomatedFollowUps() {
         .select("id, pipe_type, stage, title_template, description_template, days_offset, priority, is_active, trigger_type")
         .eq("pipe_type", pipeType)
         .eq("stage", stage)
-        .eq("is_active", true);
+        .eq("is_active", true)
+        // Só as da org do lead + o template global (org NULL). Admin de duas
+        // orgs não aplica a regra de uma na outra.
+        .or(`organization_id.eq.${organizationId},organization_id.is.null`);
 
       if (automationsError) throw automationsError;
       if (!automations || automations.length === 0) return [];
