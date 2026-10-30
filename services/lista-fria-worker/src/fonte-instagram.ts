@@ -14,7 +14,7 @@ import { execucaoTerminou } from "./apify.ts";
 import type { BuscaDaFila } from "./db.ts";
 import type { Fonte, Leitura, Medicao } from "./executor.ts";
 import { clamp } from "./executor.ts";
-import { CONTAS_POR_PAGINA, candidatoDoItem } from "./instagram.ts";
+import { ACTOR_PADRAO, CONTAS_POR_PAGINA, candidatoDoItem } from "./instagram.ts";
 
 export interface ApifyApi {
   iniciar(actorId: string, input: Record<string, unknown>, opcoes: { maxTotalChargeUsd: number; timeoutS: number }): Promise<Execucao>;
@@ -62,8 +62,31 @@ export const CFG_INSTAGRAM_PADRAO: Omit<CfgInstagram, "actorId"> = {
   // 300 s (30 s por conta) em outra. Prazo curto demais mata a execução no meio (TIMED-OUT) e
   // subestima o rendimento; 12 s por conta é folga para o caso comum, e o freio de gasto
   // (maxTotalChargeUsd) é quem limita o custo, não o relógio.
-  segundosPorConta: 12,
+  // MEDIDO em produção em 30/10/2026: 8 a 10 s por conta (30 itens e 37 itens em 300 s). Com 12 s a busca de 50
+  // contas ficava no limite e a Apify a matava (TIMED-OUT) antes do fim; 20 s dá folga. Prazo maior não custa
+  // mais: a Apify cobra por resultado entregue, não por tempo.
+  segundosPorConta: 20,
 };
+
+/**
+ * A configuração do Instagram pela Apify a partir do ambiente. Fica aqui (e não no `main`) para o teste cobrir a
+ * FIAÇÃO: em 30/10/2026 o `main` montava a configuração sem `segundosPorConta`, o prazo caía no piso de 300 s e
+ * toda busca de 50 seguidores era morta no meio, entregando 30 a 37.
+ */
+export function cfgInstagramDaApify(env: Record<string, string | undefined>): CfgInstagram {
+  const numero = (nome: string, padrao: number) => {
+    const v = Number(env[nome]);
+    return env[nome] !== undefined && env[nome] !== "" && Number.isFinite(v) ? v : padrao;
+  };
+  return {
+    actorId: env.APIFY_INSTAGRAM_ACTOR || ACTOR_PADRAO,
+    precoPorSeguidorUsd: numero("APIFY_PRECO_POR_SEGUIDOR_USD", CFG_INSTAGRAM_PADRAO.precoPorSeguidorUsd),
+    maxUsdPorBusca: numero("APIFY_MAX_USD_POR_BUSCA", CFG_INSTAGRAM_PADRAO.maxUsdPorBusca),
+    maxSeguidores: numero("INSTAGRAM_MAX_SEGUIDORES", CFG_INSTAGRAM_PADRAO.maxSeguidores),
+    contasPorCredito: numero("INSTAGRAM_CONTAS_POR_CREDITO", CFG_INSTAGRAM_PADRAO.contasPorCredito),
+    segundosPorConta: numero("INSTAGRAM_SEGUNDOS_POR_CONTA", CFG_INSTAGRAM_PADRAO.segundosPorConta ?? 20),
+  };
+}
 
 const PAGINA_DO_DATASET = 500;
 

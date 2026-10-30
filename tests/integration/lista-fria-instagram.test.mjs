@@ -9,7 +9,7 @@ import assert from 'node:assert/strict';
 
 import { candidatoDoItem, telefonesDaBio, ACTOR_PADRAO } from '../../services/lista-fria-worker/src/instagram.ts';
 import { abortarExecucao, execucaoTerminou, iniciarExecucao, lerExecucao, lerItens } from '../../services/lista-fria-worker/src/apify.ts';
-import { CFG_INSTAGRAM_PADRAO, fonteInstagram, planoDaBusca, tetoDeSeguidores } from '../../services/lista-fria-worker/src/fonte-instagram.ts';
+import { CFG_INSTAGRAM_PADRAO, cfgInstagramDaApify, fonteInstagram, planoDaBusca, tetoDeSeguidores } from '../../services/lista-fria-worker/src/fonte-instagram.ts';
 import { CFG_PADRAO, executarBusca } from '../../services/lista-fria-worker/src/executor.ts';
 import { U_LIBERADO, as, asWorker, asPostgres, one, val, criarBusca, comSaldo, setup } from './helpers/lista-fria-db.mjs';
 
@@ -140,11 +140,11 @@ describe('planoDaBusca', () => {
   const cfg = { actorId: ACTOR_PADRAO, ...CFG_INSTAGRAM_PADRAO, maxSeguidores: 5_000 };
   test('o padrão real: o acesso sem login entrega ~50 seguidores por conta, então o plano não pede mais (medido)', () => {
     const p = planoDaBusca(100, { actorId: ACTOR_PADRAO, ...CFG_INSTAGRAM_PADRAO });
-    assert.deepEqual(p, { maxItems: 50, maxPages: 1, maxTotalChargeUsd: 0.7, timeoutS: 600 });
+    assert.deepEqual(p, { maxItems: 50, maxPages: 1, maxTotalChargeUsd: 0.7, timeoutS: 1000 });
     assert.equal(CFG_INSTAGRAM_PADRAO.maxSeguidores, 50);
   });
-  test('100 créditos: 800 contas, 16 páginas, prazo de 12 s por conta, freio de custo com folga de 15%', () => {
-    assert.deepEqual(planoDaBusca(100, cfg), { maxItems: 800, maxPages: 16, maxTotalChargeUsd: 11.05, timeoutS: 9_600 });
+  test('100 créditos: 800 contas, 16 páginas, prazo de 20 s por conta, freio de custo com folga de 15%', () => {
+    assert.deepEqual(planoDaBusca(100, cfg), { maxItems: 800, maxPages: 16, maxTotalChargeUsd: 11.05, timeoutS: 16_000 });
   });
   test('piso: 1 crédito ainda processa uma página inteira', () => assert.deepEqual(planoDaBusca(1, cfg).maxItems, 50));
   test('teto: busca enorme é limitada em contas E em dólares', () => {
@@ -375,6 +375,21 @@ const BUSCA_VAR = { ...BUSCA_IG, creditos_limite: 50, cobranca: 'por_varredura',
 // O banco novo: debita pelo total informado e avisa quando a reserva acaba.
 const varrerReal = (limite) => (varridos) => ({ ativa: true, cobrando: true, creditos_usados: Math.min(varridos, limite), limite_atingido: varridos >= limite });
 
+describe('cfgInstagramDaApify (a fiação do main)', () => {
+  test('SEM variáveis, a busca de 50 seguidores ganha 1.000 s: em produção o prazo caía em 300 s e a Apify matava a execução (TIMED-OUT) com 30 a 37 itens', () => {
+    const cfg = cfgInstagramDaApify({});
+    assert.equal(cfg.segundosPorConta, 20);
+    assert.equal(planoDaBusca(50, cfg, 50).timeoutS, 1000);
+    assert.ok(planoDaBusca(50, cfg, 50).timeoutS >= 50 * 10 * 1.5, 'folga sobre os ~10 s por conta medidos');
+  });
+  test('o ambiente sobrescreve cada valor; lixo cai no padrão', () => {
+    const cfg = cfgInstagramDaApify({ INSTAGRAM_SEGUNDOS_POR_CONTA: '30', INSTAGRAM_MAX_SEGUIDORES: '200', APIFY_MAX_USD_POR_BUSCA: '2', APIFY_INSTAGRAM_ACTOR: 'a~b' });
+    assert.deepEqual([cfg.segundosPorConta, cfg.maxSeguidores, cfg.maxUsdPorBusca, cfg.actorId], [30, 200, 2, 'a~b']);
+    assert.equal(cfgInstagramDaApify({ INSTAGRAM_SEGUNDOS_POR_CONTA: 'abc', INSTAGRAM_MAX_SEGUIDORES: '' }).segundosPorConta, 20);
+    assert.equal(cfgInstagramDaApify({ INSTAGRAM_MAX_SEGUIDORES: '' }).maxSeguidores, 50);
+  });
+});
+
 describe('tetoDeSeguidores', () => {
   test('por varredura o crédito é o seguidor; por contato não há teto duro', () => {
     assert.equal(tetoDeSeguidores(BUSCA_VAR), 50);
@@ -384,7 +399,7 @@ describe('tetoDeSeguidores', () => {
     assert.equal(tetoDeSeguidores({ ...BUSCA_IG, cobranca: 'por_contato' }), Infinity);
   });
   test('o plano pede à Apify exatamente a reserva, e o freio de custo acompanha', () => {
-    assert.deepEqual(planoDaBusca(50, cfgIg, 50), { maxItems: 50, maxPages: 1, maxTotalChargeUsd: 0.7, timeoutS: 600 });
+    assert.deepEqual(planoDaBusca(50, cfgIg, 50), { maxItems: 50, maxPages: 1, maxTotalChargeUsd: 0.7, timeoutS: 1000 });
   });
 });
 

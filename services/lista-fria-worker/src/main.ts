@@ -28,8 +28,7 @@ import { comPulso } from "./pulso.ts";
 import { abortarExecucao, iniciarExecucao, lerExecucao, lerItens, type ApifyCfg } from "./apify.ts";
 import { CFG_PADRAO, executarBusca, executarMaps, type Ambiente, type CfgDoExecutor } from "./executor.ts";
 import { coletorApi } from "./coletor-instagram.ts";
-import { ACTOR_PADRAO } from "./instagram.ts";
-import { CFG_INSTAGRAM_PADRAO, CFG_INSTAGRAM_SESSAO_PADRAO, fonteInstagram, type ApifyApi, type CfgInstagram } from "./fonte-instagram.ts";
+import { CFG_INSTAGRAM_SESSAO_PADRAO, cfgInstagramDaApify, fonteInstagram, type ApifyApi, type CfgInstagram } from "./fonte-instagram.ts";
 import { apagarJob, baixarCsv, criarJob, lerJob, type GosomCfg } from "./gosom.ts";
 import { aderentes, expandirBusca, type IaCfg } from "./ia.ts";
 import { sincronizarBase, type BaseLocal } from "./base-cnpj.ts";
@@ -115,13 +114,7 @@ async function main() {
         itens: (ds, off, lim) => lerItens(ac, ds, off, lim),
         abortar: (id) => abortarExecucao(ac, id),
       },
-      cfg: {
-        actorId: process.env.APIFY_INSTAGRAM_ACTOR || ACTOR_PADRAO,
-        precoPorSeguidorUsd: numero("APIFY_PRECO_POR_SEGUIDOR_USD", CFG_INSTAGRAM_PADRAO.precoPorSeguidorUsd),
-        maxUsdPorBusca: numero("APIFY_MAX_USD_POR_BUSCA", CFG_INSTAGRAM_PADRAO.maxUsdPorBusca),
-        maxSeguidores: numero("INSTAGRAM_MAX_SEGUIDORES", CFG_INSTAGRAM_PADRAO.maxSeguidores),
-        contasPorCredito: numero("INSTAGRAM_CONTAS_POR_CREDITO", CFG_INSTAGRAM_PADRAO.contasPorCredito),
-      },
+      cfg: cfgInstagramDaApify(process.env),
     };
   }
   // Base de CNPJ: sincronizada no boot e, ociosa, a cada 6 h. A consulta (DuckDB) é aberta sob demanda
