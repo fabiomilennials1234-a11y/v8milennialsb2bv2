@@ -3,8 +3,8 @@ import userEvent from "@testing-library/user-event";
 import { useState } from "react";
 import { describe, expect, it, vi } from "vitest";
 
-import { SEM_CRITERIOS, parseDivisao, type CriteriosDeContato, type DivisaoDosContatos } from "../lib/tipos";
-import { DivisaoDosContatosPainel, fraseDosCriterios } from "./DivisaoDosContatos";
+import { SEM_CRITERIOS, fraseDosCriterios, parseDivisao, type CriteriosDeContato, type DivisaoDosContatos } from "../lib/tipos";
+import { DivisaoDosContatosPainel } from "./DivisaoDosContatos";
 
 const divisao: DivisaoDosContatos = {
   novos: 120,

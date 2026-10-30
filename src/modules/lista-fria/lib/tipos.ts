@@ -259,6 +259,13 @@ export interface CriteriosDeContato {
 
 export const SEM_CRITERIOS: CriteriosDeContato = { comInstagram: false, comTelefone: false, comEmail: false };
 
+/** "@", "@ e telefone", "@, telefone e e-mail": o que os critérios marcados exigem, em português. */
+export function fraseDosCriterios(c: CriteriosDeContato): string {
+  const partes = [c.comInstagram && "@", c.comTelefone && "telefone", c.comEmail && "e-mail"].filter((p): p is string => p !== false);
+  if (partes.length <= 1) return partes.join("");
+  return `${partes.slice(0, -1).join(", ")} e ${partes[partes.length - 1]}`;
+}
+
 /** A divisão dos contatos NOVOS (que ainda não são lead nem foram importados) por tipo de contato. */
 export interface DivisaoDosContatos {
   novos: number;

@@ -12,7 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { cn } from "@/lib/utils";
 
-import type { CriteriosDeContato, DivisaoDosContatos } from "../lib/tipos";
+import { fraseDosCriterios, type CriteriosDeContato, type DivisaoDosContatos } from "../lib/tipos";
 
 const n = (v: number) => v.toLocaleString("pt-BR");
 
@@ -20,20 +20,12 @@ const TIPOS: ReadonlyArray<{
   chave: keyof CriteriosDeContato;
   contagem: keyof Pick<DivisaoDosContatos, "comInstagram" | "comTelefone" | "comEmail">;
   rotulo: string;
-  frase: string;
   icone: ReactNode;
 }> = [
-  { chave: "comInstagram", contagem: "comInstagram", rotulo: "Com @", frase: "@", icone: <AtSign className="size-4" aria-hidden /> },
-  { chave: "comTelefone", contagem: "comTelefone", rotulo: "Com telefone", frase: "telefone", icone: <Phone className="size-4" aria-hidden /> },
-  { chave: "comEmail", contagem: "comEmail", rotulo: "Com e-mail", frase: "e-mail", icone: <Mail className="size-4" aria-hidden /> },
+  { chave: "comInstagram", contagem: "comInstagram", rotulo: "Com @", icone: <AtSign className="size-4" aria-hidden /> },
+  { chave: "comTelefone", contagem: "comTelefone", rotulo: "Com telefone", icone: <Phone className="size-4" aria-hidden /> },
+  { chave: "comEmail", contagem: "comEmail", rotulo: "Com e-mail", icone: <Mail className="size-4" aria-hidden /> },
 ];
-
-/** "@", "@ e telefone", "@, telefone e e-mail": o que os marcados exigem, em português. */
-export function fraseDosCriterios(c: CriteriosDeContato): string {
-  const partes = TIPOS.filter((t) => c[t.chave]).map((t) => t.frase);
-  if (partes.length <= 1) return partes.join("");
-  return `${partes.slice(0, -1).join(", ")} e ${partes[partes.length - 1]}`;
-}
 
 interface Props {
   divisao: DivisaoDosContatos | undefined;

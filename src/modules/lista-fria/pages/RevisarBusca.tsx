@@ -22,7 +22,7 @@ import { FilterChip } from "@/shared/components/FilterChip";
 import { notifyError } from "@/shared/errors";
 import { cn } from "@/lib/utils";
 
-import { DivisaoDosContatosPainel, fraseDosCriterios } from "../components/DivisaoDosContatos";
+import { DivisaoDosContatosPainel } from "../components/DivisaoDosContatos";
 import { useExportarBusca, useExportarPublicoMeta } from "../hooks/useExportarBusca";
 import { useListaFriaAcesso } from "../hooks/useListaFriaAcesso";
 import {
@@ -36,7 +36,7 @@ import {
 } from "../hooks/useListaFriaDados";
 import { useImportarBusca, useSelecionarPorContato, useSelecionarResultados } from "../hooks/useListaFriaMutacoes";
 import { recusaDaListaFria } from "../lib/erros";
-import { ROTULO_FONTE, ROTULO_QUALIDADE, type QualidadeDoContato, buscaEstaAberta, buscaTemResultado } from "../lib/tipos";
+import { ROTULO_FONTE, ROTULO_QUALIDADE, type QualidadeDoContato, buscaEstaAberta, buscaTemResultado, fraseDosCriterios } from "../lib/tipos";
 
 const COR_DA_QUALIDADE: Record<QualidadeDoContato, string> = {
   verificado: "text-success-strong",
