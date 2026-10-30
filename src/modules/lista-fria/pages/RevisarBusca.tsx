@@ -22,6 +22,7 @@ import { FilterChip } from "@/shared/components/FilterChip";
 import { notifyError } from "@/shared/errors";
 import { cn } from "@/lib/utils";
 
+import { DivisaoDosContatosPainel, fraseDosCriterios } from "../components/DivisaoDosContatos";
 import { useExportarBusca, useExportarPublicoMeta } from "../hooks/useExportarBusca";
 import { useListaFriaAcesso } from "../hooks/useListaFriaAcesso";
 import {
@@ -29,10 +30,11 @@ import {
   TAMANHO_DA_PAGINA,
   type FiltrosDaRevisao,
   useBusca,
+  useDivisaoDosContatos,
   usePendentesDaImportacao,
   useResultados,
 } from "../hooks/useListaFriaDados";
-import { useImportarBusca, useSelecionarResultados } from "../hooks/useListaFriaMutacoes";
+import { useImportarBusca, useSelecionarPorContato, useSelecionarResultados } from "../hooks/useListaFriaMutacoes";
 import { recusaDaListaFria } from "../lib/erros";
 import { ROTULO_FONTE, ROTULO_QUALIDADE, type QualidadeDoContato, buscaEstaAberta, buscaTemResultado } from "../lib/tipos";
 
@@ -55,7 +57,10 @@ export default function RevisarBusca() {
   const { data: busca, isLoading: carregandoBusca } = useBusca(buscaId);
   const { data: resultados, isFetching } = useResultados(buscaId, filtros);
   const { data: pendentes } = usePendentesDaImportacao(buscaId);
+  const criterios = { comInstagram: filtros.comInstagram, comTelefone: filtros.comTelefone, comEmail: filtros.comEmail };
+  const { data: divisao } = useDivisaoDosContatos(buscaId, criterios);
   const selecionar = useSelecionarResultados();
+  const selecionarPorContato = useSelecionarPorContato();
   const importar = useImportarBusca();
   const exportar = useExportarBusca();
   const exportarMeta = useExportarPublicoMeta();
@@ -87,6 +92,8 @@ export default function RevisarBusca() {
   const novos = pendentes?.novos ?? 0;
   const todosMarcados = novos > 0 && selecionados === novos;
   const naoTerminou = buscaEstaAberta(busca);
+  // A coluna @ só existe quando algum resultado tem @ (busca de Instagram): em Maps e CNPJ seria uma coluna vazia.
+  const mostrarArroba = (divisao?.comInstagram ?? 0) > 0;
   const podeImportar = podeEditar && buscaTemResultado(busca) && selecionados > 0 && !importar.isPending;
 
   const erroDeEscrita = (fallback: string) => (err: unknown) =>
@@ -100,6 +107,20 @@ export default function RevisarBusca() {
     selecionar.mutate(
       { buscaId: busca.id, ids, selecionado: marcado },
       { onError: erroDeEscrita("Não foi possível atualizar a seleção.") },
+    );
+
+  const selecionarSoEstes = () =>
+    selecionarPorContato.mutate(
+      { buscaId: busca.id, criterios },
+      {
+        onSuccess: (qtd) =>
+          toast.success(
+            fraseDosCriterios(criterios)
+              ? `${n(qtd)} contatos com ${fraseDosCriterios(criterios)} selecionados para importar.`
+              : `${n(qtd)} contatos selecionados para importar.`,
+          ),
+        onError: erroDeEscrita("Não foi possível atualizar a seleção."),
+      },
     );
 
   const confirmarImportacao = () =>
@@ -193,6 +214,15 @@ export default function RevisarBusca() {
         <KpiTile label="Sem contato" value={n(busca.semContato)} icon={UserX} note="não cobrados" />
       </KpiRow>
 
+      <DivisaoDosContatosPainel
+        divisao={divisao}
+        criterios={criterios}
+        onCriterios={(c) => mudar(c)}
+        onSelecionar={selecionarSoEstes}
+        selecionando={selecionarPorContato.isPending}
+        podeEditar={podeEditar && buscaTemResultado(busca)}
+      />
+
       <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
         <div className="relative w-full sm:max-w-[360px]">
           <Search className="absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden />
@@ -206,12 +236,6 @@ export default function RevisarBusca() {
         </div>
         <FilterChip active={filtros.somenteNovos} count={n(novos)} aria-pressed={filtros.somenteNovos} onClick={() => mudar({ somenteNovos: !filtros.somenteNovos })}>
           Só novos
-        </FilterChip>
-        <FilterChip active={filtros.comEmail} aria-pressed={filtros.comEmail} onClick={() => mudar({ comEmail: !filtros.comEmail })}>
-          Com e-mail
-        </FilterChip>
-        <FilterChip active={filtros.comTelefone} aria-pressed={filtros.comTelefone} onClick={() => mudar({ comTelefone: !filtros.comTelefone })}>
-          Com telefone
         </FilterChip>
         <FilterChip active={filtros.verificados} aria-pressed={filtros.verificados} onClick={() => mudar({ verificados: !filtros.verificados })}>
           Verificados
@@ -231,6 +255,7 @@ export default function RevisarBusca() {
                 />
               </TableHead>
               <TableHead>Negócio</TableHead>
+              {mostrarArroba && <TableHead>@</TableHead>}
               <TableHead>Telefone</TableHead>
               <TableHead>E-mail</TableHead>
               <TableHead>Qualidade</TableHead>
@@ -240,7 +265,7 @@ export default function RevisarBusca() {
           <TableBody>
             {linhas.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={6} className="py-12 text-center text-[13px] text-muted-foreground">
+                <TableCell colSpan={mostrarArroba ? 7 : 6} className="py-12 text-center text-[13px] text-muted-foreground">
                   {isFetching ? "Carregando…" : "Nenhum contato neste recorte."}
                 </TableCell>
               </TableRow>
@@ -261,6 +286,9 @@ export default function RevisarBusca() {
                       <p className="truncate font-bold">{r.nome}</p>
                       <p className="truncate text-xs text-muted-foreground">{[r.categoria, r.bairro].filter(Boolean).join(" · ")}</p>
                     </TableCell>
+                    {mostrarArroba && (
+                      <TableCell className="max-w-[180px] truncate">{r.instagram ? `@${r.instagram}` : <span className="text-muted-foreground">·</span>}</TableCell>
+                    )}
                     <TableCell className="whitespace-nowrap tabular-nums">{r.telefone ?? <span className="text-muted-foreground">·</span>}</TableCell>
                     <TableCell className="max-w-[260px] truncate">{r.email ?? <span className="text-muted-foreground">·</span>}</TableCell>
                     <TableCell>
@@ -319,6 +347,13 @@ export default function RevisarBusca() {
             <DialogTitle>Importar {n(selecionados)} contatos?</DialogTitle>
             <DialogDescription>Eles entram na tela de Leads, na aba Lista fria.</DialogDescription>
           </DialogHeader>
+          {divisao && (
+            <p className="rounded-xl border border-border bg-muted/40 px-3.5 py-2.5 text-sm" data-testid="divisao-da-importacao">
+              Destes, <b className="tabular-nums">{n(divisao.selecionadosComInstagram)}</b> têm @,{" "}
+              <b className="tabular-nums">{n(divisao.selecionadosComTelefone)}</b> têm telefone e{" "}
+              <b className="tabular-nums">{n(divisao.selecionadosComEmail)}</b> têm e-mail.
+            </p>
+          )}
           <ul className="space-y-4 text-sm">
             <li className="flex gap-3">
               <Snowflake className="mt-0.5 size-5 shrink-0 text-primary-soft-foreground" aria-hidden />

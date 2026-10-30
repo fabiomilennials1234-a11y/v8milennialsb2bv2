@@ -3,7 +3,18 @@ import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useOrganization } from "@/modules/identity";
 
-import { type Busca, type Resultado, type Saldos, buscaEstaAberta, parseBusca, parseResultado, parseSaldos } from "../lib/tipos";
+import {
+  type Busca,
+  type CriteriosDeContato,
+  type DivisaoDosContatos,
+  type Resultado,
+  type Saldos,
+  buscaEstaAberta,
+  parseBusca,
+  parseDivisao,
+  parseResultado,
+  parseSaldos,
+} from "../lib/tipos";
 import { rpcListaFria } from "../lib/rpc";
 
 /**
@@ -75,6 +86,7 @@ export function useBusca(buscaId: string | undefined) {
 export interface FiltrosDaRevisao {
   busca: string;
   somenteNovos: boolean;
+  comInstagram: boolean;
   comEmail: boolean;
   comTelefone: boolean;
   verificados: boolean;
@@ -84,6 +96,7 @@ export interface FiltrosDaRevisao {
 export const FILTROS_DA_REVISAO: FiltrosDaRevisao = {
   busca: "",
   somenteNovos: false,
+  comInstagram: false,
   comEmail: false,
   comTelefone: false,
   verificados: false,
@@ -109,6 +122,7 @@ export function useResultados(buscaId: string | undefined, filtros: FiltrosDaRev
         .eq("organization_id", organizationId as string)
         .eq("busca_id", buscaId as string);
       if (filtros.somenteNovos) q = q.eq("ja_e_lead", false);
+      if (filtros.comInstagram) q = q.not("instagram", "is", null);
       if (filtros.comEmail) q = q.not("email", "is", null);
       if (filtros.comTelefone) q = q.not("telefone", "is", null);
       if (filtros.verificados) q = q.eq("qualidade", "verificado");
@@ -145,6 +159,30 @@ export function usePendentesDaImportacao(buscaId: string | undefined) {
       if (sel.error) throw sel.error;
       if (todos.error) throw todos.error;
       return { selecionados: sel.count ?? 0, novos: todos.count ?? 0 };
+    },
+  });
+}
+
+/**
+ * A divisão dos contatos novos por tipo (com @, telefone, e-mail) e quantos têm TODOS os tipos marcados. Uma ida ao
+ * banco só, com a conta feita lá: contar no navegador não escala e trairia a seleção, que também é feita no banco.
+ */
+export function useDivisaoDosContatos(buscaId: string | undefined, criterios: CriteriosDeContato) {
+  const { organizationId } = useOrganization();
+  return useQuery<DivisaoDosContatos>({
+    queryKey: [CHAVE_LISTA_FRIA, organizationId, "divisao", buscaId, criterios],
+    enabled: !!organizationId && !!buscaId,
+    placeholderData: keepPreviousData,
+    staleTime: 5_000,
+    queryFn: async () => {
+      const { data, error } = await rpcListaFria("lista_fria_resultados_divisao", {
+        p_busca: buscaId as string,
+        p_com_instagram: criterios.comInstagram,
+        p_com_telefone: criterios.comTelefone,
+        p_com_email: criterios.comEmail,
+      });
+      if (error) throw error;
+      return parseDivisao(data);
     },
   });
 }

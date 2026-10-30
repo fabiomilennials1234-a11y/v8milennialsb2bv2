@@ -25,6 +25,16 @@ export interface FuncoesDaListaFria {
     Args: { p_busca: string; p_ids: string[] | null; p_selecionado: boolean };
     Returns: number;
   };
+  /** { novos, com_instagram, com_telefone, com_email, combinacao, selecionados, selecionados_com_* } */
+  lista_fria_resultados_divisao: {
+    Args: { p_busca: string; p_com_instagram: boolean; p_com_telefone: boolean; p_com_email: boolean };
+    Returns: Json;
+  };
+  /** Marca EXATAMENTE quem tem todos os tipos pedidos (E) e desmarca o resto dos novos. Devolve quantos ficaram. */
+  lista_fria_resultados_selecionar_por_contato: {
+    Args: { p_busca: string; p_com_instagram: boolean; p_com_telefone: boolean; p_com_email: boolean };
+    Returns: number;
+  };
   // { importados, ja_eram_leads, restantes }
   lista_fria_importar: { Args: { p_busca: string; p_limite?: number }; Returns: Json };
 }

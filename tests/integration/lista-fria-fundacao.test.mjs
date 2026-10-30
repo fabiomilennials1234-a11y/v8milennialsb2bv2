@@ -10,7 +10,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  ROLLBACK, ROLLBACK_CNPJ, ROLLBACK_META, ROLLBACK_VARREDURA, ROLLBACK_POR_CREDITOS, TORQUE, OUTRA, U_ADMIN, U_MEMBRO, U_LIBERADO, U_MASTER, U_OUTRA,
+  ROLLBACK, ROLLBACK_CNPJ, ROLLBACK_META, ROLLBACK_VARREDURA, ROLLBACK_POR_CREDITOS, ROLLBACK_DIVISAO, TORQUE, OUTRA, U_ADMIN, U_MEMBRO, U_LIBERADO, U_MASTER, U_OUTRA,
   read, setup, as, asWorker, asPostgres, one, val, maps, criarBusca, item, registrar, comSaldo,
 } from './helpers/lista-fria-db.mjs';
 
@@ -332,6 +332,7 @@ test('o rollback desfaz tudo e devolve os gatilhos ao corpo anterior', async () 
   const db = await setup();
   try {
     // Quatro migrations empilhadas: desfaz na ordem inversa (varredura, meta, CNPJ, fundação).
+    await db.exec(read(ROLLBACK_DIVISAO)); // a mais nova sai primeiro
     await db.exec(read(ROLLBACK_POR_CREDITOS));
     await db.exec(read(ROLLBACK_VARREDURA));
     await db.exec(read(ROLLBACK_META));

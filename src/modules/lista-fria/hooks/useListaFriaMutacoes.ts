@@ -3,7 +3,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useOrganization } from "@/modules/identity";
 
 import { rpcListaFria } from "../lib/rpc";
-import type { ContatoExigido, FonteDaBusca } from "../lib/tipos";
+import type { ContatoExigido, CriteriosDeContato, FonteDaBusca } from "../lib/tipos";
 import { CHAVE_LISTA_FRIA } from "./useListaFriaDados";
 
 /**
@@ -69,6 +69,24 @@ export function useSelecionarResultados() {
         p_busca: v.buscaId,
         p_ids: v.ids,
         p_selecionado: v.selecionado,
+      });
+      if (error) throw error;
+      return data ?? 0;
+    },
+    onSuccess: invalidar,
+  });
+}
+
+/** Marca só quem tem TODOS os tipos de contato escolhidos ("E") e desmarca o resto dos novos. */
+export function useSelecionarPorContato() {
+  const invalidar = useInvalidarListaFria();
+  return useMutation({
+    mutationFn: async (v: { buscaId: string; criterios: CriteriosDeContato }) => {
+      const { data, error } = await rpcListaFria("lista_fria_resultados_selecionar_por_contato", {
+        p_busca: v.buscaId,
+        p_com_instagram: v.criterios.comInstagram,
+        p_com_telefone: v.criterios.comTelefone,
+        p_com_email: v.criterios.comEmail,
       });
       if (error) throw error;
       return data ?? 0;

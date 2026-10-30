@@ -28,6 +28,8 @@ export const ROLLBACK_META = '../../supabase/migrations/rollback/20271220000000_
 export const MIGRATION_VARREDURA = '../../supabase/migrations/20271221000000_lista_fria_cobranca_por_varredura.sql';
 export const ROLLBACK_VARREDURA = '../../supabase/migrations/rollback/20271221000000_lista_fria_cobranca_por_varredura.sql';
 export const MIGRATION_POR_CREDITOS = '../../supabase/migrations/20271222000000_lista_fria_instagram_busca_por_creditos.sql';
+export const MIGRATION_DIVISAO = '../../supabase/migrations/20271223000000_lista_fria_divisao_por_contato.sql';
+export const ROLLBACK_DIVISAO = '../../supabase/migrations/rollback/20271223000000_lista_fria_divisao_por_contato.sql';
 export const ROLLBACK_POR_CREDITOS = '../../supabase/migrations/rollback/20271222000000_lista_fria_instagram_busca_por_creditos.sql';
 
 // O que a Lista Fria toca em `leads` e nos gatilhos de lead criado. Os corpos
@@ -124,6 +126,7 @@ export async function setup() {
   await db.exec(read(MIGRATION_META));
   await db.exec(read(MIGRATION_VARREDURA));
   await db.exec(read(MIGRATION_POR_CREDITOS));
+  await db.exec(read(MIGRATION_DIVISAO));
   await db.exec(`
     INSERT INTO member_feature_permissions (team_member_id, feature_key, enabled) VALUES
       ('${TM_LIBERADO}', 'lista_fria.view', true),
