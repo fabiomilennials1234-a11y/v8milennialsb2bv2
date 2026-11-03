@@ -25,8 +25,8 @@ import { NEGOCIO_MAGRO, NEGOCIO_GANHO } from "@/modules/leads/components/deal-ca
 
 /** O que o cabeçalho do celular passou ao botão, render a render. */
 let propsRecebidas: Array<Record<string, unknown>> = [];
-vi.mock("@/modules/communication/components/voice/VoiceCallButton", () => ({
-  VoiceCallButton: (props: Record<string, unknown>) => {
+vi.mock("@/modules/communication/components/voice/ChatCallButton", () => ({
+  ChatCallButton: (props: Record<string, unknown>) => {
     propsRecebidas.push(props);
     return <button type="button" aria-label="Ligar" />;
   },
@@ -105,10 +105,9 @@ describe("Celular — o cabeçalho da conversa ganha o botão, fora do bloco do 
     });
   });
 
-  // Quem decide sumir é o botão (sem lead → null). O cabeçalho só repassa.
-  it("sem lead, repassa `undefined` e deixa o botão decidir", () => {
+  it("sem lead, repassa a ação de vincular o contato", () => {
     render(<MobileChatThreadHeader {...base} hasLead={false} />);
-    expect(propsRecebidas.at(-1)).toMatchObject({ variant: "icon", leadId: undefined });
+    expect(propsRecebidas.at(-1)).toMatchObject({ variant: "icon", leadId: undefined, onOpenLead: base.onTapContact });
   });
 
   it("o botão NÃO fica dentro do bloco clicável do contato", () => {

@@ -88,9 +88,10 @@ export function useVoicePairing() {
       abortRef.current?.abort();
       abortRef.current = null;
       void queryClient.invalidateQueries({ queryKey: ["voip_sessions"] });
+      void queryClient.invalidateQueries({ queryKey: ["voip_voice_reach", organizationId] });
       void queryClient.invalidateQueries({ queryKey: ["whatsapp_instances"] });
     }
-  }, [queryClient]);
+  }, [queryClient, organizationId]);
 
   /**
    * Abre (ou reabre) o stream de eventos de uma sessão já criada.

@@ -63,7 +63,7 @@ import { RealtimeStatusBadge } from "@/modules/communication/components/chat/Rea
 import { SyncChatDialog } from "@/modules/communication/components/chat/history-sync/SyncChatButton";
 import { useMessageLimits } from "@/modules/communication/hooks/useMessageLimits";
 import { getAvatarGradient } from "@/modules/communication/components/chat/list/avatarGradient";
-import { VoiceCallButton } from "@/modules/communication/components/voice/VoiceCallButton";
+import { ChatCallButton } from "@/modules/communication/components/voice/ChatCallButton";
 import { legendaDoTelefone } from "@/modules/communication/lib/identificadorOculto";
 
 export interface SzChatSession {
@@ -72,6 +72,7 @@ export interface SzChatSession {
 }
 
 export interface ChatHeaderProps {
+  isGroup?: boolean;
   phoneNumber: string;
   contactName: string;
   hasLead: boolean;
@@ -166,6 +167,7 @@ function DensityMenu({
 }
 
 export function ChatHeader({
+  isGroup,
   phoneNumber,
   contactName,
   hasLead,
@@ -290,9 +292,7 @@ export function ChatHeader({
           )}
         </Button>}
 
-        {/* Ligar por WhatsApp (TorqueCalls). Some sozinho quando a org não tem
-            número de voz conectado. */}
-        <VoiceCallButton leadId={leadId} leadName={contactName} />
+        {!isGroup && <ChatCallButton leadId={leadId} leadName={contactName} onOpenLead={onOpenLeadModal} />}
 
         {/* Limite de conversas novas — aviso, não ação: fica à vista. */}
         {limitsWarning && (

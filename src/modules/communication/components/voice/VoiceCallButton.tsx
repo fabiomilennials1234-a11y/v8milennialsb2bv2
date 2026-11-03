@@ -199,6 +199,7 @@ export function VoiceCallButton({
         disabled={voice.busy}
         className={cn("shrink-0 gap-0", className)}
         title={titulo}
+        aria-label="Ligar"
         onClick={discar}
         onPointerDown={naoVazar}
       >
@@ -227,6 +228,7 @@ export function VoiceCallButton({
         disabled={voice.busy}
         className="relative gap-0 rounded-r-none pr-1.5 focus-visible:z-10"
         title={titulo}
+        aria-label="Ligar"
         onClick={discar}
         onPointerDown={naoVazar}
       >
