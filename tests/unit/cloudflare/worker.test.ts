@@ -22,6 +22,9 @@ const FILES: Record<string, { body: string; type: string }> = {
   "/sobre.html": { body: "<html>sobre</html>", type: "text/html; charset=utf-8" },
   "/privacidade.html": { body: "<html>privacidade</html>", type: "text/html; charset=utf-8" },
   "/robots.txt": { body: "User-agent: *", type: "text/plain; charset=utf-8" },
+  // Como o servidor de assets real manda .txt: sem charset.
+  "/llms.txt": { body: "# Torque CRM — não", type: "text/plain" },
+  "/legacy.txt": { body: "x", type: "text/plain; charset=iso-8859-1" },
   "/.well-known/security.txt": { body: "Contact: mailto:security@example.com", type: "text/plain; charset=utf-8" },
   "/landing/Paleta de Cor_Milennials.png": { body: "PNG", type: "image/png" },
   "/lp/v1/index.html": { body: "<html>lp v1</html>", type: "text/html; charset=utf-8" },
@@ -147,6 +150,13 @@ describe("SPA", () => {
     expect(await (await call("/landing/Paleta%20de%20Cor_Milennials.png")).text()).toBe("PNG");
     expect(await (await call("/leads")).text()).toBe("<html>V5</html>");
     expect(await (await call("/configuracoes/usuarios?x=1")).text()).toBe("<html>V5</html>");
+  });
+
+  it("texto sem charset sai como UTF-8; charset declarado e não-texto ficam como vieram", async () => {
+    expect((await call("/llms.txt")).headers.get("content-type")).toBe("text/plain; charset=utf-8");
+    expect((await call("/robots.txt")).headers.get("content-type")).toBe("text/plain; charset=utf-8");
+    expect((await call("/legacy.txt")).headers.get("content-type")).toBe("text/plain; charset=iso-8859-1");
+    expect((await call("/landing/Paleta%20de%20Cor_Milennials.png")).headers.get("content-type")).toBe("image/png");
   });
 
   it("caminho com barra no fim vai direto ao index", async () => {
