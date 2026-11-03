@@ -35,6 +35,7 @@ import { withSecurityHeaders } from "../_shared/security-headers.ts";
 import { timingSafeCompare } from "../_shared/auth.ts";
 import { logRuntime } from "../_shared/logger.ts";
 import { buildInv5AlertText, buildInv5PayloadFromRows } from "../_shared/inv5-alert.ts";
+import { avaliarFila, type BuscaDaFila, textoDaFila } from "../_shared/lista-fria-fila.ts";
 
 // Silêncio entre avisos do mesmo assunto. Um incidente de banco dura dezenas de
 // minutos; avisar a cada 2 seria ruído, e ruído treina o time a ignorar.
@@ -272,6 +273,40 @@ async function checkExposedTables(supabase: any): Promise<Alert | null> {
   };
 }
 
+/**
+ * Fila da Lista Fria parada: busca esperando sem ninguém atender, ou `executando` sem sinal.
+ *
+ * O healthcheck do container não vê worker desligado por engano nem preso numa busca, e a recuperação das
+ * travadas é chamada pelo próprio worker: morto, a reserva de créditos de quem espera fica retida em
+ * silêncio. Decisão em `_shared/lista-fria-fila.ts` (pura, testada). Sem busca em aberto não há o que
+ * medir e não há aviso.
+ */
+async function checkListaFriaFila(supabase: SupabaseClient): Promise<Alert | null> {
+  const { data, error } = await supabase
+    .from("lista_fria_buscas")
+    .select("id, status, fonte, organization_id, created_at, heartbeat_at, worker_id")
+    .in("status", ["na_fila", "executando"])
+    .order("created_at", { ascending: true })
+    .limit(200);
+  if (error || !data || data.length === 0) return null;
+
+  const problemas = avaliarFila(data as BuscaDaFila[]);
+  if (problemas.length === 0) return null;
+
+  const ids = [...new Set(problemas.flatMap((p) => p.organizacoes))];
+  const nomes = new Map<string, string>();
+  const { data: orgs } = await supabase.from("organizations").select("id, name").in("id", ids);
+  for (const o of orgs ?? []) nomes.set(o.id, o.name);
+
+  return {
+    key: "lista_fria_fila",
+    text: textoDaFila(problemas, nomes),
+    logPayload: {
+      problemas: problemas.map((p) => ({ motivo: p.motivo, buscas: p.buscas, minutos: Math.round(p.minutos) })),
+    },
+  };
+}
+
 async function sendWhatsApp(text: string): Promise<{ ok: boolean; detail?: string }> {
   // Secrets próprias primeiro. O fallback para as do suporte existe para o
   // watchdog nascer funcionando antes de alguém provisionar as dele — mas com
@@ -329,6 +364,7 @@ Deno.serve(
       checkSupportNotifyHealth(supabase),
       checkRunawayBackfill(supabase),
       checkExposedTables(supabase),
+      checkListaFriaFila(supabase),
     ]);
 
     const alerts = results
@@ -378,6 +414,6 @@ Deno.serve(
       }
     }
 
-    return json({ ok: true, checked: 4, sent, suppressed, failed });
+    return json({ ok: true, checked: 5, sent, suppressed, failed });
   })
 );

@@ -76,20 +76,27 @@ Chave revogada, banco fora ou rede caída reprovam o healthcheck; o `restart: un
 Ative a notificação de serviço indisponível do EasyPanel para este serviço.
 
 **Fila parada.** O healthcheck não vê um worker saudável porém travado numa busca, nem o worker desligado
-por engano. Rode esta consulta de tempos em tempos (ou ligue num alerta):
+por engano. Quem vigia é o `infra-watchdog` (pg_cron, a cada 2 min), que avisa no WhatsApp do watchdog, com
+silêncio de 30 min entre avisos (`supabase/functions/_shared/lista-fria-fila.ts`):
+
+- **Ninguém está atendendo:** busca `na_fila` há 5+ min e nenhuma `executando` com sinal recente. Busca longa
+  na frente (Maps leva 6+ min) NÃO dispara: a fila está andando.
+- **Worker sem sinal:** busca `executando` sem renovar `heartbeat_at` há 5+ min (a recuperação do worker só age
+  em 10).
+- **Fila lenta:** worker andando, mas a busca mais antiga espera há 30+ min.
+
+Sem busca em aberto não há o que medir, então worker desligado com a fila vazia não avisa; o aviso do
+EasyPanel (serviço indisponível, acima) cobre esse caso. Para olhar na mão:
 
 ```sql
--- Buscas esperando há mais de 5 min = ninguém está atendendo.
-select id, fonte, organization_id, now() - created_at as esperando
+select id, fonte, organization_id, status, now() - created_at as esperando, now() - heartbeat_at as sem_sinal
   from public.lista_fria_buscas
- where status = 'na_fila' and created_at < now() - interval '5 minutes'
+ where status in ('na_fila', 'executando')
  order by created_at;
-
--- Buscas "executando" sem sinal de vida há mais de 3 min.
-select id, fonte, worker_id, now() - heartbeat_at as sem_sinal
-  from public.lista_fria_buscas
- where status = 'executando' and heartbeat_at < now() - interval '3 minutes';
 ```
+
+⚠️ A recuperação das travadas é chamada pelo worker. Com o worker morto, a reserva de créditos da busca
+`executando` fica retida até ele voltar: o aviso existe para alguém agir antes disso.
 
 O próprio worker fecha como `falhou` e devolve a reserva as buscas sem sinal por 10 min
 (`lista_fria_worker_recuperar_travadas`), então o usuário nunca perde crédito por queda.
