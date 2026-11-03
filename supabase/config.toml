@@ -467,6 +467,12 @@ verify_jwt = false
 [functions.blast-plan-create]
 verify_jwt = false
 
+# lista-fria-importar-e-disparar: importa a busca da Lista fria, abre negócio no funil
+# e cria o disparo cadenciado (ADR-0048). JWT validado no handler (getUser); permissão e
+# flag da Lista fria checadas na RPC lista_fria_disparo_preparar, com o JWT do usuário.
+[functions.lista-fria-importar-e-disparar]
+verify_jwt = false
+
 # blast-plan-release: releaser diário de lotes (pg_cron via pg_net); auth x-cron-secret.
 [functions.blast-plan-release]
 verify_jwt = false
