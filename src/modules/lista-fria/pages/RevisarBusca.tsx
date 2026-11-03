@@ -2,10 +2,11 @@
  * Lista Fria · Revisar busca (mockups 5 e 6 do board Miro).
  *
  * O cliente confere o que a busca achou, desmarca o que não quer e importa para
- * a aba Lista fria da tela de Leads. Importar cria LEAD sem funil e sem card.
- * Sem disparo: a lista só exporta e importa (decisão do CTO, 27/10).
+ * a aba Lista fria da tela de Leads. Importar cria LEAD sem funil e sem card e
+ * sem disparo (decisão do CTO, 27/10). "Importar e Disparar" é o caminho que vai
+ * além: abre negócio no funil escolhido e manda a mensagem cadenciada (ADR-0048).
  */
-import { CheckCircle2, FileDown, Loader2, Megaphone, Search, ShieldCheck, Snowflake, UserX, Users } from "lucide-react";
+import { CheckCircle2, FileDown, Loader2, Megaphone, Search, Send, ShieldCheck, Snowflake, UserX, Users } from "lucide-react";
 import { useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { toast } from "sonner";
@@ -22,6 +23,7 @@ import { FilterChip } from "@/shared/components/FilterChip";
 import { notifyError } from "@/shared/errors";
 import { cn } from "@/lib/utils";
 
+import { ImportarEDispararDialog } from "../components/ImportarEDispararDialog";
 import { useExportarBusca, useExportarPublicoMeta } from "../hooks/useExportarBusca";
 import { useListaFriaAcesso } from "../hooks/useListaFriaAcesso";
 import {
@@ -51,6 +53,7 @@ export default function RevisarBusca() {
   const { podeEditar } = useListaFriaAcesso();
   const [filtros, setFiltros] = useState<FiltrosDaRevisao>(FILTROS_DA_REVISAO);
   const [confirmando, setConfirmando] = useState(false);
+  const [disparando, setDisparando] = useState(false);
 
   const { data: busca, isLoading: carregandoBusca } = useBusca(buscaId);
   const { data: resultados, isFetching } = useResultados(buscaId, filtros);
@@ -307,11 +310,21 @@ export default function RevisarBusca() {
           <b className="tabular-nums">{n(selecionados)} contatos selecionados</b>
           {busca.jaLeads > 0 && <span className="ml-2 text-xs text-muted-foreground">Os {n(busca.jaLeads)} que já são leads ficam de fora.</span>}
         </p>
-        <Button onClick={() => setConfirmando(true)} disabled={!podeImportar}>
-          <CheckCircle2 />
-          Importar para Lista fria
-        </Button>
+        <div className="flex flex-wrap justify-end gap-2">
+          <Button variant="outline" onClick={() => setConfirmando(true)} disabled={!podeImportar}>
+            <CheckCircle2 />
+            Importar para Lista fria
+          </Button>
+          <Button onClick={() => setDisparando(true)} disabled={!podeImportar}>
+            <Send />
+            Importar e Disparar
+          </Button>
+        </div>
       </div>
+
+      {disparando && (
+        <ImportarEDispararDialog open={disparando} onOpenChange={setDisparando} buscaId={busca.id} selecionados={selecionados} />
+      )}
 
       <Dialog open={confirmando} onOpenChange={(v) => !importar.isPending && setConfirmando(v)}>
         <DialogContent className="sm:max-w-xl">
