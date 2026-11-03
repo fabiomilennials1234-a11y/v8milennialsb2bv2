@@ -1,4 +1,3 @@
-// deno-lint-ignore-file no-explicit-any
 /**
  * lista-fria-importar-e-disparar — importa os contatos selecionados de uma busca
  * da Lista fria, abre um negócio de cada um num funil e etapa escolhidos e
@@ -34,6 +33,16 @@ const LOTE_DA_IMPORTACAO = 200;
 const VOLTAS_DA_IMPORTACAO = 5; // teto de 500 contatos por pedido (a RPC de preparo já barra)
 const NEGOCIOS_EM_PARALELO = 5;
 
+/** As RPCs desta função não estão no catálogo de tipos gerado: chamada tipada à mão. */
+interface ErroDeRpc {
+  code?: string;
+  message?: string;
+  details?: string | null;
+}
+interface ClienteComRpc {
+  rpc(fn: string, args: Record<string, unknown>): PromiseLike<{ data: unknown; error: ErroDeRpc | null }>;
+}
+
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function json(status: number, body: unknown, headers: Record<string, string>): Response {
@@ -44,7 +53,7 @@ function json(status: number, body: unknown, headers: Record<string, string>): R
 }
 
 /** PostgREST devolve o ERRCODE PTxxx como `code` e o motivo em `details`. */
-function recusaDoBanco(error: { code?: string; message?: string; details?: string | null }) {
+function recusaDoBanco(error: ErroDeRpc) {
   const status = /^PT(\d{3})$/.test(error.code ?? "") ? Number(error.code!.slice(2)) : error.code === "42501" ? 403 : 500;
   return { status, body: { error: error.details ?? "erro", message: error.message ?? "Erro inesperado." } };
 }
@@ -77,6 +86,7 @@ Deno.serve(
     const supabaseUser = createClient(SUPABASE_URL, Deno.env.get("SUPABASE_ANON_KEY")!, {
       global: { headers: { Authorization: authHeader } },
     });
+    const rpcDoUsuario = supabaseUser as unknown as ClienteComRpc;
     const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
 
     const { data: userData, error: userErr } = await supabaseUser.auth.getUser(jwt);
@@ -129,7 +139,7 @@ Deno.serve(
     }
 
     // ── 1. Preparo: valida tudo no banco e abre o pedido ─────────────────────
-    const { data: preparo, error: preparoErr } = await (supabaseUser as any).rpc("lista_fria_disparo_preparar", {
+    const { data: preparo, error: preparoErr } = await rpcDoUsuario.rpc("lista_fria_disparo_preparar", {
       p_busca: buscaId,
       p_pipeline: pipelineId,
       p_stage: stageId,
@@ -142,8 +152,7 @@ Deno.serve(
       const r = recusaDoBanco(preparoErr);
       return json(r.status, r.body, cors);
     }
-    const disparoId = (preparo as any).disparo_id as string;
-    const orgId = (preparo as any).organization_id as string;
+    const { disparo_id: disparoId, organization_id: orgId } = preparo as { disparo_id: string; organization_id: string };
 
     const registrar = (campos: Record<string, unknown>) =>
       admin
@@ -169,7 +178,7 @@ Deno.serve(
       // ── 2. Importa ─────────────────────────────────────────────────────────
       let importados = 0;
       for (let volta = 0; volta < VOLTAS_DA_IMPORTACAO; volta++) {
-        const { data, error } = await (supabaseUser as any).rpc("lista_fria_importar", {
+        const { data, error } = await rpcDoUsuario.rpc("lista_fria_importar", {
           p_busca: buscaId,
           p_limite: LOTE_DA_IMPORTACAO,
         });
@@ -192,10 +201,10 @@ Deno.serve(
         .eq("busca_id", buscaId)
         .eq("organization_id", orgId)
         .not("lead_id", "is", null)
-        .gte("importado_em", (pedido as any).created_at)
+        .gte("importado_em", (pedido as { created_at: string }).created_at)
         .limit(1000);
       if (linhasErr) return await falhar("importando", linhasErr.message, { importados });
-      const leadIds = Array.from(new Set((linhas ?? []).map((l: any) => l.lead_id as string)));
+      const leadIds = Array.from(new Set(((linhas ?? []) as Array<{ lead_id: string }>).map((l) => l.lead_id)));
 
       if (leadIds.length === 0) {
         await registrar({ status: "concluido", finished_at: new Date().toISOString(), erro: "nada_importado" });
@@ -207,7 +216,7 @@ Deno.serve(
       const comNegocio: string[] = [];
       const semNegocio: { lead_id: string; motivo: string }[] = [];
       await emParalelo(leadIds, NEGOCIOS_EM_PARALELO, async (leadId) => {
-        const { error } = await (supabaseUser as any).rpc("abrir_negocio", {
+        const { error } = await rpcDoUsuario.rpc("abrir_negocio", {
           p_lead_id: leadId,
           p_pipe: pipelineId,
           p_stage: stageId,
