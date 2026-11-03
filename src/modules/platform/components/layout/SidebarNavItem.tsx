@@ -7,12 +7,15 @@
  * ícone mudo é adivinhação.
  */
 
+import { useEffect } from "react";
 import { NavLink } from "react-router-dom";
 import { ChevronRight, Lock } from "lucide-react";
 
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
+import { useNovidadeVista } from "@/modules/platform/hooks/useNovidadeVista";
 import type { NavNode } from "@/modules/platform/lib/navigation-model";
+import { novidadeNoPrazo } from "@/modules/platform/lib/novidade";
 
 interface SidebarNavItemProps {
   item: NavNode;
@@ -93,6 +96,26 @@ function RailBadge({ badge }: { badge: number | "dot" }) {
   );
 }
 
+/**
+ * Selo "Novo": anel dourado que pulsa devagar. Fica no canto do ícone no trilho e à direita do rótulo na
+ * lateral aberta. `motion-reduce` deixa só o selo, sem movimento.
+ */
+function SeloNovo({ rail }: { rail: boolean }) {
+  return (
+    <span
+      aria-hidden
+      data-testid="selo-novo"
+      className={cn(
+        "pointer-events-none rounded-full bg-primary px-1.5 py-px text-[8px] font-extrabold uppercase leading-3 tracking-wide text-primary-foreground",
+        "animate-novo-pulso motion-reduce:animate-none",
+        rail ? "absolute -right-1.5 -top-1" : "shrink-0",
+      )}
+    >
+      Novo
+    </span>
+  );
+}
+
 export function SidebarNavItem({
   item,
   active,
@@ -114,6 +137,13 @@ export function SidebarNavItem({
   const isParent = typeof expanded === "boolean";
   if (rail) collapsed = true;
 
+  const { vista, marcar } = useNovidadeVista(item.novo?.id);
+  const mostrarNovo = !!item.novo && !vista && !locked && novidadeNoPrazo(item);
+  // Abrir a tela apaga o selo. `active` cobre quem chega por URL; o clique, quem usa o menu.
+  useEffect(() => {
+    if (active && item.novo) marcar();
+  }, [active, item.novo, marcar]);
+
   const inner = (
     <>
       <ActiveRail active={active} rail={rail} />
@@ -125,8 +155,10 @@ export function SidebarNavItem({
         />
       )}
       {rail && badge !== undefined && <RailBadge badge={badge} />}
+      {rail && mostrarNovo && <SeloNovo rail />}
       {!collapsed && <span className="flex-1 truncate">{item.label}</span>}
       {!collapsed && locked && <Lock className="h-3 w-3 shrink-0 text-amber-500/70" />}
+      {!collapsed && mostrarNovo && <SeloNovo rail={false} />}
       {!collapsed && trailing}
       {!collapsed && isParent && !locked && (
         <ChevronRight
@@ -201,8 +233,9 @@ export function SidebarNavItem({
     row = (
       <NavLink
         to={item.path}
+        onClick={mostrarNovo ? marcar : undefined}
         onMouseEnter={onHoverPrefetch}
-        aria-label={collapsed ? item.label : undefined}
+        aria-label={collapsed ? (mostrarNovo ? `${item.label} (novo)` : item.label) : undefined}
         className={rowClasses(active, compact, rail)}
       >
         {inner}
