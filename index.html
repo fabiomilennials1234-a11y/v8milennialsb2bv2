@@ -112,6 +112,29 @@
   </head>
 
   <body>
+    <!--
+      Crawlers de IA (GPTBot, ClaudeBot, PerplexityBot) não executam JS: sem
+      isto, a home é um <div> vazio para eles. Fica fora do #root, então o
+      React nunca o toca; browser com JS não renderiza <noscript>.
+    -->
+    <noscript>
+      <main>
+        <h1>Torque CRM — o CRM B2B para fábricas e distribuidoras</h1>
+        <p>
+          Torque CRM é uma plataforma SaaS brasileira de gestão comercial para empresas que vendem
+          para outras empresas: funis de venda em kanban, automação de follow-ups e tarefas,
+          distribuição de leads, reativação de carteira, WhatsApp e outros canais, agentes de IA com
+          supervisão humana e painéis de desempenho do time. Planos a partir de R$ 297 por mês.
+        </p>
+        <ul>
+          <li><a href="/sobre">Sobre o Torque CRM</a></li>
+          <li><a href="/lp/v1/">Conheça o produto e agende uma demonstração</a></li>
+          <li><a href="/llms.txt">Resumo para assistentes de IA</a></li>
+          <li><a href="/termos">Termos de Serviço</a> · <a href="/privacidade">Privacidade</a></li>
+        </ul>
+        <p>Para usar a plataforma, ative o JavaScript no navegador.</p>
+      </main>
+    </noscript>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
