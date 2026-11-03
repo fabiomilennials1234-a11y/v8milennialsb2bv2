@@ -265,6 +265,43 @@ describe("headers sem junção", () => {
   });
 });
 
+describe("www → apex", () => {
+  const WWW = "https://www.torquecrm.com.br";
+
+  it("GET/HEAD → 301 para o apex mantendo caminho e query, sem tocar no servidor de assets", async () => {
+    const get = await call("/leads?x=1&y=%20", { host: WWW });
+    expect(get.status).toBe(301);
+    expect(get.headers.get("location")).toBe("https://torquecrm.com.br/leads?x=1&y=%20");
+    expect(get.headers.get("cache-control")).toBe("no-store, must-revalidate");
+    expectProfile(get, "app");
+    const head = await call("/", { host: WWW, method: "HEAD" });
+    expect(head.status).toBe(301);
+    expect(head.headers.get("location")).toBe("https://torquecrm.com.br/");
+    expect(assetCalls).toEqual([]);
+  });
+
+  it("POST na API → 308 (preserva método e corpo), sem chamar o Supabase", async () => {
+    const fetchSpy = vi.fn();
+    vi.stubGlobal("fetch", fetchSpy);
+    const response = await call("/api/v1/leads", { host: WWW, method: "POST", body: "{}" });
+    expect(response.status).toBe(308);
+    expect(response.headers.get("location")).toBe("https://torquecrm.com.br/api/v1/leads");
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it("token no caminho continua redigido no log", async () => {
+    await call("/reset-password/segredo123", { host: WWW });
+    const lines = logSpy.mock.calls.map(([line]) => String(line)).join("\n");
+    expect(lines).toContain('"status":301');
+    expect(lines).not.toContain("segredo123");
+  });
+
+  it("apex e outros hosts não redirecionam", async () => {
+    expect((await call("/", { host: "https://torquecrm.com.br" })).status).toBe(200);
+    expect((await call("/")).status).toBe(200);
+  });
+});
+
 describe("X-Robots-Tag (Div8)", () => {
   it("só em *.workers.dev", async () => {
     expect((await call("/")).headers.get("x-robots-tag")).toBe("noindex, nofollow");
