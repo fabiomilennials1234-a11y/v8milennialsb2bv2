@@ -149,6 +149,18 @@ describe("IntegrationsCatalog — gate por feature", () => {
     expect(within(catalogo).getByText("TorqueCalls")).toBeInTheDocument();
   });
 
+  it("o atalho do chat abre diretamente o painel do TorqueCalls", () => {
+    voiceCallsEnabled = true;
+    const previous = window.location.href;
+    try {
+      window.history.replaceState(null, "", "/configuracoes/integracoes?integracao=torquecalls");
+      render();
+      expect(screen.getByRole("dialog", { name: "TorqueCalls" })).toBeVisible();
+    } finally {
+      window.history.replaceState(null, "", previous);
+    }
+  });
+
   it("o badge de conectadas não conta um cartão escondido pela feature", () => {
     // TorqueCalls está "conectado" (voipSessionsData tem uma sessão aberta),
     // mas escondido — o badge tem que ignorá-lo, tanto na contagem de

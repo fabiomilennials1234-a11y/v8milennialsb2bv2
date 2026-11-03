@@ -368,6 +368,7 @@ function ChatView({
     <div className="flex flex-col h-full min-h-0 min-w-0">
       {isMobile ? (
         <MobileChatThreadHeader
+          isGroup={selectedContact?.is_group}
           contactName={contactName}
           phoneNumber={phoneNumber ?? ""}
           hasLead={!!effectiveLeadId}
@@ -377,6 +378,7 @@ function ChatView({
         />
       ) : (
         <ChatHeader
+          isGroup={selectedContact?.is_group}
           phoneNumber={phoneNumber ?? ""}
           contactName={contactName}
           hasLead={!!effectiveLeadId}
@@ -1068,6 +1070,7 @@ export function ChatShellWithContext() {
       selectedKey,
       selectedOfficialInstanceId,
       leadDeConversaNova?.name ?? null,
+      leadDeConversaNova?.id,
     );
   }, [socialContacts, selectedKey, isOfficialBox, selectedOfficialInstanceId, leadDeConversaNova]);
 

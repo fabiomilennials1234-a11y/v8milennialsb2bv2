@@ -13,6 +13,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { instanceColor } from "./utils/instanceColor";
 
 interface ChatBubbleHeaderProps {
+  callAction?: ReactNode;
   mode: "list" | "thread";
   // thread-mode props
   contactName?: string;
@@ -39,6 +40,7 @@ function getInitials(name: string): string {
 }
 
 export function ChatBubbleHeader({
+  callAction,
   mode,
   contactName,
   instanceName,
@@ -99,6 +101,7 @@ export function ChatBubbleHeader({
               )}
             </div>
           </div>
+          {callAction}
         </>
       ) : titleSlot ? (
         <div className="flex-1 min-w-0 flex items-center px-1">{titleSlot}</div>

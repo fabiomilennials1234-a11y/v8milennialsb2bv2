@@ -106,6 +106,7 @@ export function TorqueCallsSettings() {
       // A lista e as instâncias mudam juntas: desconectar também desliga
       // `voice_calls_enabled` no servidor.
       await queryClient.invalidateQueries({ queryKey: ["voip_sessions"] });
+      await queryClient.invalidateQueries({ queryKey: ["voip_voice_reach", organizationId] });
       await queryClient.invalidateQueries({ queryKey: ["whatsapp_instances"] });
     } catch (err) {
       notifyError(err, { fallback: "Não foi possível desconectar." });

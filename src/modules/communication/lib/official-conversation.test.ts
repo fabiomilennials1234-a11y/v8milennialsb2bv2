@@ -49,7 +49,7 @@ describe("contatoDeConversaNova", () => {
   const chave = `whatsapp_oficial:${INSTANCIA}:5547992176628`;
 
   it("monta o contato que a tela precisa para abrir o composer", () => {
-    const c = contatoDeConversaNova(chave, INSTANCIA, "Flavionei Silva");
+    const c = contatoDeConversaNova(chave, INSTANCIA, "Flavionei Silva", "lead-1");
 
     expect(c).toMatchObject({
       channel: "whatsapp_oficial",
@@ -57,6 +57,7 @@ describe("contatoDeConversaNova", () => {
       messaging_channel_id: INSTANCIA,
       external_user_id: "5547992176628",
       display_name: "Flavionei Silva",
+      lead_id: "lead-1",
       unread_count: 0,
     });
   });

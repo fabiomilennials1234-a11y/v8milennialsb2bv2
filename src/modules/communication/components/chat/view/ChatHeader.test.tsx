@@ -46,8 +46,8 @@ vi.mock("@/modules/communication/components/chat/history-sync/SyncChatButton", (
  * O botão de ligar com DOIS números, como no print: é o pior caso de largura
  * que o cabeçalho tem que aguentar. A suíte do botão em si é outra.
  */
-vi.mock("@/modules/communication/components/voice/VoiceCallButton", () => ({
-  VoiceCallButton: () => (
+vi.mock("@/modules/communication/components/voice/ChatCallButton", () => ({
+  ChatCallButton: () => (
     <div data-testid="ligar" className="inline-flex shrink-0">
       <button type="button">Ligar</button>
       <button type="button" aria-label="Trocar o número que vai ligar. Agora: Gabrielly-SDR." />
@@ -88,6 +88,10 @@ const linhaDoNome = () => nome().parentElement!;
 const blocoDoContato = () => nome().closest('[role="button"]')!;
 
 describe("ChatHeader — o contato é o último a perder espaço", () => {
+  it("oferece ligação para contatos, mas não para grupos", () => {
+    montar({ isGroup: true });
+    expect(screen.queryByRole("button", { name: "Ligar" })).not.toBeInTheDocument();
+  });
   it("does not offer lead creation before the first successful send", () => {
     montar({ hasLead: false, onOpenLeadModal: undefined });
     expect(screen.queryByRole("button", { name: "Criar lead" })).not.toBeInTheDocument();

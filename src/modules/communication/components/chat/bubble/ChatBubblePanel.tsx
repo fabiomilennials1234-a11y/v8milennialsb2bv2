@@ -12,6 +12,7 @@ import { useLocation } from "react-router-dom";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { useChatBubble } from "@/modules/communication/hooks/useChatBubble";
 import { ChatBubbleHeader } from "./ChatBubbleHeader";
+import { ChatCallButton } from "../../voice/ChatCallButton";
 import { ChatBubbleSearch } from "./ChatBubbleSearch";
 import { ChatBubbleConversationList } from "./ChatBubbleConversationList";
 import { ChatBubbleThread } from "./ChatBubbleThread";
@@ -90,18 +91,23 @@ function PanelContent() {
   if (inThread && selectedInstance && selectedPhone) {
     return (
       <div className="flex flex-col h-full">
-        <ChatBubbleHeader
-          mode="thread"
-          contactName={pendingLeadName || selectedPhone}
-          instanceName={selectedInstance.instance_name}
-          showInstanceDot={instances.length > 1}
-          instanceId={selectedInstanceId}
-          onBack={backToList}
-          onMinimize={toggleMinimized}
-          onClose={close}
-        />
-        <ChatBubbleRealtimePill show={isReconnecting} />
         <ChatBubbleThread
+          renderHeader={(leadId, isGroup) => (
+            <>
+              <ChatBubbleHeader
+                mode="thread"
+                contactName={pendingLeadName || selectedPhone}
+                instanceName={selectedInstance.instance_name}
+                showInstanceDot={instances.length > 1}
+                instanceId={selectedInstanceId}
+                onBack={backToList}
+                onMinimize={toggleMinimized}
+                onClose={close}
+                callAction={!isGroup && <ChatCallButton variant="icon" leadId={leadId} leadName={pendingLeadName || selectedPhone} />}
+              />
+              <ChatBubbleRealtimePill show={isReconnecting} />
+            </>
+          )}
           phoneNumber={selectedPhone}
           instanceId={selectedInstanceId!}
           instanceName={selectedInstance.instance_name}

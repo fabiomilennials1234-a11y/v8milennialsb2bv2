@@ -1,13 +1,14 @@
 import { ArrowLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { VoiceCallButton } from "@/modules/communication/components/voice/VoiceCallButton";
+import { ChatCallButton } from "@/modules/communication/components/voice/ChatCallButton";
 import {
   legendaDoTelefone,
   telefoneParaExibicao,
 } from "@/modules/communication/lib/identificadorOculto";
 
 export interface MobileChatThreadHeaderProps {
+  isGroup?: boolean;
   contactName: string;
   phoneNumber: string;
   hasLead: boolean;
@@ -17,6 +18,7 @@ export interface MobileChatThreadHeaderProps {
 }
 
 export function MobileChatThreadHeader({
+  isGroup,
   contactName,
   phoneNumber,
   hasLead,
@@ -66,10 +68,7 @@ export function MobileChatThreadHeader({
         </div>
       </div>
 
-      {/* Ligar por WhatsApp (TorqueCalls) — a mesma regra do cabeçalho de
-          mesa: some sem número de voz ao alcance ou sem lead. Vive fora do
-          bloco clicável do contato, e ainda assim segura o clique. */}
-      <VoiceCallButton variant="icon" leadId={leadId} leadName={contactName} />
+      {!isGroup && <ChatCallButton variant="icon" leadId={leadId} leadName={contactName} onOpenLead={onTapContact} />}
     </div>
   );
 }

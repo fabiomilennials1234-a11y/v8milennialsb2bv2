@@ -63,6 +63,7 @@ const PROJECAO_DA_LIGACAO_MS = 2500;
 
 
 interface VoiceCallContextValue {
+  numbersLoading: boolean;
   /** true enquanto houver qualquer chamada em andamento. */
   busy: boolean;
   /** Os números ao alcance dele, em ordem estável (por nome). */
@@ -90,6 +91,7 @@ interface VoiceCallContextValue {
 }
 
 const VoiceCallContext = createContext<VoiceCallContextValue>({
+  numbersLoading: true,
   busy: false,
   numbers: [],
   selected: null,
@@ -104,7 +106,7 @@ export function useVoiceCallContext() {
 }
 
 export function VoiceCallProvider({ children }: { children: ReactNode }) {
-  const { numbers } = useCallableVoiceNumbers();
+  const { numbers, isLoading: numbersLoading } = useCallableVoiceNumbers();
   const [preferido, setPreferido] = usePersistedState<string | null>(
     PREFERENCIA_TELA,
     null,
@@ -313,6 +315,7 @@ export function VoiceCallProvider({ children }: { children: ReactNode }) {
 
   const value = useMemo<VoiceCallContextValue>(
     () => ({
+      numbersLoading,
       busy,
       numbers,
       selected,
@@ -321,7 +324,7 @@ export function VoiceCallProvider({ children }: { children: ReactNode }) {
       answerIncoming,
       dismissIncoming,
     }),
-    [numbers, busy, selected, selectNumber, startCall, answerIncoming, dismissIncoming],
+    [numbersLoading, numbers, busy, selected, selectNumber, startCall, answerIncoming, dismissIncoming],
   );
 
   return (
