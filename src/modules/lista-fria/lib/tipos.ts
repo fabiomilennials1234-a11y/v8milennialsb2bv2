@@ -69,12 +69,13 @@ export const ROTULO_QUALIDADE: Record<QualidadeDoContato, string> = {
 };
 
 /**
- * Instagram disponível na tela (29/10/2026). O worker da VPS roda o adaptador da Apify, validado ponta a
- * ponta em produção (40 seguidores analisados, 10 contatos verificados, 286 s). Gasta crédito META
- * (ADR-0044). Sem `APIFY_TOKEN` no worker, a busca fecha como `instagram_indisponivel` e devolve a
- * reserva ao saldo Meta, então desligar o provedor não faz ninguém perder crédito.
+ * Instagram na tela: DESLIGADO (03/11/2026) — o cartão aparece como "Em breve" e não abre. Google Maps e CNAE
+ * seguem disponíveis. Só esconde a porta da tela: o adaptador da Apify no worker, o saldo Meta e os testes
+ * do fluxo ficam como estão (validado ponta a ponta em 29/10: 40 seguidores, 10 contatos, 286 s). Para
+ * reabrir, troque para `true`. Gasta crédito META (ADR-0044); sem `APIFY_TOKEN` no worker a busca fecha como
+ * `instagram_indisponivel` e devolve a reserva, então reabrir nunca faz ninguém perder crédito.
  */
-export const INSTAGRAM_DISPONIVEL = true;
+export const INSTAGRAM_DISPONIVEL = false;
 
 /**
  * Tamanho de uma busca de Instagram, em créditos Meta (ADR-0047): 1 crédito = 1 seguidor varrido e a reserva é

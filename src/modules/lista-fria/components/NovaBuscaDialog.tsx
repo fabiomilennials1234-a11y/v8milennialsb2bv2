@@ -287,7 +287,7 @@ export function NovaBuscaDialog({
               <span>
                 <b className="tabular-nums text-primary">{saldos === undefined ? "·" : saldos.normal} créditos</b> e{" "}
                 <b className="tabular-nums text-primary">{saldos === undefined ? "·" : saldos.meta} créditos Meta</b> disponíveis · Google Maps e CNPJ: 1
-                crédito por contato novo e válido · Instagram: 1 crédito Meta por seguidor analisado
+                crédito por contato novo e válido{INSTAGRAM_DISPONIVEL ? " · Instagram: 1 crédito Meta por seguidor analisado" : ""}
               </span>
               <BotaoComprarCreditos />
             </p>

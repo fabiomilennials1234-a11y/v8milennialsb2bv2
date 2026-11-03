@@ -5,16 +5,52 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { NovaBuscaDialog } from "./NovaBuscaDialog";
 
 // A criação da busca vai ao banco; aqui só importa o que a tela mostra e o que ela manda.
-const { criar } = vi.hoisted(() => ({ criar: vi.fn() }));
+const { criar, instagram } = vi.hoisted(() => ({ criar: vi.fn(), instagram: { disponivel: true } }));
 vi.mock("../hooks/useListaFriaMutacoes", () => ({
   useCriarBusca: () => ({ mutate: criar, isPending: false }),
 }));
+
+// O Instagram está "Em breve" em produção; o fluxo dele segue coberto ligando a flag só aqui.
+vi.mock("../lib/tipos", async (importarOriginal) => {
+  const original = await importarOriginal<typeof import("../lib/tipos")>();
+  return {
+    ...original,
+    get INSTAGRAM_DISPONIVEL() {
+      return instagram.disponivel;
+    },
+  };
+});
 
 function montar(saldos = { normal: 160, meta: 10 }) {
   render(<NovaBuscaDialog aberto onFechar={() => {}} saldos={saldos} />);
 }
 
-beforeEach(() => criar.mockClear());
+beforeEach(() => {
+  criar.mockClear();
+  instagram.disponivel = true;
+});
+
+describe("NovaBuscaDialog: fontes disponíveis", () => {
+  it("Instagram aparece como Em breve e não abre; Google Maps e CNAE abrem", async () => {
+    instagram.disponivel = false;
+    const user = userEvent.setup();
+    montar();
+    const cartaoInstagram = screen.getByRole("button", { name: /Instagram/ });
+    expect(cartaoInstagram).toBeDisabled();
+    expect(cartaoInstagram).toHaveTextContent("Em breve");
+    expect(screen.getByRole("button", { name: /Google Maps/ })).toBeEnabled();
+    expect(screen.getByRole("button", { name: /Empresas por CNAE/ })).toBeEnabled();
+    expect(screen.queryByText(/Instagram: 1 crédito Meta/)).not.toBeInTheDocument();
+
+    await user.click(cartaoInstagram);
+    expect(screen.queryByLabelText("URL da conta")).not.toBeInTheDocument();
+  });
+
+  it("a flag de produção está desligada", async () => {
+    const { INSTAGRAM_DISPONIVEL } = await vi.importActual<typeof import("../lib/tipos")>("../lib/tipos");
+    expect(INSTAGRAM_DISPONIVEL).toBe(false);
+  });
+});
 
 describe("NovaBuscaDialog: onde comprar créditos", () => {
   it('mostra o "+" ao lado dos saldos, na escolha da fonte, e ele abre os pacotes', async () => {
