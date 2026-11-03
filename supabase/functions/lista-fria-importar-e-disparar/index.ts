@@ -157,7 +157,7 @@ Deno.serve(
     const registrar = (campos: Record<string, unknown>) =>
       admin
         .from("lista_fria_disparos")
-        .update({ ...campos, updated_at: new Date().toISOString() })
+        .update({ ...campos, ultimo_sinal_em: new Date().toISOString() })
         .eq("id", disparoId);
 
     const falhar = async (fase: string, erro: string, extra: Record<string, unknown> = {}) => {

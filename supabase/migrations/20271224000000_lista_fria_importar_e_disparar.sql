@@ -38,12 +38,14 @@ CREATE TABLE public.lista_fria_disparos (
   erro             text,
   criado_por       uuid,
   created_at       timestamptz NOT NULL DEFAULT now(),
-  updated_at       timestamptz NOT NULL DEFAULT now(),
+  ultimo_sinal_em  timestamptz NOT NULL DEFAULT now(),
   finished_at      timestamptz
 );
 
 COMMENT ON TABLE public.lista_fria_disparos IS
   'Pedido de "Importar e Disparar" da Lista fria (ADR-0048). Um ativo por busca; escrito só pela edge function lista-fria-importar-e-disparar.';
+COMMENT ON COLUMN public.lista_fria_disparos.ultimo_sinal_em IS
+  'Último sinal de vida da edge function neste pedido. Pedido ativo sem sinal há 15 min é dado como abandonado. NÃO é âncora de métrica.';
 COMMENT ON COLUMN public.lista_fria_disparos.plan_id IS
   'blast_plans.id do disparo cadenciado. Sem FK de propósito: apagar o plano não apaga o registro do pedido.';
 
@@ -167,10 +169,10 @@ BEGIN
 
   -- Pedido que travou (a edge function morreu no meio) não prende a busca para sempre.
   UPDATE public.lista_fria_disparos
-     SET status = 'falhou', erro = 'abandonado', finished_at = now(), updated_at = now()
+     SET status = 'falhou', erro = 'abandonado', finished_at = now(), ultimo_sinal_em = now()
    WHERE busca_id = p_busca
      AND status IN ('importando', 'negocios', 'disparando')
-     AND updated_at < now() - interval '15 minutes';
+     AND ultimo_sinal_em < now() - interval '15 minutes';
 
   BEGIN
     INSERT INTO public.lista_fria_disparos

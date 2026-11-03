@@ -238,7 +238,7 @@ SELECT throws_ok(
 
 -- Pedido travado há mais de 15 minutos não prende a busca.
 SET LOCAL role postgres;
-UPDATE public.lista_fria_disparos SET updated_at = now() - interval '20 minutes';
+UPDATE public.lista_fria_disparos SET ultimo_sinal_em = now() - interval '20 minutes';
 SET LOCAL role authenticated;
 SELECT pg_temp.as_user('22f0a000-0000-4000-8000-0000000000a1');
 
