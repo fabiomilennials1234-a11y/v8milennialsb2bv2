@@ -13,6 +13,7 @@ import { buscarPagina, ipNaoPublico, lookupSeguro, urlPermitida } from '../../se
 import { decodificarCfEmail, extrairContatosDoHtml, lerSite } from '../../services/lista-fria-worker/src/site.ts';
 import { aderentes, expandirBusca } from '../../services/lista-fria-worker/src/ia.ts';
 import { qualidadeDoContato } from '../../services/lista-fria-worker/src/validar.ts';
+import { bairrosDaCidade, bairrosParaLimite, limparBairros, separarCidade, sqlDosBairros } from '../../services/lista-fria-worker/src/bairros.ts';
 import { CFG_PADRAO, executarMaps, montarKeywords } from '../../services/lista-fria-worker/src/executor.ts';
 import { bancoPelaRede } from '../../services/lista-fria-worker/src/db.ts';
 import {
@@ -339,7 +340,7 @@ describe('qualidade do contato', () => {
 });
 
 // ── executor (ambiente falso) ──────────────────────────────────────────────
-function ambienteFalso({ ticks, ia = null, site = async () => ({ emails: [], whatsapps: [], telefones: [] }), limite = 100, criarFalha = null, statusDoBanco = () => 'executando', abortarEm = Infinity, registrarFn = null }) {
+function ambienteFalso({ ticks, ia = null, site = async () => ({ emails: [], whatsapps: [], telefones: [] }), limite = 100, criarFalha = null, statusDoBanco = () => 'executando', abortarEm = Infinity, registrarFn = null, bairros = undefined }) {
   const reg = { jobs: [], registros: [], progressos: [], encerrar: [], apagados: 0, logs: [], siteChamado: [], iaChamadas: 0 };
   // `esperar` avança ANTES de cada leitura: começa em -1 para a primeira volta ler o primeiro tick.
   let i = -1; let relogio = 0;
@@ -361,6 +362,7 @@ function ambienteFalso({ ticks, ia = null, site = async () => ({ emails: [], wha
       apagar: async () => { reg.apagados++; },
     },
     ia,
+    bairros,
     site: async (u) => { reg.siteChamado.push(u); return site(u); },
     mx: async () => true,
     esperar: async () => { i++; relogio += 5_000; },
@@ -379,6 +381,92 @@ describe('montarKeywords', () => {
     const k = montarKeywords('Dentistas', 'São Paulo - SP', { variantes: ['dentistas', 'Ortodontia'], bairros: ['Pinheiros', 'Moema'] });
     assert.deepEqual(k, ['Dentistas em São Paulo - SP', 'Ortodontia em São Paulo - SP', 'Dentistas em Pinheiros, São Paulo - SP', 'Dentistas em Moema, São Paulo - SP']);
     assert.equal(montarKeywords('a', 'b', { variantes: [], bairros: Array.from({ length: 50 }, (_, n) => `B${n}`) }).length, 30);
+  });
+});
+
+describe('bairros (ADR-0049)', () => {
+  test('separarCidade: UF por hífen, vírgula ou barra; município como a base guarda (maiúsculo, sem acento)', () => {
+    assert.deepEqual(separarCidade('Florianópolis - SC'), { municipio: 'FLORIANOPOLIS', uf: 'SC' });
+    assert.deepEqual(separarCidade('São Paulo, sp'), { municipio: 'SAO PAULO', uf: 'SP' });
+    assert.deepEqual(separarCidade('Joinville/SC'), { municipio: 'JOINVILLE', uf: 'SC' });
+    assert.deepEqual(separarCidade('  São   José '), { municipio: 'SAO JOSE', uf: null });
+  });
+  test('separarCidade: dois caracteres finais que não são UF fazem parte do nome; texto estranho não é cidade', () => {
+    assert.deepEqual(separarCidade('Rio de Janeiro - ZZ'), { municipio: 'RIO DE JANEIRO - ZZ', uf: null });
+    assert.equal(separarCidade("x'; DROP TABLE y;--"), null);
+    assert.equal(separarCidade('a'), null);
+    assert.equal(separarCidade('c'.repeat(81)), null);
+  });
+  test('limparBairros: junta grafias, tira o que não é bairro, ordena por empresas e capitaliza', () => {
+    const l = [
+      { uf: 'SC', bairro: 'CENTRO', n: 100 }, { uf: 'SC', bairro: 'Centro.', n: 20 }, { uf: 'SC', bairro: 'BAIRRO CENTRO', n: 5 },
+      { uf: 'SC', bairro: 'SAO JOAO DO RIO VERMELHO', n: 50 }, { uf: 'SC', bairro: 'S/N', n: 900 }, { uf: 'SC', bairro: 'QD 12', n: 400 },
+      { uf: 'SC', bairro: 'ZONA RURAL', n: 300 }, { uf: 'SC', bairro: 'FLORIANOPOLIS', n: 200 }, { uf: 'SC', bairro: 'AB', n: 90 }, { uf: 'SC', bairro: 'RARO', n: 2 },
+    ];
+    assert.deepEqual(limparBairros(l, 'FLORIANOPOLIS'), [{ nome: 'Centro', n: 125 }, { nome: 'Sao Joao do Rio Vermelho', n: 50 }]);
+  });
+  test('bairrosParaLimite: ~1 consulta a cada 8 créditos, entre 4 e 29', () => {
+    assert.equal(bairrosParaLimite(3), 4);
+    assert.equal(bairrosParaLimite(150), 19);
+    assert.equal(bairrosParaLimite(5000), 29);
+  });
+  test('sqlDosBairros: município e UF por parâmetro, nunca no texto do SQL', () => {
+    const { sql, valores } = sqlDosBairros(['/d/a.parquet'], 'SC', "X'Y");
+    assert.deepEqual(valores, ["X'Y", 'SC']);
+    assert.ok(!sql.includes("X'Y") && sql.includes('municipio = $1') && sql.includes('uf = $2') && sql.includes('LIMIT 300'));
+    assert.deepEqual(sqlDosBairros(['/d/a.parquet'], null, 'X').valores, ['X']);
+  });
+  test('bairrosDaCidade: os mais densos, na ordem; total é o que a cidade tem', async () => {
+    const consulta = { bairros: async (uf, mun) => { assert.deepEqual([uf, mun], ['SC', 'FLORIANOPOLIS']); return [{ uf: 'SC', bairro: 'CENTRO', n: 90 }, { uf: 'SC', bairro: 'TRINDADE', n: 40 }, { uf: 'SC', bairro: 'ESTREITO', n: 30 }]; } };
+    assert.deepEqual(await bairrosDaCidade(consulta, 'Florianópolis - SC', 2), { bairros: ['Centro', 'Trindade'], total: 3 });
+  });
+  test('bairrosDaCidade: sem UF e o nome existe em dois estados = ambígua, não mistura', async () => {
+    const consulta = { bairros: async () => [{ uf: 'SC', bairro: 'CENTRO', n: 90 }, { uf: 'PR', bairro: 'CENTRO', n: 80 }] };
+    assert.deepEqual(await bairrosDaCidade(consulta, 'Santa Cruz', 5), { bairros: [], total: 0, motivo: 'cidade_ambigua' });
+  });
+  test('bairrosDaCidade: sem UF e uma só UF casa: usa; cidade sem dados e cidade inválida dizem o motivo', async () => {
+    const um = { bairros: async () => [{ uf: 'SC', bairro: 'CENTRO', n: 90 }] };
+    assert.deepEqual((await bairrosDaCidade(um, 'São José', 5)).bairros, ['Centro']);
+    assert.equal((await bairrosDaCidade({ bairros: async () => [] }, 'Nada', 5)).motivo, 'sem_dados');
+    assert.equal((await bairrosDaCidade(um, '!!!', 5)).motivo, 'cidade_invalida');
+  });
+});
+
+describe('executarMaps com bairros da base (ADR-0049)', () => {
+  const lugarUnico = () => csvDe([lugar({ titulo: 'A', phone: '(11) 99319-5517' })]);
+  test('sem IA: a cidade inteira vai primeiro e cada bairro vira uma palavra-chave; depth cai porque há mais consultas', async () => {
+    const bairros = async (cidade, qtd) => { assert.equal(cidade, 'São Paulo - SP'); assert.equal(qtd, bairrosParaLimite(100)); return { bairros: ['Centro', 'Pinheiros', 'Moema'], total: 40 }; };
+    const { amb, reg } = ambienteFalso({ ticks: [{ status: 'ok', csv: lugarUnico() }], bairros });
+    await executarMaps(BUSCA, amb, CFG);
+    assert.deepEqual(reg.jobs[0].keywords, ['Dentistas em São Paulo - SP', 'Dentistas em Centro, São Paulo - SP', 'Dentistas em Pinheiros, São Paulo - SP', 'Dentistas em Moema, São Paulo - SP']);
+    assert.equal(reg.jobs[0].depth, 3);
+    assert.equal(reg.logs.find(([e]) => e === 'bairros_da_base')[1].usados, 3);
+  });
+  test('a IA que já trouxe bairros manda: a base nem é consultada', async () => {
+    let chamou = false;
+    const ia = { expandir: async () => ({ variantes: [], bairros: ['Vila Mariana'] }), aderentes: async () => new Map() };
+    const { amb, reg } = ambienteFalso({ ticks: [{ status: 'ok', csv: lugarUnico() }], ia, bairros: async () => { chamou = true; return { bairros: ['X'], total: 1 }; } });
+    await executarMaps(BUSCA, amb, CFG);
+    assert.equal(chamou, false);
+    assert.deepEqual(reg.jobs[0].keywords, ['Dentistas em São Paulo - SP', 'Dentistas em Vila Mariana, São Paulo - SP']);
+  });
+  test('base sem dados para a cidade: segue como antes, uma consulta só', async () => {
+    const { amb, reg } = ambienteFalso({ ticks: [{ status: 'ok', csv: lugarUnico() }], bairros: async () => ({ bairros: [], total: 0, motivo: 'sem_dados' }) });
+    await executarMaps(BUSCA, amb, CFG);
+    assert.deepEqual(reg.jobs[0].keywords, ['Dentistas em São Paulo - SP']);
+    assert.equal(reg.jobs[0].depth, 10);
+  });
+  test('a consulta à base lançar não derruba a busca', async () => {
+    const { amb, reg } = ambienteFalso({ ticks: [{ status: 'ok', csv: lugarUnico() }], bairros: async () => { throw new Error('duckdb caiu'); } });
+    await executarMaps(BUSCA, amb, CFG);
+    assert.deepEqual(reg.jobs[0].keywords, ['Dentistas em São Paulo - SP']);
+    assert.ok(reg.logs.some(([e]) => e === 'bairros_da_base_falhou_segue_sem'));
+    assert.equal(reg.encerrar.at(-1)[0], 'concluida');
+  });
+  test('sem o provedor de bairros (base ausente ou LISTA_FRIA_BAIRROS=0): comportamento antigo', async () => {
+    const { amb, reg } = ambienteFalso({ ticks: [{ status: 'ok', csv: lugarUnico() }] });
+    await executarMaps(BUSCA, amb, CFG);
+    assert.deepEqual(reg.jobs[0].keywords, ['Dentistas em São Paulo - SP']);
   });
 });
 
