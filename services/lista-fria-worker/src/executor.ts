@@ -17,6 +17,7 @@ import type { Banco, BuscaDaFila, ItemParaRegistrar, Progresso } from "./db.ts";
 import { ehCelular, normalizarTelefoneBR, whatsappDoLink } from "./contatos.ts";
 import type { ContatosDoSite } from "./site.ts";
 import type { Expansao } from "./ia.ts";
+import { bairrosParaLimite, type ResultadoDosBairros } from "./bairros.ts";
 import { linhasDoCsv, type LinhaDoMaps, type NovoJob } from "./gosom.ts";
 import { qualidadeDoContato, type ResolverMx } from "./validar.ts";
 
@@ -92,6 +93,11 @@ export interface Ambiente {
     expandir(nicho: string, cidade: string): Promise<Expansao>;
     aderentes(nicho: string, itens: Array<{ id: string; titulo: string; categoria: string | null }>): Promise<Map<string, boolean>>;
   } | null;
+  /**
+   * Os `quantidade` bairros mais densos da cidade, da base de CNPJ (ADR-0049). Ausente = sem base ou
+   * desligado: a busca segue com a cidade inteira como uma consulta só.
+   */
+  bairros?: (cidade: string, quantidade: number) => Promise<ResultadoDosBairros>;
   site(url: string): Promise<ContatosDoSite>;
   mx: ResolverMx;
   esperar(ms: number): Promise<void>;
@@ -185,6 +191,17 @@ export function fonteMaps(busca: BuscaDaFila, amb: Ambiente, cfg: CfgDoExecutor)
           exp = await amb.ia.expandir(nicho, cidade);
         } catch (e) {
           amb.log("ia_expandir_falhou_segue_sem", { busca: busca.id, erro: String(e) });
+        }
+      }
+      // Sem IA (ou com IA que não trouxe bairros), os bairros saem da base de CNPJ. Falha aqui NUNCA
+      // derruba a busca: ela volta a ser uma consulta só pela cidade, como era antes.
+      if (!exp?.bairros.length && amb.bairros) {
+        try {
+          const b = await amb.bairros(cidade, bairrosParaLimite(limite));
+          amb.log("bairros_da_base", { busca: busca.id, cidade, usados: b.bairros.length, total: b.total, motivo: b.motivo ?? null });
+          if (b.bairros.length) exp = { variantes: exp?.variantes ?? [], bairros: b.bairros };
+        } catch (e) {
+          amb.log("bairros_da_base_falhou_segue_sem", { busca: busca.id, erro: String(e) });
         }
       }
       const keywords = montarKeywords(nicho, cidade, exp);

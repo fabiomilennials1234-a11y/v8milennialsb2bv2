@@ -7,6 +7,7 @@
  */
 import { DuckDBInstance } from "@duckdb/node-api";
 
+import { sqlDosBairros, type ConsultaDeBairros, type LinhaDeBairro } from "./bairros.ts";
 import type { ConsultaCnpj, ExigeContato, FiltrosCnpj, LinhaCnpj } from "./fonte-cnpj.ts";
 
 const CONDICAO_DE_CONTATO: Record<ExigeContato, string> = {
@@ -48,7 +49,7 @@ export function sqlDaBusca(arquivos: readonly string[], f: FiltrosCnpj, depois: 
   return { sql, valores };
 }
 
-export async function consultaDuckdb(arquivos: readonly string[]): Promise<ConsultaCnpj & { fechar(): void }> {
+export async function consultaDuckdb(arquivos: readonly string[]): Promise<ConsultaCnpj & ConsultaDeBairros & { fechar(): void }> {
   const instancia = await DuckDBInstance.create(":memory:");
   const conexao = await instancia.connect();
   // A VPS é compartilhada com o Torque: teto de memória e de threads para a consulta.
@@ -59,6 +60,11 @@ export async function consultaDuckdb(arquivos: readonly string[]): Promise<Consu
       const { sql, valores } = sqlDaBusca(arquivos, filtros, depois, limite);
       const leitor = await conexao.runAndReadAll(sql, valores);
       return leitor.getRowObjectsJson() as unknown as LinhaCnpj[];
+    },
+    async bairros(uf, municipio) {
+      const { sql, valores } = sqlDosBairros(arquivos, uf, municipio);
+      const leitor = await conexao.runAndReadAll(sql, valores);
+      return leitor.getRowObjectsJson() as unknown as LinhaDeBairro[];
     },
     fechar() {
       conexao.closeSync();

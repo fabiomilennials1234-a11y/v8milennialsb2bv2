@@ -32,6 +32,7 @@ import { CFG_INSTAGRAM_SESSAO_PADRAO, cfgInstagramDaApify, fonteInstagram, type 
 import { apagarJob, baixarCsv, criarJob, lerJob, type GosomCfg } from "./gosom.ts";
 import { aderentes, expandirBusca, type IaCfg } from "./ia.ts";
 import { sincronizarBase, type BaseLocal } from "./base-cnpj.ts";
+import { bairrosDaCidade, type ConsultaDeBairros } from "./bairros.ts";
 import type { ConsultaCnpj } from "./fonte-cnpj.ts";
 import { CFG_CNPJ_PADRAO, fonteCnpj } from "./fonte-cnpj.ts";
 import { lerSite } from "./site.ts";
@@ -122,13 +123,13 @@ async function main() {
   const dirBase = process.env.LISTA_FRIA_BASE_DIR || "/data/base";
   let baseCnpj: BaseLocal | null = null;
   let ultimaSyncBase = 0;
-  let consulta: (ConsultaCnpj & { fechar(): void }) | null = null;
+  let consulta: (ConsultaCnpj & ConsultaDeBairros & { fechar(): void }) | null = null;
   let consultaSha = "";
   const manterBase = async () => {
     ultimaSyncBase = Date.now();
     baseCnpj = (await sincronizarBase({ url, chave, dir: dirBase }, log)) ?? baseCnpj;
   };
-  const consultaCnpj = async (): Promise<ConsultaCnpj | null> => {
+  const consultaCnpj = async (): Promise<(ConsultaCnpj & ConsultaDeBairros) | null> => {
     if (!baseCnpj) return null;
     if (consultaSha !== baseCnpj.manifesto.sha256) {
       consulta?.fechar();
@@ -160,6 +161,14 @@ async function main() {
     ia: iaCfg
       ? { expandir: (n, c) => expandirBusca(iaCfg, n, c), aderentes: (n, itens) => aderentes(iaCfg, n, itens) }
       : null,
+    // Bairros da cidade pela base de CNPJ. LISTA_FRIA_BAIRROS=0 desliga (a busca volta a ser uma consulta só).
+    bairros:
+      process.env.LISTA_FRIA_BAIRROS === "0"
+        ? undefined
+        : async (cidade, quantidade) => {
+            const c = await consultaCnpj();
+            return c ? await bairrosDaCidade(c, cidade, quantidade) : { bairros: [], total: 0, motivo: "sem_dados" };
+          },
     site: (u) => lerSite(u),
     mx: mxPelaRede(),
     esperar: (ms) => pausa(ms),
