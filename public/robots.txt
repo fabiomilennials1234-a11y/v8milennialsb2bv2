@@ -1,14 +1,28 @@
-User-agent: Googlebot
-Allow: /
-
-User-agent: Bingbot
-Allow: /
-
-User-agent: Twitterbot
-Allow: /
-
-User-agent: facebookexternalhit
-Allow: /
+# Torque CRM — https://torquecrm.com.br
+# Resumo para IA: https://torquecrm.com.br/llms.txt
 
 User-agent: *
 Allow: /
+Disallow: /api/v1/
+
+# Buscadores e assistentes de IA: liberados de forma explícita.
+User-agent: Googlebot
+User-agent: Google-Extended
+User-agent: Bingbot
+User-agent: Applebot
+User-agent: Applebot-Extended
+User-agent: GPTBot
+User-agent: OAI-SearchBot
+User-agent: ChatGPT-User
+User-agent: ClaudeBot
+User-agent: Claude-SearchBot
+User-agent: Claude-User
+User-agent: PerplexityBot
+User-agent: Perplexity-User
+User-agent: DuckAssistBot
+User-agent: Twitterbot
+User-agent: facebookexternalhit
+Allow: /
+Disallow: /api/v1/
+
+Sitemap: https://torquecrm.com.br/sitemap.xml
