@@ -11,6 +11,7 @@
 - Acesso: navegador (web) e instalável como app (PWA) no celular
 - Responsável pelo produto: Gabriel Aurelio Gipp, CNPJ 54.384.269/0001-48
 - Contato: acesso@torquecrm.com.br
+- Instagram oficial: https://www.instagram.com/torquecrm/
 - App na Meta: TORQUECRM Integrações
 
 ### Desambiguação
