@@ -15,6 +15,9 @@ import {
 export type PairingStatus =
   | "ocioso" | "criando" | "aguardando-qr" | "qr-na-tela" | "pareado" | "falhou";
 
+const QR_GRACE_MS = 5_000;
+const QR_TIMEOUT_MS = 30_000;
+
 /**
  * Orquestra o pareamento de um número.
  *
@@ -102,7 +105,7 @@ export function useVoicePairing() {
    * para sempre — sem erro nenhum. Falha silenciosa é o modo que este projeto
    * mais paga caro.
    */
-  const openStream = useCallback(async (tcSessionId: string, generation: number) => {
+  const openStream = useCallback(async (tcSessionId: string, generation: number, retrying = false) => {
     // Aborta um stream anterior (o caso do `retry` reabrindo em cima de um
     // que já morreu) para nunca deixar dois vivos ao mesmo tempo.
     abortRef.current?.abort();
@@ -120,27 +123,55 @@ export function useVoicePairing() {
     abortRef.current = controller;
     setStatus("aguardando-qr");
 
+    const isCurrent = () => !controller.signal.aborted && generationRef.current === generation;
+    const fail = (message: string) => {
+      if (!isCurrent()) return;
+      controller.abort();
+      setQr(null);
+      setStatus("falhou");
+      setError(message);
+    };
+    let receivedQr = false;
+    let retryTimer: ReturnType<typeof setTimeout> | undefined;
+    const timeout = setTimeout(() => fail("O servidor de voz não enviou o QR Code a tempo. Tente de novo."), QR_TIMEOUT_MS);
+    const clearTimers = () => {
+      clearTimeout(timeout);
+      clearTimeout(retryTimer);
+    };
+    controller.signal.addEventListener("abort", clearTimers, { once: true });
+
+    const requestQr = () => {
+      if (!isCurrent() || receivedQr) return;
+      void pairVoiceSession({ tcSessionId, organizationId: organizationId ?? undefined }).catch((err) => {
+        if (!receivedQr) fail(err instanceof VoiceControlError ? err.message : "Não foi possível gerar outro código.");
+      });
+    };
+    const streamEnded = () => fail("A conexão com o servidor de voz caiu. Tente de novo.");
     void subscribeSessionEvents({
       vpsUrl: stream.vpsUrl,
       token: stream.token,
-      onEvent: handleEvent,
+      onOpen: () => {
+        if (!isCurrent()) return;
+        // A criação pode ter emitido o primeiro QR antes de o navegador assinar.
+        if (retrying) requestQr();
+        else retryTimer = setTimeout(requestQr, QR_GRACE_MS);
+      },
+      onEvent: (event) => {
+        if (!isCurrent() || event.sessionId !== tcSessionId) return;
+        if (event.type === "auth-state" && (event.state === "failed" || event.state === "logged_out")) {
+          fail("O servidor de voz encerrou o pareamento. Tente gerar outro QR Code.");
+          return;
+        }
+        if (event.type === "session-qr") {
+          if (typeof event.qr !== "string" || !event.qr) return;
+          receivedQr = true;
+          clearTimers();
+        }
+        handleEvent(event);
+      },
       signal: controller.signal,
     })
-      .then(() => {
-        // O stream terminou sozinho (sem abort) e o pareamento não concluiu.
-        // Sem este ramo o estado ficaria parado esperando um evento que não
-        // vem mais — a mesma falha silenciosa, por outra porta.
-        if (controller.signal.aborted || generationRef.current !== generation) return;
-        // Forma funcional: se um `auth-state` pareou bem no instante em que o
-        // stream também terminava, não sobrescrever "pareado" com "falhou".
-        setStatus((atual) => (atual === "pareado" ? atual : "falhou"));
-        setError((atual) => atual ?? "A conexão com o servidor de voz caiu. Tente de novo.");
-      })
-      .catch(() => {
-        if (controller.signal.aborted || generationRef.current !== generation) return;
-        setStatus("falhou");
-        setError("A conexão com o servidor de voz caiu. Tente de novo.");
-      });
+      .then(streamEnded, streamEnded);
   }, [handleEvent, organizationId]);
 
   const start = useCallback(async (whatsappInstanceId: string) => {
@@ -187,16 +218,11 @@ export function useVoicePairing() {
       if (instanceRef.current) await start(instanceRef.current);
       return;
     }
-    const generation = generationRef.current;
+    const generation = ++generationRef.current;
     setError(null);
     setQr(null);
     try {
-      await openStream(tcSessionId, generation);
-      // `cancel()` pode ter disparado enquanto o stream reabria (antes de
-      // `abortRef` existir para abortar). Sem este retorno, `pairVoiceSession`
-      // ainda pediria QR novo pro backend depois que o operador já desistiu.
-      if (generationRef.current !== generation) return;
-      await pairVoiceSession({ tcSessionId, organizationId: organizationId ?? undefined });
+      await openStream(tcSessionId, generation, true);
     } catch (err) {
       if (generationRef.current !== generation) return;
       setStatus("falhou");
@@ -204,7 +230,7 @@ export function useVoicePairing() {
         err instanceof VoiceControlError ? err.message : "Não foi possível gerar outro código.",
       );
     }
-  }, [start, openStream, organizationId]);
+  }, [start, openStream]);
 
   return { status, qr, error, start, retry, cancel };
 }
