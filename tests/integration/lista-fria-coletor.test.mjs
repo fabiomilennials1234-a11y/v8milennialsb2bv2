@@ -58,10 +58,14 @@ describe('plano de prazo do coletor com login real', () => {
   test('sem custo em dólar a configuração padrão do coletor não promete freio de gasto', () => {
     assert.equal(CFG_INSTAGRAM_SESSAO_PADRAO.precoPorSeguidorUsd, 0);
   });
-  test('Apify: o prazo agora também é contas × segundos (12 s medido como folga), não páginas × 45', () => {
+  test('Apify: o prazo é contas × segundos por conta da configuração, não páginas × 45', () => {
     const alto = { actorId: 'a', ...CFG_INSTAGRAM_PADRAO, maxSeguidores: 5_000 };
-    assert.equal(planoDaBusca(100, alto).timeoutS, 9_600);
-    assert.equal(planoDaBusca(15, alto).timeoutS, 1_440, '120 contas × 12 s: o caso que estourou com 300 s');
+    const s = CFG_INSTAGRAM_PADRAO.segundosPorConta;
+    assert.equal(planoDaBusca(100, alto).timeoutS, 800 * s, '100 créditos = 800 contas');
+    assert.equal(planoDaBusca(15, alto).timeoutS, 120 * s, '15 créditos = 120 contas: o caso que estourou com 300 s');
+  });
+  test('Apify: segundos por conta não volta a 12 s (30/10/2026: com 12 s a busca de 50 contas era morta no fim)', () => {
+    assert.ok(CFG_INSTAGRAM_PADRAO.segundosPorConta > 12);
   });
 });
 
