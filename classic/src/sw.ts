@@ -98,8 +98,8 @@ self.addEventListener('push', (event: PushEvent) => {
   const title = payload.title || 'Torque CRM';
   const options: NotificationOptions = {
     body: payload.body || '',
-    icon: payload.icon || '/pwa-192x192.svg',
-    badge: '/pwa-192x192.svg',
+    icon: payload.icon || '/pwa-192x192.png',
+    badge: '/pwa-192x192.png',
     tag: payload.tag || 'torque-push',
     data: { url: payload.url || '/' },
   };
