@@ -246,9 +246,23 @@ Deno.serve(
       });
       const plano = await resp.json().catch(() => ({}));
       if (!resp.ok || !plano?.plan_id) {
+        // O blast-plan-create grava o plano ANTES de disparar o primeiro lote: se o
+        // disparo errar depois, o plano existe (ativo, com destinatários pendentes)
+        // e o pedido precisa apontar para ele, senão fica um plano sem dono.
+        const { data: orfao } = await admin
+          .from("blast_plans")
+          .select("id")
+          .eq("organization_id", orgId)
+          .eq("source->>disparo_id", disparoId)
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        const planoCriado = (orfao as { id?: string } | null)?.id ?? null;
+        if (planoCriado) await registrar({ plan_id: planoCriado });
         return await falhar("disparando", plano?.error ?? `blast-plan-create ${resp.status}`, {
           importados,
           negocios: comNegocio.length,
+          plan_id: planoCriado,
         });
       }
 
