@@ -73,6 +73,14 @@ beforeEach(() => {
 });
 
 describe("useVoicePairing", () => {
+  it("retoma uma sessão existente sem criar outra para o mesmo número", async () => {
+    const { result } = renderHook(() => useVoicePairing(), { wrapper });
+    await act(async () => { await result.current.start("inst-1", "sessao-pendente"); });
+    expect(createVoiceSession).not.toHaveBeenCalled();
+    expect(requestStreamToken).toHaveBeenCalledWith({ tcSessionId: "sessao-pendente", pair: true, organizationId: "org-1" });
+    act(() => emit({ type: "session-qr", sessionId: "sessao-pendente", qr: "codigo" }));
+    expect(result.current.qr).toBe("codigo");
+  });
   it("recupera um primeiro QR perdido sem criar outra sessão e oferece nova tentativa se nenhum chegar", async () => {
     vi.useFakeTimers();
     try {

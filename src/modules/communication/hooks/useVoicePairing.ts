@@ -174,17 +174,21 @@ export function useVoicePairing() {
       .then(streamEnded, streamEnded);
   }, [handleEvent, organizationId]);
 
-  const start = useCallback(async (whatsappInstanceId: string) => {
+  const start = useCallback(async (whatsappInstanceId: string, existingSessionId?: string) => {
     const generation = ++generationRef.current;
     instanceRef.current = whatsappInstanceId;
+    sessionRef.current = existingSessionId ?? null;
     setError(null);
     setQr(null);
     setStatus("criando");
     try {
-      const { tcSessionId } = await createVoiceSession({
+      const tcSessionId = existingSessionId ?? (await createVoiceSession({
         whatsappInstanceId,
         organizationId: organizationId ?? undefined,
-      });
+      })).tcSessionId;
+      if (!existingSessionId) {
+        void queryClient.invalidateQueries({ queryKey: ["voip_sessions", organizationId] });
+      }
       if (generationRef.current !== generation) return; // cancelado enquanto a sessão era criada
       sessionRef.current = tcSessionId;
       await openStream(tcSessionId, generation);
@@ -197,7 +201,7 @@ export function useVoicePairing() {
           : "Não foi possível iniciar o pareamento.",
       );
     }
-  }, [openStream, organizationId]);
+  }, [openStream, organizationId, queryClient]);
 
   /**
    * Tentar de novo NÃO recria a sessão. Se recriasse, três tentativas

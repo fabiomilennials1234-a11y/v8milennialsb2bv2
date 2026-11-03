@@ -14,6 +14,7 @@ import { useVoicePairing } from "@/modules/communication/hooks/useVoicePairing";
 interface VoicePairingDialogProps {
   instanceId: string;
   instanceName: string;
+  existingSessionId?: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }
@@ -28,6 +29,7 @@ interface VoicePairingDialogProps {
 export function VoicePairingDialog({
   instanceId,
   instanceName,
+  existingSessionId,
   open,
   onOpenChange,
 }: VoicePairingDialogProps) {
@@ -49,9 +51,9 @@ export function VoicePairingDialog({
     }
     if (startedForRef.current !== instanceId) {
       startedForRef.current = instanceId;
-      void start(instanceId);
+      void start(instanceId, existingSessionId);
     }
-  }, [open, instanceId, start, cancel]);
+  }, [open, instanceId, existingSessionId, start, cancel]);
 
   const isLoading = status === "ocioso" || status === "criando" || status === "aguardando-qr";
 
