@@ -584,7 +584,7 @@ Nada disto é feito agora. É o que precisa estar resolvido antes de `torquecrm.
 - [ ] **(b) A zona precisa ir para a Cloudflare.** Custom Domain exige que a zona `torquecrm.com.br` esteja na Cloudflare, ou seja, trocar os nameservers saindo da Hostinger. Antes, copie **todos** os registros: MX, `send.` (Resend), `calls.`, n8n e o que mais houver.
 - [ ] **(f) Rollback de DNS.** Baixe o TTL dias antes. Deixe escrito como voltar os registros para o nginx.
 - [ ] **(d) `workers_dev: false` depois do corte.** Senão o `*.workers.dev` continua sendo uma segunda origem pública do mesmo front.
-- [ ] **(m) `www.torquecrm.com.br`.** Hoje ele serve o mesmo front (200, nginx). Precisa de Custom Domain também, ou de um redirect para `torquecrm.com.br`.
+- [x] **(m) `www.torquecrm.com.br`.** O Worker responde 301 (308 fora de GET/HEAD) para `https://torquecrm.com.br`, mantendo caminho e query. O apex é o domínio único.
 - [ ] **(n) HTTP → HTTPS.** Hoje o Traefik responde 308 de `http://` para `https://`. Na Cloudflare:
   - ligue **Always Use HTTPS**;
   - fixe a versão mínima de TLS (**Minimum TLS Version**).

@@ -29,7 +29,21 @@ export function applyProfile(response: Response, profile: Profile, cacheControl:
   const out = new Response(response.body, response);
   for (const [name, value] of Object.entries(PROFILES[profile])) out.headers.set(name, value);
   out.headers.set("Cache-Control", cacheControl);
+  ensureUtf8(out.headers);
   return out;
+}
+
+/**
+ * Todo texto que passa por aqui é UTF-8 (o build e as edge functions só geram
+ * UTF-8), mas o servidor de assets manda `text/plain` sem charset e o
+ * navegador cai no windows-1252: "não" vira "nÃ£o" no /llms.txt. Só completa;
+ * charset declarado fica como veio.
+ */
+export function ensureUtf8(headers: Headers): void {
+  const type = headers.get("Content-Type");
+  if (type && /^text\//i.test(type) && !/;\s*charset=/i.test(type)) {
+    headers.set("Content-Type", `${type}; charset=utf-8`);
+  }
 }
 
 /**

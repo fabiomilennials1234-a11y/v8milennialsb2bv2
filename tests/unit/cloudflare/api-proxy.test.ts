@@ -344,6 +344,18 @@ describe("resposta do Supabase", () => {
     expect(response.headers.has("cache-control")).toBe(false);
   });
 
+  it("texto sem charset ganha charset=utf-8; JSON fica como veio", async () => {
+    const { fetchImpl } = stubFetch((call) =>
+      call.url.endsWith("/docs.txt")
+        ? new Response("# Torque — não", { headers: { "content-type": "text/plain" } })
+        : new Response("{}", { headers: { "content-type": "application/json" } }),
+    );
+    const text = await proxyApi(...req("/api/v1/docs.txt"), { upstream: UPSTREAM, fetchImpl });
+    expect(text.headers.get("content-type")).toBe("text/plain; charset=utf-8");
+    const json = await proxyApi(...req("/api/v1/leads"), { upstream: UPSTREAM, fetchImpl });
+    expect(json.headers.get("content-type")).toBe("application/json");
+  });
+
   it("Cache-Control do upstream é preservado", async () => {
     const { fetchImpl } = stubFetch(() => new Response("{}", { headers: { "cache-control": "private, max-age=5" } }));
     const [request, url] = req("/api/v1/leads");
