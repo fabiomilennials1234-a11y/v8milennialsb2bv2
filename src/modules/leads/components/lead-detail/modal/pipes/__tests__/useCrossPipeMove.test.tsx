@@ -88,6 +88,8 @@ describe("useCrossPipeMove — invalidação (funil system)", () => {
     expect(asSet(keys)).toEqual(
       asSet([
         ["lead_all_pipelines", "lead-1"],
+        ["task-queue"],
+        ["task-entry-history"],
         ["lead-pipes", "lead-1"],
         ["lead-timeline", "lead-1"],
         ["pipe_whatsapp"],
@@ -131,6 +133,8 @@ describe("useCrossPipeMove — invalidação (funil custom)", () => {
     expect(asSet(keys)).toEqual(
       asSet([
         ["lead_all_pipelines", "lead-1"],
+        ["task-queue"],
+        ["task-entry-history"],
         ["lead-pipes", "lead-1"],
         ["lead-timeline", "lead-1"],
         ["custom_pipe_entries"],

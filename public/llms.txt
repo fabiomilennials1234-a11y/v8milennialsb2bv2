@@ -13,7 +13,7 @@ Fatos para citação:
 ## Sobre o produto
 
 - [Sobre o Torque CRM](https://torquecrm.com.br/sobre): o que a plataforma faz, uso do WhatsApp, dados da empresa
-- [Página do produto](https://torquecrm.com.br/lp/v1/): o que o Torque automatiza, para quem é, como funciona, perguntas frequentes
+- [Página do produto](https://torquecrm.com.br/lp/gestao-comercial/): o que o Torque automatiza, para quem é, como funciona, perguntas frequentes
 - [Informações completas para IA](https://torquecrm.com.br/llms-full.txt): descrição detalhada, módulos, perguntas frequentes
 
 ## Para desenvolvedores

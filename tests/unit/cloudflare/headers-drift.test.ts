@@ -8,6 +8,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import config from "../../../cloudflare/headers.json";
+import { RETIRED_LANDINGS } from "../../../cloudflare/src/routing";
 import { MAX_HEADER_LINE, renderAssetsIgnore, renderHeadersFile } from "../../../scripts/cloudflare/prepare-assets.mjs";
 
 const dockerfile = fs.readFileSync(path.resolve(__dirname, "../../../Dockerfile"), "utf8");
@@ -53,6 +54,20 @@ describe("headers.json == Dockerfile", () => {
     for (const exact of ["location = /sobre", "location = /privacidade", "location = / ", "location = /index.html", "location = /sw.js", "  location / {"]) {
       expect(cacheOf(exact)).toBe(config.cache.noStore);
     }
+  });
+});
+
+describe("LPs aposentadas", () => {
+  it("o `map $lp_retired` do Dockerfile = RETIRED_LANDINGS do Worker", () => {
+    const map = between("map $uri $lp_retired {", "'}'");
+    const entries = [...map.matchAll(/~\^\/lp\/([a-z0-9-]+)\(\/\|\$\) (\S+);/g)].map((m) => [m[1], m[2]]);
+    expect(Object.fromEntries(entries)).toEqual(RETIRED_LANDINGS);
+  });
+
+  it("o nginx responde o 301 relativo, dentro do bloco de /lp/", () => {
+    const block = between("location ^~ /lp/", "  }'");
+    expect(block).toContain("absolute_redirect off;");
+    expect(block).toContain("if ($lp_retired) { return 301 $lp_retired$is_args$args; }");
   });
 });
 

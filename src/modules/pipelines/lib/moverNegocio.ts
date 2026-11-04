@@ -59,6 +59,8 @@ export async function moverNegocio(params: MoverNegocioParams): Promise<void> {
  * furo que `useCrossPipeMove` documenta.
  */
 export function invalidateAfterMove(queryClient: QueryClient, leadId?: string): void {
+  queryClient.invalidateQueries({ queryKey: ["task-queue"] });
+  queryClient.invalidateQueries({ queryKey: ["task-entry-history"] });
   // Views de compatibilidade — as telas de funil ainda leem por elas.
   queryClient.invalidateQueries({ queryKey: ["pipe_whatsapp"] });
   queryClient.invalidateQueries({ queryKey: ["pipe_confirmacao"] });

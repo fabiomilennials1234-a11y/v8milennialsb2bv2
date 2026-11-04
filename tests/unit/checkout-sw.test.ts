@@ -6,54 +6,46 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import headers from "../../cloudflare/headers.json";
-import { STRIPE_BYPASS_PROBE, shouldCacheAsset } from "@/shared/pwa/asset-routing";
+import { STRIPE_BYPASS_PROBE, isAppOwnedRequest } from "@/shared/pwa/runtime-routes";
 import { ensureStripeReachable } from "@/modules/billing/lib/checkout-sw";
 
 const self = "https://torquecrm.com.br";
-const at = (href: string, destination: string) => ({ url: new URL(href), destination, selfOrigin: self });
+const owned = (href: string) => isAppOwnedRequest(new URL(href), self);
 
-describe("shouldCacheAsset", () => {
+describe("cache de runtime do SW e a Stripe", () => {
   it.each([
-    ["https://js.stripe.com/clover/stripe.js", "script"],
-    ["https://js.stripe.com/x/fingerprinted/css/a.css", "style"],
-    ["https://b.stripecdn.com/x.woff2", "font"],
-    ["https://q.stripe.com/pixel.png", "image"],
-    ["https://cdnjs.cloudflare.com/a.css", "style"],
-    ["https://exemplo.com/foto.png", "image"],
-  ])("não toca em %s", (href, destination) => {
-    expect(shouldCacheAsset(at(href, destination))).toBe(false);
+    "https://js.stripe.com/clover/stripe.js",
+    "https://x.js.stripe.com/fingerprinted/css/a.css",
+    "https://api.stripe.com/v1/tokens",
+    "https://hooks.stripe.com/3d_secure/x",
+    "https://b.stripecdn.com/x.woff2",
+    "https://q.stripe.com/pixel.png",
+  ])("não toca em %s", (href) => {
+    expect(owned(href)).toBe(false);
   });
 
-  it.each([
-    ["https://torquecrm.com.br/assets/a.js", "script"],
-    ["https://torquecrm.com.br/assets/a.css", "style"],
-    ["https://torquecrm.com.br/a.woff2", "font"],
-    ["https://torquecrm.com.br/a.png", "image"],
-    ["https://abc.supabase.co/storage/v1/object/public/x.png", "image"],
-    ["https://fonts.googleapis.com/css2?family=X", "style"],
-  ])("continua cacheando %s", (href, destination) => {
-    expect(shouldCacheAsset(at(href, destination))).toBe(true);
+  it("host que imita a Stripe sob a nossa origem continua sendo nosso, e a Stripe sob o nosso nome não", () => {
+    expect(owned("https://torquecrm.com.br/assets/js.stripe.com.js")).toBe(true);
+    expect(owned("https://torquecrm.com.br.js.stripe.com/a.js")).toBe(false);
   });
 
-  it("nada fora de script, estilo, fonte e imagem", () => {
-    expect(shouldCacheAsset(at("https://torquecrm.com.br/a", "document"))).toBe(false);
-    expect(shouldCacheAsset(at("https://torquecrm.com.br/a", ""))).toBe(false);
-  });
-
-  it("todo host externo aceito está no connect-src: fora dele o fetch do SW nunca funcionou", () => {
-    const connect = /connect-src ([^;]+);/.exec(headers.profiles.app["Content-Security-Policy"])![1]!;
-    expect(connect).toContain("https://*.supabase.co");
-    expect(connect).toContain("https://fonts.googleapis.com");
+  it("continua cacheando os ativos da própria aplicação", () => {
+    expect(owned("https://torquecrm.com.br/assets/a.js")).toBe(true);
   });
 });
 
 describe("src/sw.ts", () => {
   const sw = readFileSync(resolve(__dirname, "../../src/sw.ts"), "utf8");
-  it("as duas rotas de ativo passam pelo filtro, e o SW responde à sonda", () => {
-    expect(sw).not.toContain("({ request }) => request.destination === 'script'");
-    expect(sw.match(/shouldCacheAsset\(/g)?.length).toBeGreaterThanOrEqual(2);
+  it("nenhuma rota casa por destino sem passar pela guarda, e o SW responde à sonda", () => {
+    expect(sw).not.toContain("({ request }) => request.destination");
+    expect(sw.match(/isAppOwnedRequest\(/g)?.length).toBe(2);
     expect(sw).toContain("STRIPE_BYPASS_PROBE");
+  });
+
+  it("as outras rotas de runtime são só do Supabase: nenhuma alcança a Stripe", () => {
+    const rotasPorUrl = [...sw.matchAll(/\(\{ url \}\) => (.+)\.test\(url\.href\)/g)].map((m) => m[1]!);
+    expect(rotasPorUrl.length).toBeGreaterThan(0);
+    for (const rota of rotasPorUrl) expect(rota).toContain("supabase");
   });
 });
 

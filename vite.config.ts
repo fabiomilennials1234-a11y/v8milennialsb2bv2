@@ -198,7 +198,8 @@ export default defineConfig(({ mode }) => {
         // build que já não existe no servidor (chamado 39ff2cd1).
         // Cache the emoji font on demand, through the runtime font cache.
         // Do not force its download when the service worker first installs.
-        globIgnores: ['**/*.html', '**/noto-color-emoji-*'],
+        // LP é publicada à parte e tem CSP própria: nada dela passa pelo SW.
+        globIgnores: ['**/*.html', '**/noto-color-emoji-*', 'lp/**'],
       },
       devOptions: {
         enabled: false, // Don't run SW in dev

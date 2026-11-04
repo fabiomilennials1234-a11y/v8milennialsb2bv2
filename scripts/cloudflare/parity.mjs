@@ -43,7 +43,7 @@ import http from "node:http";
 import https from "node:https";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
-import { encodePath, listFiles, loadHeadersConfig, parseArgs, pool, sha256 } from "./lib.mjs";
+import { CLOUDFLARE_DIR, encodePath, listFiles, loadHeadersConfig, parseArgs, pool, sha256 } from "./lib.mjs";
 
 export { sha256 };
 
@@ -359,11 +359,18 @@ export function buildMatrix({ assetsDir, allAssets, headersConfig = HEADERS_CONF
   // 7. Landing pages: cada arquivo de cada uma, mais as pastas.
   const lpRoot = path.join(assetsDir, "lp");
   for (const name of fs.readdirSync(lpRoot).sort()) {
-    add({ path: `/lp/${name}/` });
+    // Pasta sem página (`_shared`, só CSS/JS): o mesmo caso de `/lp/`.
+    const hasIndex = fs.existsSync(path.join(lpRoot, name, "index.html"));
+    add(hasIndex ? { path: `/lp/${name}/` } : { path: `/lp/${name}/`, allow: { status: "Div2", "cache-control": "Div5" } });
     for (const rel of listFiles(path.join(lpRoot, name))) add({ path: encodePath(`lp/${name}/${rel}`) });
   }
-  add({ path: "/lp/v1" });
-  add({ path: "/lp/v1?ref=parity" });
+  add({ path: "/lp/gestao-comercial" });
+  add({ path: "/lp/gestao-comercial?ref=parity" });
+  // LPs aposentadas: 301 para a atual, com a query, nos dois.
+  const retired = JSON.parse(fs.readFileSync(path.join(CLOUDFLARE_DIR, "retired-landings.json"), "utf8"));
+  for (const name of Object.keys(retired)) {
+    for (const suffix of ["", "/", "?utm_source=parity", "/?utm_source=parity", "/css/styles.css"]) add({ path: `/lp/${name}${suffix}` });
+  }
   add({ path: "/lp/", allow: { status: "Div2", "cache-control": "Div5" } });
   add({ path: "/lp/nao-existe", allow: { "cache-control": "Div5" } });
 

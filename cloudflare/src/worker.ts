@@ -85,6 +85,12 @@ async function handle(route: Route, request: Request, url: URL, env: Env): Promi
       return applyProfile(plain(405, "Method Not Allowed", { Allow: "GET, HEAD" }), "app", CACHE.noStore);
     case "not-found":
       return notFound();
+    case "landing-redirect":
+      return applyProfile(
+        new Response(null, { status: 301, headers: { Location: route.location } }),
+        "lp",
+        CACHE.landing,
+      );
     case "landing":
       return serveLanding(env, request, url, route.path);
     case "spa": {

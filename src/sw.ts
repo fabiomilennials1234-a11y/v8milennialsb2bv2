@@ -6,7 +6,7 @@ import { registerRoute } from 'workbox-routing';
 import { CacheFirst, NetworkFirst, StaleWhileRevalidate } from 'workbox-strategies';
 import { ExpirationPlugin } from 'workbox-expiration';
 import { MATCH_APP_ENTRY } from './shared/pwa/build-identity';
-import { STRIPE_BYPASS_PROBE, shouldCacheAsset } from './shared/pwa/asset-routing';
+import { STRIPE_BYPASS_PROBE, isAppOwnedRequest } from './shared/pwa/runtime-routes';
 
 declare let self: ServiceWorkerGlobalScope;
 
@@ -40,8 +40,10 @@ clientsClaim();
 // ─── Runtime caching (mirrors workbox config from vite.config) ──
 registerRoute(
   ({ request, url }) =>
-    request.destination !== 'script' &&
-    shouldCacheAsset({ url, destination: request.destination, selfOrigin: self.location.origin }),
+    isAppOwnedRequest(url, self.location.origin) &&
+    (request.destination === 'style' ||
+      request.destination === 'font' ||
+      request.destination === 'image'),
   new CacheFirst({
     cacheName: 'static-assets',
     plugins: [
@@ -54,9 +56,7 @@ registerRoute(
 );
 
 registerRoute(
-  ({ request, url }) =>
-    request.destination === 'script' &&
-    shouldCacheAsset({ url, destination: request.destination, selfOrigin: self.location.origin }),
+  ({ request, url }) => isAppOwnedRequest(url, self.location.origin) && request.destination === 'script',
   new StaleWhileRevalidate({
     cacheName: 'js-assets',
     plugins: [

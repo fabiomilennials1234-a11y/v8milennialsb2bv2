@@ -1,6 +1,6 @@
 /**
  * Cliente com Service Worker antigo. O SW velho intercepta o script da Stripe e o bloqueia (ver
- * `shared/pwa/asset-routing.ts`), e ele continua no controle mesmo depois do deploy: o novo fica
+ * `shared/pwa/runtime-routes.ts`), e ele continua no controle mesmo depois do deploy: o novo fica
  * esperando até o usuário aceitar a atualização. Quem abre o link nessa janela não pagaria.
  *
  * Aqui a atualização alcança o cliente: pergunta ao controller se é da versão que deixa a Stripe
@@ -11,7 +11,7 @@
  * Sem atualização disponível, devolve "stale" e a tela segue: o Stripe.js falha, aparece o aviso, e
  * "Tentar de novo" passa por aqui outra vez.
  */
-import { STRIPE_BYPASS_PROBE } from "@/shared/pwa/asset-routing";
+import { STRIPE_BYPASS_PROBE } from "@/shared/pwa/runtime-routes";
 
 const PROBE_TIMEOUT_MS = 400;
 const POLL_MS = 200;

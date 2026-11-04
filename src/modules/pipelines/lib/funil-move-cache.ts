@@ -141,6 +141,8 @@ export interface ReconciliarMoveParams {
  * atravessar para o funil de destino) e `PREFIXOS_DE_OUTRAS_TELAS`.
  */
 export function reconciliarMoveNoFunil(qc: QueryClient, p: ReconciliarMoveParams): void {
+  qc.invalidateQueries({ queryKey: ["task-queue"] });
+  qc.invalidateQueries({ queryKey: ["task-entry-history"] });
   const outroFunil = (key: QueryKey) => key[1] !== p.pipelineId;
   qc.invalidateQueries({ queryKey: [PAGE], predicate: (q) => outroFunil(q.queryKey), refetchType: "none" });
   qc.invalidateQueries({ queryKey: [COUNTS], predicate: (q) => outroFunil(q.queryKey), refetchType: "none" });

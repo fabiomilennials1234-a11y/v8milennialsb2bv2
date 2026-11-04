@@ -15,7 +15,7 @@ const HERDADAS = [
   '20270812111845_payment_link_buyers.sql',
   '20270812190000_payment_links_package.sql',
 ];
-export const STRIPE_MIGRATION = '20271225000000_stripe_billing_foundation.sql';
+export const STRIPE_MIGRATION = '20271226000000_stripe_billing_foundation.sql';
 
 /** Prod tem estas colunas por 20270812160000; aqui só o que o caminho existing_org encosta. */
 const PROVISIONINGS_PROD = `
