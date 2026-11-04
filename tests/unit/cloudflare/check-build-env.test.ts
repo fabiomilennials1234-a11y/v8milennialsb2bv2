@@ -131,3 +131,16 @@ describe("CLI", () => {
     expect(run(OK, ["--qualquer"]).status).toBe(2);
   });
 });
+
+describe("segredo da Stripe de modo teste em VITE_*", () => {
+  const ok = OK;
+  it.each(["sk_test_abcdefgh12345678", "rk_test_abcdefgh12345678", "whsec_abcdefgh12345678"])("%s é recusado, sem citar o valor", (value) => {
+    const problems = checkBuildEnv({ ...ok, VITE_STRIPE_PUBLISHABLE_KEY: value });
+    expect(problems.some((p) => p.includes("VITE_STRIPE_PUBLISHABLE_KEY"))).toBe(true);
+    expect(problems.join(" ")).not.toContain(value);
+  });
+  it("pk_test_ e pk_live_ passam", () => {
+    expect(checkBuildEnv({ ...ok, VITE_STRIPE_PUBLISHABLE_KEY: "pk_test_abcdefgh12345678" })).toEqual([]);
+    expect(checkBuildEnv({ ...ok, VITE_STRIPE_PUBLISHABLE_KEY: "pk_live_abcdefgh12345678" })).toEqual([]);
+  });
+});
