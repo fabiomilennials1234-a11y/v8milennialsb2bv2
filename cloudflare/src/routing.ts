@@ -8,6 +8,7 @@
  * daqui só pega variações de caixa (`/ASSETS/x.js`), que o padrão negativo
  * não cobre.
  */
+import retiredLandings from "../retired-landings.json";
 
 /**
  * Interface única (V5) desde 2026-10-14. O cookie `torque_ui` não escolhe mais
@@ -36,6 +37,8 @@ export type Route =
   | { kind: "api" }
   | { kind: "method-not-allowed" }
   | { kind: "not-found" }
+  /** LP aposentada: 301 relativo para a atual, com os headers de LP (igual ao nginx). */
+  | { kind: "landing-redirect"; location: string }
   /** `/lp/*`: landing pages estáticas, com headers próprios. */
   | { kind: "landing"; path: string }
   /** Resto: o arquivo exato, se existir; senão o index da V5. */
@@ -45,6 +48,19 @@ export type Route =
 const ASSET_FILE = /^\/assets\/.*\.(js|css|woff2?|ttf|eot|svg|png|jpg|jpeg|gif|webp|ico|map)$/i;
 
 const SECURITY_TXT = "/.well-known/security.txt";
+
+/**
+ * LPs aposentadas → LP atual. Espelhado no `map $uri $lp_retired` do Dockerfile
+ * (`headers-drift.test.ts` quebra se divergirem). Subcaminho vai para o mesmo
+ * destino: a pasta antiga não existe mais, e anúncio ou link salvo em
+ * `/lp/v1/qualquer-coisa` ainda chega numa página de venda.
+ *
+ * O destino é sempre uma constante daqui: nada do caminho pedido entra no
+ * `Location`, então não há como virar open redirect. Só a query é preservada.
+ */
+export const RETIRED_LANDINGS: Readonly<Record<string, string>> = retiredLandings;
+
+const RETIRED_LANDING_PATH = new RegExp(`^/lp/(${Object.keys(RETIRED_LANDINGS).join("|")})(?:/|$)`);
 
 /**
  * Caminho decodificado do jeito do servidor de assets: cada segmento passa por
@@ -125,6 +141,7 @@ export function redactPath(pathname: string): string {
 const FULL_PATH_ROUTES: ReadonlySet<string> = new Set<Route["kind"]>([
   "api",
   "landing",
+  "landing-redirect",
   "page",
   "index",
   "service-worker",
@@ -163,6 +180,11 @@ export function resolveRoute(url: URL, method: string): Route {
   // qualquer método. Sem a barra, o nginx responde 301 para a pasta.
   if (path === "/api/v1") return { kind: "redirect", location: `/api/v1/${url.search}` };
   if (path.startsWith("/api/v1/")) return { kind: "api" };
+
+  // Dockerfile — `if ($lp_retired)`: como no nginx, vale para qualquer método e
+  // vence a regra de dotfile, porque o `^~ /lp/` também vence a dele.
+  const retired = RETIRED_LANDING_PATH.exec(path)?.[1];
+  if (retired) return { kind: "landing-redirect", location: `${RETIRED_LANDINGS[retired]}${url.search}` };
 
   // O nginx só serve arquivo estático para GET/HEAD; o resto é 405.
   if (method !== "GET" && method !== "HEAD") return { kind: "method-not-allowed" };

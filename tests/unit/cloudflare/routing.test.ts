@@ -129,7 +129,8 @@ describe("logPath — negar por padrão: caminho cortado fora das rotas de estru
   it("rotas de estrutura conhecida mantêm o caminho, sem os segredos da lista", () => {
     expect(logPath("api", "/api/v1/checkout/a1b2c3TOK")).toBe("/api/v1/checkout/:token");
     expect(logPath("api", "/api/v1/leads/123")).toBe("/api/v1/leads/123");
-    expect(logPath("landing", "/lp/v1/")).toBe("/lp/v1/");
+    expect(logPath("landing", "/lp/crm-b2b/")).toBe("/lp/crm-b2b/");
+    expect(logPath("landing-redirect", "/lp/v1/")).toBe("/lp/v1/");
     expect(logPath("landing", "/lp/checkout/a1b2c3TOK")).toBe("/lp/checkout/:token");
     expect(logPath("page", "/sobre")).toBe("/sobre");
     expect(logPath("page", "/.well-known/security.txt")).toBe("/.well-known/security.txt");
@@ -148,7 +149,7 @@ describe("caminho: decodificação como a do servidor de assets", () => {
   });
 
   it("encodePath é a forma canônica que volta para o mesmo caminho", () => {
-    for (const p of ["/landing/Paleta de Cor_Milennials.png", "/lp/v1/", "/a+b/c@d"]) {
+    for (const p of ["/landing/Paleta de Cor_Milennials.png", "/lp/crm-b2b/", "/a+b/c@d"]) {
       expect(decodePath(encodePath(p))).toBe(p);
     }
   });
@@ -191,7 +192,7 @@ describe("contrato de roteamento — uma linha por linha da tabela do macro", ()
   });
 
   it("6. método ≠ GET/HEAD fora da API → 405", () => {
-    for (const path of ["/", "/leads", "/sobre", "/lp/v1/", "/robots.txt"]) {
+    for (const path of ["/", "/leads", "/sobre", "/lp/crm-b2b/", "/robots.txt"]) {
       expect(route(path, "POST")).toEqual({ kind: "method-not-allowed" });
     }
     expect(route("/leads", "OPTIONS")).toEqual({ kind: "method-not-allowed" });
@@ -205,9 +206,28 @@ describe("contrato de roteamento — uma linha por linha da tabela do macro", ()
   });
 
   it("8. /lp/* → landing", () => {
-    expect(route("/lp/v1/")).toEqual({ kind: "landing", path: "/lp/v1/" });
-    expect(route("/lp/v1")).toEqual({ kind: "landing", path: "/lp/v1" });
+    expect(route("/lp/crm-b2b/")).toEqual({ kind: "landing", path: "/lp/crm-b2b/" });
+    expect(route("/lp/crm-b2b")).toEqual({ kind: "landing", path: "/lp/crm-b2b" });
+    expect(route("/lp/_shared/lp.js")).toEqual({ kind: "landing", path: "/lp/_shared/lp.js" });
     expect(route("/lp/")).toEqual({ kind: "landing", path: "/lp/" });
+  });
+
+  it("8b. LP aposentada → 301 para a atual: com e sem barra, subcaminho, codificada, com query", () => {
+    const redirect = (location: string) => ({ kind: "landing-redirect", location });
+    expect(route("/lp/v1")).toEqual(redirect("/lp/gestao-comercial/"));
+    expect(route("/lp/v1/")).toEqual(redirect("/lp/gestao-comercial/"));
+    expect(route("/lp/v1/css/x.css")).toEqual(redirect("/lp/gestao-comercial/"));
+    expect(route("/lp/%76%31")).toEqual(redirect("/lp/gestao-comercial/"));
+    expect(route("//lp//v2")).toEqual(redirect("/lp/crm-b2b/"));
+    expect(route("/lp/v3?utm_source=x")).toEqual(redirect("/lp/crm-b2b/?utm_source=x"));
+    expect(route("/lp/demonstracao/?a=1&b=2")).toEqual(redirect("/lp/crm-b2b/?a=1&b=2"));
+    expect(route("/lp/v1/.env")).toEqual(redirect("/lp/gestao-comercial/"));
+  });
+
+  it("8c. o que não é exatamente uma LP aposentada segue como landing", () => {
+    for (const path of ["/lp/v10", "/lp/v1x/y", "/lp/V1", "/lp/demonstracao-nova"]) {
+      expect(route(path).kind, path).toBe("landing");
+    }
   });
 
   it("9. regex de /assets/ (sem diferenciar maiúscula) que chega ao Worker → 404", () => {

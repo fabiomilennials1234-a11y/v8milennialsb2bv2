@@ -50,7 +50,7 @@ Segmentos atendidos: alumínio, agro, metalúrgico, plásticos e embalagens, far
 
 ## Preço
 
-Há planos diferentes conforme a estrutura e as necessidades da operação. Planos a partir de R$ 297 por mês. A contratação começa por uma demonstração ao vivo de 30 minutos, sem compromisso: https://torquecrm.com.br/lp/v1/
+Há planos diferentes conforme a estrutura e as necessidades da operação. Planos a partir de R$ 297 por mês. A contratação começa por uma demonstração ao vivo de 30 minutos, sem compromisso: https://torquecrm.com.br/lp/gestao-comercial/
 
 ## Perguntas frequentes
 
@@ -81,7 +81,7 @@ Planos a partir de R$ 297 por mês, conforme a estrutura da operação.
 ## Links
 
 - Sobre: https://torquecrm.com.br/sobre
-- Produto e demonstração: https://torquecrm.com.br/lp/v1/
+- Produto e demonstração: https://torquecrm.com.br/lp/gestao-comercial/
 - API v1: https://torquecrm.com.br/api/llms.txt
 - Termos: https://torquecrm.com.br/termos
 - Privacidade: https://torquecrm.com.br/privacidade

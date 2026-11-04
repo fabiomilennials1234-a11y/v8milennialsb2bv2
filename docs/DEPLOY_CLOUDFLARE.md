@@ -479,7 +479,7 @@ Cada requisição que passa pelo Worker gera uma linha assim:
 
 - **A linha do Worker nunca tem** headers (como `X-API-Key`), corpo ou query string, porque a query da API pode carregar dado de lead.
 - **O caminho também é limpo.** Links de e-mail e de pagamento carregam token no caminho: `/reset-password/<token>` (válido por 1 hora) e `/checkout/<token>`. A regra é **negar por padrão**:
-  - **Caminho inteiro**, só nas rotas de estrutura conhecida: API (`/api/v1/*`), landing pages (`/lp/*`), páginas fixas (`/sobre`, `/privacidade`, `/.well-known/security.txt`), index, service worker e o redirect de `/api/v1`. Mesmo nelas, os tokens conhecidos viram marcador: `/api/v1/checkout/<token>` vira `/api/v1/checkout/:token`.
+  - **Caminho inteiro**, só nas rotas de estrutura conhecida: API (`/api/v1/*`), landing pages (`/lp/*`, incluindo o 301 das LPs aposentadas `/lp/v1`, `/lp/v2`, `/lp/v3` e `/lp/demonstracao`), páginas fixas (`/sobre`, `/privacidade`, `/.well-known/security.txt`), index, service worker e o redirect de `/api/v1`. Mesmo nelas, os tokens conhecidos viram marcador: `/api/v1/checkout/<token>` vira `/api/v1/checkout/:token`.
   - **Todo o resto** (telas do app, 404, 405, erro) grava **só o primeiro pedaço** do caminho, mais `/*` se houver outros: `/checkout/<token>` vira `/checkout/*`, `/configuracoes/usuarios` vira `/configuracoes/*`, e `/leads` continua `/leads`.
   - Se o primeiro pedaço não parece rota do app (mais de 32 caracteres, ou com algo além de letras, números e `-`; maiúscula vira minúscula), ele vira `:seg`. Por exemplo, um token solto em `/<token>` vira `/:seg`.
   - Assim, nem um token que ninguém listou chega ao log.
@@ -529,7 +529,7 @@ O comando de paridade conhece estas diferenças e as marca como `EXPECTED-DIFF`.
 | Div1 | `/.well-known/security.txt` passa a responder 200 | Em produção dá 404 só porque o nginx bloqueia todo caminho com ponto. O arquivo existe para ser lido. |
 | Div2 | `/lp/` (pasta sem página) dá 404 em vez de 403 | O 403 revela que a pasta existe. |
 | Div3 | `/landing/`, `/api/`, `/landing` e `/api` abrem o app em vez de 301 → 403 | Não são rotas de usuário. O Worker não lista pastas. |
-| Div4 | Redirect de pasta (`/lp/v1` → `/lp/v1/`, `/api/v1` → `/api/v1/`) com endereço relativo | **Bug de produção hoje:** o nginx manda para `http://torquecrm.com.br:8080/…`, um link quebrado. O conserto no nginx (`absolute_redirect off;`) é tarefa separada. |
+| Div4 | Redirect de pasta (`/api/v1` → `/api/v1/`) com endereço relativo | **Bug do nginx:** ele manda para `http://torquecrm.com.br:8080/…`, um link quebrado. Em `/lp/` o nginx já tem `absolute_redirect off;` e responde relativo, como o Worker. |
 | Div5 | Erro gerado pelo Worker vem com `Cache-Control: no-store` | Erro não deve ficar em cache. Hoje o nginx manda cache de 600 s no 404 das LPs e nenhum no 404 de dotfile. |
 | Div6 | `manifest.webmanifest` sai como `application/manifest+json` | É o tipo correto. Hoje sai `application/octet-stream`. |
 | Div7 | A compressão (br/gzip) é diferente | A comparação usa o conteúdo já descomprimido. Aparece só como nota e não conta como diferença. |
