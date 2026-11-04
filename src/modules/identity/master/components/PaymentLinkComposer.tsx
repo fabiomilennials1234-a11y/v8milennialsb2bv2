@@ -70,10 +70,11 @@ const CYCLES = [
   { value: "annual", label: "Anual" },
 ];
 
-const METHODS = [
-  { value: "pix", label: "Pix" },
-  { value: "credit_card", label: "Cartão de crédito" },
-];
+/**
+ * O checkout da Stripe só cobra assinatura em cartão e só para organização que já existe
+ * (ADR-0050). `new_org` responde `target_not_supported` no servidor, então nem é oferecido.
+ */
+const PAYMENT_METHOD = "credit_card";
 
 /** Sete dias é o padrão da casa para proposta; o operador ajusta. */
 const DEFAULT_EXPIRY_DAYS = 7;
@@ -90,13 +91,10 @@ export function PaymentLinkComposer() {
   const { data: orgs } = useMasterOrganizations();
   const createLink = useCreatePaymentLink();
 
-  const [targetKind, setTargetKind] = useState<"existing_org" | "new_org">("existing_org");
   const [organizationId, setOrganizationId] = useState<string>("");
-  const [newOrgName, setNewOrgName] = useState("");
   const [planId, setPlanId] = useState<string>("");
   const [userCount, setUserCount] = useState(5);
   const [billingCycle, setBillingCycle] = useState("annual");
-  const [paymentMethod, setPaymentMethod] = useState("pix");
   const [expiresAt, setExpiresAt] = useState(() => isoDaysFromNow(DEFAULT_EXPIRY_DAYS));
   const [couponCode, setCouponCode] = useState("");
 
@@ -147,11 +145,11 @@ export function PaymentLinkComposer() {
       planId: planId || null,
       userCount,
       billingCycle,
-      paymentMethod,
+      paymentMethod: PAYMENT_METHOD,
       couponCode: couponCode.trim() || null,
       manualFinalMonthlyCents: manualMonthlyCents,
     }),
-    [planId, userCount, billingCycle, paymentMethod, couponCode, manualMonthlyCents],
+    [planId, userCount, billingCycle, couponCode, manualMonthlyCents],
   );
 
   const { data: quote, isLoading, isStale, error } = useBillingQuote(quoteInput);
@@ -206,8 +204,7 @@ export function PaymentLinkComposer() {
     snapshotKeys,
   );
 
-  const targetOk =
-    targetKind === "existing_org" ? !!organizationId : newOrgName.trim().length >= 2;
+  const targetOk = !!organizationId;
   const discountOk = manualMonthlyCents === null || manualReason.trim().length >= 3;
 
   // A validação do comprador acontece ANTES de enviar, e o motivo é o canal de
@@ -227,13 +224,13 @@ export function PaymentLinkComposer() {
   async function handleGenerate() {
     if (!planId) return;
     const result = await createLink.mutateAsync({
-      targetKind,
-      organizationId: targetKind === "existing_org" ? organizationId : null,
-      newOrgName: targetKind === "new_org" ? newOrgName.trim() : null,
+      targetKind: "existing_org",
+      organizationId,
+      newOrgName: null,
       planId,
       userCount,
       billingCycle,
-      paymentMethod,
+      paymentMethod: PAYMENT_METHOD,
       expiresAt: new Date(expiresAt).toISOString(),
       packageFeatures: features,
       packageLimits: limits,
@@ -261,55 +258,24 @@ export function PaymentLinkComposer() {
         <section className="space-y-4">
           <h3 className="text-sm font-medium">Para quem é a proposta</h3>
 
-          <div className="flex gap-2">
-            <Button
-              type="button"
-              variant={targetKind === "existing_org" ? "default" : "outline"}
-              size="sm"
-              onClick={() => setTargetKind("existing_org")}
-            >
-              Organização existente
-            </Button>
-            <Button
-              type="button"
-              variant={targetKind === "new_org" ? "default" : "outline"}
-              size="sm"
-              onClick={() => setTargetKind("new_org")}
-            >
-              Organização nova
-            </Button>
+          <div className="space-y-2">
+            <Label htmlFor="org">Organização</Label>
+            <Select value={organizationId} onValueChange={setOrganizationId}>
+              <SelectTrigger id="org">
+                <SelectValue placeholder="Escolha a organização" />
+              </SelectTrigger>
+              <SelectContent>
+                {orgs?.map((o) => (
+                  <SelectItem key={o.id} value={o.id}>
+                    {o.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">
+              A cobrança é uma assinatura recorrente no cartão de crédito.
+            </p>
           </div>
-
-          {targetKind === "existing_org" ? (
-            <div className="space-y-2">
-              <Label htmlFor="org">Organização</Label>
-              <Select value={organizationId} onValueChange={setOrganizationId}>
-                <SelectTrigger id="org">
-                  <SelectValue placeholder="Escolha a organização" />
-                </SelectTrigger>
-                <SelectContent>
-                  {orgs?.map((o) => (
-                    <SelectItem key={o.id} value={o.id}>
-                      {o.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          ) : (
-            <div className="space-y-2">
-              <Label htmlFor="new-org">Nome da organização a criar</Label>
-              <Input
-                id="new-org"
-                value={newOrgName}
-                onChange={(e) => setNewOrgName(e.target.value)}
-                placeholder="Ex.: Metalúrgica Andrade"
-              />
-              <p className="text-xs text-muted-foreground">
-                A organização é criada quando o pagamento confirmar, com o e-mail do comprador.
-              </p>
-            </div>
-          )}
         </section>
 
         <Separator />
@@ -372,21 +338,6 @@ export function PaymentLinkComposer() {
               </Select>
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="method">Forma de pagamento</Label>
-              <Select value={paymentMethod} onValueChange={setPaymentMethod}>
-                <SelectTrigger id="method">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {METHODS.map((m) => (
-                    <SelectItem key={m.value} value={m.value}>
-                      {m.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
           </div>
         </section>
 
@@ -550,9 +501,9 @@ export function PaymentLinkComposer() {
           <div>
             <h3 className="text-sm font-medium">Comprador (opcional)</h3>
             <p className="text-xs text-muted-foreground">
-              Pré-preencher poupa o cliente de digitar. O que ele digitar no checkout corrige o
-              que você colocar aqui — é a mesma linha. Os três campos andam juntos: preencha os
-              três ou nenhum.
+              Fica registrado junto do link. O cliente sempre digita os dados no checkout, e o
+              que ele digitar corrige o que você colocar aqui — é a mesma linha. Os três campos
+              andam juntos: preencha os três ou nenhum.
             </p>
           </div>
 

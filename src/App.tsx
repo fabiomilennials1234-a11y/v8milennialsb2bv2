@@ -40,6 +40,7 @@ import { lazyRetry } from "@/core/stale-build-recovery";
 // lazyRetry: uma nova tentativa para falha passageira; chunk velho aciona a
 // recuperação de build (src/core/stale-build-recovery.ts).
 const Auth = lazy(() => lazyRetry(() => import("@/modules/identity/pages/Auth")));
+const CheckoutPage = lazy(() => lazyRetry(() => import("@/modules/billing/pages/CheckoutPage")));
 const Dashboard = lazy(() => lazyRetry(() => import("@/modules/analytics/pages/Dashboard")));
 const MetricsStudio = lazy(() => lazyRetry(() => import("@/modules/analytics/pages/MetricsStudio")));
 const Revisao = lazy(() => lazyRetry(() => import("@/modules/engagement/pages/Revisao")));
@@ -272,6 +273,13 @@ function PageLoader() {
   return <TorqueLoader variant="inline" />;
 }
 
+/**
+ * Checkout público: tema escuro travado (o Stripe Elements recebe cor fixa no iframe) e nada
+ * do app flutuando sobre o botão de pagar, nem para quem por acaso está logado. Lido uma vez
+ * no boot do App porque toda saída desta rota é navegação de verdade, nunca do router.
+ */
+const IS_CHECKOUT_ROUTE = /^\/checkout(\/|$)/.test(window.location.pathname);
+
 function AppRoutes() {
   return (
     <Suspense fallback={<PageLoader />}>
@@ -282,6 +290,10 @@ function AppRoutes() {
           estado "link inválido" amigável (mesma página). */}
       <Route path="/reset-password/:token" element={<ResetPassword />} />
       <Route path="/reset-password" element={<ResetPassword />} />
+      {/* Link de pagamento (público; o token é a credencial). Suspense próprio: o pulso do
+          TorqueLoader ignora prefers-reduced-motion. Sem token cai em "link não encontrado". */}
+      <Route path="/checkout/:token" element={<Suspense fallback={<div className="min-h-dvh bg-background" />}><CheckoutPage /></Suspense>} />
+      <Route path="/checkout" element={<Suspense fallback={<div className="min-h-dvh bg-background" />}><CheckoutPage /></Suspense>} />
       {/* Signup dedicado — renderiza a página (honra ?plan vindo do pricing) em vez de redirecionar p/ /auth e perder o plano */}
       <Route path="/signup" element={<Signup />} />
       {/* MFA (TOTP) — FORA do gate de master de propósito. Exige apenas sessão
@@ -1042,7 +1054,7 @@ const App = () => {
   }
   return (
     <QueryClientProvider client={queryClient}>
-      <ThemeProvider attribute="class" defaultTheme="system" storageKey="v8-theme" enableSystem>
+      <ThemeProvider attribute="class" defaultTheme="system" storageKey="v8-theme" enableSystem forcedTheme={IS_CHECKOUT_ROUTE ? "dark" : undefined}>
         {/* Os toasts ficam FORA do ThemeTransitionProvider: ele embrulha o app
             numa `div.relative z-[1]`, e esse z-index cria um contexto de
             empilhamento que prendia o toaster abaixo do overlay de qualquer
@@ -1052,7 +1064,9 @@ const App = () => {
         <Sonner />
         <ThemeTransitionProvider>
           <TooltipProvider>
-            <ServiceWorkerUpdater />
+            {/* Sem Service Worker novo nascendo em quem só veio pagar: 12 MB de precache e um
+                aviso de versão não têm lugar nesta tela. */}
+            {!IS_CHECKOUT_ROUTE && <ServiceWorkerUpdater />}
             <BrowserRouter>
               <AuthProvider>
                 <ReportIdentityBridge />
@@ -1062,11 +1076,11 @@ const App = () => {
                     Montado fora, o hook lança no primeiro render e derruba a
                     árvore inteira: tela branca em todas as rotas, para todos
                     os usuários. Foi exatamente o que quebrou a produção. */}
-                <PilhaDeCartoes />
+                {!IS_CHECKOUT_ROUTE && <PilhaDeCartoes />}
                 <RealtimeOrgBridge>
                   <PipeOpsProvider>
                     <GlobalErrorBoundary>
-                      <PushPermissionPrompt />
+                      {!IS_CHECKOUT_ROUTE && <PushPermissionPrompt />}
                       {/* Motivo da perda: porta única de toda movimentação
                           humana para etapa de perda (chat, gaveta, /funil,
                           massa). Dentro do PipeOpsProvider — o catálogo de
@@ -1088,11 +1102,15 @@ const App = () => {
                                       dois módulos. Ver LeadCallActionSlot. */}
                                   <LeadCallActionProvider value={renderLeadCallAction}>
                                     <AppRoutes />
-                                    <CommandPaletteComponent />
-                                    <SupportAccess>
-                                      <SupportPanel />
-                                      <SupportAnnouncement />
-                                    </SupportAccess>
+                                    {!IS_CHECKOUT_ROUTE && (
+                                      <>
+                                        <CommandPaletteComponent />
+                                        <SupportAccess>
+                                          <SupportPanel />
+                                          <SupportAnnouncement />
+                                        </SupportAccess>
+                                      </>
+                                    )}
                                   </LeadCallActionProvider>
                                 </VoiceCallProvider>
                               </GlobalShortcutsProvider>
