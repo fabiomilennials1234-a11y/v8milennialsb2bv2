@@ -445,7 +445,7 @@ function SortableStageItem({
             </div>
             <div className="flex items-center gap-1.5 mt-1 text-xs text-muted-foreground">
               <ClipboardList className="w-3 h-3 shrink-0" />
-              {isAdmin ? <Link to={`/tarefas?tab=playbooks&stage=${stage.id}`} className="text-primary hover:underline">Configurar atividades do playbook</Link> : <span>Atividades configuradas pelo administrador</span>}
+              {isAdmin ? <Link to={`/dashboard?taskSettings=playbooks&taskStage=${stage.id}`} className="text-primary hover:underline">Configurar atividades do playbook</Link> : <span>Atividades configuradas pelo administrador</span>}
             </div>
           </div>
           <div className="flex items-center gap-1">

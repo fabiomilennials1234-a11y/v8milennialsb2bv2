@@ -29,7 +29,7 @@ before(async () => {
   const trigger=unified.match(/CREATE OR REPLACE FUNCTION public\.apply_stage_checklist\(\)[\s\S]*?\$\$;/)?.[0];
   assert.ok(trigger,'uses the real unified legacy trigger');
   await db.exec(trigger);
-  await db.exec(sql('supabase/migrations/20271216000000_tarefas_playbook_opcao_b.sql'));
+  await db.exec(sql('supabase/migrations/20271225000000_tarefas_playbook_opcao_b.sql'));
 });
 after(async()=>{await db?.close();});
 beforeEach(async()=>{
@@ -227,7 +227,7 @@ test('encerrar negócio sem mudar de etapa também registra a pendência',async(
   const events=(await one('select task_entry_history($1) events',[id(40)])).events;
   assert.equal(events.length,1);assert.equal(events[0].reason,'Cliente fechou durante a ligação');
 });
-test('tarefa futura fica nas próximas e a pessoal é sempre do chamador',async()=>{
+test('lista unificada inclui tarefas futuras e a pessoal é sempre do chamador',async()=>{
   await login(1);await query("select task_save_activity($1,null,$2,'Contato futuro','call',5,false,'','',2,true)",[id(10),id(21)]);
   await createEntry(40,12);await login(2);
   assert.equal((await one('select task_queue($1) result',[id(10)])).result.total,2);
@@ -237,10 +237,17 @@ test('tarefa futura fica nas próximas e a pessoal é sempre do chamador',async(
   assert.equal((await one('select origin from task_work_items where id=$1',[own])).origin,'member');
   const queue=(await one('select task_queue($1,null,false,0,null,true) result',[id(10)])).result;
   assert.deepEqual(new Set(queue.items.map(t=>t.origin)),new Set(['admin','member']));
+  const unified=(await one('select task_queue($1,null,false,0,null,null) result',[id(10)])).result;
+  assert.equal(unified.total,4);
+  assert.ok(unified.items.every(t=>t.assignee_id===id(12)));
+  assert.ok(unified.items.some(t=>t.title==='Contato futuro'));
+  assert.ok(unified.items.some(t=>t.title==='Enviar proposta'));
   await assert.rejects(query("select task_create_manual($1,'Invasão',current_date,'')",[id(90)]),/access_denied/);
   await login(1);
   const adminOwn=(await one("select task_create_manual($1,'Revisar operação',current_date,'') id",[id(10)])).id;
   assert.equal((await one('select origin from task_work_items where id=$1',[adminOwn])).origin,'member');
+  const adminQueue=(await one('select task_queue($1,null,false,0,null,null) result',[id(10)])).result;
+  assert.deepEqual(adminQueue.items.map(t=>t.id),[adminOwn]);
 });
 test('revogar a permissão ou o vínculo impede leitura e execução',async()=>{
   await createEntry(40,12);await login(2);

@@ -2,17 +2,20 @@
 
 ## Comportamento entregue
 
-A execução permanece no card **Tarefas do dia** do Comando. A lista reúne as
+A execução permanece no card **Tarefas** do Comando, substituindo **Tarefas do dia**. A lista reúne as
 ações pessoais existentes de `acoes_do_dia` e as atividades atribuídas pelo
 admin. Os dois títulos são **Criadas por você** e **Criadas pelo admin**.
+Os grupos se diferenciam apenas pelos cabeçalhos, sem abas ou botões por origem.
+As tarefas abertas, inclusive com prazo futuro, aparecem na mesma lista. O botão
+**Histórico** alterna entre essa lista e as execuções anteriores.
 O recorte é sempre do próprio usuário, inclusive na Central da equipe do admin.
 Criar, concluir, reabrir e remover tarefas pessoais continua usando os registros
 originais; não há cópia nem descarte dessas ações.
 
-A porta **Gestão de tarefas**, acima da Agenda, só aparece para admins. Membros
-que tentarem acessar `/tarefas` são redirecionados ao Comando e não carregam
-configuração ou filas de equipe. A paleta de comandos e os recentes aplicam a
-mesma restrição.
+A gestão abre pelo botão **Gerenciar**, no próprio card do Comando, apenas para
+admins. Não há página nem entrada de Tarefas na navegação. Membros não carregam
+configuração ou filas de equipe, mesmo tentando abrir a janela administrativa.
+Os links de modelos por etapa abrem os playbooks dentro do Comando.
 
 Na gestão, o admin atribui uma atividade à equipe inteira ou seleciona um ou
 mais membros ativos da organização. Informa prazo, orientação e prioridade
@@ -82,7 +85,7 @@ ignorados pelo Git e não entram no build do produto. Para abrir:
 node node_modules/vite/bin/vite.js --config .ui-shots/tasks-preview/vite.config.ts
 ```
 
-Endereço: `http://127.0.0.1:4177/dashboard`. O seletor **Testar como** alterna
+Endereço: `http://127.0.0.1:4178/dashboard`. O seletor **Testar como** alterna
 admin/membro exclusivamente nessa prévia. Ela não valida login nem conecta ao
 banco de produção. Alterações nos dados demonstrativos duram até recarregar.
 
@@ -96,7 +99,7 @@ O procedimento do repositório para um ensaio conectado está em
 1. Confirmar o projeto alvo e comparar seu ledger com as migrations do checkout.
    Não executar `db push` indiscriminadamente: a numeração do repo é histórica e
    pode divergir do ledger do ambiente.
-2. Revisar a migration `20271216000000_tarefas_playbook_opcao_b.sql`, principalmente
+2. Revisar a migration `20271225000000_tarefas_playbook_opcao_b.sql`, principalmente
    RLS, grants, RPCs e os gatilhos dos negócios e das ações pessoais. Confirmar
    dependências e fazer o ensaio conectado antes de liberar a mudança.
 3. Aplicar a migration autorizada antes de publicar o frontend que usa os RPCs.

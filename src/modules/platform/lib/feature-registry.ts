@@ -111,7 +111,6 @@ export const ROUTE_FEATURE_MAP: Record<string, FeatureKey> = {
   "/carteira": "leads",
   // revisão / follow-ups
   "/follow-ups": "review",
-  "/tarefas": "review",
   // performance / comissões / tv
   "/performance": "performance",
   "/comissoes": "commissions",

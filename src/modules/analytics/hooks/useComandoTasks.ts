@@ -4,13 +4,13 @@ import { useIdentity,useOrganization,isVirtualTeamMember } from '@/modules/ident
 import { personalTaskItems } from '../lib/comando-task-items';
 
 /** Always personal, including when the rest of Comando shows the team. */
-export function useComandoTasks({history=false,future=false,page=0}:{history?:boolean;future?:boolean;page?:number}={}) {
+export function useComandoTasks({history=false,page=0}:{history?:boolean;page?:number}={}) {
   const {userId,teamMemberId}=useIdentity();const {organizationId,timezone}=useOrganization();
   const realMember=teamMemberId && !isVirtualTeamMember(teamMemberId)?teamMemberId:null;
   const myMemberId=teamMemberId??(userId?`user:${userId}`:null);
   const personal=useAcoesDoDia('meu');
-  const assigned=useTaskQueue({assigneeId:realMember,history,future,page,enabled:!!realMember});
-  const personalItems=future?[]:personalTaskItems(personal.data,userId,organizationId,myMemberId,timezone??'America/Sao_Paulo').filter(t=>history?t.status==='completed':t.status==='pending');
+  const assigned=useTaskQueue({assigneeId:realMember,history,future:null,page,enabled:!!realMember});
+  const personalItems=personalTaskItems(personal.data,userId,organizationId,myMemberId,timezone??'America/Sao_Paulo').filter(t=>history?t.status==='completed':t.status==='pending');
   const assignedData=realMember?assigned.data:undefined;
   const assignedError=!!realMember && assigned.isError;
   const items=[...(page===0?personalItems:[]),...(assignedData?.items??[])];

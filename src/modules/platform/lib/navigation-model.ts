@@ -23,7 +23,6 @@ import {
   GitBranch,
   HandCoins,
   Snowflake,
-  ListChecks,
   MoreHorizontal,
   Package,
   Send,
@@ -155,7 +154,6 @@ export const SIDEBAR_PITSTOP: NavNode = {
   icon: Settings,
   path: "/configuracoes",
 };
-export const SIDEBAR_TASKS: NavNode = { label: "Gestão de tarefas", icon: ListChecks, path: "/tarefas" };
 
 /**
  * V5: o Pitstop deixou de ser painel ao lado da lateral e virou página-hub.
@@ -274,7 +272,6 @@ export const OUTBOUND_MEMBER_ALLOWED_PATHS = [
   "/funil",
   "/funis",
   "/follow-ups",
-  "/tarefas",
 ] as const;
 
 /**
@@ -292,7 +289,6 @@ export const NAV_VIEW_PERMISSIONS: Record<string, string> = {
   "/upsell": "upsell.view",
   "/agenda": "agenda.view",
   "/follow-ups": "followups.view",
-  "/tarefas": "followups.view",
   "/leads": "leads.view",
   // Ex-aba Clientes de /leads (CTO 2026-10-16): mesma permissão da tela-mãe.
   "/carteira": "leads.view",

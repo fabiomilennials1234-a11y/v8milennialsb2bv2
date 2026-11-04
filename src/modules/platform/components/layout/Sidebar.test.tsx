@@ -75,7 +75,6 @@ function makeModel(overrides: Partial<NavigationModel> = {}): NavigationModel {
     primary: PRIMARY,
     pitstopGroups: PITSTOP,
     agenda: node("Agenda", "/agenda"),
-    tasks: null,
     pitstop: node("Pitstop", "/configuracoes", Settings),
     isOutboundMember: false,
     isLocked: () => false,
@@ -112,12 +111,6 @@ beforeEach(() => {
 });
 
 describe("Sidebar — trilho de ícones", () => {
-  it("Gestão de tarefas fica junto da Agenda quando o modelo libera o acesso administrativo", async () => {
-    renderSidebar(makeModel({ tasks: node("Gestão de tarefas", "/tarefas") }));
-    expect(screen.getByRole("link", { name: "Agenda" })).toBeInTheDocument();
-    await userEvent.click(screen.getByRole("link", { name: "Gestão de tarefas" }));
-    expect(screen.getByTestId("onde")).toHaveTextContent("/tarefas");
-  });
   it("toda porta tem nome acessível, mesmo sem rótulo visível", () => {
     renderSidebar();
     const nav = screen.getByRole("navigation", { name: "Telas" });

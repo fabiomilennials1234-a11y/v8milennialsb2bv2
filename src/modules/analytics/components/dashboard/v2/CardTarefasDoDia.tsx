@@ -1,8 +1,8 @@
 import { useState,type FormEvent } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate,useSearchParams } from 'react-router-dom';
 import { ListChecks,Plus } from 'lucide-react';
 import { useCreateAcaoDoDia,useCompleteAcaoDoDia,useUncompleteAcaoDoDia,useDeleteAcaoDoDia } from '@/modules/engagement';
-import { TaskList,TaskDetails,useTaskWrite,type WorkItem } from '@/modules/engagement/tasks';
+import { TaskList,TaskDetails,TaskManagementDialog,useTaskWrite,type WorkItem } from '@/modules/engagement/tasks';
 import { useOrganization,useIdentity } from '@/modules/identity';
 import { Button } from '@/components/ui/button';
 import { useComandoTasks } from '@/modules/analytics/hooks/useComandoTasks';
@@ -14,9 +14,12 @@ export function CardTarefasDoDia() {
 }
 function PersonalTasks() {
   const {timezone}=useOrganization();const {isAdmin}=useIdentity();const navigate=useNavigate();
-  const [tab,setTab]=useState<'today'|'future'|'history'>('today');const [page,setPage]=useState(0);
+  const [history,setHistory]=useState(false);const [page,setPage]=useState(0);
+  const [params,setParams]=useSearchParams();const management=params.get('taskSettings');
+  const manageTab=management==='playbooks' || management==='routines'?management:'assigned';
+  const manage=(open:boolean)=>setParams(current=>{const next=new URLSearchParams(current);if(open)next.set('taskSettings','assigned');else {next.delete('taskSettings');next.delete('taskStage');}return next;},{replace:true});
   const [selected,setSelected]=useState<WorkItem|null>(null);const [title,setTitle]=useState('');
-  const queue=useComandoTasks({history:tab==='history',future:tab==='future',page});
+  const queue=useComandoTasks({history,page});
   const create=useCreateAcaoDoDia();const complete=useCompleteAcaoDoDia();const reopen=useUncompleteAcaoDoDia();const remove=useDeleteAcaoDoDia();const write=useTaskWrite();
   const busy=create.isPending || complete.isPending || reopen.isPending || remove.isPending || write.isPending;
   const openBusiness=(item:WorkItem)=>{if(item.lead_id){setSelected(null);navigate(`/leads?lead=${item.lead_id}`);}};
@@ -28,11 +31,11 @@ function PersonalTasks() {
     }catch{/* each mutation reports its error */}
   };
   const add=async(e:FormEvent)=>{e.preventDefault();if(!title.trim() || busy)return;try{await create.mutateAsync({title:title.trim()});setTitle('');}catch{/* mutation reports the error */}};
-  return <ComandoCard icon={ListChecks} title="Tarefas do dia" count={queue.total} tone={queue.overdue?'urgent':'default'}
-    action={isAdmin?{label:'Gerenciar',to:'/tarefas'}:undefined} isLoading={queue.isCardLoading} isError={queue.isBlockingError} onRetry={()=>void queue.refetch()} isEmpty={false}
+  return <ComandoCard icon={ListChecks} title="Tarefas" count={queue.total} tone={queue.overdue?'urgent':'default'}
+    headerActions={<>{isAdmin && <Button variant="ghost" size="sm" onClick={()=>manage(true)}>Gerenciar</Button>}<Button variant={history?'secondary':'ghost'} size="sm" aria-pressed={history} onClick={()=>{setHistory(v=>!v);setPage(0);}}>Histórico</Button></>}
+    isLoading={queue.isCardLoading} isError={queue.isBlockingError} onRetry={()=>void queue.refetch()} isEmpty={false}
     notice={queue.unavailableSource && <div role="alert" className="mx-4 mb-3 flex flex-wrap items-center gap-2 rounded-lg border px-3 py-2 text-xs text-muted-foreground"><p className="min-w-0 flex-1">{queue.unavailableSource==='assigned'?'Não foi possível carregar as atividades atribuídas pelo admin. Suas tarefas pessoais continuam disponíveis.':'Não foi possível carregar suas tarefas pessoais. As atividades atribuídas continuam disponíveis.'}</p><Button variant="ghost" size="sm" onClick={()=>void queue.refetch()}>Tentar novamente</Button></div>}>
-    <div className="flex gap-1 border-b px-4 pb-3" role="group" aria-label="Período das tarefas">{([['today','Hoje'],['future','Próximas'],['history','Histórico']] as const).map(([value,label])=><Button key={value} variant={tab===value?'secondary':'ghost'} size="sm" onClick={()=>{setTab(value);setPage(0);}}>{label}</Button>)}</div>
-    {!queue.items.length?<p className="px-4 py-7 text-center text-xs text-muted-foreground">{tab==='history'?'Nenhuma execução neste histórico.':tab==='future'?'Nenhuma atividade futura.':'Nenhuma tarefa pendente. Crie a sua abaixo.'}</p>:
+    {!queue.items.length?<p className="px-4 py-7 text-center text-xs text-muted-foreground">{history?'Nenhuma execução neste histórico.':'Nenhuma tarefa pendente. Crie a sua abaixo.'}</p>:
       <TaskList items={queue.items} myMemberId={queue.myMemberId} timezone={timezone??'America/Sao_Paulo'} busy={busy} onSelect={setSelected}
         onAction={(item,kind)=>kind==='complete'?setSelected(item):void action(item,kind)} onOpenDeal={openBusiness}
         onRemove={item=>{if(item.daily_action_id)remove.mutate(item.daily_action_id);}}/>}
@@ -41,5 +44,6 @@ function PersonalTasks() {
     {selected && <TaskDetails key={selected.id} item={selected} timezone={timezone??'America/Sao_Paulo'} canComplete={selected.assignee_id===queue.myMemberId && ['pending','in_progress'].includes(selected.status)} busy={busy}
       recordResult={!selected.daily_action_id} onClose={()=>setSelected(null)} onComplete={result=>void action(selected,'complete',result)} onOpenDeal={selected.lead_id?()=>openBusiness(selected):undefined}
       onReopen={selected.daily_action_id && selected.status==='completed'?()=>{reopen.mutate(selected.daily_action_id!,{onSuccess:()=>setSelected(null)});}:undefined}/>}
+    {isAdmin && management && <TaskManagementDialog initialTab={manageTab} initialStage={params.get('taskStage')??''} onClose={()=>manage(false)}/>}
   </ComandoCard>;
 }

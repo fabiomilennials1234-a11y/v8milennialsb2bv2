@@ -547,7 +547,7 @@ BEGIN
       AND (p_assignee IS NULL OR t.assignee_id=p_assignee)
       AND (p_entry IS NULL OR t.pipeline_entry_id=p_entry)
       AND CASE WHEN p_history THEN t.status IN ('completed','missed') ELSE t.status IN ('pending','in_progress') END
-      AND (p_history OR p_team OR p_entry IS NOT NULL OR CASE WHEN p_future
+      AND (p_history OR p_team OR p_entry IS NOT NULL OR p_future IS NULL OR CASE WHEN p_future
         THEN (t.due_at AT TIME ZONE v_tz)::date>v_today AND t.status<>'in_progress'
         ELSE (t.due_at AT TIME ZONE v_tz)::date<=v_today OR t.status='in_progress' END)
   ), page AS (

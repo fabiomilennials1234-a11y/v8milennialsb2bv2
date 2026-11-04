@@ -42,7 +42,6 @@ vi.mock("@/modules/platform/hooks/useNavigationModel", () => ({
     primary: [{ label: "Comando", icon: Gauge, path: "/dashboard" }],
     pitstopGroups: [],
     agenda: null,
-    tasks: null,
     pitstop: null,
     isOutboundMember: false,
     isLocked: () => false,

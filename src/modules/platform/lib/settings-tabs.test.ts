@@ -52,7 +52,7 @@ describe("registro das abas de Configurações", () => {
   });
 
   it("Checklists saiu das Configurações — o link antigo vai para os playbooks de tarefas", () => {
-    expect(settingsTabPath(tab("checklists"))).toBe("/tarefas?tab=playbooks");
+    expect(settingsTabPath(tab("checklists"))).toBe("/dashboard?taskSettings=playbooks");
     expect(visibleSettingsTabs(ADMIN_OUTBOUND).map((t) => t.value)).not.toContain("checklists");
   });
 

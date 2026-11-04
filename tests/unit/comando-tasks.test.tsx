@@ -4,7 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { CardTarefasDoDia } from '@/modules/analytics/components/dashboard/v2/CardTarefasDoDia';
 import { TaskAssignmentEditor } from '@/modules/engagement/components/tasks/TaskAssignmentEditor';
-import Tarefas from '@/modules/engagement/pages/Tarefas';
+import { TaskManagementDialog } from '@/modules/engagement/components/tasks/TaskManagementDialog';
 import { personalTaskItems } from '@/modules/analytics/lib/comando-task-items';
 
 const mocks=vi.hoisted(()=>({isAdmin:false,personalError:false,create:vi.fn(),complete:vi.fn(),reopen:vi.fn(),remove:vi.fn(),write:vi.fn(),queue:vi.fn(),config:vi.fn()}));
@@ -33,25 +33,45 @@ describe('tarefas no Comando',()=>{
     expect(screen.getByText('Atividade atribuída pelo admin')).toBeInTheDocument();
     expect(screen.getByRole('alert')).toHaveTextContent('tarefas pessoais');
   });
-  it('reúne tarefas existentes e atribuídas na própria central, sem porta de gestão para membro',async()=>{
+  it('reúne as origens por cabeçalhos no Comando, com apenas o filtro de histórico',async()=>{
     render(<MemoryRouter><CardTarefasDoDia/></MemoryRouter>);
     expect(screen.getByText('Tarefa que já existia')).toBeInTheDocument();expect(screen.getByText('Atividade atribuída pelo admin')).toBeInTheDocument();
     expect(screen.getByRole('heading',{name:'Criadas por você'})).toBeInTheDocument();expect(screen.getByRole('heading',{name:'Criadas pelo admin'})).toBeInTheDocument();
-    expect(screen.queryByRole('link',{name:'Gerenciar'})).not.toBeInTheDocument();
-    expect(mocks.queue).toHaveBeenCalledWith(expect.objectContaining({assigneeId:'bruno',enabled:true}));
+    expect(screen.getByRole('heading',{name:'Tarefas',exact:true})).toBeInTheDocument();
+    expect(screen.queryByRole('button',{name:'Hoje',exact:true})).not.toBeInTheDocument();
+    expect(screen.queryByRole('button',{name:'Próximas',exact:true})).not.toBeInTheDocument();
+    expect(screen.queryByRole('button',{name:/Criadas por você|Criadas pelo admin|Gerenciar/})).not.toBeInTheDocument();
+    expect(screen.getByRole('button',{name:'Histórico'})).toHaveAttribute('aria-pressed','false');
+    expect(mocks.queue).toHaveBeenCalledWith(expect.objectContaining({assigneeId:'bruno',enabled:true,future:null}));
     await userEvent.type(screen.getByRole('textbox',{name:'Nova tarefa do dia'}),'Anotar perguntas');await userEvent.click(screen.getByRole('button',{name:'Adicionar'}));
     expect(mocks.create).toHaveBeenCalledWith({title:'Anotar perguntas'});
     await userEvent.click(screen.getByRole('button',{name:'Começar'}));await userEvent.click(screen.getByRole('button',{name:'Concluir tarefa'}));expect(mocks.complete).toHaveBeenCalledWith('legacy');
   });
-  it('admin também executa somente a própria fila no Comando e recebe acesso à gestão',()=>{
+  it('admin gerencia atividades no próprio Comando e executa somente a sua fila',async()=>{
     mocks.isAdmin=true;render(<MemoryRouter><CardTarefasDoDia/></MemoryRouter>);
-    expect(screen.getByRole('link',{name:/Gerenciar/})).toHaveAttribute('href','/tarefas');
+    expect(screen.queryByRole('link',{name:/Gerenciar/})).not.toBeInTheDocument();
     expect(mocks.queue).toHaveBeenCalledWith(expect.objectContaining({assigneeId:'bruno'}));
     expect(screen.queryByText('Criadas pelos membros')).not.toBeInTheDocument();
+    expect(mocks.config).not.toHaveBeenCalled();
+    await userEvent.click(screen.getByRole('button',{name:'Gerenciar'}));
+    expect(screen.getByRole('dialog',{name:'Gerenciar tarefas'})).toBeInTheDocument();
+    expect(screen.getByRole('button',{name:'Atribuir atividade'})).toBeInTheDocument();
+    expect(mocks.config).toHaveBeenCalled();
   });
-  it('membro não carrega configuração nem equipe pela rota de gestão',()=>{
-    render(<MemoryRouter initialEntries={['/tarefas']}><Tarefas/></MemoryRouter>);
+  it('membro não carrega configuração nem equipe ao tentar abrir a gestão',()=>{
+    render(<MemoryRouter><TaskManagementDialog onClose={vi.fn()}/></MemoryRouter>);
     expect(mocks.config).not.toHaveBeenCalled();expect(mocks.queue).not.toHaveBeenCalled();
+  });
+  it('o mesmo botão alterna o histórico e a lista aberta sem separar as origens',async()=>{
+    render(<MemoryRouter><CardTarefasDoDia/></MemoryRouter>);
+    await userEvent.click(screen.getByRole('button',{name:'Histórico'}));
+    expect(screen.getByRole('button',{name:'Histórico'})).toHaveAttribute('aria-pressed','true');
+    expect(mocks.queue).toHaveBeenLastCalledWith(expect.objectContaining({history:true,future:null}));
+    await userEvent.click(screen.getByRole('button',{name:'Histórico'}));
+    expect(screen.getByRole('button',{name:'Histórico'})).toHaveAttribute('aria-pressed','false');
+    expect(mocks.queue).toHaveBeenLastCalledWith(expect.objectContaining({history:false,future:null}));
+    expect(screen.getByRole('heading',{name:'Criadas por você'})).toBeInTheDocument();
+    expect(screen.getByRole('heading',{name:'Criadas pelo admin'})).toBeInTheDocument();
   });
   it('ações pessoais excluem outro usuário e outra organização, preservando legado próprio',()=>{
     const base={id:'p',user_id:'bruno-user',organization_id:'org-a',title:'Minha',description:null,is_completed:false,position:0,created_at:'2026-10-21T12:00:00Z',completed_at:null,lead_id:null,proposta_id:null,confirmacao_id:null,follow_up_id:null};

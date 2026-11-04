@@ -160,7 +160,7 @@ export function TabProximosPassos() {
           icon={ListChecks}
           tone="info"
           loading={taskLoading}
-          note="Suas, para hoje"
+          note="Suas, em aberto"
         />
         <KpiTile
           label="Atrasadas"

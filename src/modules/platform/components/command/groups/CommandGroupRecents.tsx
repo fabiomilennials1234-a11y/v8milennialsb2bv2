@@ -20,7 +20,7 @@ import {
 import { CommandGroup, CommandItem } from "cmdk";
 import { useTheme } from "next-themes";
 import { cn } from "@/lib/utils";
-import { useAuth,useIdentity } from "@/modules/identity";
+import { useAuth } from "@/modules/identity";
 import { getRecent, pushRecent } from "../recentCommands";
 import { useRecentItems } from "@/modules/engagement/hooks/useRecentItems";
 
@@ -44,7 +44,6 @@ const ITEM_MAP: Record<string, RecoverableItem> = {
   "nav-chat":           { label: "Chat WhatsApp",    Icon: MessageSquare,   type: "navigate", payload: "/chat-whatsapp" },
   "nav-copilot":        { label: "Copilot IA",       Icon: Bot,             type: "navigate", payload: "/copilot" },
   "nav-agenda":         { label: "Agenda",           Icon: CalendarDays,    type: "navigate", payload: "/agenda" },
-  "nav-tarefas":        { label: "Gestão de tarefas", Icon: CalendarDays,    type: "navigate", payload: "/tarefas" },
   "nav-analytics":      { label: "Analytics",        Icon: BarChart3,       type: "navigate", payload: "/analytics" },
   "nav-funis":          { label: "Funis",    Icon: Megaphone,       type: "navigate", payload: "/funis" },
   "nav-automacoes":     { label: "Automações",       Icon: Zap,             type: "navigate", payload: "/automacoes" },
@@ -67,7 +66,6 @@ const ENTITY_ROUTE: Record<string, (id: string) => string> = {
 export function CommandGroupRecents({ onClose }: CommandGroupRecentsProps) {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const { isAdmin } = useIdentity();
   const { theme, setTheme } = useTheme();
   const { data: recentEntities } = useRecentItems(5);
 
@@ -76,7 +74,7 @@ export function CommandGroupRecents({ onClose }: CommandGroupRecentsProps) {
   const recentIds = getRecent(user.id);
   const validRecents = recentIds
     .map((id) => ({ id, config: ITEM_MAP[id] }))
-    .filter((r) => !!r.config && (r.config.payload!=='/tarefas' || isAdmin))
+    .filter((r) => !!r.config)
     .slice(0, 5);
 
   const hasCommands = validRecents.length > 0;

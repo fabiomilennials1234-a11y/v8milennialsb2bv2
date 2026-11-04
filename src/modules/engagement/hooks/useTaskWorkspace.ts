@@ -6,7 +6,8 @@ import { taskRpc } from '../lib/task-api';
 import type { TaskConfiguration, TaskQueue } from '../lib/task-types';
 
 export function useTaskQueue(options: {
-  assigneeId?: string | null; history?: boolean; future?: boolean; page?: number; entryId?: string | null; enabled?: boolean;team?:boolean;
+  /** future: null includes every open deadline in the same personal queue. */
+  assigneeId?: string | null; history?: boolean; future?: boolean | null; page?: number; entryId?: string | null; enabled?: boolean;team?:boolean;
 } = {}) {
   const { organizationId, isReady } = useOrganization();
   const { userId } = useIdentity();

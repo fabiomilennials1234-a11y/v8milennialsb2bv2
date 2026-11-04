@@ -52,7 +52,6 @@ vi.mock("@/modules/platform/hooks/useNavigationModel", async () => {
         ],
         pitstopGroups: [],
         agenda: null,
-        tasks: null,
         pitstop: null,
         isOutboundMember: false,
         isLocked: () => false,

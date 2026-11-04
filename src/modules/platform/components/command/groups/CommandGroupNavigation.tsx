@@ -11,7 +11,6 @@ import {
   MessageSquare,
   Bot,
   CalendarDays,
-  ListChecks,
   BarChart3,
   ChartNoAxesCombined,
   Megaphone,
@@ -24,7 +23,7 @@ import {
 } from "lucide-react";
 import { CommandGroup, CommandItem } from "cmdk";
 import { cn } from "@/lib/utils";
-import { useAuth,useIdentity } from "@/modules/identity";
+import { useAuth } from "@/modules/identity";
 import { useOrgFeaturesOptional } from "@/contexts/OrgFeaturesContext";
 import { SIDEBAR_FEATURE_MAP } from "@/modules/platform/lib/feature-registry";
 import { pushRecent } from "../recentCommands";
@@ -41,7 +40,6 @@ const NAV_ITEMS = [
   { id: "nav-chat",        label: "Chat WhatsApp",   path: "/chat-whatsapp",   Icon: MessageSquare },
   { id: "nav-copilot",     label: "Copilot IA",      path: "/copilot",        Icon: Bot },
   { id: "nav-agenda",      label: "Agenda",          path: "/agenda",         Icon: CalendarDays },
-  { id: "nav-tarefas",     label: "Gestão de tarefas", path: "/tarefas",        Icon: ListChecks },
   { id: "nav-analytics",   label: "Analytics",       path: "/analytics",      Icon: BarChart3 },
   { id: "nav-funis",       label: "Funis",   path: "/funis",          Icon: Megaphone },
   { id: "nav-automacoes",  label: "Automações",      path: "/automacoes",     Icon: Zap },
@@ -53,7 +51,6 @@ const NAV_ITEMS = [
 export function CommandGroupNavigation({ onClose }: CommandGroupNavigationProps) {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const { isAdmin } = useIdentity();
   const orgFeatures = useOrgFeaturesOptional();
 
   // Plan gating — item bloqueado mostra cadeado e navega pro estado
@@ -75,7 +72,7 @@ export function CommandGroupNavigation({ onClose }: CommandGroupNavigationProps)
       heading="Navegação"
       className="[&_[cmdk-group-heading]]:text-[11px] [&_[cmdk-group-heading]]:font-bold [&_[cmdk-group-heading]]:uppercase [&_[cmdk-group-heading]]:tracking-[.06em] [&_[cmdk-group-heading]]:text-muted-foreground [&_[cmdk-group-heading]]:px-3 [&_[cmdk-group-heading]]:py-1.5"
     >
-      {NAV_ITEMS.filter(item=>item.path!=='/tarefas' || isAdmin).map(({ id, label, path, Icon }) => {
+      {NAV_ITEMS.map(({ id, label, path, Icon }) => {
         const locked = isItemLocked(path);
         return (
           <CommandItem

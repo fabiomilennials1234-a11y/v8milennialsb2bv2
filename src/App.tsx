@@ -91,7 +91,6 @@ const Pitstop = lazy(() => lazyRetry(() => import("@/modules/platform/pages/Pits
 const AreaGestor = lazy(() => lazyRetry(() => import("@/modules/identity/gestor/pages/AreaGestor")));
 const MasterGestores = lazy(() => lazyRetry(() => import("@/modules/identity/master/pages/MasterGestores")));
 const CopilotPlayground = lazy(() => lazyRetry(() => import("@/modules/copilot/components/playground").then(m => ({ default: m.CopilotPlayground }))));
-const Tarefas = lazy(() => lazyRetry(() => import("@/modules/engagement/pages/Tarefas")));
 const MessageTemplates = lazy(() => lazyRetry(() => import("@/modules/communication/pages/MessageTemplates")));
 const Automacoes = lazy(() => lazyRetry(() => import("./modules/workflows/pages/Automacoes")));
 const AutomacoesEditor = lazy(() => lazyRetry(() => import("./modules/workflows/pages/AutomacoesEditor")));
@@ -463,13 +462,12 @@ function AppRoutes() {
           </ProtectedRoute>
         }
       />
-      <Route path="/tarefas" element={<ProtectedRoute><LayoutWrapper><PermissionProtectedRoute featureKey="followups.view"><FeatureRoute feature="review"><Tarefas /></FeatureRoute></PermissionProtectedRoute></LayoutWrapper></ProtectedRoute>} />
       <Route
         path="/checklists"
         element={
           <ProtectedRoute>
             <LayoutWrapper>
-              <Navigate to="/tarefas?tab=playbooks" replace />
+              <Navigate to="/dashboard?taskSettings=playbooks" replace />
             </LayoutWrapper>
           </ProtectedRoute>
         }
