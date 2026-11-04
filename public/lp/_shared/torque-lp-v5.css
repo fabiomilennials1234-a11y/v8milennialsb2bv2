@@ -625,3 +625,23 @@ html.lpm-open{overflow:hidden}
 }
 @keyframes lpm-sheet{from{transform:translateY(100%)}to{transform:none}}
 @media (prefers-reduced-motion:reduce){.lpm[open],.lpm[open]::backdrop{animation:none!important}}
+.lpm-fail{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;padding:24px;text-align:center;font-size:16px}
+.lpm-agenda .lpm-fail-btn{display:inline-flex;align-items:center;justify-content:center;min-height:52px;padding:0 24px;border-radius:999px;background:hsl(47 100% 50%);color:hsl(40 60% 8%);font-weight:800;text-decoration:none}
+
+/* ===== iOS Safari ===== */
+html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
+/* Campo abaixo de 16 px faz o iOS dar zoom ao focar */
+@media (max-width:680px){.ta-compose input{font-size:16px}}
+/* A barra do Safari muda de altura: dvh onde existe, vh como reserva */
+.lpm-card,.lpm-embed{-webkit-overflow-scrolling:touch;overscroll-behavior:contain}
+@media (max-width:680px){
+  .lpm-agenda{height:100vh;height:100dvh}
+  .lpm-agenda .lpm-card{height:100vh;max-height:100vh;height:100dvh;max-height:100dvh;padding-bottom:calc(14px + env(safe-area-inset-bottom))}
+  .lpm-lead .lpm-card{max-height:92vh;max-height:92dvh}
+}
+/* O foco inicial do modal vai ao título: sem anel no X e sem abrir o teclado do celular */
+.lpm h2:focus{outline:0}
+
+/* Safari antes do 15.4 não esconde <dialog> fechado. Campo a menos de 16 px dá zoom em toque, inclusive em paisagem. */
+.lpm:not([open]){display:none}
+@media (pointer:coarse){.ta-compose input{font-size:16px}}
