@@ -45,8 +45,7 @@
 --                      (nulo = cartão criado, não movido). Só membro ATIVO.
 --   Ranking do mês     `get_ranking_data`, o ranking do painel — o número bate
 --                      com o que a pessoa vê lá. Chamado só DEPOIS de
---                      assert_org_access: essa função, sozinha, não confere
---                      acesso (ver o relatório desta entrega).
+--                      assert_org_access.
 --
 --   Falha branda: os três blocos opcionais capturam o erro, avisam (WARNING) e
 --   seguem. Um estouro neles não pode derrubar a abertura, desfazer o "visto" e
