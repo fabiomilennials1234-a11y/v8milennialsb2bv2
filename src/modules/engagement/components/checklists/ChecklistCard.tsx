@@ -42,6 +42,7 @@ export const ChecklistCard = memo(function ChecklistCard({ checklist, defaultExp
   const progress = checklist.total_items > 0
     ? Math.round((checklist.completed_items / checklist.total_items) * 100)
     : 0;
+  const readOnly = !!checklist.playbook_archived_at;
 
   const handleAddItem = () => {
     const trimmed = newItemTitle.trim();
@@ -109,7 +110,7 @@ export const ChecklistCard = memo(function ChecklistCard({ checklist, defaultExp
                   autoFocus
                 />
               ) : (
-                <h3 className="truncate text-[15px] font-bold tracking-[-0.02em]">{checklist.title}</h3>
+                <h3 className="truncate text-[15px] font-bold tracking-[-0.02em]">{checklist.title}{readOnly && <span className="ml-2 text-xs font-normal text-muted-foreground">Histórico</span>}</h3>
               )}
             </div>
 
@@ -136,6 +137,7 @@ export const ChecklistCard = memo(function ChecklistCard({ checklist, defaultExp
               className="h-8 w-8 rounded-[10px] text-muted-foreground hover:text-foreground"
               onClick={() => setIsEditingTitle(true)}
               aria-label="Renomear template"
+              disabled={readOnly}
             >
               <Pencil className="h-3.5 w-3.5" />
             </Button>
@@ -145,6 +147,7 @@ export const ChecklistCard = memo(function ChecklistCard({ checklist, defaultExp
               className="h-8 w-8 rounded-[10px] text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
               onClick={() => deleteChecklist.mutate(checklist.id, { onSuccess: () => onDeleted?.() })}
               aria-label="Excluir template"
+              disabled={readOnly}
             >
               <Trash2 className="h-3.5 w-3.5" />
             </Button>
@@ -174,6 +177,7 @@ export const ChecklistCard = memo(function ChecklistCard({ checklist, defaultExp
                     <ChecklistItemRow
                       key={item.id}
                       item={item}
+                      readOnly={readOnly}
                       onToggle={(id, completed) => toggleItem.mutate({ id, checklist_id: checklist.id, is_completed: completed })}
                       onUpdate={(id, title) => updateItem.mutate({ id, title })}
                       onDelete={(id) => deleteItem.mutate(id)}
@@ -187,6 +191,7 @@ export const ChecklistCard = memo(function ChecklistCard({ checklist, defaultExp
                 <Plus className="ml-1.5 h-4 w-4 flex-shrink-0 text-muted-foreground" />
                 <Input
                   placeholder="Adicionar item..."
+                  disabled={readOnly}
                   value={newItemTitle}
                   onChange={(e) => setNewItemTitle(e.target.value)}
                   onKeyDown={handleAddItemKeyDown}
@@ -196,7 +201,7 @@ export const ChecklistCard = memo(function ChecklistCard({ checklist, defaultExp
                   size="sm"
                   variant="outline"
                   onClick={handleAddItem}
-                  disabled={!newItemTitle.trim()}
+                  disabled={readOnly || !newItemTitle.trim()}
                 >
                   Adicionar
                 </Button>

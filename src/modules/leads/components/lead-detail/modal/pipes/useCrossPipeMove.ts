@@ -6,6 +6,7 @@ import { useLogLeadAction } from "@/shared/hooks/useLogLeadAction";
 import { notifyError } from "@/shared/errors";
 import type { PerdaResolvida } from "@/contracts/pipe/perda";
 import { useLossReasonGate } from "../../../../loss-reason-gate";
+import { useTaskMoveGate } from "@/modules/engagement/tasks";
 
 /**
  * useCrossPipeMove — unified stage-move hook for both system and custom
@@ -70,6 +71,7 @@ export interface UseCrossPipeMoveResult {
 }
 
 export function useCrossPipeMove(leadId: string): UseCrossPipeMoveResult {
+  const requestTaskMove = useTaskMoveGate();
   const qc = useQueryClient();
   const logAction = useLogLeadAction();
   const { capturarMotivoDaPerda } = useLossReasonGate();
@@ -79,6 +81,7 @@ export function useCrossPipeMove(leadId: string): UseCrossPipeMoveResult {
   const move = useCallback(
     async (target: CrossPipeMoveTarget) => {
       const targetKey = target.kind === "system" ? target.stageKey : target.stageId;
+      if (!(await requestTaskMove(target.kind === "system" ? target.pipeId : target.entryId))) return;
       if (target.isLoss && !target.perda) {
         const entryId = target.kind === "system" ? target.pipeId : target.entryId;
         const perda = await capturarMotivoDaPerda({ entryIds: [entryId], stageName: target.stageLabel });
@@ -106,6 +109,8 @@ export function useCrossPipeMove(leadId: string): UseCrossPipeMoveResult {
         });
 
         qc.invalidateQueries({ queryKey: ["lead_all_pipelines", leadId] });
+        qc.invalidateQueries({ queryKey: ["task-queue"] });
+        qc.invalidateQueries({ queryKey: ["task-entry-history"] });
         qc.invalidateQueries({ queryKey: ["lead-pipes", leadId] });
         qc.invalidateQueries({ queryKey: ["lead-timeline", leadId] });
 
@@ -191,7 +196,7 @@ export function useCrossPipeMove(leadId: string): UseCrossPipeMoveResult {
         setPendingStageKey(null);
       }
     },
-    [leadId, logAction, qc, capturarMotivoDaPerda],
+    [leadId, logAction, qc, capturarMotivoDaPerda, requestTaskMove],
   );
 
   return useMemo(

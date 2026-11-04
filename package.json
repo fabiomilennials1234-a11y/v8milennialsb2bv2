@@ -4,6 +4,7 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
+    "test:tasks": "vitest run tests/unit/comando-tasks.test.tsx tests/unit/task-playbook-ui.test.tsx --no-file-parallelism && node --test tests/integration/task-playbook.test.mjs",
     "test:won-order": "node --test tests/integration/won-order-adjustment.test.mjs",
     "test:historical-correction": "node --test tests/integration/historical-sale-correction.test.mjs",
     "test:sale-correction": "node --test tests/integration/won-sale-correction.test.mjs tests/integration/historical-sale-correction.test.mjs tests/integration/outcome-date-correction.test.mjs",

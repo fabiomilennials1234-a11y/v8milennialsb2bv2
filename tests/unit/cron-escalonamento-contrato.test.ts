@@ -189,6 +189,17 @@ describe('jobs agendados por migrations novas', () => {
     expect(AGENDADOS_DEPOIS.map((j) => j.jobname)).toContain('purge-system-alerts-resolvidos');
   });
 
+  it('rotinas de tarefas mantêm quatro execuções por hora, sem lacunas maiores que 20 minutos', () => {
+    const rotinas = AGENDADOS_DEPOIS.filter((j) => j.jobname === 'task-routines-roll-day');
+    expect(rotinas).toHaveLength(1);
+    const disparos = disparosNaSemana(rotinas[0].schedule);
+    expect(disparos).toHaveLength(4 * 24 * 7);
+    const intervalos = disparos.map((minuto, i) =>
+      (disparos[(i + 1) % disparos.length] - minuto + 7 * 24 * 60) % (7 * 24 * 60),
+    );
+    expect(Math.max(...intervalos)).toBeLessThanOrEqual(20);
+  });
+
   it(`pico de disparos não-por-minuto continua no máximo ${TETO}`, () => {
     expect(pico(cargaSemanal(comNovos))).toBeLessThanOrEqual(TETO);
   });

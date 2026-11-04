@@ -17,6 +17,7 @@ export interface AcaoDoDia {
   description: string | null;
   proposta_id: string | null;
   lead_id: string | null;
+  pipeline_entry_id?: string | null;
   confirmacao_id: string | null;
   follow_up_id: string | null;
   is_completed: boolean;
@@ -181,10 +182,12 @@ export function useAcoesDoDia(escopo: AcoesDoDiaEscopo = "meu") {
 export function useCreateAcaoDoDia() {
   const queryClient = useQueryClient();
   const { user } = useAuth();
+  const { organizationId } = useOrganization();
 
   return useMutation({
     mutationFn: async (input: CreateAcaoDoDiaInput) => {
       if (!user?.id) throw new Error("User not authenticated");
+      if (!organizationId) throw new Error("Organização não disponível.");
 
       const { data, error } = await supabase
         .from("acoes_do_dia")
@@ -192,6 +195,7 @@ export function useCreateAcaoDoDia() {
         // `20270828000030` e ainda não está nos tipos gerados.
         .insert({
           user_id: user.id,
+          organization_id: organizationId,
           title: input.title,
           description: input.description || null,
           proposta_id: input.proposta_id || null,

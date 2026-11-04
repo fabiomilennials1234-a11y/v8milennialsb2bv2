@@ -75,6 +75,7 @@ import { AddMeetingModal } from "@/modules/pipelines/components/legacy/confirmac
 import { DX_TARGET_KEYS } from "@/modules/pipelines/lib/meeting-dx";
 import { usePipelineDisplayConfig } from "@/modules/pipelines/hooks/config/usePipelineDisplayConfig";
 import { nomeDoFunil } from "@/contracts/pipe";
+import { useTaskMoveGate } from "@/modules/engagement/tasks";
 
 /**
  * Fallback LEGADO de destino quando a etapa de sucesso não declara
@@ -126,6 +127,7 @@ export function useFunilMoveFlow({
   findEntry,
 }: UseFunilMoveFlowParams) {
   const { organizationId } = useOrganization();
+  const requestTaskMove = useTaskMoveGate();
   const movePermission = useCanDo("move_pipe_record");
   const queryClient = useQueryClient();
   const mover = useMoverCardNoFunil(pipeline ? { id: pipeline.id, type: pipeline.type } : null);
@@ -487,12 +489,14 @@ export function useFunilMoveFlow({
 
   // ── O interceptador ──────────────────────────────────────────────────────
   const requestMove = useCallback(
-    (entryId: string, stage: CustomPipelineStage) => {
+    async (entryId: string, stage: CustomPipelineStage) => {
       const entry = findEntry(entryId);
       if (!entry || !pipeline) {
         console.warn("[Funil] Entry não encontrada no board:", entryId);
         return;
       }
+
+      if (entry.stage_key !== stage.stage_key && !(await requestTaskMove(entryId))) return;
 
       // 1. Perdido — motivo obrigatório antes do move (SCRUM-369).
       if (isEtapaDePerda(stage)) {
@@ -552,7 +556,7 @@ export function useFunilMoveFlow({
       // 5. Move simples.
       void completarMove(entryId, stage);
     },
-    [findEntry, pipeline, stages, saleGuard, continuarWon, ehSystem, temTrilhoDx, completarMove, moverParaPerda],
+    [findEntry, pipeline, stages, saleGuard, continuarWon, ehSystem, temTrilhoDx, completarMove, moverParaPerda, requestTaskMove],
   );
 
   // ── Diálogos (renderizados pela página) ──────────────────────────────────

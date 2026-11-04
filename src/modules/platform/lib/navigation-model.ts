@@ -23,7 +23,6 @@ import {
   GitBranch,
   HandCoins,
   Snowflake,
-  ListChecks,
   MoreHorizontal,
   Package,
   Send,
@@ -33,7 +32,6 @@ import {
   Tv,
   Wallet,
   Workflow,
-  Wrench,
   Zap,
 } from "lucide-react";
 
@@ -189,7 +187,6 @@ export const PITSTOP_GROUPS: PitstopGroup[] = [
       // sem tirá-lo de lá: duplicado, ele aparece nos dois lugares.
       { label: "Ranking", icon: Trophy, path: "/performance" },
       { label: "Comissões", icon: DollarSign, path: "/comissoes" },
-      { label: "Revisão", icon: Wrench, path: "/follow-ups" },
     ],
   },
   {
@@ -197,7 +194,6 @@ export const PITSTOP_GROUPS: PitstopGroup[] = [
     title: "Rotas",
     hint: "Rotinas de apoio da operação",
     items: [
-      { label: "Checklists", icon: ListChecks, path: "/checklists" },
       { label: "Templates", icon: FileText, path: "/templates" },
       { label: "Contatos", icon: BookUser, path: "/contatos" },
       { label: "Duplicatas", icon: Copy, path: "/duplicatas" },

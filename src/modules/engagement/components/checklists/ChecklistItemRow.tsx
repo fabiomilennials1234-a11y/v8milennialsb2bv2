@@ -12,6 +12,7 @@ interface ChecklistItemRowProps {
   onToggle: (id: string, completed: boolean) => void;
   onUpdate: (id: string, title: string) => void;
   onDelete: (id: string) => void;
+  readOnly?: boolean;
 }
 
 export const ChecklistItemRow = memo(function ChecklistItemRow({
@@ -19,6 +20,7 @@ export const ChecklistItemRow = memo(function ChecklistItemRow({
   onToggle,
   onUpdate,
   onDelete,
+  readOnly = false,
 }: ChecklistItemRowProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [editTitle, setEditTitle] = useState(item.title);
@@ -58,6 +60,7 @@ export const ChecklistItemRow = memo(function ChecklistItemRow({
     >
       <Checkbox
         checked={item.is_completed}
+        disabled={readOnly}
         onCheckedChange={(checked) => onToggle(item.id, !!checked)}
         className="flex-shrink-0"
       />
@@ -73,7 +76,7 @@ export const ChecklistItemRow = memo(function ChecklistItemRow({
         />
       ) : (
         <span
-          onClick={() => setIsEditing(true)}
+          onClick={() => !readOnly && setIsEditing(true)}
           className={cn(
             "flex-1 cursor-pointer text-sm transition-colors hover:text-foreground/70",
             item.is_completed && "text-muted-foreground line-through"
@@ -92,6 +95,7 @@ export const ChecklistItemRow = memo(function ChecklistItemRow({
           onDelete(item.id);
         }}
         aria-label="Remover item"
+        disabled={readOnly}
       >
         <Trash2 className="h-3.5 w-3.5" />
       </Button>

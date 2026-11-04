@@ -4,7 +4,7 @@ import { useOrganization } from "@/modules/identity";
 import { isVirtualTeamMember } from "@/modules/identity";
 import { useRealtimeSubscription } from "@/shared/realtime/useRealtimeSubscription";
 import { toast } from "sonner";
-import type { ChecklistWithCounts } from "@/modules/engagement/hooks/useChecklists";
+import type { Checklist, ChecklistWithCounts } from "@/modules/engagement/hooks/useChecklists";
 import { notifyError } from "@/shared/errors";
 
 export function useChecklistTemplates() {
@@ -25,13 +25,17 @@ export function useChecklistTemplates() {
 
       if (error) throw error;
 
-      return (data ?? []).map((c: any) => {
+      const rows = (data ?? []) as (Checklist & {
+        playbook_archived_at?: string | null;
+        checklist_items: { id: string; is_completed: boolean }[];
+      })[];
+      return rows.filter((c) => !c.playbook_archived_at).map((c) => {
         const items = c.checklist_items ?? [];
         return {
           ...c,
           checklist_items: undefined,
           total_items: items.length,
-          completed_items: items.filter((i: any) => i.is_completed).length,
+          completed_items: items.filter((i) => i.is_completed).length,
           lead: null,
         };
       });

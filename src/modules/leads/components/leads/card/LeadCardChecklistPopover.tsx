@@ -381,7 +381,7 @@ function ChecklistGroup({ checklist, leadId }: ChecklistGroupProps) {
             transition={{ duration: reduceMotion ? 0 : 0.15 }}
             className="overflow-hidden"
           >
-            <ChecklistItemsList checklistId={checklist.id} leadId={leadId} />
+            <ChecklistItemsList checklistId={checklist.id} leadId={leadId} readOnly={!!checklist.playbook_archived_at} />
           </motion.div>
         )}
       </AnimatePresence>
@@ -392,11 +392,13 @@ function ChecklistGroup({ checklist, leadId }: ChecklistGroupProps) {
 interface ChecklistItemsListProps {
   checklistId: string;
   leadId: string;
+  readOnly?: boolean;
 }
 
 const ChecklistItemsList = memo(function ChecklistItemsList({
   checklistId,
   leadId,
+  readOnly = false,
 }: ChecklistItemsListProps) {
   const { data: items = [] } = useChecklistItems(checklistId);
   const toggleItem = useToggleChecklistItem();
@@ -443,6 +445,7 @@ const ChecklistItemsList = memo(function ChecklistItemsList({
         >
           <Checkbox
             checked={item.is_completed}
+            disabled={readOnly}
             onCheckedChange={() => handleToggle(item)}
             className="size-3.5 rounded-[4px] shrink-0 data-[state=checked]:border-success data-[state=checked]:bg-success data-[state=checked]:text-success-foreground"
           />

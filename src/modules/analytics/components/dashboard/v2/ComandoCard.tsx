@@ -33,6 +33,7 @@ interface ComandoCardProps {
   scopeHint?: string;
   /** Porta para a tela completa do assunto. */
   action?: { label: string; to: string };
+  headerActions?: ReactNode;
   isLoading?: boolean;
   isError?: boolean;
   isEmpty?: boolean;
@@ -53,6 +54,7 @@ export function ComandoCard({
   tone = "default",
   scopeHint,
   action,
+  headerActions,
   isLoading = false,
   isError = false,
   isEmpty = false,
@@ -107,6 +109,7 @@ export function ComandoCard({
             <ArrowRight className="h-3.5 w-3.5" />
           </Link>
         )}
+        {headerActions && <div className="ml-auto flex items-center gap-2">{headerActions}</div>}
       </header>
 
       {notice}
