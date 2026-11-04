@@ -209,6 +209,20 @@ test('histórico impede reparentear um item, mas não quebra exclusão autorizad
   await query('delete from leads where id=$1',[id(30)]);
   assert.equal((await one('select count(*)::int n from checklists where id=$1',[historic])).n,0);
 });
+
+test('exclusão autorizada do lead mantém a ação pessoal de outro autor sem bloquear SET NULL',async()=>{
+  await query("insert into acoes_do_dia(id,user_id,organization_id,lead_id,title) values($1,$2,$3,$4,'Anotação pessoal')",[id(60),id(2),id(10),id(30)]);
+  await login(1);
+  await query('delete from leads where id=$1',[id(30)]);
+  const action=await one('select user_id,lead_id,title from acoes_do_dia where id=$1',[id(60)]);
+  assert.deepEqual(action,{user_id:id(2),lead_id:null,title:'Anotação pessoal'});
+});
+
+test('exclusão da organização remove checklists históricos pelo cascade autorizado',async()=>{
+  await query('delete from team_members where organization_id=$1',[id(10)]);
+  await query('delete from organizations where id=$1',[id(10)]);
+  assert.equal((await one('select count(*)::int n from checklists where organization_id=$1',[id(10)])).n,0);
+});
 test('anon não tem acesso a dados nem aos RPCs',async()=>{
   await login(0,'anon');
   await assert.rejects(query('select * from task_work_items'),/permission denied/);

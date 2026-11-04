@@ -119,7 +119,8 @@ COMMENT ON COLUMN public.checklists.playbook_archived_at IS
 
 CREATE FUNCTION private.task_enabled(p_org uuid) RETURNS boolean
 LANGUAGE sql STABLE SECURITY DEFINER SET search_path = '' AS $$
-  SELECT EXISTS (SELECT 1 FROM public.task_workspaces w WHERE w.organization_id=p_org AND w.enabled);
+  SELECT EXISTS (SELECT 1 FROM public.task_workspaces w JOIN public.organizations o ON o.id=w.organization_id
+    WHERE w.organization_id=p_org AND w.enabled);
 $$;
 CREATE FUNCTION private.task_my_members() RETURNS uuid[]
 LANGUAGE sql STABLE SECURITY DEFINER SET search_path = '' AS $$
@@ -624,6 +625,14 @@ BEGIN
       -- Parent deletion is an authorized CRM operation, not an edit to history.
       IF (OLD.lead_id IS NOT NULL AND NOT EXISTS(SELECT 1 FROM public.leads WHERE id=OLD.lead_id))
         OR (OLD.pipeline_entry_id IS NOT NULL AND NOT EXISTS(SELECT 1 FROM public.pipeline_entries WHERE id=OLD.pipeline_entry_id)) THEN RETURN OLD; END IF;
+    ELSIF NEW.lead_id IS NULL AND OLD.lead_id IS NOT NULL
+      AND NOT EXISTS(SELECT 1 FROM public.leads WHERE id=OLD.lead_id)
+      AND to_jsonb(NEW)-ARRAY['lead_id','updated_at']=to_jsonb(OLD)-ARRAY['lead_id','updated_at'] THEN
+      RETURN NEW;
+    ELSIF NEW.source_template_id IS NULL AND OLD.source_template_id IS NOT NULL
+      AND NOT EXISTS(SELECT 1 FROM public.checklists WHERE id=OLD.source_template_id)
+      AND to_jsonb(NEW)-ARRAY['source_template_id','updated_at']=to_jsonb(OLD)-ARRAY['source_template_id','updated_at'] THEN
+      RETURN NEW;
     ELSIF NEW.deal_id IS NULL AND OLD.deal_id IS NOT NULL
       AND NOT EXISTS(SELECT 1 FROM public.deals WHERE id=OLD.deal_id)
       AND to_jsonb(NEW)-ARRAY['deal_id','updated_at']=to_jsonb(OLD)-ARRAY['deal_id','updated_at'] THEN
@@ -652,6 +661,11 @@ CREATE TRIGGER task_preserve_checklist_items BEFORE INSERT OR UPDATE OR DELETE O
 CREATE FUNCTION private.task_validate_daily_action_org() RETURNS trigger
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
 BEGIN
+  IF TG_OP='UPDATE' AND NEW.lead_id IS NULL AND OLD.lead_id IS NOT NULL
+    AND NOT EXISTS(SELECT 1 FROM public.leads WHERE id=OLD.lead_id)
+    AND to_jsonb(NEW)-ARRAY['lead_id','updated_at']=to_jsonb(OLD)-ARRAY['lead_id','updated_at'] THEN
+    RETURN NEW; -- Authorized lead deletion preserves the author's action through SET NULL.
+  END IF;
   IF auth.uid() IS NOT NULL AND auth.role()='authenticated' THEN
     PERFORM public.assert_org_access(NEW.organization_id);
     IF NEW.user_id IS DISTINCT FROM auth.uid() THEN RAISE EXCEPTION 'forbidden' USING ERRCODE='42501'; END IF;
