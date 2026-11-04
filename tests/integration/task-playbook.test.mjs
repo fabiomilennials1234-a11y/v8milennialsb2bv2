@@ -178,11 +178,25 @@ test('histórico de checklist é legível mas não pode ser alterado pelo client
   await assert.rejects(query('update checklist_items set is_completed=false where checklist_id=$1',[old]),/histórico/);
   await assert.rejects(query('delete from checklists where id=$1',[old]),/histórico/);
 });
-test('Classic continua usando o gatilho legado e não gera atividades',async()=>{
-  await db.exec('RESET ROLE'); await query('update organizations set ui_v5_enabled=false where id=$1',[id(10)]);
+test('organização pausada continua usando o gatilho legado e não gera atividades',async()=>{
+  await db.exec('RESET ROLE'); await query('update task_workspaces set enabled=false where organization_id=$1',[id(10)]);
   await createEntry(40,12);
   assert.equal((await one('select count(*)::int n from checklists where pipeline_entry_id=$1',[id(40)])).n,1);
   assert.equal((await one('select count(*)::int n from task_work_items')).n,0);
+});
+
+test('interface única ativa tarefas com a flag V5 antiga desligada sem alterar a organização',async()=>{
+  await login(9);
+  await query("select task_assign($1,'Revisar proposta',current_date,'team','{}'::uuid[],'high','')",[id(90)]);
+  const queue=(await one('select task_queue($1,null,false,0,null,null) data',[id(90)])).data;
+  assert.equal(queue.total,1);
+  assert.equal(queue.items[0].assignee_id,id(91));
+  assert.equal((await one('select enabled from task_workspaces where organization_id=$1',[id(90)])).enabled,true);
+  await db.exec('RESET ROLE');
+  assert.equal((await one('select ui_v5_enabled from organizations where id=$1',[id(90)])).ui_v5_enabled,false);
+  await query('update organizations set ui_v5_enabled=false where id=$1',[id(10)]);
+  await createEntry(40,12);
+  assert.equal((await one('select count(*)::int n from task_work_items where pipeline_entry_id=$1',[id(40)])).n,2);
 });
 test('histórico impede reparentear um item, mas não quebra exclusão autorizada de lead/negócio',async()=>{
   await db.exec(`INSERT INTO checklists(id,organization_id,lead_id,title) VALUES('${id(38)}','${id(10)}','${id(30)}','Novo checklist');`);

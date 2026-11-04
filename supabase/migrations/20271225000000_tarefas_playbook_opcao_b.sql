@@ -119,8 +119,7 @@ COMMENT ON COLUMN public.checklists.playbook_archived_at IS
 
 CREATE FUNCTION private.task_enabled(p_org uuid) RETURNS boolean
 LANGUAGE sql STABLE SECURITY DEFINER SET search_path = '' AS $$
-  SELECT EXISTS (SELECT 1 FROM public.task_workspaces w JOIN public.organizations o ON o.id=w.organization_id
-    WHERE w.organization_id=p_org AND w.enabled AND o.ui_v5_enabled);
+  SELECT EXISTS (SELECT 1 FROM public.task_workspaces w WHERE w.organization_id=p_org AND w.enabled);
 $$;
 CREATE FUNCTION private.task_my_members() RETURNS uuid[]
 LANGUAGE sql STABLE SECURITY DEFINER SET search_path = '' AS $$
@@ -162,7 +161,7 @@ GRANT ALL ON public.task_workspaces, public.task_playbook_activities, public.tas
 CREATE FUNCTION private.task_import_templates(p_org uuid) RETURNS void
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
 BEGIN
-  IF NOT EXISTS (SELECT 1 FROM public.organizations WHERE id=p_org AND ui_v5_enabled) THEN RETURN; END IF;
+  IF NOT EXISTS (SELECT 1 FROM public.organizations WHERE id=p_org) THEN RETURN; END IF;
   PERFORM pg_advisory_xact_lock(hashtextextended('task-workspace:'||p_org::text,0));
   IF EXISTS (SELECT 1 FROM public.task_workspaces WHERE organization_id=p_org) THEN RETURN; END IF;
   INSERT INTO public.task_playbook_activities(organization_id,stage_id,title,instructions,position,source_checklist_item_id)
@@ -210,14 +209,14 @@ CREATE FUNCTION private.task_roll_day(p_org uuid DEFAULT NULL) RETURNS void
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
 BEGIN
   UPDATE public.task_work_items t SET status='missed'
-    FROM public.organizations o WHERE o.id=t.organization_id AND o.ui_v5_enabled
+    FROM public.organizations o WHERE o.id=t.organization_id
       AND (p_org IS NULL OR t.organization_id=p_org) AND t.routine_id IS NOT NULL
       AND EXISTS(SELECT 1 FROM public.task_workspaces w WHERE w.organization_id=t.organization_id AND w.enabled)
       AND t.status IN ('pending','in_progress') AND t.work_date<(now() AT TIME ZONE coalesce(o.timezone,'America/Sao_Paulo'))::date;
   INSERT INTO public.task_work_items(organization_id,routine_id,assignee_id,title,kind,instructions,priority,work_date,due_at)
     SELECT r.organization_id,r.id,m.id,r.title,'task',r.instructions,r.priority,d.local_day,
       (d.local_day+r.due_time) AT TIME ZONE coalesce(o.timezone,'America/Sao_Paulo')
-    FROM public.task_routines r JOIN public.organizations o ON o.id=r.organization_id AND o.ui_v5_enabled
+    FROM public.task_routines r JOIN public.organizations o ON o.id=r.organization_id
     JOIN public.task_workspaces w ON w.organization_id=r.organization_id AND w.enabled
     JOIN public.team_members m ON m.organization_id=r.organization_id AND m.is_active
       AND (r.audience='team' OR m.id=ANY(r.member_ids))
@@ -383,7 +382,7 @@ CREATE TRIGGER zzz_task_stage_guard BEFORE UPDATE OF stage_id,stage_key,pipeline
 CREATE TRIGGER trg_task_after_entry AFTER INSERT OR UPDATE OF stage_id,stage_key,pipeline_id,assigned_to,metadata ON public.pipeline_entries
   FOR EACH ROW EXECUTE FUNCTION private.task_after_entry();
 
--- The old engine remains intact for Classic organizations.
+-- Keep the legacy checklist trigger while an organization has no active workspace.
 DROP TRIGGER IF EXISTS trg_apply_stage_checklist_pipeline ON public.pipeline_entries;
 CREATE TRIGGER trg_apply_stage_checklist_pipeline AFTER INSERT OR UPDATE OF stage_id,stage_key ON public.pipeline_entries
   FOR EACH ROW WHEN (NOT private.task_enabled(NEW.organization_id)) EXECUTE FUNCTION public.apply_stage_checklist();
@@ -412,7 +411,7 @@ BEGIN
   PERFORM private.task_validate_audience(p_org,p_audience,p_members,true);
   IF p_title IS NULL OR length(btrim(p_title)) NOT BETWEEN 1 AND 300 OR length(p_instructions)>10000 OR length(p_message)>10000 THEN RAISE EXCEPTION 'invalid_activity'; END IF;
   PERFORM private.task_import_templates(p_org);
-  IF NOT private.task_enabled(p_org) THEN RAISE EXCEPTION 'A organização precisa usar a interface nova.'; END IF;
+  IF NOT private.task_enabled(p_org) THEN RAISE EXCEPTION 'A geração de tarefas está pausada nesta organização.'; END IF;
   IF NOT EXISTS(SELECT 1 FROM public.pipeline_stages WHERE id=p_stage AND organization_id=p_org AND is_active) THEN RAISE EXCEPTION 'invalid_stage'; END IF;
   IF p_id IS NOT NULL AND NOT EXISTS(SELECT 1 FROM public.task_playbook_activities WHERE id=p_id AND organization_id=p_org) THEN RAISE EXCEPTION 'activity_not_found'; END IF;
   INSERT INTO public.task_playbook_activities(id,organization_id,stage_id,title,kind,due_days,required,instructions,message_template,position,enabled,priority,audience,member_ids)
@@ -435,7 +434,7 @@ BEGIN
   v_members:=coalesce(p_members,CASE WHEN p_assignee IS NULL THEN '{}'::uuid[] ELSE ARRAY[p_assignee] END);
   PERFORM private.task_validate_audience(p_org,v_audience,v_members);
   PERFORM private.task_import_templates(p_org);
-  IF NOT private.task_enabled(p_org) THEN RAISE EXCEPTION 'A organização precisa usar a interface nova.'; END IF;
+  IF NOT private.task_enabled(p_org) THEN RAISE EXCEPTION 'A geração de tarefas está pausada nesta organização.'; END IF;
   IF p_assignee IS NOT NULL AND NOT EXISTS(SELECT 1 FROM public.team_members WHERE id=p_assignee AND organization_id=p_org AND is_active) THEN RAISE EXCEPTION 'invalid_assignee'; END IF;
   IF p_id IS NOT NULL AND NOT EXISTS(SELECT 1 FROM public.task_routines WHERE id=p_id AND organization_id=p_org) THEN RAISE EXCEPTION 'routine_not_found'; END IF;
   INSERT INTO public.task_routines(id,organization_id,assignee_id,title,instructions,weekdays,due_time,enabled,priority,audience,member_ids)
@@ -511,7 +510,7 @@ BEGIN
   PERFORM private.task_validate_audience(p_org,p_audience,p_members);
   IF p_title IS NULL OR length(btrim(p_title)) NOT BETWEEN 1 AND 300 OR p_due_date IS NULL OR length(p_instructions)>10000 THEN RAISE EXCEPTION 'invalid_task'; END IF;
   PERFORM private.task_import_templates(p_org);
-  IF NOT private.task_enabled(p_org) THEN RAISE EXCEPTION 'A organização precisa usar a interface nova.'; END IF;
+  IF NOT private.task_enabled(p_org) THEN RAISE EXCEPTION 'A geração de tarefas está pausada nesta organização.'; END IF;
   SELECT coalesce(timezone,'America/Sao_Paulo') INTO v_tz FROM public.organizations WHERE id=p_org;
   INSERT INTO public.task_work_items(organization_id,created_by,assignment_id,assignee_id,origin,title,kind,instructions,priority,work_date,due_at)
     SELECT p_org,auth.uid(),v_id,m.id,'admin',btrim(p_title),'task',coalesce(p_instructions,''),p_priority,

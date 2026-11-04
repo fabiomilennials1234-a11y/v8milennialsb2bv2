@@ -45,7 +45,9 @@ coincidir com purgas pesadas nem exceder o teto de conexões simultâneas.
 Os modelos de checklist vinculados a etapas são convertidos uma única vez em
 atividades do playbook. Itens já aplicados aos negócios ficam como histórico,
 com seus estados originais, sem virarem um backlog novo. O motor de checklist
-legado continua para organizações Classic.
+legado continua enquanto a organização não tem um workspace ativo ou está pausada.
+A ativação acompanha o Comando da interface única e não depende da flag antiga
+`ui_v5_enabled`, nem altera essa configuração da organização.
 
 As tabelas novas têm RLS e o cliente autenticado não recebe permissão de escrita
 direta. Os RPCs verificam acesso à organização; configuração e distribuição
@@ -108,7 +110,7 @@ O procedimento do repositório para um ensaio conectado está em
    organização. Para ativação antecipada/controlada de uma organização, executar
    `SELECT public.task_activate('<organization UUID>');` com a identidade de admin
    ou serviço apropriada. `scripts/migrate-checklists-to-playbooks.sql` é a opção
-   explícita em lote para todas as organizações V5; não roda automaticamente no build.
+   explícita em lote para todas as organizações; não roda automaticamente no build.
 5. Com dois membros e um admin da organização alvo, conferir: tarefas pessoais
    mantidas; atribuição a um subconjunto invisível aos não selecionados; tarefa
    da equipe com execuções independentes; prioridades; geração na etapa;
