@@ -27,8 +27,8 @@ const FILES: Record<string, { body: string; type: string }> = {
   "/legacy.txt": { body: "x", type: "text/plain; charset=iso-8859-1" },
   "/.well-known/security.txt": { body: "Contact: mailto:security@example.com", type: "text/plain; charset=utf-8" },
   "/landing/Paleta de Cor_Milennials.png": { body: "PNG", type: "image/png" },
-  "/lp/v1/index.html": { body: "<html>lp v1</html>", type: "text/html; charset=utf-8" },
-  "/lp/v1/css/styles.css": { body: "body{}", type: "text/css; charset=utf-8" },
+  "/lp/gestao-comercial/index.html": { body: "<html>lp gestao</html>", type: "text/html; charset=utf-8" },
+  "/lp/gestao-comercial/css/styles.css": { body: "body{}", type: "text/css; charset=utf-8" },
   "/assets/index-abc.js": { body: "console.log(1)", type: "text/javascript; charset=utf-8" },
 };
 
@@ -167,32 +167,83 @@ describe("SPA", () => {
 
 describe("landing pages", () => {
   it("pasta → index.html, com os headers da LP e cache de 600 s", async () => {
-    const response = await call("/lp/v1/");
+    const response = await call("/lp/gestao-comercial/");
     expect(response.status).toBe(200);
-    expect(await response.text()).toBe("<html>lp v1</html>");
+    expect(await response.text()).toBe("<html>lp gestao</html>");
     expect(response.headers.get("cache-control")).toBe("public, max-age=600, must-revalidate");
     expectProfile(response, "lp");
   });
 
   it("arquivo da LP", async () => {
-    const response = await call("/lp/v1/css/styles.css");
+    const response = await call("/lp/gestao-comercial/css/styles.css");
     expect(await response.text()).toBe("body{}");
     expectProfile(response, "lp");
   });
 
   it("sem barra, com index → 301 relativo mantendo a query (Div4)", async () => {
-    const response = await call("/lp/v1?utm=x");
+    const response = await call("/lp/gestao-comercial?utm=x");
     expect(response.status).toBe(301);
-    expect(response.headers.get("location")).toBe("/lp/v1/?utm=x");
+    expect(response.headers.get("location")).toBe("/lp/gestao-comercial/?utm=x");
     expectProfile(response, "lp");
   });
 
   it("pasta sem index e caminho inexistente → 404 com no-store (Div2, Div5)", async () => {
-    for (const path of ["/lp/", "/lp/nao-existe", "/lp/v1/css"]) {
+    for (const path of ["/lp/", "/lp/nao-existe", "/lp/gestao-comercial/css"]) {
       const response = await call(path);
       expect(response.status, path).toBe(404);
       expect(response.headers.get("cache-control")).toBe("no-store, must-revalidate");
       expectProfile(response, "lp");
+    }
+  });
+});
+
+describe("LPs aposentadas", () => {
+  it.each([
+    ["/lp/v1", "/lp/gestao-comercial/"],
+    ["/lp/v1/", "/lp/gestao-comercial/"],
+    ["/lp/v2", "/lp/crm-b2b/"],
+    ["/lp/v2/", "/lp/crm-b2b/"],
+    ["/lp/v3", "/lp/crm-b2b/"],
+    ["/lp/v3/", "/lp/crm-b2b/"],
+    ["/lp/demonstracao", "/lp/crm-b2b/"],
+    ["/lp/demonstracao/", "/lp/crm-b2b/"],
+    ["/lp/v1/css/styles.css", "/lp/gestao-comercial/"],
+  ])("%s → 301 para %s, com os headers da LP e sem tocar nos assets", async (path, location) => {
+    const response = await call(path);
+    expect(response.status).toBe(301);
+    expect(response.headers.get("location")).toBe(location);
+    expect(response.headers.get("cache-control")).toBe("public, max-age=600, must-revalidate");
+    expectProfile(response, "lp");
+    expect(assetCalls).toEqual([]);
+  });
+
+  it("preserva a query com e sem barra", async () => {
+    const query = "?utm_source=google&gclid=abc%20d";
+    expect((await call(`/lp/v1${query}`)).headers.get("location")).toBe(`/lp/gestao-comercial/${query}`);
+    expect((await call(`/lp/demonstracao/${query}`)).headers.get("location")).toBe(`/lp/crm-b2b/${query}`);
+  });
+
+  it("não vira open redirect: o caminho pedido nunca entra no Location", async () => {
+    const attempts = [
+      "/lp/v1//evil.example",
+      "/lp/v1/%2F%2Fevil.example",
+      "/lp/v1/https://evil.example",
+      "/lp/v2/%0d%0aSet-Cookie:%20x=1",
+      "/lp/v1?next=//evil.example",
+    ];
+    for (const path of attempts) {
+      const response = await call(path);
+      const location = response.headers.get("location")!;
+      expect(response.status, path).toBe(301);
+      expect(location, path).toMatch(/^\/lp\/(gestao-comercial|crm-b2b)\/(\?|$)/);
+      expect(response.headers.get("set-cookie"), path).toBeNull();
+      expect(new URL(location, "https://torquecrm.com.br").origin, path).toBe("https://torquecrm.com.br");
+    }
+  });
+
+  it("nome parecido não é aposentado", async () => {
+    for (const path of ["/lp/v10", "/lp/v1x/", "/lp/demonstracao-nova"]) {
+      expect((await call(path)).status, path).toBe(404);
     }
   });
 });
@@ -216,7 +267,7 @@ describe("erros gerados pelo Worker", () => {
   });
 
   it("POST/OPTIONS fora da API → 405 com Allow", async () => {
-    for (const [path, method] of [["/", "POST"], ["/leads", "OPTIONS"], ["/lp/v1/", "PUT"]] as const) {
+    for (const [path, method] of [["/", "POST"], ["/leads", "OPTIONS"], ["/lp/gestao-comercial/", "PUT"]] as const) {
       const response = await call(path, { method });
       expect(response.status).toBe(405);
       expect(response.headers.get("allow")).toBe("GET, HEAD");
@@ -248,7 +299,7 @@ describe("erros gerados pelo Worker", () => {
 
 describe("headers sem junção", () => {
   it("nenhuma resposta sai com CSP juntada (vírgula = duas políticas)", async () => {
-    const paths = ["/", "/sw.js", "/sobre", "/leads", "/lp/v1/", "/lp/v1", "/lp/x", "/.env", "/api/v1", "/ASSETS/x.js"];
+    const paths = ["/", "/sw.js", "/sobre", "/leads", "/lp/gestao-comercial/", "/lp/gestao-comercial", "/lp/x", "/.env", "/api/v1", "/ASSETS/x.js"];
     for (const path of paths) {
       const response = await call(path);
       const csp = response.headers.get("content-security-policy");
@@ -260,7 +311,7 @@ describe("headers sem junção", () => {
   });
 
   it("nunca chama o servidor de assets em /assets/* (esse caminho não passa pelo Worker)", async () => {
-    for (const path of ["/", "/leads", "/lp/v1/", "/lp/v1", "/sobre", "/ASSETS/x.js", "/assets-like"]) await call(path);
+    for (const path of ["/", "/leads", "/lp/gestao-comercial/", "/lp/gestao-comercial", "/sobre", "/ASSETS/x.js", "/assets-like"]) await call(path);
     expect(assetCalls.some((c) => c.path.startsWith("/assets/"))).toBe(false);
   });
 });
@@ -321,8 +372,8 @@ describe("X-Torque-Version (prova de versão do smoke do deploy)", () => {
       ["/sw.js"],
       ["/sobre"],
       ["/leads"],
-      ["/lp/v1/"],
-      ["/lp/v1"],
+      ["/lp/gestao-comercial/"],
+      ["/lp/gestao-comercial"],
       ["/api/v1"],
       ["/.env"],
       ["/", { method: "POST" }],
@@ -464,5 +515,5 @@ describe("API e log", () => {
  it("allows same-origin geolocation in the app but keeps landing pages blocked", async () => {
    expect((await call("/")).headers.get("Permissions-Policy")).toBe("geolocation=(self), payment=()");
    expect((await call("/chat")).headers.get("Permissions-Policy")).toBe("geolocation=(self), payment=()");
-   expect((await call("/lp/v1/")).headers.get("Permissions-Policy")).toBe("geolocation=(), payment=()");
+   expect((await call("/lp/gestao-comercial/")).headers.get("Permissions-Policy")).toBe("geolocation=(), payment=()");
  });

@@ -193,6 +193,38 @@ describe("buildMatrix — Div13 (/50x.html)", () => {
   });
 });
 
+describe("buildMatrix — landing pages", () => {
+  function matrix() {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "parity-lp-"));
+    const write = (rel: string) => {
+      fs.mkdirSync(path.dirname(path.join(dir, rel)), { recursive: true });
+      fs.writeFileSync(path.join(dir, rel), "x");
+    };
+    for (const name of ["index.html", "_headers", ".assetsignore", "assets/index-A.js", "lp/gestao-comercial/index.html", "lp/_shared/lp.js"]) write(name);
+    try {
+      return buildMatrix({ assetsDir: dir, allAssets: false });
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  }
+  const find = (cases: { path: string }[], p: string) => cases.find((c) => c.path === p) as { path: string; allow?: unknown };
+
+  it("pasta sem index (`_shared`) aceita o 404 do Worker (Div2), e a LP de verdade não", () => {
+    const cases = matrix();
+    expect(find(cases, "/lp/_shared/").allow).toEqual({ status: "Div2", "cache-control": "Div5" });
+    expect(find(cases, "/lp/gestao-comercial/").allow).toBeUndefined();
+    expect(find(cases, "/lp/_shared/lp.js")).toBeDefined();
+  });
+
+  it("LP aposentada é comparada sem nenhuma tolerância, com e sem barra e com query", () => {
+    const cases = matrix();
+    for (const p of ["/lp/v1", "/lp/v1/", "/lp/v1?utm_source=parity", "/lp/v2", "/lp/v2/", "/lp/v3", "/lp/v3/", "/lp/demonstracao", "/lp/demonstracao/?utm_source=parity"]) {
+      expect(find(cases, p), p).toBeDefined();
+      expect(find(cases, p).allow, p).toBeUndefined();
+    }
+  });
+});
+
 describe("buildMatrix — interface única (V5)", () => {
   function assetsDir() {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "parity-v5-"));
