@@ -189,22 +189,19 @@ Deno.serve(
         if ((r.restantes ?? 0) === 0) break;
       }
 
-      // Os leads DESTE pedido: importados depois que ele abriu.
-      const { data: pedido } = await admin
-        .from("lista_fria_disparos")
-        .select("created_at")
-        .eq("id", disparoId)
-        .single();
-      const { data: linhas, error: linhasErr } = await admin
-        .from("lista_fria_resultados")
-        .select("lead_id")
-        .eq("busca_id", buscaId)
-        .eq("organization_id", orgId)
-        .not("lead_id", "is", null)
-        .gte("importado_em", (pedido as { created_at: string }).created_at)
-        .limit(1000);
-      if (linhasErr) return await falhar("importando", linhasErr.message, { importados });
-      const leadIds = Array.from(new Set(((linhas ?? []) as Array<{ lead_id: string }>).map((l) => l.lead_id)));
+      // Os leads que este pedido trata: os que acabou de importar e os que uma
+      // tentativa anterior deixou pela metade (importados, sem plano de envio).
+      // Quem já tem negócio neste funil não ganha outro: `abrir_negocio` não é
+      // idempotente e um segundo negócio no mesmo lead vira "recompra".
+      const { data: pendentes, error: pendentesErr } = await admin.rpc("lista_fria_disparo_pendentes", {
+        p_busca: buscaId,
+        p_pipeline: pipelineId,
+        p_disparo: disparoId,
+      });
+      if (pendentesErr) return await falhar("importando", pendentesErr.message ?? "erro", { importados });
+      const alvos = (pendentes ?? []) as Array<{ lead_id: string; tem_negocio: boolean }>;
+      const leadIds = alvos.map((a) => a.lead_id);
+      const jaComNegocio = new Set(alvos.filter((a) => a.tem_negocio).map((a) => a.lead_id));
 
       if (leadIds.length === 0) {
         await registrar({ status: "concluido", finished_at: new Date().toISOString(), erro: "nada_importado" });
@@ -213,9 +210,9 @@ Deno.serve(
 
       // ── 3. Negócios ────────────────────────────────────────────────────────
       await registrar({ status: "negocios" });
-      const comNegocio: string[] = [];
+      const comNegocio: string[] = [...jaComNegocio];
       const semNegocio: { lead_id: string; motivo: string }[] = [];
-      await emParalelo(leadIds, NEGOCIOS_EM_PARALELO, async (leadId) => {
+      await emParalelo(leadIds.filter((id) => !jaComNegocio.has(id)), NEGOCIOS_EM_PARALELO, async (leadId) => {
         const { error } = await rpcDoUsuario.rpc("abrir_negocio", {
           p_lead_id: leadId,
           p_pipe: pipelineId,
@@ -239,12 +236,17 @@ Deno.serve(
       await registrar({ status: "disparando" });
       const resp = await fetch(`${SUPABASE_URL}/functions/v1/blast-plan-create`, {
         method: "POST",
+        // Em nome do usuário, como serviço: a org vem da BUSCA (já validada pela RPC de
+        // preparo com o JWT dele), não de team_members. Conta master e usuário em mais
+        // de uma org não têm linha única lá, e o plano falhava com "No organization".
         headers: {
-          Authorization: authHeader,
+          Authorization: `Bearer ${SERVICE_ROLE_KEY}`,
           apikey: Deno.env.get("SUPABASE_ANON_KEY")!,
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
+          organization_id: orgId,
+          acting_user_id: userData.user.id,
           instance_ids: instanceIds,
           lead_ids: comNegocio,
           message: mensagem,

@@ -31,6 +31,7 @@ import {
   chipPodeDispararFrio,
   dentroDaJanelaFria,
   pendenciasDoPedido,
+  resumoDoDisparo,
   type CadenciaDoDisparo,
 } from "../lib/disparo";
 
@@ -42,9 +43,12 @@ interface Props {
   buscaId: string;
   /** Contatos que vão entrar: os selecionados que ainda não são leads. */
   selecionados: number;
+  /** Já importados por um disparo que falhou: só falta a mensagem (não ganham outro negócio). */
+  aguardando?: number;
 }
 
-export function ImportarEDispararDialog({ open, onOpenChange, buscaId, selecionados }: Props) {
+export function ImportarEDispararDialog({ open, onOpenChange, buscaId, selecionados, aguardando = 0 }: Props) {
+  const { total, retomada } = resumoDoDisparo(selecionados, aguardando);
   const navigate = useNavigate();
   const disparar = useImportarEDisparar();
 
@@ -69,7 +73,7 @@ export function ImportarEDispararDialog({ open, onOpenChange, buscaId, seleciona
   const pedido = { funilId, etapaId, mensagem, chipIds, cadencia };
   const pendencias = pendenciasDoPedido(pedido);
   const naJanela = dentroDaJanelaFria();
-  const podeConfirmar = pendencias.length === 0 && naJanela && selecionados > 0 && !disparar.isPending;
+  const podeConfirmar = pendencias.length === 0 && naJanela && total > 0 && !disparar.isPending;
   // A coluna existe em `pipelines`, mas os tipos gerados ainda não a trazem.
   const automacaoDaEtapa = (funil as { stage_dispatch_enabled?: boolean } | undefined)?.stage_dispatch_enabled === true;
 
@@ -102,9 +106,12 @@ export function ImportarEDispararDialog({ open, onOpenChange, buscaId, seleciona
     <Dialog open={open} onOpenChange={(v) => !disparar.isPending && onOpenChange(v)}>
       <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
         <DialogHeader>
-          <DialogTitle>Importar e disparar {n(selecionados)} contatos</DialogTitle>
+          <DialogTitle>{retomada ? `Retomar o disparo de ${n(total)} contatos` : `Importar e disparar ${n(total)} contatos`}</DialogTitle>
           <DialogDescription>
             Os contatos entram na Lista fria, ganham um negócio no funil que você escolher e recebem a mensagem, um de cada vez.
+            {aguardando > 0 && (
+              <> {n(aguardando)} já foram importados numa tentativa anterior: eles não ganham outro negócio, só recebem a mensagem.</>
+            )}
           </DialogDescription>
         </DialogHeader>
 
@@ -261,7 +268,7 @@ export function ImportarEDispararDialog({ open, onOpenChange, buscaId, seleciona
           </Button>
           <Button onClick={confirmar} disabled={!podeConfirmar}>
             {disparar.isPending ? <Loader2 className="animate-spin" /> : <Send />}
-            {disparar.isPending ? "Importando e disparando…" : `Importar e disparar ${n(selecionados)}`}
+            {disparar.isPending ? "Importando e disparando…" : retomada ? `Retomar disparo de ${n(total)}` : `Importar e disparar ${n(total)}`}
           </Button>
         </DialogFooter>
       </DialogContent>

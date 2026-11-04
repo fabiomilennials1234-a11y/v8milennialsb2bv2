@@ -148,3 +148,21 @@ export function usePendentesDaImportacao(buscaId: string | undefined) {
     },
   });
 }
+
+/**
+ * Contatos que um "Importar e Disparar" anterior importou e deixou sem mensagem
+ * (falhou antes de criar o plano). Já são leads e já têm negócio: só falta o envio.
+ */
+export function useAguardandoDisparo(buscaId: string | undefined) {
+  const { organizationId } = useOrganization();
+  return useQuery<number>({
+    queryKey: [CHAVE_LISTA_FRIA, organizationId, "aguardando-disparo", buscaId],
+    enabled: !!organizationId && !!buscaId,
+    staleTime: 5_000,
+    queryFn: async () => {
+      const { data, error } = await rpcListaFria("lista_fria_disparo_aguardando", { p_busca: buscaId as string });
+      if (error) throw error;
+      return Number(data ?? 0);
+    },
+  });
+}

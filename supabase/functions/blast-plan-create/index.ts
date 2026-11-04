@@ -18,6 +18,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { withErrorBoundary } from "../_shared/error-boundary.ts";
 import { withSecurityHeaders } from "../_shared/security-headers.ts";
 import { logRuntime } from "../_shared/logger.ts";
+import { lerChamadaDeServico } from "../_shared/chamada-de-servico.ts";
 import { runUazapiSenderJob } from "../_shared/dispatch-router.ts";
 import { regimeDoConjunto } from "../_shared/decisao-do-disparo.ts";
 import { getDailyBlastBudget, blastDailyUsageSource } from "../_shared/quick-blast/daily-budget.ts";
@@ -55,29 +56,45 @@ Deno.serve(
       return jsonResponse(401, { error: "Missing auth" }, corsHeaders);
     }
     const userJwt = authHeader.slice(7);
-    const supabaseUser = createClient(SUPABASE_URL, Deno.env.get("SUPABASE_ANON_KEY")!, {
-      global: { headers: { Authorization: authHeader } },
-    });
     const supabaseAdmin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
 
-    const { data: userData, error: userErr } = await supabaseUser.auth.getUser(userJwt);
-    if (userErr || !userData?.user) {
-      return jsonResponse(401, { error: "Invalid token" }, corsHeaders);
-    }
-    const user = userData.user;
-
-    // Resolve caller org — NO role gate (ADR-0002). Any member may create.
-    const { data: member } = await supabaseAdmin
-      .from("team_members")
-      .select("organization_id")
-      .eq("user_id", user.id)
-      .maybeSingle();
-    if (!member?.organization_id) {
-      return jsonResponse(403, { error: "No organization" }, corsHeaders);
-    }
-    const orgId = member.organization_id as string;
-
     const body = await req.json().catch(() => null);
+
+    // Chamada de serviço (ver _shared/chamada-de-servico.ts): outra edge function
+    // que JÁ validou o acesso do usuário e fala em nome dele. Qualquer outro bearer
+    // segue o caminho de usuário abaixo, em que a org vem de team_members, nunca do corpo.
+    const servico = lerChamadaDeServico(userJwt, SERVICE_ROLE_KEY, body);
+
+    let orgId: string;
+    let actorUserId: string;
+    if (servico.servico) {
+      if (!servico.ok) return jsonResponse(400, { error: servico.erro }, corsHeaders);
+      orgId = servico.orgId;
+      actorUserId = servico.actorUserId;
+    } else {
+      const supabaseUser = createClient(SUPABASE_URL, Deno.env.get("SUPABASE_ANON_KEY")!, {
+        global: { headers: { Authorization: authHeader } },
+      });
+
+      const { data: userData, error: userErr } = await supabaseUser.auth.getUser(userJwt);
+      if (userErr || !userData?.user) {
+        return jsonResponse(401, { error: "Invalid token" }, corsHeaders);
+      }
+      const user = userData.user;
+
+      // Resolve caller org — NO role gate (ADR-0002). Any member may create.
+      const { data: member } = await supabaseAdmin
+        .from("team_members")
+        .select("organization_id")
+        .eq("user_id", user.id)
+        .maybeSingle();
+      if (!member?.organization_id) {
+        return jsonResponse(403, { error: "No organization" }, corsHeaders);
+      }
+      orgId = member.organization_id as string;
+      actorUserId = user.id;
+    }
+
     if (!body) return jsonResponse(400, { error: "Invalid JSON" }, corsHeaders);
 
     const {
@@ -295,7 +312,7 @@ Deno.serve(
         },
         {
           orgId,
-          userId: user.id,
+          userId: actorUserId,
           instance: instance as any,
           numbers,
           window,
