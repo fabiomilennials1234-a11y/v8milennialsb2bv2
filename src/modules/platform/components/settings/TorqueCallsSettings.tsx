@@ -27,7 +27,7 @@ export function TorqueCallsSettings() {
   const { data: instances = [], isLoading } = useWhatsAppInstances();
   const { data: sessions = [] } = useVoipSessions();
   const { data: cap = 10 } = useVoiceSessionsCap();
-  const [pairing, setPairing] = useState<{ id: string; name: string } | null>(null);
+  const [pairing, setPairing] = useState<{ id: string; name: string; sessionId?: string } | null>(null);
   const [desconectando, setDesconectando] = useState<string | null>(null);
 
   // ─── Dois predicados, diferentes DE PROPÓSITO ──────────────────────────────
@@ -57,6 +57,7 @@ export function TorqueCallsSettings() {
   const noTeto = ativos >= cap;
 
   const sessionDe = (instanceId: string) =>
+    ocupandoVaga.find((s) => s.whatsappInstanceId === instanceId && s.status === "open") ??
     ocupandoVaga.find((s) => s.whatsappInstanceId === instanceId);
 
   // ─── A sessão que CAIU não é a sessão que o cliente DESLIGOU ────────────────
@@ -146,6 +147,15 @@ export function TorqueCallsSettings() {
                         Aguardando confirmação
                       </Badge>
                     )}
+                    {!sessao.jid && (sessao.status === "pending" || sessao.status === "pairing") && (
+                      <Button
+                        size="sm"
+                        disabled={desconectando === sessao.tcSessionId}
+                        onClick={() => setPairing({ id: inst.id, name: inst.instance_name, sessionId: sessao.tcSessionId })}
+                      >
+                        Exibir QR Code
+                      </Button>
+                    )}
                     <Button
                       variant="outline"
                       size="sm"
@@ -211,6 +221,7 @@ export function TorqueCallsSettings() {
         <VoicePairingDialog
           instanceId={pairing.id}
           instanceName={pairing.name}
+          existingSessionId={pairing.sessionId}
           open
           onOpenChange={(o) => !o && setPairing(null)}
         />

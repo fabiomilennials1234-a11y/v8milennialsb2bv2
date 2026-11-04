@@ -25,7 +25,8 @@ vi.mock("@/modules/communication", () => ({
   useVoiceSessionsCap: () => ({ data: cap }),
   logoutVoiceSession: (...a: unknown[]) => logoutVoiceSession(...a),
   VoiceControlError: class extends Error {},
-  VoicePairingDialog: () => null,
+  VoicePairingDialog: ({ existingSessionId }: { existingSessionId?: string }) =>
+    <div role="dialog">{existingSessionId}</div>,
 }));
 
 vi.mock("@/modules/identity", () => ({ useOrganization: () => ({ organizationId: "org-1" }) }));
@@ -54,6 +55,20 @@ function linhaDoNumero(nome: string): HTMLElement {
 }
 
 describe("TorqueCallsSettings", () => {
+  it("reabre o QR da sessão pendente mesmo com todas as vagas ocupadas", async () => {
+    cap = 1;
+    sessions = [{ ...sessaoAberta, jid: "", status: "pending" }];
+    render(<TorqueCallsSettings />);
+    await userEvent.setup().click(within(linhaDoNumero("Comercial")).getByRole("button", { name: "Exibir QR Code" }));
+    expect(screen.getByRole("dialog")).toHaveTextContent("tc-1");
+  });
+
+  it("prioriza a sessão aberta quando o número também tem uma tentativa pendente", () => {
+    sessions = [{ ...sessaoAberta, tcSessionId: "antiga", status: "pending", jid: "" }, sessaoAberta];
+    render(<TorqueCallsSettings />);
+    expect(screen.getByText("Voz ativa")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Exibir QR Code" })).not.toBeInTheDocument();
+  });
   it("lista os números e diz quais têm voz", () => {
     render(<TorqueCallsSettings />);
     expect(screen.getByText("Comercial")).toBeInTheDocument();
