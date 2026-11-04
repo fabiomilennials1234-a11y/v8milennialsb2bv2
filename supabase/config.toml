@@ -605,6 +605,15 @@ verify_jwt = false
 [functions.billing-provision-worker]
 verify_jwt = false
 
+# stripe-webhook: autenticada pelo HMAC da Stripe sobre o corpo cru, não por JWT.
+[functions.stripe-webhook]
+verify_jwt = false
+
+# billing-checkout-subscription: porta pública do checkout. A página do link não tem
+# sessão; a autorização é o conhecimento do token, e o freio falha fechado.
+[functions.billing-checkout-subscription]
+verify_jwt = false
+
 # Personal test: requireAuth validates the user's JWT; all lead reads use that
 # same JWT so current RLS applies. No internal-key or service-role evaluation.
 [functions.test-guided-condition]
