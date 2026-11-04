@@ -1,0 +1,74 @@
+/**
+ * `ConsultaCnpj` sobre o Parquet enxuto, com DuckDB (única dependência do worker, ADR-0043).
+ *
+ * A base são partes Parquet ordenadas em sequência por (uf, cnae, municipio), então os filtros de UF e
+ * CNAE leem só os grupos de linhas que casam, mesmo atravessando partes. O que é dado do usuário (UF, município, cursor) vai por parâmetro; os CNAEs só
+ * entram como texto depois de validados como dígitos; os caminhos das partes vêm do manifesto local.
+ */
+import { DuckDBInstance } from "@duckdb/node-api";
+
+import { sqlDosBairros, type ConsultaDeBairros, type LinhaDeBairro } from "./bairros.ts";
+import type { ConsultaCnpj, ExigeContato, FiltrosCnpj, LinhaCnpj } from "./fonte-cnpj.ts";
+
+const CONDICAO_DE_CONTATO: Record<ExigeContato, string> = {
+  qualquer: "(email IS NOT NULL OR tel IS NOT NULL)",
+  email: "email IS NOT NULL",
+  telefone: "tel IS NOT NULL",
+  ambos: "(email IS NOT NULL AND tel IS NOT NULL)",
+};
+
+const literal = (s: string): string => `'${s.replaceAll("'", "''")}'`;
+
+/** SQL e parâmetros de uma página. Exportado para o teste conferir o que vai ao banco. */
+export function sqlDaBusca(arquivos: readonly string[], f: FiltrosCnpj, depois: string | null, limite: number): { sql: string; valores: Array<string | number> } {
+  const cnaes = f.cnaes.map((c) => {
+    if (!/^\d{2,7}$/.test(c)) throw new Error("CNAE inválido");
+    return `cnae LIKE '${c}%'`;
+  });
+  const valores: Array<string | number> = [f.uf];
+  let n = 1;
+  let onde = `uf = $${n} AND (${cnaes.join(" OR ")}) AND matriz`;
+  if (f.municipio) {
+    valores.push(f.municipio);
+    onde += ` AND municipio = $${++n}`;
+  }
+  if (depois) {
+    valores.push(depois);
+    onde += ` AND cnpj > $${++n}`;
+  }
+  valores.push(limite);
+  const sql = `
+    SELECT * FROM (
+      SELECT cnpj, razao, fantasia, cnae, cnae_desc, uf, municipio, bairro, endereco, tel,
+             CASE WHEN email_compartilhado THEN NULL ELSE email END AS email, porte, celular
+        FROM read_parquet([${arquivos.map(literal).join(", ")}])
+       WHERE ${onde}
+    ) WHERE ${CONDICAO_DE_CONTATO[f.contato]}
+    ORDER BY cnpj
+    LIMIT $${++n}`;
+  return { sql, valores };
+}
+
+export async function consultaDuckdb(arquivos: readonly string[]): Promise<ConsultaCnpj & ConsultaDeBairros & { fechar(): void }> {
+  const instancia = await DuckDBInstance.create(":memory:");
+  const conexao = await instancia.connect();
+  // A VPS é compartilhada com o Torque: teto de memória e de threads para a consulta.
+  await conexao.run(`SET memory_limit='${process.env.DUCKDB_MEMORIA || "768MB"}'`);
+  await conexao.run(`SET threads=${Number(process.env.DUCKDB_THREADS) > 0 ? Number(process.env.DUCKDB_THREADS) : 2}`);
+  return {
+    async buscar(filtros, depois, limite) {
+      const { sql, valores } = sqlDaBusca(arquivos, filtros, depois, limite);
+      const leitor = await conexao.runAndReadAll(sql, valores);
+      return leitor.getRowObjectsJson() as unknown as LinhaCnpj[];
+    },
+    async bairros(uf, municipio) {
+      const { sql, valores } = sqlDosBairros(arquivos, uf, municipio);
+      const leitor = await conexao.runAndReadAll(sql, valores);
+      return leitor.getRowObjectsJson() as unknown as LinhaDeBairro[];
+    },
+    fechar() {
+      conexao.closeSync();
+      instancia.closeSync();
+    },
+  };
+}

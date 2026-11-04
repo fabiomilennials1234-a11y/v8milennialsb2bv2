@@ -158,28 +158,35 @@ export default defineConfig(({ mode }) => {
       // no-op, onNeedRefresh nunca dispara e o update fica waiting pra sempre
       // enquanto houver aba aberta.
       registerType: 'prompt',
-      includeAssets: ['favicon.png', 'favicon.svg'],
+      includeAssets: ['favicon.ico', 'favicon.png', 'apple-touch-icon.png'],
       manifest: {
         name: 'Torque CRM',
         short_name: 'Torque',
-        description: 'CRM de vendas de alta performance para times comerciais',
+        description: 'CRM B2B para fábricas e distribuidoras: funil de vendas, WhatsApp, campanhas e automações com IA.',
+        lang: 'pt-BR',
         theme_color: '#E8922A',
-        background_color: '#0a0a0a',
+        background_color: '#0a0908',
         display: 'standalone',
         scope: '/',
         start_url: '/',
         icons: [
           {
-            src: '/pwa-192x192.svg',
+            src: '/pwa-192x192.png',
             sizes: '192x192',
-            type: 'image/svg+xml',
+            type: 'image/png',
             purpose: 'any',
           },
           {
-            src: '/pwa-512x512.svg',
+            src: '/pwa-512x512.png',
             sizes: '512x512',
-            type: 'image/svg+xml',
-            purpose: 'any maskable',
+            type: 'image/png',
+            purpose: 'any',
+          },
+          {
+            src: '/pwa-maskable-512x512.png',
+            sizes: '512x512',
+            type: 'image/png',
+            purpose: 'maskable',
           },
         ],
       },

@@ -10,6 +10,7 @@ import { useChatReply } from "./useChatReply";
  */
 import { useMutation, useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import type { Json } from "@/integrations/supabase/types";
 import { useCurrentTeamMember } from "@/modules/identity";
 import { track } from "@/lib/analytics";
 import { resolveWhatsAppDestination, type WhatsAppDestination } from "@/modules/communication/lib/whatsapp";
@@ -315,7 +316,7 @@ export function useSendWhatsAppMessage() {
         direction: "outgoing",
         message_type: "text",
         content: message,
-        ...(replyContext ? { reply_context: replyContext } : {}),
+        ...(replyContext ? { reply_context: replyContext as unknown as Json } : {}),
         status: providerSendStatus(data),
         timestamp,
       }, { onConflict: "message_id,instance_id", ignoreDuplicates: true })
@@ -504,6 +505,12 @@ export function useSendWhatsAppMedia() {
       const isSzChat = await isSzChatInstanceCached(instanceId);
       const recovery = recoveryContext(queryClient, teamMember.organization_id, phoneNumber, destination, instanceId, _sendId, caption ?? null, mediaUrl);
 
+      // Do not depend on realtime/refetch to display an attachment already uploaded.
+      queryClient.setQueryData<WhatsAppMessage[]>(
+        ["whatsapp_messages", teamMember.organization_id, phoneNumber, instanceId],
+        old => old?.map(message => message.id === _sendId ? { ...message, media_url: mediaUrl } : message),
+      );
+
       let data: Record<string, unknown>;
       let error: unknown;
 
@@ -602,7 +609,7 @@ export function useSendWhatsAppMedia() {
         // Este fallback não tem raw_payload: sem isto o trigger não acha nome
         // e, se ele chegar antes do eco do webhook, o nome se perde.
         ...(mediaType === "document" && fileName?.trim() ? { media_file_name: fileName.trim().slice(0, 255) } : {}),
-        ...(replyContext ? { reply_context: replyContext } : {}),
+        ...(replyContext ? { reply_context: replyContext as unknown as Json } : {}),
         status: providerSendStatus(data),
         timestamp: new Date().toISOString(),
       }, { onConflict: "message_id,instance_id", ignoreDuplicates: true })
@@ -637,7 +644,7 @@ export function useSendWhatsAppMedia() {
         direction: "outgoing",
         message_type: variables.mediaType,
         content: variables.caption || null,
-        media_url: null,
+        media_url: variables.media,
         media_file_name: variables.mediaType === "document" ? variables.fileName?.trim() || null : null,
         push_name: null,
         status: "pending",

@@ -5,6 +5,7 @@ import { LeadCardMetrics } from "./LeadCardMetrics";
 import { LeadCardDeals } from "./LeadCardDeals";
 import { LeadCardNotes } from "./LeadCardNotes";
 import { LeadCardFields } from "./LeadCardFields";
+import type { DocumentoEditado } from "../../lib/lead-documents";
 import { LeadCardHistory } from "./LeadCardHistory";
 import { AbrirConversaPorContato } from "./AbrirConversaPorContato";
 import type { ContatoDaConversa, LeadCardData } from "./types";
@@ -226,6 +227,7 @@ export function LeadCard({
   onNewDeal,
   registrarVenda,
   onSaveField,
+  onSaveDocumentos,
   onToggleCopilot,
   onDelete,
   onComentar,
@@ -251,6 +253,8 @@ export function LeadCard({
   registrarVenda?: React.ReactNode;
   /** Persiste um campo do bloco Dados. Sem ela o bloco fica só de leitura. */
   onSaveField?: (chave: string, valor: string) => Promise<void>;
+  /** Persiste a lista de documentos (vários CNPJ). Sem ela a lista fica só de leitura. */
+  onSaveDocumentos?: (lista: DocumentoEditado[]) => Promise<void>;
   onToggleCopilot?: (ativo: boolean) => void;
   onDelete?: () => void;
   /**
@@ -498,6 +502,7 @@ export function LeadCard({
                     : lead.campos
                 }
                 onSave={onSaveField}
+                onSaveDocumentos={onSaveDocumentos}
               />
             </div>
           </div>

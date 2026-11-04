@@ -1,4 +1,4 @@
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import type { Tables, TablesInsert, TablesUpdate } from "@/integrations/supabase/types";
 import { useOrganization } from "@/modules/identity";
@@ -15,6 +15,24 @@ import { prepareLeadForCreate } from "../lib/lead-create-payload";
 import { EMPTY_COUNT, runCappedCount, type CappedCount } from "../lib/capped-count";
 import { useLeadsRealtime } from "./useLeadsRealtime";
 import { buscarLeadIdsPorTelefoneSecundario } from "./useLeadPhones";
+import { buscarLeadIdsPorDocumento } from "./useLeadDocument";
+
+/**
+ * Leads achados pelo que NÃO é coluna de `leads`: telefone secundário
+ * (`lead_phones`) e CPF/CNPJ (`lead_documents`, principal e extras). Entram no
+ * mesmo `or()` da busca. As duas consultas vão em paralelo.
+ */
+async function buscarLeadIdsSecundarios(
+  queryClient: QueryClient,
+  organizationId: string,
+  search: string | null | undefined,
+): Promise<string[]> {
+  const [telefones, documentos] = await Promise.all([
+    buscarLeadIdsPorTelefoneSecundario(queryClient, organizationId, search),
+    buscarLeadIdsPorDocumento(queryClient, organizationId, search),
+  ]);
+  return [...new Set([...telefones, ...documentos])];
+}
 import { coDonosDoFiltro } from "./useLeadOwners";
 import { comEmbedDosDonos } from "../lib/lead-owners";
 
@@ -35,6 +53,8 @@ export interface LeadsFilterParams {
   usaLeiDoErp?: boolean;
   /** Piloto da página da Café Jurerê, habilitado por flag da organização. */
   usaCadastroErpCafeJurere?: boolean;
+  /** A org tem a Lista fria (flag)? Só então a lista separa a seção. */
+  usaListaFria?: boolean;
   filterUf?: string;
   /** Instante ISO (inclusive) — limite inferior de `created_at`. */
   createdFrom?: string;
@@ -91,11 +111,11 @@ function applyLeadsFilters(
  * Retorna até LEADS_PAGE_SIZE leads por página.
  */
 export function useLeads(params: LeadsFilterParams = {}, options: { enabled?: boolean } = {}) {
-  const { page = 0, searchQuery, filterOrigin, filterQualification, filterClassificacao, usaLeiDoErp, usaCadastroErpCafeJurere, filterUf, createdFrom, createdTo, filterAssignment, filterResponsible, donosMultiplos, sort = DEFAULT_LEAD_SORT } = params;
+  const { page = 0, searchQuery, filterOrigin, filterQualification, filterClassificacao, usaLeiDoErp, usaCadastroErpCafeJurere, usaListaFria, filterUf, createdFrom, createdTo, filterAssignment, filterResponsible, donosMultiplos, sort = DEFAULT_LEAD_SORT } = params;
   const { organizationId, isReady } = useOrganization();
   const queryClient = useQueryClient();
   const enabled = isReady && options.enabled !== false;
-  const filters = { searchQuery, filterOrigin, filterQualification, filterClassificacao, usaLeiDoErp, usaCadastroErpCafeJurere, filterUf, createdFrom, createdTo, filterAssignment, filterResponsible, ...(donosMultiplos ? { donosMultiplos } : {}) };
+  const filters = { searchQuery, filterOrigin, filterQualification, filterClassificacao, usaLeiDoErp, usaCadastroErpCafeJurere, usaListaFria, filterUf, createdFrom, createdTo, filterAssignment, filterResponsible, ...(donosMultiplos ? { donosMultiplos } : {}) };
   const queryKey = leadsKeys.list(organizationId, page, filters, sort);
 
   // UM canal (em `leads`), classificado por evento — ver `useLeadsRealtime`.
@@ -139,7 +159,7 @@ export function useLeads(params: LeadsFilterParams = {}, options: { enabled?: bo
 
       // Telefone secundário (lead_phones) — Chamado 82c50502.
       const [secundarios, coDonos] = await Promise.all([
-        buscarLeadIdsPorTelefoneSecundario(queryClient, organizationId, searchQuery),
+        buscarLeadIdsSecundarios(queryClient, organizationId, searchQuery),
         coDonosDoFiltro(organizationId, filters),
       ]);
       query = applyLeadsFilters(query, organizationId, filters, secundarios, coDonos);
@@ -189,24 +209,24 @@ export function useLeads(params: LeadsFilterParams = {}, options: { enabled?: bo
  * FILTROS da lista, e com TETO: acima de `LEADS_COUNT_CAP` devolve
  * `{ capped: true }` em vez do total. Ver `lib/capped-count`.
  */
-export function useLeadsCount(filters: Omit<LeadsFilterParams, "page"> = {}) {
-  const { searchQuery, filterOrigin, filterQualification, filterClassificacao, usaLeiDoErp, usaCadastroErpCafeJurere, filterUf, createdFrom, createdTo, filterAssignment, filterResponsible, donosMultiplos } = filters;
+export function useLeadsCount(filters: Omit<LeadsFilterParams, "page"> = {}, options: { enabled?: boolean } = {}) {
+  const { searchQuery, filterOrigin, filterQualification, filterClassificacao, usaLeiDoErp, usaCadastroErpCafeJurere, usaListaFria, filterUf, createdFrom, createdTo, filterAssignment, filterResponsible, donosMultiplos } = filters;
   const { organizationId, isReady } = useOrganization();
   const queryClient = useQueryClient();
-  const recorte = { searchQuery, filterOrigin, filterQualification, filterClassificacao, usaLeiDoErp, usaCadastroErpCafeJurere, filterUf, createdFrom, createdTo, filterAssignment, filterResponsible, ...(donosMultiplos ? { donosMultiplos } : {}) };
+  const recorte = { searchQuery, filterOrigin, filterQualification, filterClassificacao, usaLeiDoErp, usaCadastroErpCafeJurere, usaListaFria, filterUf, createdFrom, createdTo, filterAssignment, filterResponsible, ...(donosMultiplos ? { donosMultiplos } : {}) };
 
   return useQuery<CappedCount>({
     queryKey: leadsKeys.count(organizationId, recorte),
     queryFn: async () => {
       if (!organizationId) return EMPTY_COUNT;
       const [secundarios, coDonos] = await Promise.all([
-        buscarLeadIdsPorTelefoneSecundario(queryClient, organizationId, searchQuery),
+        buscarLeadIdsSecundarios(queryClient, organizationId, searchQuery),
         coDonosDoFiltro(organizationId, recorte),
       ]);
       const query = applyLeadsFilters(supabase.from("leads").select("id"), organizationId, recorte, secundarios, coDonos);
       return runCappedCount(query);
     },
-    enabled: isReady,
+    enabled: isReady && options.enabled !== false,
     staleTime: 60000, // 1 minuto
   });
 }

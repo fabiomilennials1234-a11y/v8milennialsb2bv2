@@ -16,6 +16,7 @@
  * o modelo atual sem migração de schema.
  */
 import type { ChatContact } from "@/modules/communication/hooks/chat/types";
+import { paraBusca } from "./nomeDaConversa";
 
 // ─── Tipos de estado ────────────────────────────────────────────────────────
 
@@ -155,12 +156,21 @@ export function applyInboxFilters(
   contacts: ChatContact[],
   state: InboxFilterState,
   ctx: InboxFilterContext,
-  opts: { searchQuery?: string; tab?: InboxTab; includeGroups?: boolean } = {},
+  opts: {
+    searchQuery?: string;
+    tab?: InboxTab;
+    includeGroups?: boolean;
+    /** Nome exibido na lista (flags de nome da org). A busca também o varre. */
+    displayName?: (c: ChatContact) => string;
+  } = {},
 ): ChatContact[] {
-  const search = (opts.searchQuery ?? "").trim().toLowerCase();
+  const rawSearch = (opts.searchQuery ?? "").trim().toLowerCase();
+  const search = paraBusca(rawSearch);
+  // Só dígitos: o usuário digitou um código do ERP (ou um pedaço de telefone).
+  const digitsOnly = /^\d+$/.test(search);
   const tab = opts.tab ?? "active";
 
-  return contacts.filter((c) => {
+  const filtered = contacts.filter((c) => {
     // O opt-in vem da configuração da org, não de filtros salvos pelo membro.
     if (tab === "grupos") {
       if (!c.is_group) return false;
@@ -186,13 +196,39 @@ export function applyInboxFilters(
     if (!matchesSource(c, state.source)) return false;
     if (!matchesLeadPresence(c, state.lead)) return false;
 
-    if (search) {
-      const matchesName = [c.saved_contact_name, c.lead_name, c.push_name]
-        .some(name => name?.toLowerCase().includes(search));
-      if (!c.phone_number.includes(search) && !matchesName) return false;
-    }
+    if (search && !matchesSearch(c, rawSearch, search, digitsOnly, opts.displayName)) return false;
     return true;
   });
+
+  if (!search || !digitsOnly) return filtered;
+  // Código do ERP exato > prefixo > resto (telefone, nome). Sort estável: dentro
+  // de cada faixa a ordem original da lista é preservada.
+  const rank = (c: ChatContact) => {
+    const code = codigoDoErp(c);
+    if (code === search) return 0;
+    if (code.startsWith(search)) return 1;
+    return 2;
+  };
+  return filtered
+    .map((c, i) => ({ c, i, r: rank(c) }))
+    .sort((a, b) => a.r - b.r || a.i - b.i)
+    .map((x) => x.c);
+}
+
+const codigoDoErp = (c: ChatContact) => paraBusca(c.lead_erp_code ?? "");
+
+function matchesSearch(
+  c: ChatContact,
+  rawSearch: string,
+  search: string,
+  digitsOnly: boolean,
+  displayName?: (c: ChatContact) => string,
+): boolean {
+  if (c.phone_number.includes(rawSearch)) return true;
+  if (digitsOnly && codigoDoErp(c).startsWith(search)) return true;
+  const fontes = [c.saved_contact_name, c.lead_name, c.push_name, c.lead_erp_code, c.lead_contact_label];
+  if (displayName) fontes.push(displayName(c));
+  return fontes.some((f) => !!f && paraBusca(f).includes(search));
 }
 
 /** Nº de dimensões ativas (fora vendor="all"/unread — todas contam se != default). */

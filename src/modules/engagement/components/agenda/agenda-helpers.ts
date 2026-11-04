@@ -16,6 +16,7 @@ import {
 import { ptBR } from "date-fns/locale";
 import type { AgendaEvent as RpcAgendaEvent } from "@/modules/engagement/hooks/useAgendaEvents";
 import type { CalendarEvent } from "@/modules/integrations/hooks/useGoogleCalendar";
+import { agendaAttributionLabel } from "../../lib/agenda-attribution";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -748,4 +749,17 @@ export function resumirComparecimento(
     else resumo.semRegistro += 1;
   }
   return resumo;
+}
+
+/** Build a per-event subtitle from the richest detail available. */
+export function eventSubtitle(event: UnifiedEvent, showOwner: boolean): string {
+  const detalhe = (() => {
+    if (event.location) return event.location;
+    const lead = [event.leadCompany, event.leadName].filter(Boolean).join(" · ");
+    if (lead) return lead;
+    return SOURCE_LABELS[event.source] ?? event.source;
+  })();
+
+  if (showOwner && event.creatorName) return `${agendaAttributionLabel(event.source)}: ${event.creatorName} · ${detalhe}`;
+  return detalhe;
 }

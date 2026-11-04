@@ -417,6 +417,14 @@ export class UazapiProvider implements WhatsAppProvider {
       accepted_at: new Date(timestamp >= 1e12 ? timestamp : timestamp * 1000).toISOString() };
   }
 
+  async findRecentMessages(opts: { number: string; limit: number }): Promise<unknown[]> {
+    const chatid = opts.number.includes("@") ? opts.number : `${opts.number}@s.whatsapp.net`;
+    const raw = await this.client.findRecentMessages({ chatid, limit: opts.limit });
+    const page = raw && typeof raw === "object" ? raw as Record<string, unknown> : null;
+    const rows = Array.isArray(raw) ? raw : page?.messages ?? page?.data;
+    return Array.isArray(rows) ? rows : [];
+  }
+
   async findTrackedMenu(opts: TrackedMenuQuery): Promise<TrackedMenuResult> {
     const chatid = `${opts.number}@s.whatsapp.net`;
     const raw = await this.client.findTrackedMessages({ chatid, track_id: opts.trackId, track_source: opts.trackSource });

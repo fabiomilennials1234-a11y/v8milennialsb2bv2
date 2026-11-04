@@ -1,0 +1,10 @@
+{
+  "name": "lista-fria-worker",
+  "private": true,
+  "type": "module",
+  "description": "Worker da Lista Fria. Única dependência: DuckDB, para ler a base enxuta de CNPJ em Parquet (ADR-0043).",
+  "engines": { "node": ">=24" },
+  "dependencies": {
+    "@duckdb/node-api": "2.0.0-r.1"
+  }
+}

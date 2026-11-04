@@ -3,14 +3,16 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <link rel="icon" type="image/png" href="/favicon.png" />
+    <link rel="icon" href="/favicon.ico" sizes="48x48" />
+    <link rel="icon" type="image/png" sizes="192x192" href="/favicon.png" />
     <title>Torque CRM</title>
-    <meta name="description" content="Torque CRM - Sistema de gestão comercial de alta performance para times que buscam resultados." />
-    <meta name="author" content="Torque" />
+    <meta name="description" content="Torque CRM é o CRM B2B para fábricas e distribuidoras: funil de vendas, WhatsApp, campanhas e automações com IA para o time comercial vender mais." />
+    <meta name="author" content="Torque CRM" />
     <meta name="theme-color" content="#E8922A" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-    <link rel="apple-touch-icon" href="/pwa-192x192.svg" />
+    <meta name="apple-mobile-web-app-title" content="Torque" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
 
     <!-- Security Headers -->
     <meta http-equiv="X-Content-Type-Options" content="nosniff" />
@@ -32,11 +34,74 @@
       form-action 'self';
     " />
 
+    <meta property="og:site_name" content="Torque CRM" />
     <meta property="og:title" content="Torque CRM" />
-    <meta property="og:description" content="CRM de vendas de alta performance para times comerciais" />
+    <meta property="og:description" content="CRM B2B para fábricas e distribuidoras: funil de vendas, WhatsApp, campanhas e automações com IA." />
     <meta property="og:type" content="website" />
+    <meta property="og:locale" content="pt_BR" />
+    <meta property="og:url" content="https://torquecrm.com.br/" />
+    <meta property="og:image" content="https://torquecrm.com.br/og-image.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="Torque CRM" />
 
     <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:image" content="https://torquecrm.com.br/og-image.png" />
+
+    <!--
+      Identidade da marca para buscadores. Existe outro produto chamado
+      "Torque CRM" (torquecrm.online, CRM de oficina); sem estes dados o Google
+      funde os dois na Visão geral criada por IA. Organization + WebSite fixam
+      nome do site, logo e entidade legal; o @id liga os três nós.
+    -->
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@graph": [
+          {
+            "@type": "Organization",
+            "@id": "https://torquecrm.com.br/#organization",
+            "name": "Torque CRM",
+            "alternateName": "Torque",
+            "url": "https://torquecrm.com.br/",
+            "logo": {
+              "@type": "ImageObject",
+              "url": "https://torquecrm.com.br/pwa-512x512.png",
+              "width": 512,
+              "height": 512
+            },
+            "image": "https://torquecrm.com.br/og-image.png",
+            "description": "Plataforma SaaS de CRM para empresas B2B — fábricas e distribuidoras.",
+            "email": "acesso@torquecrm.com.br",
+            "taxID": "54.384.269/0001-48",
+            "areaServed": "BR",
+            "sameAs": ["https://www.instagram.com/torquecrm/"]
+          },
+          {
+            "@type": "WebSite",
+            "@id": "https://torquecrm.com.br/#website",
+            "name": "Torque CRM",
+            "alternateName": ["Torque", "torquecrm.com.br"],
+            "url": "https://torquecrm.com.br/",
+            "inLanguage": "pt-BR",
+            "publisher": { "@id": "https://torquecrm.com.br/#organization" }
+          },
+          {
+            "@type": "SoftwareApplication",
+            "@id": "https://torquecrm.com.br/#software",
+            "name": "Torque CRM",
+            "url": "https://torquecrm.com.br/",
+            "applicationCategory": "BusinessApplication",
+            "applicationSubCategory": "CRM B2B",
+            "operatingSystem": "Web",
+            "inLanguage": "pt-BR",
+            "description": "CRM B2B para fábricas e distribuidoras: funil de vendas, WhatsApp, campanhas e automações com inteligência artificial.",
+            "image": "https://torquecrm.com.br/og-image.png",
+            "publisher": { "@id": "https://torquecrm.com.br/#organization" }
+          }
+        ]
+      }
+    </script>
     <script>
       (function() {
         var theme = localStorage.getItem("torque-theme") || localStorage.getItem("v8-theme");
@@ -48,6 +113,29 @@
   </head>
 
   <body>
+    <!--
+      Crawlers de IA (GPTBot, ClaudeBot, PerplexityBot) não executam JS: sem
+      isto, a home é um <div> vazio para eles. Fica fora do #root, então o
+      React nunca o toca; browser com JS não renderiza <noscript>.
+    -->
+    <noscript>
+      <main>
+        <h1>Torque CRM — o CRM B2B para fábricas e distribuidoras</h1>
+        <p>
+          Torque CRM é uma plataforma SaaS brasileira de gestão comercial para empresas que vendem
+          para outras empresas: funis de venda em kanban, automação de follow-ups e tarefas,
+          distribuição de leads, reativação de carteira, WhatsApp e outros canais, agentes de IA com
+          supervisão humana e painéis de desempenho do time. Planos a partir de R$ 297 por mês.
+        </p>
+        <ul>
+          <li><a href="/sobre">Sobre o Torque CRM</a></li>
+          <li><a href="/lp/v1/">Conheça o produto e agende uma demonstração</a></li>
+          <li><a href="/llms.txt">Resumo para assistentes de IA</a></li>
+          <li><a href="/termos">Termos de Serviço</a> · <a href="/privacidade">Privacidade</a></li>
+        </ul>
+        <p>Para usar a plataforma, ative o JavaScript no navegador.</p>
+      </main>
+    </noscript>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

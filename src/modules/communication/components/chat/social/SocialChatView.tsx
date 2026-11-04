@@ -47,6 +47,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { toast } from "sonner";
 import { ChannelBadge } from "@/modules/communication/components/chat/ChannelBadge";
+import { ChatCallButton } from "@/modules/communication/components/voice/ChatCallButton";
 import { MessageList } from "@/modules/communication/components/chat/view/MessageList";
 import { getChannelLabel } from "@/modules/communication/components/chat/ChannelBadge";
 import { ImagePreviewModal } from "@/modules/communication/components/chat/media/ImagePreviewModal";
@@ -223,6 +224,11 @@ function SocialChatHeader({
             .join(" · ")}
         </p>
       </div>
+
+      {contact.channel === "whatsapp_oficial" && (
+        <ChatCallButton variant={isMobile ? "icon" : "default"} leadId={contact.lead_id}
+          leadName={name} onOpenLead={onOpenLead} />
+      )}
 
       {/* BLOQUEAR fica AQUI, e não numa tela de configuração: a vontade de
           bloquear nasce lendo a conversa. A lista de bloqueados é que mora nas

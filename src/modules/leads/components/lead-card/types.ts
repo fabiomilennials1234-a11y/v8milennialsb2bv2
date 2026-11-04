@@ -101,6 +101,8 @@ export interface LeadCardMetrics {
   clienteId?: string | null;
 }
 
+import type { LeadDocumentItem } from "../../lib/lead-documents";
+
 export type TipoDeCampo = "texto" | "email" | "telefone" | "documento" | "url" | "data" | "moeda";
 
 /**
@@ -136,6 +138,12 @@ export interface LeadCardField {
   alteradoLocalmente?: boolean;
   /** O valor que o ERP tem para este campo, mostrado ao lado do override. */
   valorErp?: string | null;
+  /**
+   * Só no CPF/CNPJ: TODOS os documentos ativos do lead em `lead_documents`
+   * (principal primeiro). `valor` continua sendo o principal; os demais são
+   * CNPJ extras que só existem no Torque e nunca entram em casamento do ERP.
+   */
+  documentos?: LeadDocumentItem[];
 }
 
 export interface LeadCardFieldGroup {

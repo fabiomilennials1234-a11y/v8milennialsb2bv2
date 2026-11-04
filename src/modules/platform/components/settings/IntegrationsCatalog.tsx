@@ -653,7 +653,11 @@ function getSettingsComponent(settingsId: string): React.FC | null {
 // ─── Main Catalog ───────────────────────────────────────
 
 export default function IntegrationsCatalog() {
-  const [selectedId, setSelectedId] = useState<string | null>(() => typeof window !== "undefined" && new URLSearchParams(window.location.search).has("meta") ? "facebook" : null);
+  const [selectedId, setSelectedId] = useState<string | null>(() => {
+    if (typeof window === "undefined") return null;
+    const params = new URLSearchParams(window.location.search);
+    return params.has("meta") ? "facebook" : params.get("integracao");
+  });
   const [focoId, setFocoId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [filterCategory, setFilterCategory] = useState<IntegrationCategory | "all">("all");

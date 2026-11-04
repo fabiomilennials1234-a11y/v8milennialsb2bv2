@@ -14,6 +14,19 @@ function streamOf(chunks: string[]): Response {
 }
 
 describe("subscribeSessionEvents", () => {
+  it("sinaliza a abertura só depois de o servidor aceitar a assinatura", async () => {
+    const onOpen = vi.fn();
+    let accept!: (response: Response) => void;
+    const subscription = subscribeSessionEvents({
+      vpsUrl: "https://calls.example", token: "tk", onOpen, onEvent: vi.fn(),
+      signal: new AbortController().signal,
+      fetchImpl: () => new Promise<Response>((resolve) => { accept = resolve; }),
+    });
+    expect(onOpen).not.toHaveBeenCalled();
+    accept(streamOf([]));
+    await subscription;
+    expect(onOpen).toHaveBeenCalledTimes(1);
+  });
   it("entrega um evento completo", async () => {
     const seen: SessionEvent[] = [];
     await subscribeSessionEvents({

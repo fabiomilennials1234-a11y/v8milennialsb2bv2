@@ -19,8 +19,7 @@ import { motion } from "framer-motion";
 import { CalendarOff, Check, ChevronLeft, ChevronRight, X } from "lucide-react";
 
 import type { UnifiedEvent } from "./agenda-helpers";
-import { SOURCE_LABELS, getMonthGrid, isFinishedEvent, outcomeOf } from "./agenda-helpers";
-import { agendaAttributionLabel } from "../../lib/agenda-attribution";
+import { eventSubtitle, getMonthGrid, isFinishedEvent, outcomeOf } from "./agenda-helpers";
 
 interface DayAgendaViewProps {
   /** Currently selected day (also drives which month the mini-calendar shows). */
@@ -50,19 +49,6 @@ const MINI_DAY_NAMES = ["D", "S", "T", "Q", "Q", "S", "S"];
 // cartão claro e sumiria.
 const PANEL_CLASS =
   "rounded-card border border-card-border bg-card shadow-relevo";
-
-/** Build a per-event subtitle from the richest detail available. */
-function eventSubtitle(event: UnifiedEvent, showOwner: boolean): string {
-  const detalhe = (() => {
-    if (event.location) return event.location;
-    const lead = [event.leadCompany, event.leadName].filter(Boolean).join(" · ");
-    if (lead) return lead;
-    return SOURCE_LABELS[event.source] ?? event.source;
-  })();
-
-  if (showOwner && event.creatorName) return `${agendaAttributionLabel(event.source)}: ${event.creatorName} · ${detalhe}`;
-  return detalhe;
-}
 
 export function DayAgendaView({
   date,

@@ -1,0 +1,7 @@
+# NUNCA versionar: credenciais e sessões das contas de scraping.
+contas.json
+*.sqlite
+sessoes/
+data/
+__pycache__/
+*.pyc

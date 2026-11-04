@@ -26,6 +26,7 @@ export interface SubscribeArgs {
   vpsUrl: string;
   token: string;
   onEvent: (event: SessionEvent) => void;
+  onOpen?: () => void;
   signal: AbortSignal;
   /** Injetado nos testes. Padrão: o fetch global. */
   fetchImpl?: typeof fetch;
@@ -53,6 +54,7 @@ export async function subscribeSessionEvents(args: SubscribeArgs): Promise<void>
   let buffer = "";
 
   try {
+    args.onOpen?.();
     for (;;) {
       const { done, value } = await reader.read();
       if (done) break;

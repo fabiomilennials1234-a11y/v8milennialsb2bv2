@@ -90,6 +90,8 @@ vi.mock("@/modules/leads/hooks/useLeadsCarteiraMetrics", () => ({
 // `useQueryClient`, e este arquivo monta sem provider.
 vi.mock("@/modules/leads/hooks/useLeadDocument", () => ({
   useLeadDocument: () => ({ data: null }),
+  useLeadDocuments: () => ({ data: [] }),
+  useSalvarLeadDocuments: () => ({ mutateAsync: vi.fn().mockResolvedValue({}) }),
   useSetLeadDocument: () => ({ mutateAsync: vi.fn().mockResolvedValue({}) }),
 }));
 vi.mock("@/modules/leads/hooks/useCafeJurereCadastro", () => ({

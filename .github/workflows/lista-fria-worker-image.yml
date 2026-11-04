@@ -1,0 +1,52 @@
+name: Lista fria · imagem do worker
+
+# Constrói e publica a imagem do worker da Lista fria no ghcr, como o front faz (docker-image.yml).
+# Só roda quando o worker muda. NÃO implanta nada: quem coloca a imagem nova no ar é o EasyPanel, a
+# mão, trocando a tag (veja services/lista-fria-worker/DEPLOY.md). Tag fixa por sha, nunca :latest em prod.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'services/lista-fria-worker/**'
+      - '.github/workflows/lista-fria-worker-image.yml'
+  workflow_dispatch:
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}/lista-fria-worker
+
+jobs:
+  build:
+    name: Build & Push
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=sha,prefix=sha-,format=short
+            type=raw,value=latest
+
+      - uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: services/lista-fria-worker/Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+
+      - name: Tag para colar no EasyPanel
+        run: echo "LISTA_FRIA_IMAGEM=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:sha-$(echo ${{ github.sha }} | cut -c1-7)" >> "$GITHUB_STEP_SUMMARY"

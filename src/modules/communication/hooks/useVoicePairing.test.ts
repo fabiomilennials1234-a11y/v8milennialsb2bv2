@@ -23,7 +23,8 @@ interface StreamHandle {
 }
 let streams: StreamHandle[] = [];
 
-const subscribeSessionEvents = vi.fn((args: { onEvent: (e: SessionEvent) => void }) => {
+const subscribeSessionEvents = vi.fn((args: { onOpen: () => void; onEvent: (e: SessionEvent) => void }) => {
+  args.onOpen();
   return new Promise<void>((resolve, reject) => {
     streams.push({ onEvent: args.onEvent, resolve, reject });
   });
@@ -42,7 +43,7 @@ vi.mock("@/modules/communication/lib/torquecallsApi", () => ({
 }));
 
 vi.mock("@/modules/communication/lib/torquecallsEvents", () => ({
-  subscribeSessionEvents: (args: { onEvent: (e: SessionEvent) => void }) => subscribeSessionEvents(args),
+  subscribeSessionEvents: (args: Parameters<typeof subscribeSessionEvents>[0]) => subscribeSessionEvents(args),
 }));
 
 // A org do master (ou a derivada de `team_members` pra admin comum) — o hook
@@ -72,6 +73,61 @@ beforeEach(() => {
 });
 
 describe("useVoicePairing", () => {
+  it("retoma uma sessão existente sem criar outra para o mesmo número", async () => {
+    const { result } = renderHook(() => useVoicePairing(), { wrapper });
+    await act(async () => { await result.current.start("inst-1", "sessao-pendente"); });
+    expect(createVoiceSession).not.toHaveBeenCalled();
+    expect(requestStreamToken).toHaveBeenCalledWith({ tcSessionId: "sessao-pendente", pair: true, organizationId: "org-1" });
+    act(() => emit({ type: "session-qr", sessionId: "sessao-pendente", qr: "codigo" }));
+    expect(result.current.qr).toBe("codigo");
+  });
+  it("recupera um primeiro QR perdido sem criar outra sessão e oferece nova tentativa se nenhum chegar", async () => {
+    vi.useFakeTimers();
+    try {
+      const { result } = renderHook(() => useVoicePairing(), { wrapper });
+      await act(async () => { await result.current.start("inst-1"); });
+      expect(pairVoiceSession).not.toHaveBeenCalled();
+      act(() => { vi.advanceTimersByTime(5_000); });
+      expect(pairVoiceSession).toHaveBeenCalledTimes(1);
+      expect(createVoiceSession).toHaveBeenCalledTimes(1);
+      act(() => { vi.advanceTimersByTime(25_000); });
+      expect(result.current.status).toBe("falhou");
+      await act(async () => { await result.current.retry(); });
+      act(() => emit({ type: "session-qr", sessionId: "tc-1", qr: "novo" }));
+      act(() => { vi.advanceTimersByTime(30_000); });
+      expect(result.current.qr).toBe("novo");
+      expect(result.current.status).toBe("qr-na-tela");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("não pede outro código quando o inicial já está na tela", async () => {
+    vi.useFakeTimers();
+    try {
+      const { result } = renderHook(() => useVoicePairing(), { wrapper });
+      await act(async () => { await result.current.start("inst-1"); });
+      act(() => emit({ type: "session-qr", sessionId: "tc-1", qr: "inicial" }));
+      act(() => { vi.advanceTimersByTime(30_000); });
+      expect(pairVoiceSession).not.toHaveBeenCalled();
+      expect(result.current.qr).toBe("inicial");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it.each(["logged_out", "failed"])("retira o QR quando o servidor informa %s", async (state) => {
+    const { result } = renderHook(() => useVoicePairing(), { wrapper });
+    await act(async () => { await result.current.start("inst-1"); });
+    act(() => emit({ type: "session-qr", sessionId: "tc-1", qr: "antigo" }));
+    act(() => emit({ type: "auth-state", sessionId: "outra", state }));
+    expect(result.current.qr).toBe("antigo");
+    act(() => emit({ type: "auth-state", sessionId: "tc-1", state }));
+    expect(result.current.qr).toBeNull();
+    expect(result.current.status).toBe("falhou");
+    act(() => emit({ type: "session-qr", sessionId: "tc-1", qr: "atrasado" }));
+    expect(result.current.qr).toBeNull();
+  });
   it("vai de ocioso até o QR na tela", async () => {
     const { result } = renderHook(() => useVoicePairing(), { wrapper });
     expect(result.current.status).toBe("ocioso");

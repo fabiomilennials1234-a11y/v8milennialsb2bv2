@@ -72,11 +72,11 @@ export function useLeadsStats(filters: Omit<LeadsFilterParams, "page"> = {}) {
   const { organizationId, isReady, timezone } = useOrganization();
   const timeZone = timezone || "America/Sao_Paulo";
 
-  const { searchQuery, filterOrigin, filterQualification, filterClassificacao, usaLeiDoErp, usaCadastroErpCafeJurere, filterUf, createdFrom, createdTo, filterResponsible, donosMultiplos } = filters;
+  const { searchQuery, filterOrigin, filterQualification, filterClassificacao, usaLeiDoErp, usaCadastroErpCafeJurere, usaListaFria, filterUf, createdFrom, createdTo, filterResponsible, donosMultiplos } = filters;
 
   return useQuery<LeadsStats>({
     queryKey: leadsKeys.stats(organizationId, timeZone, {
-      searchQuery, filterOrigin, filterQualification, filterClassificacao, usaLeiDoErp, usaCadastroErpCafeJurere, filterUf, createdFrom, createdTo, filterResponsible,
+      searchQuery, filterOrigin, filterQualification, filterClassificacao, usaLeiDoErp, usaCadastroErpCafeJurere, usaListaFria, filterUf, createdFrom, createdTo, filterResponsible,
       ...(donosMultiplos ? { donosMultiplos } : {}),
     }),
     queryFn: async () => {
@@ -102,7 +102,7 @@ export function useLeadsStats(filters: Omit<LeadsFilterParams, "page"> = {}) {
         // então procurar por telefone dava contagem diferente do que estava na
         // tela.
         return applyLeadListFilters(q, {
-          searchQuery, filterOrigin, filterQualification, filterClassificacao, usaLeiDoErp, usaCadastroErpCafeJurere,
+          searchQuery, filterOrigin, filterQualification, filterClassificacao, usaLeiDoErp, usaCadastroErpCafeJurere, usaListaFria,
           filterUf, createdFrom, createdTo, filterResponsible, donosMultiplos, coOwnedLeadIds,
         });
       };

@@ -22,6 +22,9 @@ const FILES: Record<string, { body: string; type: string }> = {
   "/sobre.html": { body: "<html>sobre</html>", type: "text/html; charset=utf-8" },
   "/privacidade.html": { body: "<html>privacidade</html>", type: "text/html; charset=utf-8" },
   "/robots.txt": { body: "User-agent: *", type: "text/plain; charset=utf-8" },
+  // Como o servidor de assets real manda .txt: sem charset.
+  "/llms.txt": { body: "# Torque CRM — não", type: "text/plain" },
+  "/legacy.txt": { body: "x", type: "text/plain; charset=iso-8859-1" },
   "/.well-known/security.txt": { body: "Contact: mailto:security@example.com", type: "text/plain; charset=utf-8" },
   "/landing/Paleta de Cor_Milennials.png": { body: "PNG", type: "image/png" },
   "/lp/v1/index.html": { body: "<html>lp v1</html>", type: "text/html; charset=utf-8" },
@@ -149,6 +152,13 @@ describe("SPA", () => {
     expect(await (await call("/configuracoes/usuarios?x=1")).text()).toBe("<html>V5</html>");
   });
 
+  it("texto sem charset sai como UTF-8; charset declarado e não-texto ficam como vieram", async () => {
+    expect((await call("/llms.txt")).headers.get("content-type")).toBe("text/plain; charset=utf-8");
+    expect((await call("/robots.txt")).headers.get("content-type")).toBe("text/plain; charset=utf-8");
+    expect((await call("/legacy.txt")).headers.get("content-type")).toBe("text/plain; charset=iso-8859-1");
+    expect((await call("/landing/Paleta%20de%20Cor_Milennials.png")).headers.get("content-type")).toBe("image/png");
+  });
+
   it("caminho com barra no fim vai direto ao index", async () => {
     await call("/leads/");
     expect(assetCalls).toEqual([{ path: "/index.html", method: "GET" }]);
@@ -252,6 +262,43 @@ describe("headers sem junção", () => {
   it("nunca chama o servidor de assets em /assets/* (esse caminho não passa pelo Worker)", async () => {
     for (const path of ["/", "/leads", "/lp/v1/", "/lp/v1", "/sobre", "/ASSETS/x.js", "/assets-like"]) await call(path);
     expect(assetCalls.some((c) => c.path.startsWith("/assets/"))).toBe(false);
+  });
+});
+
+describe("www → apex", () => {
+  const WWW = "https://www.torquecrm.com.br";
+
+  it("GET/HEAD → 301 para o apex mantendo caminho e query, sem tocar no servidor de assets", async () => {
+    const get = await call("/leads?x=1&y=%20", { host: WWW });
+    expect(get.status).toBe(301);
+    expect(get.headers.get("location")).toBe("https://torquecrm.com.br/leads?x=1&y=%20");
+    expect(get.headers.get("cache-control")).toBe("no-store, must-revalidate");
+    expectProfile(get, "app");
+    const head = await call("/", { host: WWW, method: "HEAD" });
+    expect(head.status).toBe(301);
+    expect(head.headers.get("location")).toBe("https://torquecrm.com.br/");
+    expect(assetCalls).toEqual([]);
+  });
+
+  it("POST na API → 308 (preserva método e corpo), sem chamar o Supabase", async () => {
+    const fetchSpy = vi.fn();
+    vi.stubGlobal("fetch", fetchSpy);
+    const response = await call("/api/v1/leads", { host: WWW, method: "POST", body: "{}" });
+    expect(response.status).toBe(308);
+    expect(response.headers.get("location")).toBe("https://torquecrm.com.br/api/v1/leads");
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it("token no caminho continua redigido no log", async () => {
+    await call("/reset-password/segredo123", { host: WWW });
+    const lines = logSpy.mock.calls.map(([line]) => String(line)).join("\n");
+    expect(lines).toContain('"status":301');
+    expect(lines).not.toContain("segredo123");
+  });
+
+  it("apex e outros hosts não redirecionam", async () => {
+    expect((await call("/", { host: "https://torquecrm.com.br" })).status).toBe(200);
+    expect((await call("/")).status).toBe(200);
   });
 });
 
@@ -413,3 +460,9 @@ describe("API e log", () => {
     expect(String(logSpy.mock.calls[0]![0])).not.toContain("token");
   });
 });
+
+ it("allows same-origin geolocation in the app but keeps landing pages blocked", async () => {
+   expect((await call("/")).headers.get("Permissions-Policy")).toBe("geolocation=(self), payment=()");
+   expect((await call("/chat")).headers.get("Permissions-Policy")).toBe("geolocation=(self), payment=()");
+   expect((await call("/lp/v1/")).headers.get("Permissions-Policy")).toBe("geolocation=(), payment=()");
+ });

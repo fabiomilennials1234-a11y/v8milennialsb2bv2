@@ -80,7 +80,7 @@ export function SupportPanel() {
               </header>
               <NewTicketForm
                 // Um rascunho novo (outro erro) remonta o formulário do zero.
-                key={prefill ? `${prefill.title}:${prefill.description}` : "blank"}
+                key={prefill ? `${prefill.title}:${prefill.tipo ?? ""}:${prefill.description}` : "blank"}
                 initialDraft={prefill ?? undefined}
                 onCreated={openTicket}
                 onCancel={backToList}

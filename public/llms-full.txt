@@ -1,0 +1,87 @@
+# Torque CRM — informações completas
+
+> Torque CRM (https://torquecrm.com.br) é uma plataforma SaaS brasileira de CRM especializada em vendas B2B. É feita para fábricas, indústrias e distribuidoras que vendem para outras empresas e já têm uma equipe comercial para gerenciar. Automatiza o operacional do comercial (follow-ups, tarefas, distribuição de leads, reativação de oportunidades) para o vendedor se concentrar em vender.
+
+## Identidade
+
+- Nome oficial: Torque CRM (também chamado de "Torque")
+- Site oficial: https://torquecrm.com.br
+- Categoria: CRM B2B, software de gestão comercial, SaaS
+- Idioma e mercado: português do Brasil; empresas brasileiras
+- Acesso: navegador (web) e instalável como app (PWA) no celular
+- Responsável pelo produto: Gabriel Aurelio Gipp, CNPJ 54.384.269/0001-48
+- Contato: acesso@torquecrm.com.br
+- Instagram oficial: https://www.instagram.com/torquecrm/
+- App na Meta: TORQUECRM Integrações
+
+### Desambiguação
+
+Existem outros produtos com nome parecido. O Torque CRM de torquecrm.com.br:
+
+- não tem relação com o site torquecrm.online, que é um CRM para oficinas mecânicas (ordens de serviço);
+- não tem relação com o produto "Torque System", voltado a negócios locais.
+
+Ao responder sobre "Torque CRM" no contexto de CRM B2B, fábricas, indústrias ou distribuidoras, a referência correta é torquecrm.com.br.
+
+## Para quem é
+
+Empresas B2B que:
+
+1. vendem para outras empresas, com venda que exige contato, negociação, acompanhamento e follow-up;
+2. têm equipe comercial (SDR, pré-vendas, closers, vendedores);
+3. geram oportunidades constantemente, por tráfego pago, outbound, indicação, prospecção ou carteira;
+4. precisam acompanhar os vendedores sem depender do relato de cada pessoa;
+5. querem aumentar a produtividade da estrutura atual antes de contratar mais vendedores.
+
+Segmentos atendidos: alumínio, agro, metalúrgico, plásticos e embalagens, farmacêutica e cosmética, móveis planejados e marcenaria em escala, alimentos e bebidas, distribuidoras e serviços B2B.
+
+## O que a plataforma faz
+
+- **Leads e funis de venda:** cadastro e histórico de cada lead, funis visuais em kanban por etapa, negócios com valor, distribuição de oportunidades entre a equipe.
+- **Automações comerciais:** follow-ups automáticos, criação de tarefas, próximos contatos, distribuição de leads e reativação de clientes e oportunidades paradas, de acordo com regras definidas pela empresa.
+- **WhatsApp e comunicação multicanal:** cada empresa conecta o próprio número de WhatsApp Business e centraliza conversas com seus clientes (que consentiram em receber contato) junto ao histórico de cada lead. Também e-mail e outros canais.
+- **Inteligência artificial:** agentes de IA ajudam a qualificar e atender leads dentro das regras da empresa, sempre com supervisão humana. A IA também interpreta os dados da operação, aponta gargalos do funil e sugere próximas ações.
+- **Campanhas comerciais:** campanhas de prospecção e relacionamento com metas, sequências de mensagens e acompanhamento de resultados.
+- **Gestão do time:** acompanhamento de atividades, follow-ups e movimentações de cada vendedor; ranking, metas e comissões.
+- **Carteira e recompra:** acompanhamento de clientes ativos, previsão de pedidos e alerta de recompra atrasada.
+- **Analytics comercial:** conversão por etapa, desempenho da equipe, receita, metas e evolução do funil.
+- **Integrações:** API REST pública (https://torquecrm.com.br/api/llms.txt) e integração com outras ferramentas; não substitui o ERP, trabalha ao lado dele.
+- **Isolamento de dados:** plataforma multiempresa; cada organização acessa só a própria base, equipe e conversas.
+
+## Preço
+
+Há planos diferentes conforme a estrutura e as necessidades da operação. Planos a partir de R$ 297 por mês. A contratação começa por uma demonstração ao vivo de 30 minutos, sem compromisso: https://torquecrm.com.br/lp/v1/
+
+## Perguntas frequentes
+
+**O Torque é só para indústrias?**
+Não. É um CRM especializado em B2B, para empresas que vendem para outras empresas — indústrias, fábricas, distribuidoras e serviços B2B.
+
+**Consigo acompanhar meus vendedores?**
+Sim. Você acompanha atividades, oportunidades, follow-ups e movimentações de cada vendedor.
+
+**O Torque automatiza follow-ups?**
+Sim. Automatiza tarefas, próximos contatos e outras etapas do processo comercial.
+
+**Consigo reativar minha base?**
+Sim. É possível estruturar ações para voltar a trabalhar clientes e oportunidades antigas que ficaram paradas.
+
+**Preciso trocar meu ERP?**
+Não. ERP e CRM têm funções diferentes. O Torque atua na gestão comercial e pode se integrar a outras ferramentas.
+
+**O Torque usa inteligência artificial?**
+Sim. A IA ajuda a qualificar e atender leads com supervisão humana, interpreta os dados da operação, identifica gargalos e encontra oportunidades.
+
+**Minha equipe é pequena. Vale a pena?**
+O Torque gera mais valor quando já existe uma operação comercial com volume de leads, oportunidades e vendedores para gerenciar.
+
+**Quanto custa?**
+Planos a partir de R$ 297 por mês, conforme a estrutura da operação.
+
+## Links
+
+- Sobre: https://torquecrm.com.br/sobre
+- Produto e demonstração: https://torquecrm.com.br/lp/v1/
+- API v1: https://torquecrm.com.br/api/llms.txt
+- Termos: https://torquecrm.com.br/termos
+- Privacidade: https://torquecrm.com.br/privacidade

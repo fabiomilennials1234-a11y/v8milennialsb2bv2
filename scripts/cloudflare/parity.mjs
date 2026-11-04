@@ -335,7 +335,8 @@ export function buildMatrix({ assetsDir, allAssets, headersConfig = HEADERS_CONF
   for (const p of [
     "/robots.txt",
     "/favicon.png",
-    "/favicon.svg",
+    "/favicon.ico",
+    "/apple-touch-icon.png",
     "/lamejs.min.js",
     "/api/openapi.json",
     "/api/llms.txt",

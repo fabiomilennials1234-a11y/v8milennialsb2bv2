@@ -14,10 +14,11 @@ import { useLeadCardData } from "./useLeadCardData";
 import type { QualificationTier } from "../lead-detail/modal/types";
 import { useUpdateLead, useToggleLeadAI, useDeleteLead } from "../../hooks/useLeads";
 import { useSaveCustomFieldValue } from "../../hooks/useLeadCustomFields";
-import { useSetLeadDocument } from "../../hooks/useLeadDocument";
+import { useSalvarLeadDocuments, useSetLeadDocument } from "../../hooks/useLeadDocument";
 import { useLeadPhones } from "../../hooks/useLeadPhones";
 import { formatPhoneBR } from "@/shared/format/phone";
 import { isValidBrDocument, onlyDigits } from "../../lib/document";
+import { validarDocumentosEditados, type DocumentoEditado } from "../../lib/lead-documents";
 import {
   useCreateLeadComment,
   useDeleteLeadComment,
@@ -102,6 +103,7 @@ export function LeadCardContainer({
   const updateLead = useUpdateLead();
   const saveCustomField = useSaveCustomFieldValue();
   const setDocumento = useSetLeadDocument(leadId);
+  const salvarDocumentos = useSalvarLeadDocuments(leadId);
   const toggleAI = useToggleLeadAI();
   const deleteLead = useDeleteLead();
   const criarComentario = useCreateLeadComment();
@@ -143,6 +145,20 @@ export function LeadCardContainer({
       await updateLead.mutateAsync({ id: leadId, [chave]: limpo === "" ? null : limpo });
     },
     [leadId, data, saveCustomField, updateLead, setDocumento],
+  );
+
+  /**
+   * Lista de documentos do lead (vários CNPJ): a RPC recebe a lista COMPLETA e
+   * apaga o que saiu dela. Valida antes (espelho do banco) e deixa a recusa do
+   * banco subir para o bloco, que a mostra na tela.
+   */
+  const salvarLista = useCallback(
+    async (lista: DocumentoEditado[]) => {
+      const recusa = validarDocumentosEditados(lista);
+      if (recusa) throw new Error(recusa);
+      await salvarDocumentos.mutateAsync(lista);
+    },
+    [salvarDocumentos],
   );
 
   const salvarNota = useCallback(
@@ -305,6 +321,7 @@ export function LeadCardContainer({
         lead={data}
         onSaveNote={salvarNota}
         onSaveField={salvarCampo}
+        onSaveDocumentos={salvarLista}
         onAbrirFicha={onAbrirFicha}
         editorDeEtiquetas={
           leadId ? (
@@ -402,6 +419,7 @@ export function LeadCardContainer({
       onNewDeal={onNewDeal}
       registrarVenda={leadId ? <RegisterHistoricalSalesDialog key={leadId} leadId={leadId} /> : undefined}
       onSaveField={salvarCampo}
+      onSaveDocumentos={salvarLista}
       // Sem org conhecida a caixa de escrever some: a policy de INSERT exige a
       // org, e oferecer uma ação cujo gravar falharia é pior que não oferecer.
       onComentar={leadId && organizacaoId ? comentar : undefined}

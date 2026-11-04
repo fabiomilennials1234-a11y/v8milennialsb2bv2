@@ -54,6 +54,7 @@ export function contatoDeConversaNova(
   instanceId: string | null | undefined,
   /** Nome do lead, quando quem abriu a conversa o conhece. */
   nome?: string | null,
+  leadId?: string | null,
 ): SocialContact | null {
   if (!conversationKey || !instanceId) return null;
 
@@ -78,7 +79,7 @@ export function contatoDeConversaNova(
     last_message_time: new Date().toISOString(),
     last_message_direction: null,
     unread_count: 0,
-    lead_id: null,
+    lead_id: leadId ?? null,
     lead_name: nome?.trim() || null,
     tags: [],
   };

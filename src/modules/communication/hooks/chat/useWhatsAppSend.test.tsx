@@ -152,3 +152,28 @@ it.each(["text", "image"])("sends a quoted %s in a group conversation to the gro
   );
   unmount(); client.clear();
 });
+
+it("send_outcome_unknown (504): never resends, and the exhausted message says it may have been delivered", async () => {
+  vi.useFakeTimers();
+  invoke.mockResolvedValue({
+    data: null,
+    error: Object.assign(new Error("Edge Function returned a non-2xx status code"), { context: { status: 504 } }),
+  });
+  const client = new QueryClient({ defaultOptions: { mutations: { retry: false } } });
+  const { result, unmount } = renderHook(useSendWhatsAppMessage, {
+    wrapper: ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={client}>{children}</QueryClientProvider>
+    ),
+  });
+  const variables = { phoneNumber: "555134073827", message: "Bom dia", instanceName: "sales", instanceId: "instance" };
+  await act(async () => {
+    const failed = expect(result.current.mutateAsync({ ...variables })).rejects.toThrow(/pode ter sido entregue/);
+    await vi.advanceTimersByTimeAsync(60_000);
+    await failed;
+  });
+  expect(invoke).toHaveBeenCalledTimes(1);
+  const failures = client.getQueryData<FailedMessage[]>(["whatsapp_failed_messages", "org", variables.phoneNumber, variables.instanceId]);
+  expect(failures).toHaveLength(1);
+  expect(failures?.[0].error).toMatch(/confira no WhatsApp antes de reenviar/);
+  unmount(); client.clear();
+});

@@ -43,6 +43,6 @@ export function montarPayload(aviso: AvisoParaPush): PayloadDePush {
     // A tag agrupa no sistema operacional pela mesma chave que agrupa no CRM:
     // a segunda mensagem do mesmo lead substitui a primeira em vez de empilhar.
     tag: aviso.group_key ?? aviso.aviso_id,
-    icon: "/pwa-192x192.svg",
+    icon: "/pwa-192x192.png",
   };
 }

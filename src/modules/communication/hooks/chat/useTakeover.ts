@@ -42,6 +42,7 @@ interface UseTakeoverResult {
   resumeMode: AiStateResumeMode | null;
   updatedAt: string | null;
   isLoading: boolean;
+  isError: boolean;
   isMutating: boolean;
   pauseAi: (mode: AiStateResumeMode) => Promise<void>;
   resumeAi: () => Promise<void>;
@@ -69,7 +70,7 @@ export function useTakeover(conversationId: string | null | undefined): UseTakeo
   // ── Query: estado atual da conversa ──────────────────────────────────────
   const queryKey = ["takeover", conversationId];
 
-  const { data, isLoading } = useQuery<ConversationAiState | null>({
+  const { data, isLoading, isError } = useQuery<ConversationAiState | null>({
     queryKey,
     queryFn: async () => {
       if (!conversationId) return null;
@@ -180,6 +181,7 @@ export function useTakeover(conversationId: string | null | undefined): UseTakeo
     resumeMode: data?.ai_state_resume_mode ?? null,
     updatedAt: data?.ai_state_updated_at ?? null,
     isLoading,
+    isError,
     isMutating: mutation.isPending,
     pauseAi,
     resumeAi,

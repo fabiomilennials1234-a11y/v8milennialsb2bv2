@@ -78,6 +78,20 @@ const updateMeeting = vi.fn().mockResolvedValue({});
 // `useMeetings` que a página passar a consumir tem que aparecer aqui — senão
 // ele chega como `undefined` e a página quebra na montagem, culpando a branch
 // errada. `useMeeting` entrou junto com o diálogo de edição.
+// A busca global é uma dependência nova da página. Esta suíte é sobre o recorte
+// de quem vê o quê; a busca tem os testes dela (useAgendaSearch.test.tsx).
+vi.mock("@/modules/engagement/hooks/useAgendaSearch", () => ({
+  useAgendaSearch: () => ({
+    term: "",
+    isActive: false,
+    isPending: false,
+    isError: false,
+    isUnavailable: false,
+    events: [],
+    refetch: vi.fn(),
+  }),
+}));
+
 vi.mock("@/modules/engagement/hooks/useMeetings", () => ({
   useDeleteMeeting: () => ({ mutateAsync: vi.fn() }),
   useUpdateMeeting: () => ({ mutateAsync: updateMeeting }),

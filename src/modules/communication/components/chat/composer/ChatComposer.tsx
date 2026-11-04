@@ -20,7 +20,7 @@ import { useChatReply } from "../../../hooks/chat/useChatReply";
  */
 import { useRef, useState, useCallback, useEffect, type DragEvent } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Send, Loader2, CalendarClock, AlertCircle, X, LayoutList, QrCode, Sticker, FileText, Film } from "lucide-react";
+import { Send, Loader2, CalendarClock, CalendarPlus, AlertCircle, X, LayoutList, QrCode, Sticker, FileText, Film } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -57,6 +57,7 @@ import { acceptedInteractiveRow, interactiveInsertOptions } from "@/modules/comm
 import { sendMenu as enviarMenuNoProxy } from "@/modules/communication/lib/whatsappApi";
 import { SendPixDialog } from "./SendPixDialog";
 import { notifyError } from "@/shared/errors";
+import { CreateMeetingDialog } from "@/modules/engagement";
 
 // ─── Props ────────────────────────────────────────────────────────────────────
 
@@ -155,6 +156,9 @@ export function ChatComposer({
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [caption, setCaption] = useState("");
   const [scheduleModalOpen, setScheduleModalOpen] = useState(false);
+  const [meetingDialogOpen, setMeetingDialogOpen] = useState(false);
+  // Reunião só existe para lead (meetings.lead_id é FK): conversa sem lead não oferece.
+  const meetingLeadId = selectedContact?.lead_id ?? null;
   const [menuDialogOpen, setMenuDialogOpen] = useState(false);
   const [pixDialogOpen, setPixDialogOpen] = useState(false);
   // Provider-aware gating: interactive menu + Pix are Uazapi-only. Hidden for
@@ -641,6 +645,19 @@ export function ChatComposer({
                   <CalendarClock className="w-[18px] h-[18px]" />
                 </button>
 
+                {/* Agendar reunião (agenda) — só com lead */}
+                {meetingLeadId && (
+                  <button
+                    type="button"
+                    onClick={() => setMeetingDialogOpen(true)}
+                    aria-label="Agendar reunião"
+                    title="Agendar reunião"
+                    className={QUICK_ACTION_BUTTON}
+                  >
+                    <CalendarPlus className="w-[18px] h-[18px]" />
+                  </button>
+                )}
+
                 {/* Menu + Pix + contato/localização — Uazapi-only (somem para
                     Meta/Evolution: allowlist positiva, R13). */}
                 {caps.canUseUazapiActions && (
@@ -726,6 +743,15 @@ export function ChatComposer({
           phoneNumber={selectedContact.phone_number}
           instanceId={instanceId}
           initialMessage={message}
+        />
+      )}
+
+      {meetingLeadId && (
+        <CreateMeetingDialog
+          open={meetingDialogOpen}
+          onOpenChange={setMeetingDialogOpen}
+          initialLeadId={meetingLeadId}
+          initialLeadName={selectedContact?.lead_name || selectedContact?.push_name || undefined}
         />
       )}
 

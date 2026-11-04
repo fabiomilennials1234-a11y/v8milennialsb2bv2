@@ -50,7 +50,7 @@ interface Props {
    * Rascunho inicial. Um Chamado aberto a partir de um toast de erro chega com o
    * código do erro na descrição e já marcado como defeito (ADR-0038).
    */
-  initialDraft?: Pick<TicketDraft, "title" | "description">;
+  initialDraft?: Pick<TicketDraft, "title" | "description"> & Partial<Pick<TicketDraft, "tipo" | "impacto">>;
 }
 
 export function NewTicketForm({
@@ -63,7 +63,8 @@ export function NewTicketForm({
   initialDraft,
 }: Props) {
   const [draft, setDraft] = useState<TicketDraft>(() =>
-    initialDraft ? { ...emptyTicketDraft(), ...initialDraft, tipo: "bug" } : emptyTicketDraft(),
+    // Rascunho sem tipo = erro de tela = defeito. Um pedido (ex.: comprar créditos) traz o próprio tipo.
+    initialDraft ? { ...emptyTicketDraft(), ...initialDraft, tipo: initialDraft.tipo ?? "bug" } : emptyTicketDraft(),
   );
   const [submitted, setSubmitted] = useState(false);
   // Os arquivos esperam em memória: o caminho no bucket começa pelo id do

@@ -76,6 +76,8 @@ const PRODUCTION_CATALOG: CatalogRow[] = [
   { key: 'pipeline.delete_cards', isAdminOnly: false, defaultValue: true },
   { key: 'pipeline.move_cards', isAdminOnly: false, defaultValue: true },
   { key: 'pipeline.view', isAdminOnly: false, defaultValue: true },
+  // 20271218000000 — default TRUE de propósito: o rollout não muda ninguém.
+  { key: 'pipeline.view_all', isAdminOnly: false, defaultValue: true },
   { key: 'products.create', isAdminOnly: false, defaultValue: true },
   { key: 'products.delete', isAdminOnly: false, defaultValue: true },
   { key: 'products.edit', isAdminOnly: false, defaultValue: true },

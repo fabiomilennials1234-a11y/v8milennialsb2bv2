@@ -107,6 +107,15 @@ describe("lead já no funil (uq_pipeline_entries_um_card_sem_negocio)", () => {
     expect(isLeadJaNoFunil("duplicate")).toBe(false);
   });
 
+  it("reconhece também a recusa de domínio de abrir_negocio (Funil 'só os meus')", () => {
+    const recusa = {
+      code: "23505",
+      message: "lead_ja_no_funil: este lead já tem um card sem negócio neste funil, sob outro responsável.",
+    };
+    expect(isLeadJaNoFunil(recusa)).toBe(true);
+    expect(isLeadJaNoFunil({ ...recusa, code: "42501" })).toBe(false);
+  });
+
   it("porta automática: card que já existe não é erro, qualquer outra falha segue", () => {
     expect(ignorarSeLeadJaNoFunil(doIndice)).toBeNull();
     const outro = { code: "42501", message: "rls" };

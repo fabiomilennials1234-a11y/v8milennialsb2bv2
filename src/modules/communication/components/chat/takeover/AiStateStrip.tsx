@@ -23,8 +23,8 @@
  * O switch "IA" é OUTRO conceito (Copilot ligado/desligado para o LEAD,
  * `useCopilotToggle`), e fica à direita da faixa, como antes no cabeçalho.
  *
- * Nenhuma regra nova: os handlers são os do `useTakeover`, que já valida e
- * avisa com toast. Esta peça só decide a forma.
+ * Os handlers são os do `useTakeover`. A faixa também verifica se existe um
+ * Copilot finalizado e ativo antes de anunciar disponibilidade ou oferecê-lo.
  */
 import { Bot, Info, Loader2, MoreHorizontal, Pause, RefreshCw, User, Clock } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
@@ -40,13 +40,17 @@ import {
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { useTakeover } from "@/modules/communication/hooks/chat/useTakeover";
+import type { ChatCopilotAvailability } from "@/modules/communication/hooks/chat/useChatCopilotAvailability";
 import type { AiStateResumeMode, AiTakeoverState } from "@/modules/communication/lib/chat-types";
 import { HumanPauseBadge } from "../HumanPauseBadge";
 import { AI_STATE_CONFIG } from "./aiStateLabels";
 
 export interface AiStateStripProps {
-  /** Conversa (FSM `conversations.ai_state`). Sem ela, só o switch do lead. */
+  /** Conversa (FSM `conversations.ai_state`). */
   conversationId: string | null | undefined;
+  /** Só confirma disponibilidade após consultar os agentes da organização. */
+  copilotAvailability: ChatCopilotAvailability;
+  aiStatusLoading?: boolean;
   /** Copilot desligado para o LEAD (`useCopilotToggle`). */
   aiDisabled: boolean;
   onToggleAi: (checked: boolean) => void;
@@ -76,13 +80,27 @@ interface Visual {
   texto: string;
 }
 
-const VISUAL: Record<AiTakeoverState | "LEAD_OFF", Visual> = {
+type StripState = AiTakeoverState | "LEAD_OFF" | "NO_COPILOT" | "CHECKING" | "UNVERIFIED" | "HUMAN_PAUSE";
+
+const VISUAL: Record<StripState, Visual> = {
   AI_ACTIVE: { faixa: "bg-primary-soft", chip: "bg-primary text-primary-foreground", texto: "text-primary-soft-foreground/80" },
   AI_PAUSED_MANUAL: { faixa: "bg-muted", chip: "bg-card text-muted-foreground shadow-relevo", texto: "text-muted-foreground" },
   WAITING_HUMAN: { faixa: "bg-destructive/10", chip: "bg-destructive text-destructive-foreground", texto: "text-foreground/75" },
   HUMAN_ACTIVE: { faixa: "dark bg-tinta text-tinta-foreground", chip: "bg-primary text-primary-foreground", texto: "text-tinta-muted" },
   HANDOFF_BACK: { faixa: "bg-insights/10", chip: "bg-card text-insights shadow-relevo", texto: "text-foreground/75" },
   LEAD_OFF: { faixa: "bg-muted", chip: "bg-card text-muted-foreground shadow-relevo", texto: "text-muted-foreground" },
+  NO_COPILOT: { faixa: "bg-muted", chip: "bg-card text-muted-foreground shadow-relevo", texto: "text-muted-foreground" },
+  CHECKING: { faixa: "bg-muted", chip: "bg-card text-muted-foreground shadow-relevo", texto: "text-muted-foreground" },
+  UNVERIFIED: { faixa: "bg-muted", chip: "bg-card text-muted-foreground shadow-relevo", texto: "text-muted-foreground" },
+  HUMAN_PAUSE: { faixa: "bg-muted", chip: "bg-card text-muted-foreground shadow-relevo", texto: "text-muted-foreground" },
+};
+
+const STATUS_COPY = {
+  NO_COPILOT: { title: "Sem Copilot ativo", description: "Configure e ative um Copilot para habilitar o atendimento automático." },
+  CHECKING: { title: "Verificando Copilot", description: "Consultando a disponibilidade do atendimento automático." },
+  UNVERIFIED: { title: "Status da IA indisponível", description: "Não foi possível confirmar se o Copilot está disponível." },
+  HUMAN_PAUSE: { title: "IA pausada", description: "O Copilot está pausado após uma intervenção humana." },
+  LEAD_OFF: { title: "IA desligada para este lead", description: "O Copilot não responde este lead até alguém religar a IA." },
 };
 
 function explicacaoDaPausa(modo: AiStateResumeMode | null): string {
@@ -94,6 +112,8 @@ function explicacaoDaPausa(modo: AiStateResumeMode | null): string {
 
 export function AiStateStrip({
   conversationId,
+  copilotAvailability,
+  aiStatusLoading = false,
   aiDisabled,
   onToggleAi,
   toggleAiPending,
@@ -104,28 +124,41 @@ export function AiStateStrip({
   onOpenTimeline,
   className,
 }: AiStateStripProps) {
-  const { state, resumeMode, isMutating, pauseAi, resumeAi, markHumanActive, markHandoffBack } =
+  const { state, resumeMode, isLoading, isError, isMutating, pauseAi, resumeAi, markHumanActive, markHandoffBack } =
     useTakeover(conversationId);
 
   const temConversa = !!conversationId;
   const humanoConduzindo = temConversa && state === "HUMAN_ACTIVE";
   // Mesma regra que o cabeçalho aplicava: com um humano conduzindo, o switch
   // aparece desligado e travado — ligar o Copilot ali brigaria com a pessoa.
-  const switchDesligado = aiDisabled || humanoConduzindo;
+  const verificando = copilotAvailability === "loading" || aiStatusLoading || (temConversa && isLoading);
+  const semConfirmacao = copilotAvailability !== "available" || verificando || isError;
+  const switchDesligado = aiDisabled || humanoConduzindo || semConfirmacao;
 
   // Lead com o Copilot desligado e a conversa em "IA ativa": a FSM diz ativa,
   // mas ninguém vai responder. A faixa conta o que acontece de fato.
   const leadDesligado = aiDisabled && (!temConversa || state === "AI_ACTIVE");
-  const chave: AiTakeoverState | "LEAD_OFF" = leadDesligado ? "LEAD_OFF" : temConversa ? state : "AI_ACTIVE";
+  const estado = temConversa ? state : "AI_ACTIVE";
+  const chave: StripState = humanoConduzindo || estado === "WAITING_HUMAN" ? estado
+    : copilotAvailability === "unavailable" ? "NO_COPILOT"
+    : copilotAvailability === "error" || isError ? "UNVERIFIED"
+    : verificando ? "CHECKING"
+    : leadDesligado ? "LEAD_OFF"
+    : humanPaused ? "HUMAN_PAUSE"
+    : estado;
   const visual = VISUAL[chave];
 
   const config = AI_STATE_CONFIG[temConversa ? state : "AI_ACTIVE"];
-  const Icone: LucideIcon = leadDesligado ? Bot : config.icon;
-  const titulo = leadDesligado ? "IA desligada para este lead" : config.label;
+  const statusCopy = chave in STATUS_COPY ? STATUS_COPY[chave as keyof typeof STATUS_COPY] : null;
+  const Icone: LucideIcon = chave === "HUMAN_PAUSE" ? Pause : statusCopy ? Bot : config.icon;
+  const titulo = statusCopy?.title ?? config.label;
+  const ariaLabel = statusCopy ? `${titulo}. ${statusCopy.description}`
+    : chave === "AI_ACTIVE" ? "Copilot habilitado para atendimento automático"
+    : config.ariaLabel;
   const explicacao = (() => {
-    if (leadDesligado) return "O Copilot não responde este lead até alguém religar a IA.";
+    if (statusCopy) return statusCopy.description;
     switch (chave) {
-      case "AI_ACTIVE": return "O Copilot está respondendo este lead.";
+      case "AI_ACTIVE": return "O Copilot está habilitado. O atendimento segue as regras configuradas.";
       case "AI_PAUSED_MANUAL": return explicacaoDaPausa(resumeMode);
       case "WAITING_HUMAN": return "A IA pediu ajuda: alguém precisa assumir a conversa.";
       case "HUMAN_ACTIVE": return "A IA não responde enquanto você conduz.";
@@ -140,6 +173,7 @@ export function AiStateStrip({
   if (temConversa && !leadDesligado) {
     switch (state) {
       case "AI_ACTIVE":
+        if (semConfirmacao || humanPaused) break;
         visiveis.push({ rotulo: "Pausar IA", icon: Pause, run: () => pauseAi("immediate") });
         noMenu.push(
           { rotulo: "Pausar após resposta", icon: Pause, run: () => pauseAi("after_response") },
@@ -147,23 +181,19 @@ export function AiStateStrip({
         );
         break;
       case "AI_PAUSED_MANUAL":
-        visiveis.push(
-          { rotulo: "Retomar IA", icon: Bot, run: () => resumeAi() },
-          { rotulo: "Assumir conversa", icon: User, run: () => markHumanActive() },
-        );
+        if (!semConfirmacao && !humanPaused) visiveis.push({ rotulo: "Retomar IA", icon: Bot, run: () => resumeAi() });
+        visiveis.push({ rotulo: "Assumir conversa", icon: User, run: () => markHumanActive() });
         break;
       case "WAITING_HUMAN":
-        visiveis.push(
-          { rotulo: "Deixar com a IA", icon: Bot, run: () => resumeAi() },
-          { rotulo: "Assumir conversa", icon: User, run: () => markHumanActive() },
-        );
+        if (!semConfirmacao && !humanPaused) visiveis.push({ rotulo: "Deixar com a IA", icon: Bot, run: () => resumeAi() });
+        visiveis.push({ rotulo: "Assumir conversa", icon: User, run: () => markHumanActive() });
         break;
       case "HUMAN_ACTIVE":
-        visiveis.push({ rotulo: "Devolver para a IA", icon: RefreshCw, run: () => markHandoffBack() });
+        if (!semConfirmacao && !humanPaused) visiveis.push({ rotulo: "Devolver para a IA", icon: RefreshCw, run: () => markHandoffBack() });
         noMenu.push({ rotulo: "Pausar IA permanente", icon: Pause, run: () => pauseAi("dont_resume") });
         break;
       case "HANDOFF_BACK":
-        visiveis.push({ rotulo: "Retomar IA agora", icon: Bot, run: () => resumeAi() });
+        if (!semConfirmacao && !humanPaused) visiveis.push({ rotulo: "Retomar IA agora", icon: Bot, run: () => resumeAi() });
         break;
     }
   }
@@ -173,7 +203,7 @@ export function AiStateStrip({
   return (
     <div
       role={chave === "WAITING_HUMAN" ? "alert" : "group"}
-      aria-label={leadDesligado ? titulo : config.ariaLabel}
+      aria-label={ariaLabel}
       data-testid="ai-state-strip"
       data-state={chave}
       className={cn(
@@ -184,12 +214,12 @@ export function AiStateStrip({
     >
       {/* Aria live — leitor de tela anuncia a troca de estado. */}
       <div aria-live="polite" aria-atomic="true" className="sr-only">
-        {leadDesligado ? titulo : config.ariaLabel}
+        {ariaLabel}
       </div>
 
       <div className="flex min-w-[12rem] flex-1 items-center gap-2.5">
         <span className={cn("grid h-7 w-7 shrink-0 place-items-center rounded-[9px]", visual.chip)}>
-          {isMutating ? <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden /> : <Icone className="h-3.5 w-3.5" aria-hidden />}
+          {isMutating || chave === "CHECKING" ? <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden /> : <Icone className="h-3.5 w-3.5" aria-hidden />}
         </span>
         <div className="min-w-0">
           <p className="truncate text-[13px] font-bold leading-tight">{titulo}</p>
@@ -208,9 +238,9 @@ export function AiStateStrip({
             </button>
           </TooltipTrigger>
           <TooltipContent side="bottom" className="max-w-[260px] text-xs">
-            {leadDesligado
+            {chave === "LEAD_OFF"
               ? "O switch IA liga e desliga o Copilot para este lead. O estado da conversa (pausada, assumida) é outro controle."
-              : config.ariaLabel}
+              : ariaLabel}
           </TooltipContent>
         </Tooltip>
       </div>
@@ -268,7 +298,7 @@ export function AiStateStrip({
           </DropdownMenu>
         )}
 
-        {humanPaused && humanPausedUntil && onReactivateCopilot && (
+        {!semConfirmacao && humanPaused && humanPausedUntil && onReactivateCopilot && (
           <HumanPauseBadge
             pausedUntil={humanPausedUntil}
             onReactivate={onReactivateCopilot}
@@ -290,10 +320,10 @@ export function AiStateStrip({
           <Switch
             checked={!switchDesligado}
             onCheckedChange={(checked) => {
-              if (humanoConduzindo) return;
+              if (humanoConduzindo || semConfirmacao) return;
               onToggleAi(checked);
             }}
-            disabled={toggleAiPending || humanoConduzindo}
+            disabled={toggleAiPending || humanoConduzindo || semConfirmacao}
             aria-label="Copilot ligado para este lead"
           />
         </label>

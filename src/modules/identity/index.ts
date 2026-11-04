@@ -25,6 +25,7 @@ export {
   useJobTitle,
   useCanDo,
   useHasPermission,
+  useFunnelVisibilityLevel,
 } from "./permissions";
 export { PermissionProtectedRoute } from "./permissions";
 

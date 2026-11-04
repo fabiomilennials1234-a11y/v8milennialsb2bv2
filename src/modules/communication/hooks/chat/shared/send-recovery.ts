@@ -3,7 +3,8 @@ export const MAX_SEND_RETRIES = 10;
 export type SendResponse = { data: Record<string, unknown> | null; error: unknown };
 export class SendRetriesExhausted extends Error {
   readonly retryAttempts = MAX_SEND_RETRIES;
-  constructor() { super("Falha no envio"); }
+  // Desfecho desconhecido, não falha certa: timeout/5xx podem ter entregue.
+  constructor() { super("Falha no envio. A mensagem pode ter sido entregue: confira no WhatsApp antes de reenviar."); }
 }
 
 async function waitForResult<T>(promise: Promise<T>, timeoutMs: number): Promise<T | undefined> {

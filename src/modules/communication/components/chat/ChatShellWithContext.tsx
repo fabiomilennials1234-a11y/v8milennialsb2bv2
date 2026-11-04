@@ -95,6 +95,7 @@ import { useFailedMessages, useRetryMessage } from "@/modules/communication/hook
 import { useConversationCalls } from "@/modules/communication/hooks/chat/useConversationCalls";
 import { useChatDensity } from "@/modules/communication/hooks/chat/useChatDensity";
 import { AiStateStrip } from "@/modules/communication/components/chat/takeover/AiStateStrip";
+import { useChatCopilotAvailability } from "@/modules/communication/hooks/chat/useChatCopilotAvailability";
 import { useIdentity } from "@/modules/identity";
 import { useTags } from "@/modules/leads/hooks/useTags";
 import { useCurrentTeamMember } from "@/modules/identity";
@@ -307,6 +308,7 @@ function ChatView({
   });
 
   const aiDisabled = copilotToggle.aiDisabled;
+  const copilotAvailability = useChatCopilotAvailability(organizationId);
   const toggleAi = (checked: boolean) => copilotToggle.toggle(!checked);
 
   const handleRetry = useCallback(
@@ -366,6 +368,7 @@ function ChatView({
     <div className="flex flex-col h-full min-h-0 min-w-0">
       {isMobile ? (
         <MobileChatThreadHeader
+          isGroup={selectedContact?.is_group}
           contactName={contactName}
           phoneNumber={phoneNumber ?? ""}
           hasLead={!!effectiveLeadId}
@@ -375,6 +378,7 @@ function ChatView({
         />
       ) : (
         <ChatHeader
+          isGroup={selectedContact?.is_group}
           phoneNumber={phoneNumber ?? ""}
           contactName={contactName}
           hasLead={!!effectiveLeadId}
@@ -403,6 +407,8 @@ function ChatView({
           de tela: no celular ela substitui o banner "IA pediu ajuda". */}
       <AiStateStrip
         conversationId={conversationId}
+        copilotAvailability={copilotAvailability}
+        aiStatusLoading={copilotToggle.isLoading}
         aiDisabled={aiDisabled}
         onToggleAi={toggleAi}
         toggleAiPending={copilotToggle.isPending}
@@ -1064,6 +1070,7 @@ export function ChatShellWithContext() {
       selectedKey,
       selectedOfficialInstanceId,
       leadDeConversaNova?.name ?? null,
+      leadDeConversaNova?.id,
     );
   }, [socialContacts, selectedKey, isOfficialBox, selectedOfficialInstanceId, leadDeConversaNova]);
 

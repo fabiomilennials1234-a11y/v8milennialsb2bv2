@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState } from "react";
-import { useResponsibleMembers } from "@/modules/identity";
+import { useFunnelVisibilityLevel, useResponsibleMembers } from "@/modules/identity";
 import { useTags } from "@/modules/leads";
 import {
   createInitialPeriodState,
@@ -107,6 +107,10 @@ export function useFunilFilters(
   const [search, setSearch] = useState("");
 
   const responsibleMembers = useResponsibleMembers();
+  // Funil "só os meus" (pipeline.view_all, ADR-0042): o banco já devolve só os
+  // cards da pessoa, então "Responsável: todos" não existe — e escolher outra
+  // pessoa devolveria vazio. A seção some; o estado fica em "all".
+  const onlyMine = useFunnelVisibilityLevel() === "own";
   const { data: orgTags = [] } = useTags();
 
   const patch = useCallback(
@@ -120,12 +124,16 @@ export function useFunilFilters(
     () => [
       { type: "created-period", value: state.period, onChange: patch("period") },
       { type: "stalled-days", value: state.stalled, onChange: patch("stalled") },
-      {
-        type: "responsible",
-        value: state.responsibleId,
-        onChange: patch("responsibleId"),
-        members: responsibleMembers,
-      },
+      ...(onlyMine
+        ? []
+        : ([
+            {
+              type: "responsible",
+              value: state.responsibleId,
+              onChange: patch("responsibleId"),
+              members: responsibleMembers,
+            },
+          ] as FilterSectionConfig[])),
       { type: "origin-multi", value: state.origins, onChange: patch("origins") },
       { type: "tags", value: state.tagIds, onChange: patch("tagIds"), tags: orgTags },
       {
@@ -140,7 +148,7 @@ export function useFunilFilters(
       },
       { type: "scheduled", value: state.scheduled, onChange: patch("scheduled") },
     ],
-    [state, patch, responsibleMembers, orgTags],
+    [state, patch, responsibleMembers, orgTags, onlyMine],
   );
 
   const metricsRange = useMemo(() => getDateRange(state.period), [state.period]);

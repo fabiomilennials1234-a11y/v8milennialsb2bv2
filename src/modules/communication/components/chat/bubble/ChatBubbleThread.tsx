@@ -4,7 +4,7 @@
  * Composer + permission banner ficam no rodapé. Realtime patches já vêm via
  * provider singleton — Thread só consome os queryKeys correspondentes.
  */
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { MessageList } from "@/modules/communication/components/chat/view/MessageList";
 import { ImagePreviewModal } from "@/modules/communication/components/chat/media/ImagePreviewModal";
@@ -30,6 +30,7 @@ import { useLeadWriteInstance } from "@/modules/leads";
 const NO_MESSAGES: WhatsAppMessage[] = [];
 
 interface ChatBubbleThreadProps {
+  renderHeader: (leadId: string | null, isGroup: boolean) => ReactNode;
   phoneNumber: string;
   instanceId: string;
   instanceName: string;
@@ -38,6 +39,7 @@ interface ChatBubbleThreadProps {
 }
 
 export function ChatBubbleThread({
+  renderHeader,
   phoneNumber,
   instanceId,
   instanceName,
@@ -102,6 +104,7 @@ export function ChatBubbleThread({
 
   return (
     <div className="flex-1 min-h-0 flex flex-col">
+      {renderHeader(effectiveLeadId, isGroup)}
       <MessageList
         messages={messagesQuery.data ?? []}
         transferEvents={[]}

@@ -28,6 +28,9 @@ vi.mock("@/modules/communication/hooks/chat/useWhatsAppSend", () => ({
   }),
 }));
 
+const mockLocation = vi.fn().mockResolvedValue({});
+vi.mock("@/modules/communication/lib/whatsappApi", () => ({ sendLocation: (...args: unknown[]) => mockLocation(...args), sendContact: vi.fn() }));
+vi.mock("@/modules/communication/components/chat/social/SendContactDialog", () => ({ SendContactDialog: () => null }));
 const mockSetDraft = vi.fn();
 let mockDraft = "";
 
@@ -74,7 +77,7 @@ vi.mock("@/modules/communication/lib/audioToMp3", () => ({
 }));
 
 vi.mock("sonner", () => ({
-  toast: { success: vi.fn(), error: vi.fn(), info: vi.fn() },
+  toast: { success: vi.fn(), error: vi.fn(), info: vi.fn(), warning: vi.fn() },
 }));
 
 // Templates + team member (para o slash popover de "Template rápido")
@@ -83,7 +86,7 @@ vi.mock("@/modules/communication/hooks/useMessageTemplates", () => ({
   useMessageTemplates: () => ({ data: mockTemplateList }),
 }));
 vi.mock("@/modules/identity/org-team/hooks/useCurrentTeamMember", () => ({
-  useCurrentTeamMember: () => ({ data: { id: "tm1", name: "Vendedor" } }),
+  useCurrentTeamMember: () => ({ data: { id: "tm1", name: "Vendedor", organization_id: "org-1" } }),
 }));
 
 // Framer motion — simplify for tests
@@ -363,5 +366,23 @@ describe("MobileComposerContextual", () => {
       expect(toast.error).toHaveBeenCalledWith("Arquivo vazio — selecione outro arquivo.");
     });
     expect(mockMediaMutateAsync).not.toHaveBeenCalled();
+  });
+});
+
+describe("mobile location access", () => {
+  it("opens location from the mobile tray and sends the selected coordinates", async () => {
+    mockDraft = "";
+    mockLocation.mockClear();
+    renderComposer();
+    fireEvent.click(screen.getByLabelText("Abrir ações"));
+    fireEvent.click(screen.getByRole("button", { name: "Localização", exact: true }));
+    fireEvent.change(screen.getByLabelText("Latitude"), { target: { value: "-27,5" } });
+    fireEvent.change(screen.getByLabelText("Longitude"), { target: { value: "-48,5" } });
+    fireEvent.click(screen.getByRole("button", { name: "Enviar", exact: true }));
+    await waitFor(() => expect(mockLocation).toHaveBeenCalledWith("inst-uuid-1", "5511999990000", expect.objectContaining({ latitude: -27.5, longitude: -48.5 }), undefined));
+  });
+  it("does not expose sending without reply permission", () => {
+    renderComposer({ canReply: false });
+    expect(screen.queryByRole("button", { name: "Localização", exact: true })).not.toBeInTheDocument();
   });
 });

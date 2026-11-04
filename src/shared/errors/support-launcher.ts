@@ -11,6 +11,14 @@
 export interface SupportPrefill {
   title: string;
   description: string;
+  /**
+   * Tipo do Chamado. Sem ele, o rascunho abre como "defeito" (`bug`), que é o que um erro de tela gera.
+   * Um pedido (ex.: comprar créditos) manda `solicitacao`, para não cair errado na fila do suporte.
+   * Espelha o enum `support_ticket_tipo`; `shared` não importa `platform`, por isso o literal.
+   */
+  tipo?: "bug" | "duvida" | "solicitacao";
+  /** Espelha o enum `support_ticket_impacto`. Sem ele, o usuário escolhe. */
+  impacto?: "parado" | "contorno" | "incomodo";
 }
 
 type SupportLauncher = (prefill: SupportPrefill) => void;

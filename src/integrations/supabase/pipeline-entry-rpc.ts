@@ -9,11 +9,25 @@ export type SystemPipelineSlug = "whatsapp" | "confirmacao" | "propostas";
  */
 export const UM_CARD_SEM_NEGOCIO_INDEX = "uq_pipeline_entries_um_card_sem_negocio";
 
-/** O lead já tem card aberto sem negócio neste funil: o insert perdeu para ele. */
+/**
+ * Marca da recusa de domínio de `abrir_negocio` (20271218000000): o lead já tem
+ * card aberto sem negócio neste funil, mas o chamador não o enxerga
+ * (Visualização no Funil "só os meus").
+ */
+export const LEAD_JA_NO_FUNIL_MARK = "lead_ja_no_funil";
+
+/**
+ * O lead já tem card aberto sem negócio neste funil: o insert perdeu para ele.
+ * Duas formas: o índice único (`23505` com o nome do índice) ou a recusa de
+ * domínio de `abrir_negocio`, que existe porque quem não enxerga o card do
+ * outro não tem como saber que ele existe.
+ */
 export function isLeadJaNoFunil(error: unknown): boolean {
   if (typeof error !== "object" || error === null) return false;
   const { code, message } = error as { code?: unknown; message?: unknown };
-  return code === "23505" && String(message ?? "").includes(UM_CARD_SEM_NEGOCIO_INDEX);
+  if (code !== "23505") return false;
+  const text = String(message ?? "");
+  return text.includes(UM_CARD_SEM_NEGOCIO_INDEX) || text.includes(LEAD_JA_NO_FUNIL_MARK);
 }
 
 /**

@@ -34,3 +34,19 @@ describe("abas da página /leads (Clientes virou /carteira — CTO 2026-10-16)",
     expect(leadClassificacaoOptions(false).map((o) => o.value)).toContain("cliente");
   });
 });
+
+describe("aba Lista fria (ADR-0042)", () => {
+  it("sem a flag, as abas são as de sempre", () => {
+    expect(leadsPageTabOptions(false, false, false)).toEqual(leadsPageTabOptions(false, false));
+  });
+  it.each([
+    ["Lei da Relação", false, false, ["all", "lead", "lista_fria", "perdido"]],
+    ["Lei do ERP", true, false, ["all", "lead", "lista_fria", "indefinido"]],
+  ] as const)("%s: entra depois de Leads", (_lei, erp, cafe, esperado) => {
+    expect(leadsPageTabOptions(erp, cafe, true).map((o) => o.value)).toEqual(esperado);
+    expect(leadsPageTabOptions(erp, cafe, true).find((o) => o.value === "lista_fria")?.label).toBe("Lista fria");
+  });
+  it("não é uma classificação gravável do lead", () => {
+    expect(LEAD_CLASSIFICACOES as readonly string[]).not.toContain("lista_fria");
+  });
+});

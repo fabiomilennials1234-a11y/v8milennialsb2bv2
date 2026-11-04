@@ -53,6 +53,7 @@ import { AgendaProximo } from "./AgendaProximo";
 import { cn } from "@/lib/utils";
 import { useAuth, useCanDo, useIdentity, useTeamMembers } from "@/modules/identity";
 import { useAgendaEvents } from "@/modules/engagement/hooks/useAgendaEvents";
+import { useAgendaSearch } from "@/modules/engagement/hooks/useAgendaSearch";
 import { useMyAgendaOwnership } from "@/modules/engagement/hooks/useMyAgendaOwnership";
 import {
   useDeleteMeeting,
@@ -95,6 +96,7 @@ import {
 import { TimeGrid } from "./TimeGrid";
 import { MonthView } from "./MonthView";
 import { DayAgendaView } from "./DayAgendaView";
+import { AgendaSearchResults } from "./AgendaSearchResults";
 import {
   EventDetailPopover,
   type PopoverState,
@@ -156,6 +158,17 @@ export function AgendaAtividades({ onClose }: AgendaAtividadesProps) {
   // ── Filtros da tela ─────────────────────────────────────────────────────────
   const [statusFilter, setStatusFilter] = useState<AgendaStatusFilter>("all");
   const [ownerFilter, setOwnerFilter] = useState<string>(ALL_OPTION);
+
+  // Busca global (sem janela de datas). Com termo digitado, o painel de
+  // resultados toma o lugar do calendário; o recorte de visibilidade é o do
+  // banco (`search_agenda_events`), não um filtro daqui.
+  const [searchTerm, setSearchTerm] = useState("");
+  const search = useAgendaSearch(searchTerm);
+  const searching = searchTerm.trim().length > 0;
+  const searchEvents = useMemo(
+    () => normalizeAgendaEvents(search.events),
+    [search.events],
+  );
 
   // Multi-seleção, como sempre foi nesta tela: dá para ver reunião + ligação
   // sem tarefa. Um Select de valor único derrubaria isso.
@@ -493,6 +506,22 @@ export function AgendaAtividades({ onClose }: AgendaAtividadesProps) {
     [],
   );
 
+  /**
+   * Resultado da busca: leva a Agenda ao DIA do compromisso (visão Dia, que é a
+   * lista cronológica) e abre o detalhe. A busca fecha — o resultado cumpriu o
+   * papel de localizar, e o calendário embaixo já está no dia certo.
+   */
+  const handleSearchResultClick = useCallback(
+    (e: React.MouseEvent, event: UnifiedEvent) => {
+      e.stopPropagation();
+      setDate(event.start);
+      setView("day");
+      setSearchTerm("");
+      setPopover({ event, x: e.clientX, y: e.clientY });
+    },
+    [],
+  );
+
   const handleSlotClick = useCallback(
     (day: Date, hour = 9) => {
       const slotStart = new Date(
@@ -662,7 +691,24 @@ export function AgendaAtividades({ onClose }: AgendaAtividadesProps) {
         ownerOptions={ownerOptions}
         activeTypes={activeTypes}
         onToggleType={toggleType}
+        search={searchTerm}
+        onSearchChange={setSearchTerm}
       />
+
+      {searching && (
+        <AgendaSearchResults
+          term={searchTerm.trim()}
+          events={searchEvents}
+          isPending={search.isPending}
+          isError={search.isError}
+          isUnavailable={search.isUnavailable}
+          onRetry={() => void search.refetch()}
+          onEventClick={handleSearchResultClick}
+          showOwner={seesEveryone}
+        />
+      )}
+
+      {!searching && (<>
 
       {/* Navegação de período + alternância de visão */}
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -791,6 +837,7 @@ export function AgendaAtividades({ onClose }: AgendaAtividadesProps) {
         />
       )}
       </div>
+      </>)}
 
       {/* Event popover */}
       <AnimatePresence>

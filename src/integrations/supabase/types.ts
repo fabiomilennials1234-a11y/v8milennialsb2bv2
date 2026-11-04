@@ -9646,12 +9646,17 @@ export type Database = {
       lead_documents: {
         Row: {
           created_at: string
+          deleted_at: string | null
+          deleted_by: string | null
           document: string
           document_kind: string | null
           erp_document_at_set: string | null
           erp_writeback_attempted_at: string | null
           erp_writeback_error: string | null
           erp_writeback_status: string
+          id: string
+          is_primary: boolean
+          label: string | null
           lead_id: string
           organization_id: string
           source: string
@@ -9660,12 +9665,17 @@ export type Database = {
         }
         Insert: {
           created_at?: string
+          deleted_at?: string | null
+          deleted_by?: string | null
           document: string
           document_kind?: never
           erp_document_at_set?: string | null
           erp_writeback_attempted_at?: string | null
           erp_writeback_error?: string | null
           erp_writeback_status: string
+          id?: string
+          is_primary?: boolean
+          label?: string | null
           lead_id: string
           organization_id: string
           source?: string
@@ -9674,12 +9684,17 @@ export type Database = {
         }
         Update: {
           created_at?: string
+          deleted_at?: string | null
+          deleted_by?: string | null
           document?: string
           document_kind?: never
           erp_document_at_set?: string | null
           erp_writeback_attempted_at?: string | null
           erp_writeback_error?: string | null
           erp_writeback_status?: string
+          id?: string
+          is_primary?: boolean
+          label?: string | null
           lead_id?: string
           organization_id?: string
           source?: string
@@ -9690,7 +9705,7 @@ export type Database = {
           {
             foreignKeyName: "lead_documents_lead_id_fkey"
             columns: ["lead_id"]
-            isOneToOne: true
+            isOneToOne: false
             referencedRelation: "leads"
             referencedColumns: ["id"]
           },
@@ -10339,6 +10354,7 @@ export type Database = {
           import_batch_id: string | null
           interest: string | null
           is_shadow: boolean | null
+          lista_fria_busca_id: string | null
           meta_ad_id: string | null
           meta_adset_id: string | null
           meta_campaign_id: string | null
@@ -10405,6 +10421,7 @@ export type Database = {
           import_batch_id?: string | null
           interest?: string | null
           is_shadow?: boolean | null
+          lista_fria_busca_id?: string | null
           meta_ad_id?: string | null
           meta_adset_id?: string | null
           meta_campaign_id?: string | null
@@ -10471,6 +10488,7 @@ export type Database = {
           import_batch_id?: string | null
           interest?: string | null
           is_shadow?: boolean | null
+          lista_fria_busca_id?: string | null
           meta_ad_id?: string | null
           meta_adset_id?: string | null
           meta_campaign_id?: string | null
@@ -10682,6 +10700,207 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      lista_fria_buscas: {
+        Row: {
+          cidade: string | null
+          cobranca: string
+          com_email: number
+          com_telefone: number
+          contatos_novos: number
+          created_at: string
+          creditos_devolvidos: boolean
+          creditos_limite: number
+          creditos_usados: number
+          criado_por: string | null
+          encontrados: number
+          erro: string | null
+          etapa: string | null
+          filtros: Json | null
+          finished_at: string | null
+          fonte: string
+          heartbeat_at: string | null
+          id: string
+          importada_em: string | null
+          importados: number
+          instagram_handle: string | null
+          ja_leads: number
+          nicho: string | null
+          organization_id: string
+          progresso: number
+          sem_contato: number
+          seguidores_por_credito: number
+          started_at: string | null
+          status: string
+          updated_at: string
+          varridos: number
+          worker_id: string | null
+        }
+        Insert: {
+          cidade?: string | null
+          cobranca?: string
+          com_email?: number
+          com_telefone?: number
+          contatos_novos?: number
+          created_at?: string
+          creditos_devolvidos?: boolean
+          creditos_limite: number
+          creditos_usados?: number
+          criado_por?: string | null
+          encontrados?: number
+          erro?: string | null
+          etapa?: string | null
+          filtros?: Json | null
+          finished_at?: string | null
+          fonte: string
+          heartbeat_at?: string | null
+          id?: string
+          importada_em?: string | null
+          importados?: number
+          instagram_handle?: string | null
+          ja_leads?: number
+          nicho?: string | null
+          organization_id: string
+          progresso?: number
+          sem_contato?: number
+          seguidores_por_credito?: number
+          started_at?: string | null
+          status?: string
+          updated_at?: string
+          varridos?: number
+          worker_id?: string | null
+        }
+        Update: {
+          cidade?: string | null
+          cobranca?: string
+          com_email?: number
+          com_telefone?: number
+          contatos_novos?: number
+          created_at?: string
+          creditos_devolvidos?: boolean
+          creditos_limite?: number
+          creditos_usados?: number
+          criado_por?: string | null
+          encontrados?: number
+          erro?: string | null
+          etapa?: string | null
+          filtros?: Json | null
+          finished_at?: string | null
+          fonte?: string
+          heartbeat_at?: string | null
+          id?: string
+          importada_em?: string | null
+          importados?: number
+          instagram_handle?: string | null
+          ja_leads?: number
+          nicho?: string | null
+          organization_id?: string
+          progresso?: number
+          sem_contato?: number
+          seguidores_por_credito?: number
+          started_at?: string | null
+          status?: string
+          updated_at?: string
+          varridos?: number
+          worker_id?: string | null
+        }
+        Relationships: []
+      }
+      lista_fria_creditos: {
+        Row: {
+          busca_id: string | null
+          created_at: string
+          criado_por: string | null
+          delta: number
+          id: string
+          motivo: string
+          nota: string | null
+          organization_id: string
+        }
+        Insert: {
+          busca_id?: string | null
+          created_at?: string
+          criado_por?: string | null
+          delta: number
+          id?: string
+          motivo: string
+          nota?: string | null
+          organization_id: string
+        }
+        Update: {
+          busca_id?: string | null
+          created_at?: string
+          criado_por?: string | null
+          delta?: number
+          id?: string
+          motivo?: string
+          nota?: string | null
+          organization_id?: string
+        }
+        Relationships: []
+      }
+      lista_fria_resultados: {
+        Row: {
+          bairro: string | null
+          busca_id: string
+          categoria: string | null
+          created_at: string
+          email: string | null
+          endereco: string | null
+          id: string
+          importado_em: string | null
+          instagram: string | null
+          ja_e_lead: boolean
+          lead_id: string | null
+          nome: string
+          organization_id: string
+          qualidade: string
+          ref_externa: string
+          selecionado: boolean
+          site: string | null
+          telefone: string | null
+        }
+        Insert: {
+          bairro?: string | null
+          busca_id: string
+          categoria?: string | null
+          created_at?: string
+          email?: string | null
+          endereco?: string | null
+          id?: string
+          importado_em?: string | null
+          instagram?: string | null
+          ja_e_lead?: boolean
+          lead_id?: string | null
+          nome: string
+          organization_id: string
+          qualidade?: string
+          ref_externa: string
+          selecionado?: boolean
+          site?: string | null
+          telefone?: string | null
+        }
+        Update: {
+          bairro?: string | null
+          busca_id?: string
+          categoria?: string | null
+          created_at?: string
+          email?: string | null
+          endereco?: string | null
+          id?: string
+          importado_em?: string | null
+          instagram?: string | null
+          ja_e_lead?: boolean
+          lead_id?: string | null
+          nome?: string
+          organization_id?: string
+          qualidade?: string
+          ref_externa?: string
+          selecionado?: boolean
+          site?: string | null
+          telefone?: string | null
+        }
+        Relationships: []
       }
       loss_reasons: {
         Row: {
@@ -19787,6 +20006,7 @@ export type Database = {
           reactions: Json
           received_via: string
           remote_jid: string
+          reply_context: Json | null
           search_tsv: unknown
           sent_by_ai: boolean | null
           sent_by_team_member_id: string | null
@@ -19820,6 +20040,7 @@ export type Database = {
           reactions?: Json
           received_via?: string
           remote_jid: string
+          reply_context?: Json | null
           search_tsv?: unknown
           sent_by_ai?: boolean | null
           sent_by_team_member_id?: string | null
@@ -19853,6 +20074,7 @@ export type Database = {
           reactions?: Json
           received_via?: string
           remote_jid?: string
+          reply_context?: Json | null
           search_tsv?: unknown
           sent_by_ai?: boolean | null
           sent_by_team_member_id?: string | null
@@ -21247,6 +21469,7 @@ export type Database = {
         Args: { p_expected_state: string; p_org_id: string; p_payload?: Json }
         Returns: Json
       }
+      agenda_search_fold: { Args: { p_value: string }; Returns: string }
       api_add_lead_tags: {
         Args: { p_lead_id: string; p_org: string; p_tags: string[] }
         Returns: Json
@@ -23940,6 +24163,14 @@ export type Database = {
       }
       lead_in_my_org: { Args: { p_lead_id: string }; Returns: boolean }
       lead_phone_descompartilhar: { Args: { p_lead_id: string }; Returns: boolean }
+      lead_tem_card_no_funil: {
+        Args: {
+          p_apenas_sem_negocio?: boolean
+          p_lead_id: string
+          p_pipeline_id: string
+        }
+        Returns: boolean
+      }
       lead_owner_add: {
         Args: { p_lead_id: string; p_team_member_id: string }
         Returns: Json
@@ -24387,6 +24618,10 @@ export type Database = {
       restore_lead: { Args: { p_lead_id: string }; Returns: undefined }
       restore_leads_bulk: { Args: { p_lead_ids: string[] }; Returns: number }
       rollback_import_batch: { Args: { p_batch_id: string }; Returns: Json }
+      salvar_documentos_do_lead: {
+        Args: { p_docs: Json; p_lead_id: string }
+        Returns: Json
+      }
       salvar_telefones_do_lead: {
         Args: {
           p_lead_id: string
@@ -24421,6 +24656,30 @@ export type Database = {
           p_whatsapp_instance_id: string
         }
         Returns: boolean
+      }
+      search_agenda_events: {
+        Args: { p_limit?: number; p_organization_id: string; p_query: string }
+        Returns: {
+          all_day: boolean
+          color: string
+          created_by: string
+          creator_name: string
+          description: string
+          end_at: string
+          event_type: string
+          google_event_id: string
+          id: string
+          lead_company: string
+          lead_id: string
+          lead_name: string
+          location: string
+          meet_link: string
+          owner_team_member_id: string
+          source: string
+          start_at: string
+          status: string
+          title: string
+        }[]
       }
       search_messages: {
         Args: {

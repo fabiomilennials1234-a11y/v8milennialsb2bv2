@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { applyLeadListFilters } from "./lead-list-filters";
+import { ABA_LISTA_FRIA, applyLeadListFilters } from "./lead-list-filters";
 
 /**
  * Duble do query builder do PostgREST: registra as chamadas encadeadas em vez de
@@ -9,6 +9,7 @@ import { applyLeadListFilters } from "./lead-list-filters";
 type QueryDuble = {
   calls: string[];
   is(col: string, val: null): QueryDuble;
+  not(col: string, op: string, val: null): QueryDuble;
   eq(col: string, val: unknown): QueryDuble;
   gte(col: string, val: unknown): QueryDuble;
   lte(col: string, val: unknown): QueryDuble;
@@ -25,6 +26,7 @@ function fakeQuery(): QueryDuble {
   const q: QueryDuble = {
     calls,
     is: (col, val) => registra(`is:${col}:${val}`),
+    not: (col, op, val) => registra(`not:${col}:${op}:${val}`),
     eq: (col, val) => registra(`eq:${col}:${val}`),
     gte: (col, val) => registra(`gte:${col}:${val}`),
     lte: (col, val) => registra(`lte:${col}:${val}`),
@@ -173,5 +175,32 @@ describe("applyLeadListFilters — telefone secundário (Chamado 82c50502)", () 
 
   it("sem busca, ids soltos não filtram nada", () => {
     expect(applyLeadListFilters(fakeQuery(), { secondaryPhoneLeadIds: [LEAD] }).calls).toEqual([]);
+  });
+});
+
+describe("applyLeadListFilters — Lista fria (ADR-0042)", () => {
+  it("org sem a flag: a lista é a de sempre, sem tocar na coluna da seção", () => {
+    expect(applyLeadListFilters(fakeQuery(), { filterClassificacao: "lead" }).calls.join()).not.toContain("lista_fria_busca_id");
+    expect(applyLeadListFilters(fakeQuery(), { usaListaFria: false, filterClassificacao: "all" }).calls).toEqual([]);
+  });
+
+  it("com a flag, toda aba que não é a Lista fria esconde os leads da seção", () => {
+    expect(applyLeadListFilters(fakeQuery(), { usaListaFria: true, filterClassificacao: "all" }).calls)
+      .toEqual(["is:lista_fria_busca_id:null"]);
+    expect(applyLeadListFilters(fakeQuery(), { usaListaFria: true }).calls).toEqual(["is:lista_fria_busca_id:null"]);
+    expect(applyLeadListFilters(fakeQuery(), { usaListaFria: true, filterClassificacao: "lead" }).calls)
+      .toContain("is:lista_fria_busca_id:null");
+  });
+
+  it("a aba Lista fria mostra só a seção, e não vira classificação do lead", () => {
+    for (const erp of [false, true]) {
+      const { calls } = applyLeadListFilters(fakeQuery(), { usaListaFria: true, usaLeiDoErp: erp, filterClassificacao: ABA_LISTA_FRIA });
+      expect(calls).toEqual(["not:lista_fria_busca_id:is:null"]);
+    }
+  });
+
+  it("sem a flag a aba Lista fria não recorta nada (e não vira eq:classificacao)", () => {
+    const { calls } = applyLeadListFilters(fakeQuery(), { usaListaFria: false, usaLeiDoErp: true, filterClassificacao: ABA_LISTA_FRIA });
+    expect(calls).toEqual([]);
   });
 });

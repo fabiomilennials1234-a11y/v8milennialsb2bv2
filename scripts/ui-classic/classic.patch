@@ -1129,10 +1129,16 @@ index 03a54f8e6..b735a7aba 100644
              )
            ) : undefined
 diff --git a/classic/src/modules/communication/components/chat/MessagePrimitives.tsx b/classic/src/modules/communication/components/chat/MessagePrimitives.tsx
-index a15833a9f..764a3c26b 100644
+index a15833a9f..8f162b5d2 100644
 --- a/classic/src/modules/communication/components/chat/MessagePrimitives.tsx
 +++ b/classic/src/modules/communication/components/chat/MessagePrimitives.tsx
-@@ -38,6 +38,7 @@ import {
+@@ -1,4 +1,5 @@
+ import { RichContactBubble } from "./bubbles/RichContactBubble";
++import { isLocationMessageType } from "@/modules/communication/lib/location-maps-link";
+ import { readUazapiPix, type UazapiPixFields } from "../../lib/uazapiPixDisplay";
+ import { PixMessage } from "./media/PixMessage";
+ import { AudioTranscription } from "./media/AudioTranscription";
+@@ -38,6 +39,7 @@ import {
  import { isInteractiveResponseType } from "@/modules/communication/lib/interactiveMessageType";
  import { UazapiMenuBubble } from "./bubbles/UazapiMenuBubble";
  import { readUazapiMenu, type UazapiMenuFields } from "@/modules/communication/lib/uazapiMenuDisplay";
@@ -1140,7 +1146,7 @@ index a15833a9f..764a3c26b 100644
  import { readUazapiButtons, type UazapiButtonsFields } from "../../lib/uazapiButtonsDisplay";
  import { UazapiButtonsBubble } from "./bubbles/UazapiButtonsBubble";
  import { InteractiveResponseBubble } from "./bubbles/InteractiveResponseBubble";
-@@ -45,6 +46,7 @@ import { BolhaNormalizada } from "./bubbles/BolhaNormalizada";
+@@ -45,6 +47,7 @@ import { BolhaNormalizada } from "./bubbles/BolhaNormalizada";
  import { format, isToday, isYesterday } from "date-fns";
  import { AudioPlayer, getAudioPlaybackUrl } from "./media/AudioPlayer";
  import { MessageSticker, MessageImage, MessageVideo, MessageDocument, ExpiredMedia, resolveExpiredMediaKind } from "./media/MessageMedia";
@@ -1148,7 +1154,7 @@ index a15833a9f..764a3c26b 100644
  import { Button } from "@/components/ui/button";
  import { Reply } from "lucide-react";
  import {
-@@ -142,6 +144,7 @@ export function MessageBubble({
+@@ -142,6 +145,7 @@ export function MessageBubble({
    onImagePreview,
    isFirstInGroup = true,
    isLastInGroup = true,
@@ -1156,7 +1162,7 @@ index a15833a9f..764a3c26b 100644
    mountTime,
    onRetry,
    instanceId,
-@@ -154,6 +157,8 @@ export function MessageBubble({
+@@ -154,6 +158,8 @@ export function MessageBubble({
    onImagePreview: (url: string) => void;
    isFirstInGroup?: boolean;
    isLastInGroup?: boolean;
@@ -1165,7 +1171,7 @@ index a15833a9f..764a3c26b 100644
    mountTime?: number;
    onRetry?: (message: FailedMessage) => void;
    /** When set + enableActions=true, reveals S1 action bar on hover */
-@@ -171,6 +176,8 @@ export function MessageBubble({
+@@ -171,6 +177,8 @@ export function MessageBubble({
        ? ((message as any).sent_source ?? (message.sent_by_ai ? "copilot" : "manual"))
        : "manual";
    const isWhatsAppMsg = "message_type" in message;
@@ -1174,7 +1180,16 @@ index a15833a9f..764a3c26b 100644
    const mediaUrl = isWhatsAppMsg ? (message as WhatsAppMessage).media_url : null;
    const messageType = isWhatsAppMsg ? (message as WhatsAppMessage).message_type : null;
    const isAudio = messageType === "audio" || messageType === "ptt";
-@@ -393,6 +400,12 @@ export function MessageBubble({
+@@ -181,7 +189,7 @@ export function MessageBubble({
+   // Media purged by the 30-day retention job. media_url is NULL by now; show a
+   // graceful "expired" state instead of the "[Mídia indisponível]" fallback.
+   const isMediaExpired = isWhatsAppMsg && (message as WhatsAppMessage).media_expired === true;
+-  const isLocation = messageType === "location" || messageType === "LocationMessage" || messageType === "livelocation";
++  const isLocation = isLocationMessageType(messageType);
+   const isContact = messageType === "contact" || messageType === "ContactMessage" || messageType === "ContactsArrayMessage" || messageType === "vcard" || messageType === "contact_array";
+   const isReaction = messageType === "reaction" || messageType === "ReactionMessage";
+   const isPoll = messageType === "poll";
+@@ -393,6 +401,12 @@ export function MessageBubble({
            </div>
          )}
  
@@ -1187,7 +1202,7 @@ index a15833a9f..764a3c26b 100644
          {isDeleted ? (
            <DeletedPlaceholder deletedAt={meta.deleted_at} />
          ) : isEditing ? (
-@@ -458,23 +471,29 @@ export function MessageBubble({
+@@ -458,23 +472,29 @@ export function MessageBubble({
  
              {/* Imagem */}
              {isImage && message.media_url && (
@@ -1226,7 +1241,7 @@ index a15833a9f..764a3c26b 100644
              )}
  
              {/* Sticker */}
-@@ -581,7 +600,7 @@ export function MessageBubble({
+@@ -581,7 +601,7 @@ export function MessageBubble({
                    return <MessageVideo src={mediaUrl} />;
                  if (ext && ["mp3","ogg","opus","m4a","aac","wav","webm"].includes(ext))
                    return <AudioPlayer src={getAudioPlaybackUrl(mediaUrl) ?? mediaUrl} isOutgoing={isOutgoing} />;
@@ -12605,3 +12620,119 @@ index 32f47352a..db24ce28b 100644
    prefix: "",
    theme: {
      container: {
+diff --git a/classic/src/modules/communication/components/chat/bubbles/BolhaNormalizada.tsx b/classic/src/modules/communication/components/chat/bubbles/BolhaNormalizada.tsx
+index 45860cf28..6b369d0dc 100644
+--- a/classic/src/modules/communication/components/chat/bubbles/BolhaNormalizada.tsx
++++ b/classic/src/modules/communication/components/chat/bubbles/BolhaNormalizada.tsx
+@@ -19,6 +19,7 @@ import { Contact as ContactIcon, ExternalLink, MapPin, Phone, Reply } from "luci
+ 
+ import { Button } from "@/components/ui/button";
+ import type { Bolha } from "@/modules/communication/lib/inbound-metadata";
++import { googleMapsUrl } from "@/modules/communication/lib/location-maps-link";
+ 
+ export function BolhaNormalizada({ bolha }: { bolha: Bolha }) {
+   if (bolha.tipo === "resposta") {
+@@ -60,7 +61,7 @@ export function BolhaNormalizada({ bolha }: { bolha: Bolha }) {
+     // Sem chave de mapa embutida e sem pedir uma: o link universal do Google
+     // abre no app nativo em celular, que é onde o vendedor está quando precisa
+     // chegar no endereço.
+-    const mapa = `https://www.google.com/maps/search/?api=1&query=${bolha.latitude},${bolha.longitude}`;
++    const mapa = googleMapsUrl(bolha.latitude, bolha.longitude);
+     return (
+       <div className="space-y-1">
+         <div className="flex items-center gap-2 text-sm">
+@@ -70,14 +71,14 @@ export function BolhaNormalizada({ bolha }: { bolha: Bolha }) {
+         {bolha.endereco && (
+           <p className="text-xs text-muted-foreground break-words">{bolha.endereco}</p>
+         )}
+-        <a
++        {mapa && <a
+           href={mapa}
+           target="_blank"
+           rel="noopener noreferrer"
+-          className="inline-block text-xs underline underline-offset-2 hover:opacity-80"
++          className="inline-flex min-h-11 items-center text-xs underline underline-offset-2 hover:opacity-80"
+         >
+-          Abrir no mapa
+-        </a>
++          Abrir no Google Maps
++        </a>}
+       </div>
+     );
+   }
+diff --git a/classic/src/modules/communication/components/chat/bubbles/RichContactBubble.tsx b/classic/src/modules/communication/components/chat/bubbles/RichContactBubble.tsx
+index 1015a079d..1548746fe 100644
+--- a/classic/src/modules/communication/components/chat/bubbles/RichContactBubble.tsx
++++ b/classic/src/modules/communication/components/chat/bubbles/RichContactBubble.tsx
+@@ -1,23 +1,19 @@
+ import { Contact, Copy, MapPin } from 'lucide-react';
+ import { toast } from 'sonner';
+-import { parseLocation } from '@/modules/communication/lib/rich-message-input';
++import { readLocationMapsLink } from '@/modules/communication/lib/location-maps-link';
+ import { notifyError } from "@/shared/errors";
+ 
+ export function RichContactBubble({ content, location }: { content: string | null; location: boolean }) {
+   const lines = (content ?? '').split('\n');
+-  const match = location ? /^https:\/\/www\.google\.com\/maps\?q=([+-]?[\d.]+),([+-]?[\d.]+)$/.exec(lines.at(-1) ?? '') : null;
+-  let mapsUrl: string | null = null;
+-  if (match) {
+-    try { const point = parseLocation(match[1], match[2]); mapsUrl = `https://www.google.com/maps?q=${point.latitude},${point.longitude}`; } catch { /* malformed coordinates remain plain text */ }
+-  }
++  const map = location ? readLocationMapsLink(content) : null;
+   const phone = !location && /^\d{8,15}$/.test(lines[1] ?? '') ? lines[1] : null;
+   return <div className="space-y-2 rounded-lg border border-current/20 p-3 text-sm">
+     <div className="flex items-center gap-2 text-xs opacity-75">
+       {location ? <MapPin className="h-4 w-4" /> : <Contact className="h-4 w-4" />}
+       {location ? 'Localização' : 'Contato'}
+     </div>
+-    <p className="whitespace-pre-wrap break-words">{(mapsUrl ? lines.slice(0, -1).join('\n') : content) || (location ? 'Localização compartilhada' : 'Contato compartilhado')}</p>
+-    {mapsUrl && <a href={mapsUrl} target="_blank" rel="noopener noreferrer" className="inline-flex min-h-9 items-center underline underline-offset-4">Abrir no mapa</a>}
++    <p className="whitespace-pre-wrap break-words">{(map ? map.description : content) || (location ? 'Localização compartilhada' : 'Contato compartilhado')}</p>
++    {map && <a href={map.mapsUrl} target="_blank" rel="noopener noreferrer" className="inline-flex min-h-11 items-center underline underline-offset-4">Abrir no Google Maps</a>}
+     {phone && <button type="button" className="flex min-h-9 items-center gap-2 text-xs" onClick={async () => {
+       try { await navigator.clipboard.writeText(phone); toast.success('Telefone copiado'); }
+       catch (caught) { notifyError(caught, { fallback: "Não foi possível copiar o telefone." }); }
+diff --git a/classic/src/modules/communication/lib/location-maps-link.ts b/classic/src/modules/communication/lib/location-maps-link.ts
+new file mode 100644
+index 000000000..9dd149660
+--- /dev/null
++++ b/classic/src/modules/communication/lib/location-maps-link.ts
+@@ -0,0 +1,38 @@
++import { parseLocation } from './rich-message-input';
++
++/** Universal Maps URL: app on mobile when available, browser on desktop. */
++export function googleMapsUrl(latitude: number, longitude: number): string | null {
++  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)
++    || Math.abs(latitude) > 90 || Math.abs(longitude) > 180) return null;
++  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${latitude},${longitude}`)}`;
++}
++
++/** Reads both the webhook's persisted coordinates and the composer's Maps URL. */
++export function readLocationMapsLink(content: string | null) {
++  const lines = (content ?? '').trim().split(/\r?\n/);
++  const lastLine = lines.at(-1)?.trim() ?? '';
++  let coordinates = lastLine.replace(/^📍\s*/, '');
++
++  if (lastLine.startsWith('https://')) {
++    try {
++      const url = new URL(lastLine);
++      if (url.hostname !== 'www.google.com' || url.port || url.username || url.password) return null;
++      if (/^\/maps\/?$/.test(url.pathname)) coordinates = url.searchParams.get('q') ?? '';
++      else if (/^\/maps\/search\/?$/.test(url.pathname) && url.searchParams.get('api') === '1') {
++        coordinates = url.searchParams.get('query') ?? '';
++      } else return null;
++    } catch { return null; }
++  }
++
++  const parts = coordinates.split(',');
++  if (parts.length !== 2) return null;
++  try {
++    const point = parseLocation(parts[0], parts[1]);
++    const mapsUrl = googleMapsUrl(point.latitude, point.longitude);
++    return mapsUrl ? { mapsUrl, description: lines.slice(0, -1).join('\n') } : null;
++  } catch { return null; }
++}
++
++export function isLocationMessageType(messageType: string | null): boolean {
++  return ['location', 'locationmessage', 'livelocation', 'livelocationmessage'].includes(messageType?.toLowerCase() ?? '');
++}

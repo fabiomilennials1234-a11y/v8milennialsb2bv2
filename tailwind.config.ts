@@ -235,6 +235,12 @@ export default {
         "shimmer": {
           "100%": { transform: "translateX(100%)" },
         },
+        // Selo "Novo" da lateral: anel que sai do selo e some. Devagar, para chamar sem gritar.
+        "novo-pulso": {
+          "0%": { boxShadow: "0 0 0 0 hsl(var(--primary) / 0.55)" },
+          "70%": { boxShadow: "0 0 0 7px hsl(var(--primary) / 0)" },
+          "100%": { boxShadow: "0 0 0 0 hsl(var(--primary) / 0)" },
+        },
         "panel-down": {
           from: { opacity: "0", transform: "translateY(-6px)" },
           to: { opacity: "1", transform: "translateY(0)" },
@@ -247,6 +253,7 @@ export default {
         "slide-in-right": "slide-in-right 0.3s ease-out",
         "scale-in": "scale-in 0.2s ease-out",
         "shimmer": "shimmer 1.6s infinite",
+        "novo-pulso": "novo-pulso 2.2s ease-out infinite",
       },
     },
   },

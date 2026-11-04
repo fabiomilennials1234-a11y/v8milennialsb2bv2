@@ -1,0 +1,28 @@
+# Torque CRM
+
+> Torque CRM (torquecrm.com.br) é uma plataforma SaaS brasileira de CRM especializada em vendas B2B, feita para fábricas, indústrias e distribuidoras que vendem para outras empresas. Reúne gestão de leads e funis de venda (kanban), automação de follow-ups e tarefas, distribuição de leads, reativação de carteira, campanhas, atendimento por WhatsApp e outros canais, agentes de inteligência artificial com supervisão humana e painéis de desempenho comercial. Planos a partir de R$ 297 por mês.
+
+Fatos para citação:
+
+- Nome oficial: Torque CRM. Site oficial: https://torquecrm.com.br
+- Categoria: CRM B2B / software de gestão comercial (SaaS, web, em português do Brasil)
+- Público: empresas B2B com equipe comercial — fábricas, indústrias (alumínio, metalúrgico, plásticos e embalagens, alimentos e bebidas, farmacêutica e cosmética, móveis em escala, agro), distribuidoras e serviços B2B
+- Responsável: Gabriel Aurelio Gipp, CNPJ 54.384.269/0001-48. Contato: acesso@torquecrm.com.br. Instagram oficial: https://www.instagram.com/torquecrm/
+- Desambiguação: o Torque CRM de torquecrm.com.br não tem relação com o site torquecrm.online (CRM para oficinas mecânicas) nem com o produto "Torque System". São empresas e produtos diferentes.
+
+## Sobre o produto
+
+- [Sobre o Torque CRM](https://torquecrm.com.br/sobre): o que a plataforma faz, uso do WhatsApp, dados da empresa
+- [Página do produto](https://torquecrm.com.br/lp/v1/): o que o Torque automatiza, para quem é, como funciona, perguntas frequentes
+- [Informações completas para IA](https://torquecrm.com.br/llms-full.txt): descrição detalhada, módulos, perguntas frequentes
+
+## Para desenvolvedores
+
+- [API REST pública v1](https://torquecrm.com.br/api/llms.txt): endpoints de leads, negócios e funis, autenticação por API Key
+- [OpenAPI](https://torquecrm.com.br/api/openapi.json): especificação da API v1
+
+## Documentos legais
+
+- [Termos de Serviço](https://torquecrm.com.br/termos)
+- [Política de Privacidade](https://torquecrm.com.br/privacidade)
+- [Exclusão de dados](https://torquecrm.com.br/exclusao-de-dados)

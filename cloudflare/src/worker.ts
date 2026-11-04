@@ -95,6 +95,24 @@ async function handle(route: Route, request: Request, url: URL, env: Env): Promi
   }
 }
 
+/**
+ * Um domínio só. O Google tratava www e apex como cópias e escolhia o www,
+ * enquanto sitemap, JSON-LD e llms.txt apontam para o apex: o sinal da marca
+ * se dividia. 308 fora de GET/HEAD preserva método e corpo (cliente da API
+ * configurado com www continua funcionando).
+ */
+const WWW_HOST = "www.torquecrm.com.br";
+const CANONICAL_ORIGIN = "https://torquecrm.com.br";
+
+function toCanonical(request: Request, url: URL): Response {
+  const status = request.method === "GET" || request.method === "HEAD" ? 301 : 308;
+  return applyProfile(
+    new Response(null, { status, headers: { Location: `${CANONICAL_ORIGIN}${url.pathname}${url.search}` } }),
+    "app",
+    CACHE.noStore,
+  );
+}
+
 function log(entry: Record<string, string | number>): void {
   console.log(JSON.stringify(entry));
 }
@@ -111,7 +129,8 @@ export default {
     try {
       const resolved = resolveRoute(url, request.method);
       route = resolved.kind;
-      response = await handle(resolved, request, url, env);
+      // Resolve antes de redirecionar: o log redige o caminho pela rota real.
+      response = url.hostname === WWW_HOST ? toCanonical(request, url) : await handle(resolved, request, url, env);
     } catch (error) {
       // Nome do erro só: a mensagem pode carregar a URL com a query.
       log({ level: "error", method: request.method, path: logPath(route, url.pathname), route, error: error instanceof Error ? error.name : "unknown" });

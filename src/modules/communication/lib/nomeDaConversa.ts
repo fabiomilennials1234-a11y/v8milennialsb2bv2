@@ -68,8 +68,14 @@ function semCodigoNoInicio(nome: string, codigo: string): string {
   return nome.replace(new RegExp(`^${escapado}\\s*[-–:]\\s*`), "").trim() || nome;
 }
 
-const comparavel = (s: string) =>
+export const comparavel = (s: string) =>
   s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, " ").trim().toLowerCase();
+
+/**
+ * Forma de BUSCA: `comparavel` + hífen/travessão tratados como espaço, para que
+ * "6627 -" case com "6627 - Fernando" e "6627-fernando" com o mesmo nome.
+ */
+export const paraBusca = (s: string) => comparavel(s.replace(/[-–—]/g, " "));
 
 /**
  * A regra da flag `chat_nome_cod_contato_lead` (decisão do CTO, 08/10/2026),

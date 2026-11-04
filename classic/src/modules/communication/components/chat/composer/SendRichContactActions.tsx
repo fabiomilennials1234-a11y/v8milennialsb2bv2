@@ -11,8 +11,8 @@ import { acceptedInteractiveRow, interactiveInsertOptions, type AcceptedInteract
 import { SendContactDialog } from '../social/SendContactDialog';
 import { SendLocationDialog } from '../social/SendLocationDialog';
 
-export function SendRichContactActions({ instanceId, phoneNumber, leadId, disabled }: {
-  instanceId: string; phoneNumber: string; leadId?: string; disabled: boolean;
+export function SendRichContactActions({ instanceId, phoneNumber, leadId, disabled, mobile = false }: {
+  instanceId: string; phoneNumber: string; leadId?: string; disabled: boolean; mobile?: boolean;
 }) {
   const [dialog, setDialog] = useState<'location' | 'contact' | null>(null);
   const { data: member } = useCurrentTeamMember();
@@ -33,7 +33,10 @@ export function SendRichContactActions({ instanceId, phoneNumber, leadId, disabl
     void queryClient.invalidateQueries({ queryKey: ['whatsapp_messages', scope.organizationId] });
   };
   return <>
-    <DropdownMenu>
+    {mobile ? <div className="flex gap-2 px-3 pb-3">
+      <Button variant="outline" disabled={disabled || !member?.organization_id} onClick={() => setDialog('location')}><MapPin className="mr-2 h-4 w-4" />Localização</Button>
+      <Button variant="outline" disabled={disabled || !member?.organization_id} onClick={() => setDialog('contact')}><Contact className="mr-2 h-4 w-4" />Contato</Button>
+    </div> : <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <Button variant="ghost" size="icon" disabled={disabled || !member?.organization_id} aria-label="Mais tipos de mensagem" title="Localização e contato">
           <Plus className="h-4 w-4 text-muted-foreground" />
@@ -43,7 +46,7 @@ export function SendRichContactActions({ instanceId, phoneNumber, leadId, disabl
         <DropdownMenuItem onSelect={() => setDialog('location')}><MapPin className="mr-2 h-4 w-4" />Enviar localização</DropdownMenuItem>
         <DropdownMenuItem onSelect={() => setDialog('contact')}><Contact className="mr-2 h-4 w-4" />Enviar contato</DropdownMenuItem>
       </DropdownMenuContent>
-    </DropdownMenu>
+    </DropdownMenu>}
     <SendLocationDialog open={dialog === 'location'} onOpenChange={open => { if (!open) setDialog(null); }} enviar={async location => {
       const scope = checkScope();
       const result = await sendLocation(instanceId, phoneNumber, location, leadId);

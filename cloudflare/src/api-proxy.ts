@@ -6,7 +6,7 @@
  * acrescenta credencial nenhuma — quem autentica é a function, pela X-API-Key
  * que o próprio cliente mandou.
  */
-import { CACHE, addIfAbsent, applyProfile } from "./headers";
+import { CACHE, addIfAbsent, applyProfile, ensureUtf8 } from "./headers";
 
 /** `client_max_body_size` padrão do nginx (1m). */
 export const BODY_LIMIT_BYTES = 1024 * 1024;
@@ -218,5 +218,6 @@ export async function proxyApi(request: Request, url: URL, options: ProxyOptions
 
   const response = new Response(upstream.body, upstream);
   addIfAbsent(response.headers, "app");
+  ensureUtf8(response.headers);
   return response;
 }

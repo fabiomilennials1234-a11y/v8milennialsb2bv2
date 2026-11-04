@@ -73,6 +73,8 @@ export async function reconcileConversation(
     fetched.push(...result.data as unknown as WhatsAppMessage[]);
   }
   const visibleIds = new Set(entries.map(m => m.id));
-  const retained = existing.filter(m => visibleIds.has(m.id) || isOptimisticMessage(m));
+  // Provider confirmation changes message_id before the database row exists.
+  // Its local id must survive that gap; the persisted row replaces it by provider id.
+  const retained = existing.filter(m => visibleIds.has(m.id) || !isPersistedMessage(m));
   return { messages: mergeMessagePages(retained, fetched), snapshot: { fingerprint: data.fingerprint, revisions } };
 }

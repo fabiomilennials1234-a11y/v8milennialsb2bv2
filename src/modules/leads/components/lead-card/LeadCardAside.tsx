@@ -3,6 +3,7 @@ import { ExternalLink, Pencil } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { LeadCardNotes } from "./LeadCardNotes";
 import { LeadCardFields } from "./LeadCardFields";
+import type { DocumentoEditado } from "../../lib/lead-documents";
 import type { LeadCardData } from "./types";
 
 /**
@@ -38,6 +39,7 @@ export function LeadCardAside({
   lead,
   onSaveNote,
   onSaveField,
+  onSaveDocumentos,
   onAbrirFicha,
   controles,
   editorDeEtiquetas,
@@ -45,6 +47,7 @@ export function LeadCardAside({
   lead: LeadCardData;
   onSaveNote?: (texto: string) => void;
   onSaveField?: (chave: string, valor: string) => Promise<void>;
+  onSaveDocumentos?: (lista: DocumentoEditado[]) => Promise<void>;
   /** Abre a ficha inteira do lead. Sem ela o lápis não aparece. */
   onAbrirFicha?: () => void;
   /**
@@ -223,7 +226,7 @@ export function LeadCardAside({
               })}
             </nav>
             <div className="px-5 py-4">
-              {grupoAtivo && <LeadCardFields key={lead.id} grupos={[grupoAtivo]} onSave={onSaveField} />}
+              {grupoAtivo && <LeadCardFields key={lead.id} grupos={[grupoAtivo]} onSave={onSaveField} onSaveDocumentos={onSaveDocumentos} />}
             </div>
           </div>
         )}

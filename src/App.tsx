@@ -21,6 +21,7 @@ import { TaskMoveGateProvider } from "@/modules/engagement/tasks";
 import { ProtectedRoute } from "@/modules/identity/auth";
 import { PermissionProtectedRoute } from "@/modules/identity/permissions";
 import { CobrancaRoute } from "@/modules/cobranca";
+import { ListaFriaRoute } from "@/modules/lista-fria";
 import { MainLayout } from "@/modules/platform/components/layout/MainLayout";
 import { TorqueIntro } from "@/modules/platform/components/layout/TorqueIntro";
 import { useAutoAdminAssignment } from "@/modules/identity/hooks/useAutoAdminAssignment";
@@ -48,6 +49,7 @@ const Equipe = lazy(() => lazyRetry(() => import("@/modules/identity/org-team/pa
 const Comissoes = lazy(() => lazyRetry(() => import("@/modules/engagement/pages/Comissoes")));
 const Leads = lazy(() => lazyRetry(() => import("@/modules/leads/pages/Leads")));
 const Carteira = lazy(() => lazyRetry(() => import("@/modules/leads/pages/Carteira")));
+const ListaFriaRevisar = lazy(() => lazyRetry(() => import("@/modules/lista-fria/pages/RevisarBusca")));
 const CobrancaInadimplentes = lazy(() => lazyRetry(() => import("@/modules/cobranca/pages/Inadimplentes")));
 const CobrancaFluxo = lazy(() => lazyRetry(() => import("@/modules/cobranca/pages/FluxoDeCobranca")));
 const CobrancaRegua = lazy(() => lazyRetry(() => import("@/modules/cobranca/pages/Regua")));
@@ -481,6 +483,36 @@ function AppRoutes() {
                 <FeatureRoute feature="leads"><Leads /></FeatureRoute>
               </PermissionProtectedRoute>
             </LayoutWrapper>
+          </ProtectedRoute>
+        }
+      />
+      {/* Lista Fria (ADR-0042) — a revisão de uma busca. Piloto atrás da flag
+          `organizations.feature_flags.lista_fria` (só TorqueCRM): sem a flag,
+          `ListaFriaRoute` devolve a /leads. Dentro, `lista_fria.view`. A aba
+          Lista fria em si mora na própria tela de Leads. */}
+      <Route
+        path="/leads/lista-fria/:buscaId"
+        element={
+          <ProtectedRoute>
+            <LayoutWrapper>
+              <ListaFriaRoute>
+                <PermissionProtectedRoute featureKey="lista_fria.view">
+                  <ListaFriaRevisar />
+                </PermissionProtectedRoute>
+              </ListaFriaRoute>
+            </LayoutWrapper>
+          </ProtectedRoute>
+        }
+      />
+      {/* Atalho da barra lateral: a Lista fria é uma aba de /leads, então `/lista-fria`
+          só abre essa aba. Sem a flag, `ListaFriaRoute` devolve a /leads. */}
+      <Route
+        path="/lista-fria"
+        element={
+          <ProtectedRoute>
+            <ListaFriaRoute>
+              <Navigate to="/leads?aba=lista_fria" replace />
+            </ListaFriaRoute>
           </ProtectedRoute>
         }
       />

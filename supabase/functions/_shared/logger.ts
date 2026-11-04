@@ -73,7 +73,19 @@ const PHONE_KEY_PATTERNS = ["phone", "telefone", "remote_jid", "msisdn"];
  */
 const TAX_ID_KEY_PATTERNS = [
   "cpf", "cnpj", "tax_id", "taxid", "cpfcnpj", "documento", "doc_number",
+  // lead_documents / lead_document_events / RPCs de documento do lead
+  // (múltiplos CNPJ por lead): colunas `old_document`, `new_document`,
+  // `erp_document`, `document_digits` e o parâmetro `p_document`.
+  "old_document", "new_document", "erp_document", "p_document", "document_digits",
 ];
+
+/**
+ * Chaves de documento que só valem por IGUALDADE: "document" sozinho (coluna de
+ * `lead_documents`, item de `p_docs`) e a lista inteira `p_docs`. Como padrão de
+ * substring, "document" redigiria `document_id`/`document_sent`, que não são PII.
+ * Valor não-string (a lista) vira REDACTED inteiro.
+ */
+const TAX_ID_EXACT_KEYS = new Set(["document", "documents", "p_docs", "docs"]);
 
 /**
  * Chaves cujo valor é E-MAIL. Redigido INTEIRO, e a assimetria em relação ao
@@ -119,7 +131,7 @@ const MIN_MASKABLE_DIGITS = 10;
 
 function isTaxIdKey(key: string): boolean {
   const lower = key.toLowerCase();
-  return TAX_ID_KEY_PATTERNS.some((p) => lower.includes(p));
+  return TAX_ID_EXACT_KEYS.has(lower) || TAX_ID_KEY_PATTERNS.some((p) => lower.includes(p));
 }
 
 function isEmailKey(key: string): boolean {

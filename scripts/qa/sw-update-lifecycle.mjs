@@ -1,4 +1,4 @@
-// Run with: node scripts/qa/sw-update-lifecycle.mjs [--busy]
+// Run with: node scripts/qa/sw-update-lifecycle.mjs [--busy] [--already-current]
 // Uses the real hook, toast, PWA registration client, and service worker.
 // The worker holds a test event to model an in-flight request during activation.
 import assert from 'node:assert/strict';
@@ -13,6 +13,7 @@ import { chromium } from '@playwright/test';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const output = await fs.mkdtemp(path.join(os.tmpdir(), 'torque-sw-update-test-'));
 const busy = process.argv.includes('--busy');
+const alreadyCurrent = process.argv.includes('--already-current');
 const holdMs = busy ? 8000 : 0;
 const bundledClient = path.join(root, 'node_modules/vite-plugin-pwa/dist/client/build/register.js');
 await build({
@@ -35,7 +36,7 @@ await build({
 });
 await build({
   entryPoints: [path.join(root, 'src/sw.ts')], outfile: path.join(output, 'sw.js'),
-  bundle: true, format: 'iife', define: { 'self.__WB_MANIFEST': '[]', 'process.env.NODE_ENV': '"production"' },
+  bundle: true, format: 'iife', define: { 'self.__WB_MANIFEST': JSON.stringify([{ url: '/assets/app-REVISION.js', revision: null }]), 'process.env.NODE_ENV': '"production"' },
 });
 const app = await fs.readFile(path.join(output, 'app.js'));
 const worker = await fs.readFile(path.join(output, 'sw.js'), 'utf8');
@@ -43,9 +44,9 @@ let revision = 'old';
 const server = http.createServer((req, res) => {
   res.setHeader('Cache-Control', 'no-store');
   res.setHeader('Content-Type', req.url === '/' ? 'text/html' : 'text/javascript');
-  if (req.url === '/') return res.end('<div id="root"></div><script type="module" src="/app.js"></script>');
-  if (req.url === '/app.js') return res.end(app);
-  if (req.url === '/sw.js') return res.end(`${worker}\n// ${revision}\nself.addEventListener('message',e=>{if(e.data?.type==='TEST_HOLD')e.waitUntil(new Promise(r=>setTimeout(r,${holdMs})))});`);
+  if (req.url === '/') return res.end(`<div id="root"></div><script type="module" src="/assets/app-${revision}.js"></script>`);
+  if (/^\/assets\/app-(old|new)\.js$/.test(req.url)) return res.end(app);
+  if (req.url === '/sw.js') return res.end(`${worker.replaceAll('REVISION', revision)}\n// ${revision}\nself.addEventListener('message',e=>{if(e.data?.type==='TEST_HOLD')e.waitUntil(new Promise(r=>setTimeout(r,${holdMs})))});`);
   res.writeHead(404);res.end();
 });
 await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
@@ -60,6 +61,24 @@ try {
   revision = 'new';
   await page.evaluate(async () => { await (await navigator.serviceWorker.getRegistration()).update(); });
   await page.getByRole('button', { name: 'Atualizar página', exact: true }).waitFor();
+  if (alreadyCurrent) {
+    // HTML comes from the network, so a reopened/reloaded tab already runs
+    // the new build while the shared worker is still waiting for older tabs.
+    const currentPage = await context.newPage();
+    await currentPage.goto(origin);
+    for (let attempt = 0; attempt < 3; attempt++) {
+      if (attempt) await currentPage.reload();
+      await currentPage.waitForTimeout(1800);
+      const currentState = await currentPage.evaluate(async () => ({
+        entry: document.querySelector('script[type="module"]').getAttribute('src'),
+        waiting: !!(await navigator.serviceWorker.getRegistration())?.waiting,
+        toast: document.body.innerText.includes('Nova versão disponível'),
+      }));
+      assert.deepEqual(currentState, { entry: '/assets/app-new.js', waiting: true, toast: false },
+        'A tab already running the pending build must not ask to update again');
+    }
+    await currentPage.close();
+  }
   if (busy) await page.evaluate(() => navigator.serviceWorker.controller.postMessage({ type: 'TEST_HOLD' }));
   let navigations = 0;
   page.on('framenavigated', frame => { if (frame === page.mainFrame()) navigations++; });
@@ -79,7 +98,7 @@ try {
   }));
   assert.deepEqual(state, { waiting: false, toast: false });
   assert.equal(navigations, 1);
-  console.log(JSON.stringify({ result: 'PASS', busy, elapsedMs: Date.now() - started, navigations, ...state }));
+  console.log(JSON.stringify({ result: 'PASS', busy, alreadyCurrent, elapsedMs: Date.now() - started, navigations, ...state }));
 } finally {
   await browser.close();
   server.closeAllConnections();
