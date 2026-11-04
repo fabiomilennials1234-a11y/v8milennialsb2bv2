@@ -1,3 +1,14 @@
+---
+type: changelog
+title: LPs no padrão V5 e rotas antigas aposentadas
+status: active
+created: 2026-11-04
+updated: 2026-11-04
+tags: [changelog, landing-page]
+related: []
+owner: claude-agent
+---
+
 # 2026-11-04 — LPs no padrão V5 e rotas antigas aposentadas
 
 ## Mudanças
