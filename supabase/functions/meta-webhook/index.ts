@@ -60,9 +60,18 @@ Deno.serve(withErrorBoundary('meta-webhook', async (req) => {
         const { error: updateError } = await supabase.from("meta_webhook_receipts").update({ status: "completed", completed_at: new Date().toISOString() }).eq("id", receipt.id).eq("app_id", appId).eq("attempts", receipt.attempts);
         if (updateError) throw new Error("receipt_update_failed");
         completed++;
-      } catch {
+      } catch (error) {
+        const safeCodes = new Set([
+          "unsupported_crm_object", "meta_binding_lookup_failed", "meta_binding_pending",
+          "meta_page_binding_not_found", "meta_leadgen_fetch_failed", "invalid_meta_lead_payload",
+          "meta_lead_lookup_failed", "meta_lead_transaction_failed", "meta_lead_update_failed",
+          "meta_message_transaction_failed", "meta_message_write_failed", "meta_conversation_write_failed",
+          "meta_campaign_placement_failed", "meta_campaign_tenant_mismatch", "meta_pipeline_write_failed",
+          "meta_tag_write_failed", "receipt_update_failed",
+        ]);
+        const errorCode = error instanceof Error && (safeCodes.has(error.message) || /^meta_leadgen_graph_error_\d{1,6}$/.test(error.message)) ? error.message : "meta_crm_processing_failed";
         // Lease expires in five minutes. Payload stays private and replayable; never discard on handler error.
-        await logRuntime({ module: "webhook", action: "meta_crm_retry", status: "error", errorMessage: "meta_crm_processing_failed", payloadSnapshot: { receiptId: receipt.id, attempts: receipt.attempts } });
+        await logRuntime({ module: "webhook", action: "meta_crm_retry", status: "error", errorMessage: errorCode, payloadSnapshot: { receiptId: receipt.id, attempts: receipt.attempts } });
       }
     }
     return new Response(JSON.stringify({ completed, claimed: receipts?.length ?? 0 }), { headers: withSecurityHeaders({ "Content-Type": "application/json" }) });
@@ -542,7 +551,10 @@ async function processLeadgen(
   try {
     leadData = await getLeadgenData(leadgenId, await storedMetaToken(page.page_access_token, appId, page.organization_id, `page:${pageId}`), appId);
   } catch (err) {
-    if (appId !== null) throw new Error("meta_leadgen_fetch_failed");
+    if (appId !== null) {
+      if (err instanceof Error && /^meta_leadgen_graph_error_\d{1,6}$/.test(err.message)) throw err;
+      throw new Error("meta_leadgen_fetch_failed");
+    }
     console.error(`[meta-webhook] Error fetching leadgen data:`, err);
     return;
   }
@@ -586,7 +598,7 @@ async function processLeadgen(
   // Verificar se lead ja existe (por email ou telefone)
   let existingLeadId: string | null = null;
   if (appId !== null) {
-    const { data: delivered, error: lookupError } = await supabase.from("leads").select("id").eq("organization_id", page.organization_id).contains("metadata", { leadgen_id: leadgenId }).limit(1).maybeSingle();
+    const { data: delivered, error: lookupError } = await supabase.from("leads").select("id").eq("organization_id", page.organization_id).eq("meta_lead_id", leadgenId).limit(1).maybeSingle();
     if (lookupError) throw new Error("meta_lead_lookup_failed");
     existingLeadId = delivered?.id ?? null;
   }
@@ -622,7 +634,7 @@ async function processLeadgen(
     console.log(`[meta-webhook] Lead already exists: ${existingLeadId}, updating...`);
     // Atualizar com campos mapeados
     const updateData: Record<string, unknown> = {
-      metadata: { ...formFields, leadgen_id: leadgenId, form_id: leadData.form_id },
+      meta_lead_id: leadgenId,
     };
     // Atualizar campos mapeados no lead existente (exceto name que pode ter sido editado)
     if (email) updateData.email = email;
@@ -650,7 +662,7 @@ async function processLeadgen(
     email,
     phone,
     origin: "meta_ads",
-    metadata: { ...formFields, leadgen_id: leadgenId, form_id: leadData.form_id },
+    meta_lead_id: leadgenId,
   };
 
   // Apply UTM enrichment fields (only if not already set via field_mappings)
