@@ -168,6 +168,11 @@
     automacoes: function () { return svg([h("rect", { x: 3, y: 3, width: 8, height: 8, rx: 2 }), h("rect", { x: 13, y: 13, width: 8, height: 8, rx: 2 }), p("M11 7h4a2 2 0 0 1 2 2v4")]); }
   };
 
+  /* Safari anterior ao 15.4 lança erro no seletor: na dúvida, trata como foco de teclado. */
+  function focusVisible(el) {
+    try { return el.matches(":focus-visible"); } catch (e) { return true; }
+  }
+
   var nextId = 0;
 
   function TorqueApp(mount) {
@@ -215,7 +220,7 @@
      * Clique de mouse deixa foco no botão sem :focus-visible; esse caso retoma depois dos 12 s.
      */
     var active = document.activeElement;
-    if (this.mount.contains(active) && active.matches(":focus-visible")) return;
+    if (this.mount.contains(active) && focusVisible(active)) return;
     if (this.tour && s.t >= 6) {
       this.set({ tab: TABS[(TABS.indexOf(s.tab) + 1) % TABS.length], t: 0 });
       return;

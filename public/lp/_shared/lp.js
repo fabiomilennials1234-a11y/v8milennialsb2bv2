@@ -12,8 +12,10 @@
   var CAL_BRAND = "#FFC800"; /* ouro V5: hsl(47 100% 50%) */
   var CAL_BRAND_TEXT = "#211A08"; /* --on-gold */
   var WHATSAPP_URL = "https://wa.me/5548984334050?text=" + encodeURIComponent("VIM PELOS ANUNCIOS E QUERO TIRAR ALGUMAS DUVIDAS!");
-  var WEBHOOK_MAX_WAIT_MS = 1500;
   var BUSY_RELEASE_MS = 2000;
+  var CAL_IFRAME_WAIT_MS = 8000;
+  var CAL_READY_WAIT_MS = 20000;
+  var CAL_SCRIPT_URL = "https://app.cal.com/embed/embed.js";
   /* bookingSuccessful é o evento antigo e traz o `booking`; o V2 só entra se o antigo deixar de vir. */
   var BOOKING_V2_GRACE_MS = 800;
 
@@ -103,10 +105,16 @@
     '<dialog class="lpm lpm-agenda" aria-labelledby="agendaTitle">' +
       '<div class="lpm-card">' +
         '<header class="lpm-head">' +
-          '<div><p class="lpm-eyebrow">Demonstração do Torque</p><h2 id="agendaTitle">Escolha o melhor horário.</h2></div>' +
+          '<div><p class="lpm-eyebrow">Demonstração do Torque</p><h2 id="agendaTitle" tabindex="-1" autofocus>Escolha o melhor horário.</h2></div>' +
           CLOSE_BUTTON +
         '</header>' +
-        '<div class="lpm-embed" id="calInline"><p class="lpm-load" id="calLoading" role="status">Carregando agenda…</p></div>' +
+        '<div class="lpm-embed" id="calInline">' +
+            '<p class="lpm-load" id="calLoading" role="status">Carregando agenda…</p>' +
+            '<div class="lpm-fail" id="calFail" role="alert" hidden>' +
+              '<p>Não foi possível abrir a agenda aqui.</p>' +
+              '<a class="lpm-fail-btn" href="' + AGENDA_URL + '" target="_blank" rel="noopener">Abrir a agenda em nova aba</a>' +
+            '</div>' +
+          '</div>' +
         '<div class="lpm-done" id="calDone" role="status" hidden>' +
           '<h3>✓ Reunião marcada!</h3><p id="calDoneWhen"></p>' +
           '<p>Você vai receber a confirmação por e-mail com o link da reunião. Até lá!</p>' +
@@ -120,6 +128,7 @@
   );
   var openAgendaDialog = setupDialog(agendaDialog);
   var calStarted = false;
+  var calTimers = {};
   var bookingSent = false;
 
   function textOf(v) { return typeof v === "string" ? v.trim() : ""; }
@@ -195,17 +204,54 @@
         }
         p(cal, ar);
       };
-    })(window, "https://app.cal.com/embed/embed.js", "init");
+    })(window, CAL_SCRIPT_URL, "init");
+  }
+
+  function calScript() {
+    return document.querySelector('script[src="' + CAL_SCRIPT_URL + '"]');
+  }
+
+  function setCalStatus(status) {
+    $("#calLoading").hidden = status !== "loading";
+    $("#calFail").hidden = status !== "failed";
+  }
+
+  /* Nunca fica em "Carregando": sem script, sem iframe ou sem resposta do Cal, oferece o link direto. */
+  function failCal() {
+    clearTimeout(calTimers.iframe);
+    clearTimeout(calTimers.ready);
+    setCalStatus("failed");
+  }
+
+  /* Se o embed nem chegou a criar o iframe, reabrir o modal tenta do zero. */
+  function resetCalIfNeverLoaded() {
+    if (!calStarted || $("#calFail").hidden || $("#calInline iframe")) return;
+    var script = calScript();
+    if (script) script.remove();
+    delete window.Cal;
+    calStarted = false;
+  }
+
+  function watchCal() {
+    calTimers.iframe = setTimeout(function () {
+      if (!$("#calInline iframe")) failCal();
+    }, CAL_IFRAME_WAIT_MS);
+    calTimers.ready = setTimeout(failCal, CAL_READY_WAIT_MS);
+    var script = calScript();
+    if (script) script.addEventListener("error", failCal);
   }
 
   function startCal() {
+    resetCalIfNeverLoaded();
     if (calStarted) return;
     calStarted = true;
+    setCalStatus("loading");
     var ns = AGENDA.id;
     var brand = { "cal-brand": CAL_BRAND, "cal-brand-text": CAL_BRAND_TEXT };
     var calApi;
     loadCalEmbed();
     window.Cal("init", ns, { origin: "https://app.cal.com" });
+    watchCal();
     calApi = window.Cal.ns[ns];
     calApi("inline", {
       elementOrSelector: "#calInline",
@@ -218,8 +264,12 @@
       var data = eventData(e);
       setTimeout(function () { notifyBooking(data); }, BOOKING_V2_GRACE_MS);
     } });
-    calApi("on", { action: "linkReady", callback: function () { var l = $("#calLoading"); if (l) l.hidden = true; } });
-    calApi("on", { action: "linkFailed", callback: function () { var l = $("#calLoading"); if (l) l.textContent = "Não foi possível carregar a agenda aqui. Use o link abaixo."; } });
+    calApi("on", { action: "linkReady", callback: function () {
+      clearTimeout(calTimers.iframe);
+      clearTimeout(calTimers.ready);
+      setCalStatus("ready");
+    } });
+    calApi("on", { action: "linkFailed", callback: failCal });
   }
 
   function openAgenda(from) {
@@ -240,7 +290,7 @@
     '<dialog class="lpm lpm-lead" aria-labelledby="duvidasTitle">' +
       '<form class="lpm-card" id="duvidasForm" novalidate>' +
         '<header class="lpm-head">' +
-          '<div><h2 id="duvidasTitle">Tirar minhas dúvidas</h2><p>Preencha e continue a conversa com a gente no WhatsApp.</p></div>' +
+          '<div><h2 id="duvidasTitle" tabindex="-1" autofocus>Tirar minhas dúvidas</h2><p>Preencha e continue a conversa com a gente no WhatsApp.</p></div>' +
           CLOSE_BUTTON +
         '</header>' +
         fieldHtml("d-nome", "Nome", 'type="text" name="nome" autocomplete="name"', "Informe seu nome.") +
@@ -254,12 +304,20 @@
   );
   var openDuvidasDialog = setupDialog(duvidasDialog);
 
-  /* O envio segue em segundo plano (keepalive); esperamos no máximo WEBHOOK_MAX_WAIT_MS. */
-  function sendWithDeadline(payload) {
-    return new Promise(function (resolve) {
-      setTimeout(resolve, WEBHOOK_MAX_WAIT_MS);
-      try { postLead(payload).then(resolve, resolve); } catch (e) { resolve(); }
-    });
+  /*
+   * Dispara sem esperar resposta, para o WhatsApp abrir no mesmo tick do toque: no iOS, navegar depois
+   * de uma espera perde o gesto do usuário e o app pode não abrir. text/plain dispensa preflight.
+   * Falha no envio nunca impede a navegação.
+   */
+  function fireLead(payload) {
+    var json = JSON.stringify(payload);
+    var type = "text/plain;charset=UTF-8";
+    var queued = false;
+    try { queued = !!navigator.sendBeacon && navigator.sendBeacon(LEAD_WEBHOOK_URL, new Blob([json], { type: type })); } catch (e) { /* cai no fetch */ }
+    if (queued) return;
+    try {
+      fetch(LEAD_WEBHOOK_URL, { method: "POST", headers: { "Content-Type": type }, body: json, keepalive: true, mode: "cors" }).catch(function () {});
+    } catch (e) { /* o WhatsApp abre mesmo assim */ }
   }
 
   (function initDuvidas() {
@@ -306,11 +364,10 @@
         whatsapp: window.TorquePhone.digits($("#d-whatsapp").value),
         email: $("#d-email").value.trim()
       });
-      sendWithDeadline(payload).then(function () {
-        window.location.assign(WHATSAPP_URL);
-        /* Abrir o app nem sempre descarrega a página: quem volta encontra o botão ativo. O atraso evita duplo envio. */
-        setTimeout(function () { setBusy(false); }, BUSY_RELEASE_MS);
-      });
+      fireLead(payload);
+      window.location.assign(WHATSAPP_URL);
+      /* Abrir o app nem sempre descarrega a página: quem volta encontra o botão ativo. O atraso evita duplo envio. */
+      setTimeout(function () { setBusy(false); }, BUSY_RELEASE_MS);
     });
     /* Quem volta do WhatsApp pelo botão do navegador encontra o formulário utilizável. */
     window.addEventListener("pageshow", function () { setBusy(false); });
@@ -321,6 +378,11 @@
     var cta = e.target.closest ? e.target.closest("[data-agendar],[data-duvidas]") : null;
     if (!cta) return;
     e.preventDefault();
+    /* Safari anterior ao 15.4 não tem <dialog>: vai direto ao destino. */
+    if (typeof agendaDialog.showModal !== "function") {
+      window.location.assign(cta.hasAttribute("data-agendar") ? AGENDA_URL : WHATSAPP_URL);
+      return;
+    }
     if (cta.hasAttribute("data-agendar")) openAgenda(cta); else openDuvidasDialog(cta);
   });
 
