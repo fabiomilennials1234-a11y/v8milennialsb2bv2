@@ -24,6 +24,7 @@ import { CobrancaRoute } from "@/modules/cobranca";
 import { ListaFriaRoute } from "@/modules/lista-fria";
 import { MainLayout } from "@/modules/platform/components/layout/MainLayout";
 import { TorqueIntro } from "@/modules/platform/components/layout/TorqueIntro";
+import { BoasVindasSemanaGate } from "@/modules/platform/components/boas-vindas-semana/BoasVindasSemanaGate";
 import { useAutoAdminAssignment } from "@/modules/identity/hooks/useAutoAdminAssignment";
 import { SubscriptionProtectedRoute } from "@/modules/identity/components/SubscriptionProtectedRoute";
 import { useMasterAuth } from "@/modules/identity/master/hooks/useMasterAuth";
@@ -1055,6 +1056,10 @@ const App = () => {
               <AuthProvider>
                 <ReportIdentityBridge />
                 <TorqueIntro />
+                {/* Abertura de segunda-feira: o resumo da semana anterior, uma vez
+                    por usuário por semana. Espera o TorqueIntro acabar; o chunk da
+                    animação só desce para quem a vai ver. */}
+                <BoasVindasSemanaGate />
                 {/* PilhaDeCartoes usa useNavigate() para abrir o link do
                     cartão, então PRECISA ficar dentro do BrowserRouter.
                     Montado fora, o hook lança no primeiro render e derruba a
