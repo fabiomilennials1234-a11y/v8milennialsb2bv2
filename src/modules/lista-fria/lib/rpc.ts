@@ -27,6 +27,8 @@ export interface FuncoesDaListaFria {
   };
   // { importados, ja_eram_leads, restantes }
   lista_fria_importar: { Args: { p_busca: string; p_limite?: number }; Returns: Json };
+  /** Contatos importados por um disparo que falhou antes do plano de envio (ADR-0048). */
+  lista_fria_disparo_aguardando: { Args: { p_busca: string }; Returns: number };
 }
 
 type Rpc = <F extends keyof FuncoesDaListaFria>(
