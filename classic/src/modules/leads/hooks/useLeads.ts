@@ -367,6 +367,9 @@ export function useUpdateLead() {
        * reabriria o ciclo leads↔pipelines que o dependency-cruiser barra.
        */
       queryClient.invalidateQueries({ queryKey: ["lead-detail", variables.id], refetchType: 'active' });
+      // The chat context panel uses separate lookup caches from the lead drawer.
+      queryClient.invalidateQueries({ queryKey: ["lead_by_phone"], refetchType: 'active' });
+      queryClient.invalidateQueries({ queryKey: ["lead_by_id", variables.id], refetchType: 'active' });
       queryClient.invalidateQueries({ queryKey: ["pipeline-page"], refetchType: 'active' });
       queryClient.invalidateQueries({ queryKey: ["pipeline-stage-counts"], refetchType: 'active' });
     },
