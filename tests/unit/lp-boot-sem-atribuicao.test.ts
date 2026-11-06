@@ -14,8 +14,8 @@ const helperSource = fs.readFileSync(path.join(root, "_shared/cal-metadata.js"),
 const pageHtml = (page: string) => fs.readFileSync(path.join(root, page, "index.html"), "utf8");
 
 function boot(page: string, helper?: unknown) {
-  const html = pageHtml(page).replace(/<script[\s\S]*?<\/script>/g, "");
-  const dom = new JSDOM(html, { url: `https://torquecrm.com.br/lp/${page}/?utm_source=meta`, runScripts: "outside-only", pretendToBeVisual: true });
+  // `outside-only`: nenhum <script> do HTML roda; só o que este teste passa por eval.
+  const dom = new JSDOM(pageHtml(page), { url:`https://torquecrm.com.br/lp/${page}/?utm_source=meta`, runScripts: "outside-only", pretendToBeVisual: true });
   const win = dom.window as unknown as Window & typeof globalThis & Record<string, unknown>;
   win.matchMedia = (() => ({ matches: true })) as unknown as typeof win.matchMedia;
   win.HTMLDialogElement.prototype.showModal = function showModal(this: HTMLDialogElement) { this.setAttribute("open", ""); };
