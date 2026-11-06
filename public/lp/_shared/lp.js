@@ -61,6 +61,26 @@
     return data;
   }
 
+  /* Lido na hora de abrir a agenda: o cookie _fbp só existe depois que o pixel carrega. */
+  function calMetadata() {
+    var meta = metaFields("");
+    return window.TorqueCalMetadata.build({ lp: LP_ID, url: window.location.href, referrer: document.referrer, fbp: meta.fbp, fbc: meta.fbc });
+  }
+
+  /* Atribuição é opcional, como o pixel: sem ela a reserva acontece e o webhook do servidor cria o lead. */
+  function calConfig() {
+    try { return window.TorqueCalMetadata.toConfig(calMetadata()); } catch (e) { return {}; }
+  }
+
+  function agendaLink() {
+    try { return window.TorqueCalMetadata.withQuery(AGENDA_URL, calMetadata()); } catch (e) { return AGENDA_URL; }
+  }
+
+  function refreshAgendaLinks() {
+    var href = agendaLink();
+    $$("[data-cal-link]").forEach(function (link) { link.href = href; });
+  }
+
   /* Mesmo event_id no navegador e no webhook: é assim que a Meta deduplica. Nunca pode travar o fluxo. */
   function trackConversion(name, eventId) {
     try { if (window.fbq) window.fbq("track", name, {}, { eventID: eventId }); } catch (e) { /* pixel é opcional */ }
@@ -112,7 +132,7 @@
             '<p class="lpm-load" id="calLoading" role="status">Carregando agenda…</p>' +
             '<div class="lpm-fail" id="calFail" role="alert" hidden>' +
               '<p>Não foi possível abrir a agenda aqui.</p>' +
-              '<a class="lpm-fail-btn" href="' + AGENDA_URL + '" target="_blank" rel="noopener">Abrir a agenda em nova aba</a>' +
+              '<a class="lpm-fail-btn" data-cal-link href="' + AGENDA_URL + '" target="_blank" rel="noopener">Abrir a agenda em nova aba</a>' +
             '</div>' +
           '</div>' +
         '<div class="lpm-done" id="calDone" role="status" hidden>' +
@@ -121,7 +141,7 @@
         '</div>' +
         '<footer class="lpm-foot">' +
           '<p>Ao agendar, você concorda com a nossa ' + PRIVACY_LINK + '.</p>' +
-          '<p id="calFallbackRow">A agenda não carregou? <a href="' + AGENDA_URL + '" target="_blank" rel="noopener">Abrir em uma nova aba →</a></p>' +
+          '<p id="calFallbackRow">A agenda não carregou? <a data-cal-link href="' + AGENDA_URL + '" target="_blank" rel="noopener">Abrir em uma nova aba →</a></p>' +
         '</footer>' +
       '</div>' +
     '</dialog>'
@@ -160,7 +180,9 @@
     var booking = data.booking || {};
     var answers = readResponses(booking);
     var when = textOf(booking.startTime) || textOf(data.date) || textOf(data.startTime);
-    var eventId = randomId();
+    /* Mesmo id do n8n, que posta "cal-<uid>" pelo webhook do Cal: a Meta deduplica navegador e servidor. */
+    var uid = textOf(booking.uid) || textOf(data.uid);
+    var eventId = uid ? "cal-" + uid : randomId();
     trackConversion("Schedule", eventId);
     var payload = Object.assign(trackingFields(), metaFields(eventId), {
       evento: "reuniao_marcada",
@@ -172,7 +194,7 @@
       reuniao_em: when,
       agenda: AGENDA.id,
       agenda_link: AGENDA_URL,
-      booking_uid: textOf(booking.uid) || textOf(data.uid)
+      booking_uid: uid
     });
     try { postLead(payload).catch(function () {}); } catch (e) { /* o agendamento já aconteceu no Cal.com */ }
 
@@ -256,7 +278,7 @@
     calApi("inline", {
       elementOrSelector: "#calInline",
       calLink: AGENDA.calLink,
-      config: { layout: "month_view", theme: "dark", useSlotsViewOnSmallScreen: "true" }
+      config: Object.assign({ layout: "month_view", theme: "dark", useSlotsViewOnSmallScreen: "true" }, calConfig())
     });
     calApi("ui", { theme: "dark", cssVarsPerTheme: { light: brand, dark: brand }, hideEventTypeDetails: false, layout: "month_view" });
     calApi("on", { action: "bookingSuccessful", callback: function (e) { notifyBooking(eventData(e)); } });
@@ -273,6 +295,7 @@
   }
 
   function openAgenda(from) {
+    refreshAgendaLinks();
     openAgendaDialog(from);
     startCal();
   }
@@ -374,13 +397,15 @@
   })();
 
   /* ---------- CTAs ---------- */
+  /* Link direto (#agendar, nova aba) já sai com a atribuição; o pixel ainda pode não ter gravado o cookie. */
+  refreshAgendaLinks();
   document.addEventListener("click", function (e) {
     var cta = e.target.closest ? e.target.closest("[data-agendar],[data-duvidas]") : null;
     if (!cta) return;
     e.preventDefault();
     /* Safari anterior ao 15.4 não tem <dialog>: vai direto ao destino. */
     if (typeof agendaDialog.showModal !== "function") {
-      window.location.assign(cta.hasAttribute("data-agendar") ? AGENDA_URL : WHATSAPP_URL);
+      window.location.assign(cta.hasAttribute("data-agendar") ? agendaLink() : WHATSAPP_URL);
       return;
     }
     if (cta.hasAttribute("data-agendar")) openAgenda(cta); else openDuvidasDialog(cta);
