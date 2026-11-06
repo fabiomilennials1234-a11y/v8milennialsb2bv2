@@ -34,6 +34,7 @@ import { withErrorBoundary } from "../_shared/error-boundary.ts";
 import { getCorsHeaders } from "../_shared/cors.ts";
 import { withSecurityHeaders } from "../_shared/security-headers.ts";
 import { logRuntime } from "../_shared/logger.ts";
+import { isPlausibleLinkToken } from "../_shared/payment-link-token.ts";
 import { resolverStatusDeTela, type EventoDoLivro } from "./status.ts";
 
 /**
@@ -177,6 +178,11 @@ Deno.serve(
       } else {
         return new Response(JSON.stringify({ error: "rate_limited" }), { status: 429, headers });
       }
+    }
+
+    // Caractere que o Postgres recusa não é indisponibilidade: é link que não existe.
+    if (!isPlausibleLinkToken(token)) {
+      return new Response(JSON.stringify({ state: "failed" }), { status: 200, headers });
     }
 
     const { data: resolvido, error: erroResolve } = await supabase.rpc(

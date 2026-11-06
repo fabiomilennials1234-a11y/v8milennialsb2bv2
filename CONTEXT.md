@@ -238,7 +238,15 @@ A separate sector of the Organization, with its own people, records and numbers 
 
 ## Billing
 
-- **Subscription Plan**: A pricing tier for an Organization. Managed via Asaas payment gateway. Controls feature access via quotas and feature flags.
+- **Subscription Plan**: A pricing tier for an Organization. Charged through Stripe (ADR-0050). Controls feature access via quotas and feature flags.
+
+  > _Changed 2026-11-04 (ADR-0050)._ This entry previously read: *"Managed via Asaas payment gateway."*
+
+- **Payment Link**: A proposal the Master generates for one existing Organization: plan, seats, cycle and a price frozen from the billing engine. Whoever holds the token can pay it, so the token is a credential and never reaches logs, telemetry or storage. Opens at `/checkout/:token`.
+
+- **Recurring Charge Authorization**: The buyer's explicit, versioned acceptance of automatic recurring charges, ticked **before** the subscription is created. The accepted version is recorded server-side. Changing the wording means changing the version, and anyone who has not paid yet accepts again.
+
+- **Provisioning**: The worker step that turns a paid invoice into access: Organization `active`, validity aligned to the paid period, seats and features applied. Paying and provisioning are separate facts, which is why the checkout may say "confirmed" while still registering.
 
 ## Marketing
 

@@ -3,6 +3,8 @@ import { addErrorReporter, type ErrorReport } from "./report";
 import {
   exceptionFor,
   fingerprintFor,
+  entersReplayForbiddenPath,
+  isReplayForbiddenPath,
   prepareEvent,
   scrubBreadcrumb,
   scrubRecordingEvent,
@@ -24,7 +26,8 @@ import {
  *   isso carrega dado de lead. `prepareEvent` é a segunda camada.
  * - Sem tracing: o que se quer aqui é o defeito e o passo a passo até ele, e o
  *   rastro (clique, navegação, requisição) já dá o passo a passo.
- * - Replay só no erro, todo mascarado, carregado depois que a página assenta.
+ * - Replay só no erro, todo mascarado, carregado depois que a página assenta, e nunca em rota
+ *   com credencial na URL (`isReplayForbiddenPath`).
  * - Sem a integração do Supabase do SDK: todo erro do Supabase já passa pelo
  *   contrato, e ela relataria de novo o que o reporter relata — cota queimada
  *   duas vezes pelo mesmo defeito.
@@ -95,17 +98,24 @@ function whenIdle(task: () => void): void {
   }
 }
 
+let stopReplay: (() => void) | null = null;
+
 async function startReplay(): Promise<void> {
   const { replayIntegration } = await import("./sentry-replay");
-  addIntegration(
-    replayIntegration({
-      maskAllText: true,
-      maskAllInputs: true,
-      blockAllMedia: true,
-      networkDetailAllowUrls: [],
-      beforeAddRecordingEvent: scrubRecordingEvent,
-    }),
-  );
+  // O import demorou: a pessoa pode já estar na rota em que não se grava.
+  if (isReplayForbiddenPath(window.location.pathname)) return;
+  const replay = replayIntegration({
+    maskAllText: true,
+    maskAllInputs: true,
+    blockAllMedia: true,
+    networkDetailAllowUrls: [],
+    beforeAddRecordingEvent: scrubRecordingEvent,
+  });
+  addIntegration(replay);
+  stopReplay = () => {
+    stopReplay = null;
+    void replay.stop().catch(() => undefined);
+  };
 }
 
 /**
@@ -139,7 +149,10 @@ export function initSentry(options: SentryOptions, pending: ErrorReport[] = []):
     denyUrls: EXTENSION_URLS,
     initialScope: { tags: { app: "torque-web", ...(options.sessionId ? { session_id: options.sessionId } : {}) } },
     beforeSend: prepareEvent,
-    beforeBreadcrumb: scrubBreadcrumb,
+    beforeBreadcrumb: (crumb) => {
+      if (entersReplayForbiddenPath(crumb)) stopReplay?.();
+      return scrubBreadcrumb(crumb);
+    },
   });
 
   // O evento de replay não passa pelo `beforeSend` — só pelos processors.
@@ -148,7 +161,8 @@ export function initSentry(options: SentryOptions, pending: ErrorReport[] = []):
   const detach = addErrorReporter(sentryReporter);
   for (const report of pending) sentryReporter(report);
 
-  if (options.replayOnErrorRate > 0) {
+  // Chegada direta: a gravação nem começa. Quem chega navegando para pelo `beforeBreadcrumb`.
+  if (options.replayOnErrorRate > 0 && !isReplayForbiddenPath(window.location.pathname)) {
     whenIdle(() => {
       void startReplay().catch(() => {
         // Sem gravação o relatório continua completo; não há o que avisar.

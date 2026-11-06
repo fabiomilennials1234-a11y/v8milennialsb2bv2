@@ -7,6 +7,8 @@ export default defineConfig({
       '@': path.resolve(__dirname, './src'),
       // Map Deno-style imports to npm packages for testing _shared/ files
       'https://esm.sh/@supabase/supabase-js@2': '@supabase/supabase-js',
+      // SDK da Stripe: o único import dele é _shared/stripe/client.ts.
+      'npm:stripe@23.1.0': 'stripe',
       // Map Deno std library imports to Node equivalents
       'https://deno.land/std@0.177.0/node/crypto.ts': 'crypto',
       // PWA virtual module — resolved by vite-plugin-pwa in build,

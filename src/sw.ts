@@ -6,7 +6,7 @@ import { registerRoute } from 'workbox-routing';
 import { CacheFirst, NetworkFirst, StaleWhileRevalidate } from 'workbox-strategies';
 import { ExpirationPlugin } from 'workbox-expiration';
 import { MATCH_APP_ENTRY } from './shared/pwa/build-identity';
-import { isAppOwnedRequest } from './shared/pwa/runtime-routes';
+import { STRIPE_BYPASS_PROBE, isAppOwnedRequest } from './shared/pwa/runtime-routes';
 
 declare let self: ServiceWorkerGlobalScope;
 
@@ -16,6 +16,10 @@ const precacheManifest = self.__WB_MANIFEST;
 self.addEventListener('message', (event) => {
   if (event.data && event.data.type === 'SKIP_WAITING') {
     self.skipWaiting();
+  }
+  // O checkout pergunta: quem não responde é a versão que ainda bloqueia o Stripe.js.
+  if (event.data?.type === STRIPE_BYPASS_PROBE) {
+    event.ports[0]?.postMessage({ type: STRIPE_BYPASS_PROBE, ok: true });
   }
   if (event.data?.type === MATCH_APP_ENTRY && typeof event.data.entry === 'string') {
     // HTML is network-only. A reloaded tab can already run this build even

@@ -27,6 +27,7 @@ const PUBLIC_PREFIXES = [
   "/pricing",
   "/privacidade",
   "/reset-password",
+  "/checkout",
 ];
 function isPublicPath(p: string) {
   return PUBLIC_PREFIXES.some((x) => p === x || p.startsWith(`${x}/`));

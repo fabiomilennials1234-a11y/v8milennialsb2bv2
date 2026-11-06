@@ -10,7 +10,9 @@
  * Obrigatórias: as 5 de REQUIRED_BUILD_ENV. Opcionais (vazias = comportamento
  * normal do app): VITE_CALENDAR_SERVICE_URL (nenhum código lê), VITE_INVITE_API_URL
  * (vazia, o convite cai no Supabase), VITE_SENTRY_ENVIRONMENT e
- * VITE_SENTRY_REPLAY_ON_ERROR_RATE. Opcional também não pode parecer segredo.
+ * VITE_SENTRY_REPLAY_ON_ERROR_RATE e VITE_STRIPE_PUBLISHABLE_KEY (vazia, o link de pagamento
+ * mostra "indisponível"; vira obrigatória quando o Stripe for ativado em produção). Opcional
+ * também não pode parecer segredo.
  *
  * Por que falhar cedo: o Vite não reclama de variável faltando — troca
  * `import.meta.env.VITE_X` por `undefined` e builda. O front sai "verde" e
@@ -40,6 +42,13 @@ export const REQUIRED_BUILD_ENV = Object.freeze([
   "VITE_META_WA_CONFIG_ID",
 ]);
 
+/**
+ * Segredo da Stripe de modo teste não é sensível para o cf:prepare, que varre o bundle atrás de
+ * chave `live`. Aqui é: `sk_test_` em VITE_* é o sinal de que a variável errada foi colada, e é a
+ * mesma variável que amanhã recebe a `live`.
+ */
+const STRIPE_SECRET_IN_VITE = /(?:^|[^A-Za-z0-9])(?:sk_test_|rk_test_|whsec_)[A-Za-z0-9]/;
+
 const SUPABASE_HOST = /^([a-z0-9]{20})\.supabase\.co$/;
 
 /** Problemas das VITE_* (lista vazia = ok). */
@@ -68,6 +77,7 @@ export function checkBuildEnv(env) {
   for (const [name, value] of Object.entries(env)) {
     if (!name.startsWith("VITE_") || !value) continue;
     // scanContent devolve "<rótulo>: <motivo>"; o rótulo aqui é o nome, nunca o valor.
+    if (STRIPE_SECRET_IN_VITE.test(value)) problems.push(`${name}: segredo da Stripe (sk_test_, rk_test_ ou whsec_) — VITE_* vai para o bundle público`);
     for (const problem of scanContent(name, Buffer.from(value))) problems.push(`${problem} — VITE_* vai para o bundle público`);
   }
   return problems;
