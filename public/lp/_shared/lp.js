@@ -180,9 +180,9 @@
     var booking = data.booking || {};
     var answers = readResponses(booking);
     var when = textOf(booking.startTime) || textOf(data.date) || textOf(data.startTime);
-    /* Mesmo id do n8n, que posta "cal-<uid>" pelo webhook do Cal: a Meta deduplica navegador e servidor. */
+    /* O uid puro é o id que o app Meta Pixel do Cal e o webhook do n8n também usam: a Meta conta a reserva uma vez. */
     var uid = textOf(booking.uid) || textOf(data.uid);
-    var eventId = uid ? "cal-" + uid : randomId();
+    var eventId = uid || randomId();
     trackConversion("Schedule", eventId);
     var payload = Object.assign(trackingFields(), metaFields(eventId), {
       evento: "reuniao_marcada",

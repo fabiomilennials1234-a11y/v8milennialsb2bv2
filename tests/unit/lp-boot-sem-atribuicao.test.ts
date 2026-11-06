@@ -106,3 +106,46 @@ describe.each(["crm-b2b", "gestao-comercial"])("LP %s com a atribuição no ar",
     expect(config["metadata[lp]"]).toBeTruthy();
   });
 });
+
+/* O app Meta Pixel do Cal dispara Schedule com `eid=<uid>` no frame da agenda: id diferente aqui conta a reserva em dobro. */
+describe.each(["crm-b2b", "gestao-comercial"])("LP %s: id da conversão", (page) => {
+  function reservar(data: Record<string, unknown>) {
+    const { win, errors } = boot(page, "real");
+    const track: unknown[][] = [];
+    const posts: Array<Record<string, unknown>> = [];
+    const w = win as unknown as Record<string, unknown>;
+    w.fbq = (...args: unknown[]) => track.push(args);
+    w.fetch = (_url: string, init: { body: string }) => {
+      posts.push(JSON.parse(init.body) as Record<string, unknown>);
+      return Promise.resolve({ ok: true });
+    };
+    click(win, "[data-agendar]");
+    const cal = (win as unknown as { Cal: { ns: Record<string, { q: ArrayLike<unknown>[] }> } }).Cal;
+    const [ns] = Object.values(cal.ns);
+    const on = Array.from(ns.q)
+      .map((entry) => Array.from(entry) as [string, { action: string; callback: (e: unknown) => void }])
+      .find((entry) => entry[0] === "on" && entry[1].action === "bookingSuccessful");
+    expect(on).toBeDefined();
+    on![1].callback({ detail: { data } });
+    expect(errors).toEqual([]);
+    return { track, posts };
+  }
+
+  it("usa o uid puro do Cal no pixel e no aviso ao servidor", () => {
+    const { track, posts } = reservar({
+      date: "2027-01-29T13:00:00.000Z",
+      booking: { uid: "jHmw7oB6hJZXXuvxgsPRyA", startTime: "2027-01-29T13:00:00.000Z", responses: { name: "A", telefone: "+5548900000000" } },
+    });
+    const schedule = track.filter((call) => call[1] === "Schedule");
+    expect(schedule).toHaveLength(1);
+    expect(schedule[0][3]).toEqual({ eventID: "jHmw7oB6hJZXXuvxgsPRyA" });
+    expect(posts.map((body) => body.event_id)).toEqual(["jHmw7oB6hJZXXuvxgsPRyA"]);
+  });
+
+  it("sem uid do Cal, ainda sai um id para o pixel", () => {
+    const { track } = reservar({ date: "2027-01-29T13:00:00.000Z", booking: { responses: { name: "A" } } });
+    const schedule = track.filter((call) => call[1] === "Schedule");
+    expect(schedule).toHaveLength(1);
+    expect((schedule[0][3] as { eventID: string }).eventID).toBeTruthy();
+  });
+});
