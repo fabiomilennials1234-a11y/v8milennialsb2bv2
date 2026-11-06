@@ -240,11 +240,31 @@ const DURACAO_BASE_MS: Record<CenaId, number> = {
   fecho: 8_300,
 };
 
-/** As cenas que esta org TEM, na ordem em que contam a história. */
+/**
+ * Quantos eventos uma cena do Torque precisa para valer a pena. "1 execução de
+ * automação" ou "3 leads movidos" é uma cena inteira para um número que não diz
+ * nada. Medido em produção na primeira semana (129 orgs): a mediana de execuções
+ * de automação foi 23, e 4 das 17 orgs com automação ficaram abaixo de 5.
+ */
+export const MINIMO_AUTOMACOES = 10;
+export const MINIMO_MOVIMENTACAO = 10;
+
+/**
+ * As cenas que esta org MERECE, na ordem em que contam a história: cada uma só
+ * entra se há o que mostrar. Sem isso, medido em produção, 25 das 33 orgs com
+ * abertura (76%) — as que tiveram lead e nenhuma venda — veriam "Vendas
+ * fechadas: 0" e "Receita: R$ 0", com um cartão arrastado até "Vendido".
+ *
+ * Esta é a ÚNICA fonte de verdade: o cronograma, as cenas e o painel final
+ * leem daqui, então o painel nunca mostra dado de uma cena que não tocou.
+ */
 export function planejarCenas(resumo: ResumoSemana): CenaId[] {
-  const cenas: CenaId[] = ["impacto", "leads", "vendas", "receita"];
-  if (resumo.automacoes) cenas.push("automacoes");
-  if (resumo.movimentacao) cenas.push("movimentacao");
+  const cenas: CenaId[] = ["impacto"];
+  if (resumo.leads > 0) cenas.push("leads");
+  if (resumo.vendas > 0) cenas.push("vendas");
+  if (resumo.vendas > 0 && resumo.receita > 0) cenas.push("receita");
+  if (resumo.automacoes && resumo.automacoes.execucoes >= MINIMO_AUTOMACOES) cenas.push("automacoes");
+  if (resumo.movimentacao && resumo.movimentacao.total >= MINIMO_MOVIMENTACAO) cenas.push("movimentacao");
   if (resumo.ranking) cenas.push("ranking");
   cenas.push("fecho");
   return cenas;
@@ -262,17 +282,22 @@ export interface CenaNoTempo {
  * ESTICADAS — mas só até 1,25×: acima disso a coreografia, que tem duração
  * própria, ficaria parada esperando a próxima. Nesse caso a abertura simplesmente
  * dura menos que o teto, o que para uma org com pouco a mostrar é o certo.
+ *
+ * O FECHO NUNCA ESTICA. Ele já é a cena mais longa (8,3 s) porque é o painel que
+ * precisa ser lido; o que ele pede de tempo depende de quanto há para ler, não de
+ * quantas cenas faltaram. Esticado, uma org com 1 tile no painel o veria parado ~10 s.
  */
 export function cronograma(cenas: readonly CenaId[], maximo: number = DURACAO_MAX_MS): CenaNoTempo[] {
-  const soma = cenas.reduce((s, c) => s + DURACAO_BASE_MS[c], 0);
+  const fixas = cenas.filter((c) => c === "fecho").reduce((s, c) => s + DURACAO_BASE_MS[c], 0);
+  const elasticas = cenas.filter((c) => c !== "fecho").reduce((s, c) => s + DURACAO_BASE_MS[c], 0);
   const sobreposicoes = (cenas.length - 1) * SOBREPOSICAO_MS;
-  const escala = Math.min(1.25, (maximo + sobreposicoes) / soma);
+  const escala = Math.min(1.25, (maximo + sobreposicoes - fixas) / elasticas);
   const saida: CenaNoTempo[] = [];
   let inicio = 0;
   for (const id of cenas) {
     // O teto é do total, não de cada arredondamento: sem o `min`, 7 cenas somam até
     // 1 ms a mais que o máximo (medido: 42001 > 42000).
-    const fim = Math.min(maximo, Math.round(inicio + DURACAO_BASE_MS[id] * escala));
+    const fim = Math.min(maximo, Math.round(inicio + DURACAO_BASE_MS[id] * (id === "fecho" ? 1 : escala)));
     saida.push({ id, inicio: Math.round(inicio), fim });
     inicio = fim - SOBREPOSICAO_MS;
   }

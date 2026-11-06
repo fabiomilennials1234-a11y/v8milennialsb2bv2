@@ -3,6 +3,8 @@ import {
   cronograma,
   DURACAO_MAX_MS,
   mapearResumo,
+  MINIMO_AUTOMACOES,
+  MINIMO_MOVIMENTACAO,
   nomeDoMes,
   planejarCenas,
   SOBREPOSICAO_MS,
@@ -148,6 +150,19 @@ describe("cronograma", () => {
     expect((leads.fim - leads.inicio) / (leadsBase.fim - leadsBase.inicio)).toBeLessThanOrEqual(1.25 + 1e-9);
   });
 
+  it("o fecho nunca estica: com poucas cenas ele fica nos mesmos 8,3 s, não parado por mais tempo", () => {
+    const tudo = cronograma(TODAS).find((x) => x.id === "fecho")!;
+    const poucas = cronograma(["impacto", "leads", "fecho"]).find((x) => x.id === "fecho")!;
+    expect(poucas.fim - poucas.inicio).toBe(tudo.fim - tudo.inicio);
+  });
+
+  it("a abertura de uma org só com leads dura bem menos que a cheia (e mais que o fecho sozinho)", () => {
+    const c = cronograma(["impacto", "leads", "fecho"]);
+    const total = c[c.length - 1].fim;
+    expect(total).toBeLessThan(25_000);
+    expect(total).toBeGreaterThan(12_000);
+  });
+
   it("nunca passa do teto, qualquer que seja a combinação de blocos", () => {
     const opcionais: CenaId[] = ["automacoes", "movimentacao", "ranking"];
     for (let mascara = 0; mascara < 8; mascara++) {
@@ -166,12 +181,21 @@ describe("cronograma", () => {
 });
 
 describe("planejarCenas", () => {
+  // Volume típico de uma org de verdade (medido em produção: mediana de 23 execuções de automação).
+  const automacoesFortes = { ...automacoes, execucoes: 40 };
+  const movimentacaoForte = { ...movimentacao, total: 60 };
+
   it("sem blocos do Torque: só o essencial, na ordem da história", () => {
     expect(planejarCenas(mapearResumo(entrega)!)).toEqual(["impacto", "leads", "vendas", "receita", "fecho"]);
   });
 
-  it("com tudo: as três cenas do Torque entram antes do fecho", () => {
-    const tudo = mapearResumo({ ...entrega, automacoes, movimentacao, ranking })!;
+  it("com tudo e com volume: as três cenas do Torque entram antes do fecho", () => {
+    const tudo = mapearResumo({
+      ...entrega,
+      automacoes: automacoesFortes,
+      movimentacao: movimentacaoForte,
+      ranking,
+    })!;
     expect(planejarCenas(tudo)).toEqual([
       "impacto",
       "leads",
@@ -182,5 +206,53 @@ describe("planejarCenas", () => {
       "ranking",
       "fecho",
     ]);
+  });
+
+  // O caso que a medição em produção revelou: 25 das 33 orgs com abertura tiveram lead e NENHUMA venda.
+  it("org só com leads e zero venda: sem as cenas de vendas e de receita", () => {
+    const semVenda = mapearResumo({
+      ...entrega,
+      vendas: 0,
+      receita: 0,
+      por_dia: { ...entrega.por_dia, vendas: [0, 0, 0, 0, 0, 0, 0], receita: [0, 0, 0, 0, 0, 0, 0] },
+    })!;
+    expect(planejarCenas(semVenda)).toEqual(["impacto", "leads", "fecho"]);
+  });
+
+  it("venda sem valor (muito comum: a maioria dos negócios não tem valor): mostra vendas, não uma receita de R$ 0", () => {
+    const semValor = mapearResumo({ ...entrega, receita: 0, por_dia: { ...entrega.por_dia, receita: [0, 0, 0, 0, 0, 0, 0] } })!;
+    expect(planejarCenas(semValor)).toEqual(["impacto", "leads", "vendas", "fecho"]);
+  });
+
+  it("org com venda e zero lead: sem a cena de leads", () => {
+    const semLead = mapearResumo({ ...entrega, leads: 0, por_dia: { ...entrega.por_dia, leads: [0, 0, 0, 0, 0, 0, 0] } })!;
+    expect(planejarCenas(semLead)).toEqual(["impacto", "vendas", "receita", "fecho"]);
+  });
+
+  it.each([
+    ["automação", { automacoes: { ...automacoes, execucoes: MINIMO_AUTOMACOES - 1 } }, "automacoes"],
+    ["movimentação", { movimentacao: { ...movimentacao, total: MINIMO_MOVIMENTACAO - 1 } }, "movimentacao"],
+  ])("%s abaixo do mínimo não vira cena (1 execução não merece uma cena inteira)", (_nome, extra, cena) => {
+    expect(planejarCenas(mapearResumo({ ...entrega, ...extra })!)).not.toContain(cena);
+  });
+
+  it.each([
+    ["automação", { automacoes: { ...automacoes, execucoes: MINIMO_AUTOMACOES } }, "automacoes"],
+    ["movimentação", { movimentacao: { ...movimentacao, total: MINIMO_MOVIMENTACAO } }, "movimentacao"],
+  ])("%s exatamente no mínimo vira cena (o limite é inclusivo)", (_nome, extra, cena) => {
+    expect(planejarCenas(mapearResumo({ ...entrega, ...extra })!)).toContain(cena);
+  });
+
+  it("o ranking, que já vem só com gente que vendeu, entra mesmo em org pequena", () => {
+    expect(planejarCenas(mapearResumo({ ...entrega, ranking })!)).toContain("ranking");
+  });
+
+  it("todo plano começa no impacto e termina no fecho, qualquer que seja o dado", () => {
+    const so_leads = mapearResumo({ ...entrega, vendas: 0, receita: 0 })!;
+    for (const r of [so_leads, mapearResumo(entrega)!]) {
+      const p = planejarCenas(r);
+      expect(p[0]).toBe("impacto");
+      expect(p[p.length - 1]).toBe("fecho");
+    }
   });
 });

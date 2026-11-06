@@ -1017,33 +1017,41 @@ interface Tile {
  * Cada bloco opcional entra só se a org o tem — o painel acompanha as cenas.
  */
 function tilesDoResumo(resumo: ResumoSemana): Tile[] {
+  // O painel nunca mostra dado de uma cena que não tocou: a fonte é o MESMO plano que escolheu as cenas.
+  const cenas = new Set(planejarCenas(resumo));
   const pico = indiceDoMaior(resumo.porDia.vendas);
   const conversao = resumo.leads > 0 ? (resumo.vendas / resumo.leads) * 100 : 0;
   const ticket = resumo.vendas > 0 ? resumo.receita / resumo.vendas : 0;
-  const tiles: Tile[] = [
-    {
+  const tiles: Tile[] = [];
+
+  if (cenas.has("leads")) {
+    tiles.push({
       chave: "leads",
       rotulo: "Leads novos",
       valor: inteiro.format(resumo.leads),
       sub: <SubVariacao atual={resumo.leads} anterior={resumo.anterior?.leads} />,
-    },
-    {
+    });
+  }
+  if (cenas.has("vendas")) {
+    tiles.push({
       chave: "vendas",
       rotulo: "Vendas fechadas",
       valor: inteiro.format(resumo.vendas),
       sub: <SubVariacao atual={resumo.vendas} anterior={resumo.anterior?.vendas} />,
-    },
-    {
+    });
+  }
+  if (cenas.has("receita")) {
+    tiles.push({
       chave: "receita",
       rotulo: "Receita",
       valor: brl.format(resumo.receita),
       sub: <SubVariacao atual={resumo.receita} anterior={resumo.anterior?.receita} />,
       destaque: true,
-    },
-  ];
+    });
+  }
 
   const a = resumo.automacoes;
-  if (a) {
+  if (a && cenas.has("automacoes")) {
     tiles.push({
       chave: "automacoes",
       rotulo: "Execuções de automação",
@@ -1062,7 +1070,7 @@ function tilesDoResumo(resumo: ResumoSemana): Tile[] {
   }
 
   const m = resumo.movimentacao;
-  if (m) {
+  if (m && cenas.has("movimentacao")) {
     tiles.push({
       chave: "movimentacao",
       rotulo: "Quem mais movimentou leads",
@@ -1073,7 +1081,7 @@ function tilesDoResumo(resumo: ResumoSemana): Tile[] {
   }
 
   const r = resumo.ranking;
-  if (r) {
+  if (r && cenas.has("ranking")) {
     const primeiro = r.top[0];
     tiles.push({
       chave: "ranking",
@@ -1093,16 +1101,21 @@ function tilesDoResumo(resumo: ResumoSemana): Tile[] {
     });
   }
 
-  tiles.push(
-    {
+  // Os três derivados só fazem sentido com venda (e ticket, com receita; conversão, com lead).
+  if (cenas.has("vendas")) {
+    tiles.push({
       chave: "melhor-dia",
       rotulo: "Melhor dia em vendas",
       valor: DIAS_LONGOS[pico],
       sub: `${inteiro.format(resumo.porDia.vendas[pico])} ${resumo.porDia.vendas[pico] === 1 ? "venda" : "vendas"}`,
-    },
-    { chave: "conversao", rotulo: "Conversão de lead em venda", valor: `${pctSimples.format(conversao)}%` },
-    { chave: "ticket", rotulo: "Ticket médio", valor: brl.format(ticket) },
-  );
+    });
+  }
+  if (cenas.has("vendas") && cenas.has("leads")) {
+    tiles.push({ chave: "conversao", rotulo: "Conversão de lead em venda", valor: `${pctSimples.format(conversao)}%` });
+  }
+  if (cenas.has("receita")) {
+    tiles.push({ chave: "ticket", rotulo: "Ticket médio", valor: brl.format(ticket) });
+  }
   return tiles;
 }
 
@@ -1432,8 +1445,7 @@ export function BoasVindasSemana({ nome, resumo, onConcluir }: Props) {
     >
       {/* Leitores de tela recebem o resumo uma vez, em texto; a coreografia fica de fora. */}
       <p className="sr-only">
-        Semana de {resumo.periodo}: {inteiro.format(resumo.leads)} leads novos, {inteiro.format(resumo.vendas)}{" "}
-        vendas fechadas e {brl.format(resumo.receita)} de receita.
+        Semana de {resumo.periodo}. {tilesDoResumo(resumo).map((t) => `${t.rotulo}: ${t.valor}.`).join(" ")}
       </p>
 
       <div aria-hidden className="absolute inset-0">
