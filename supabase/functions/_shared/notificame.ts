@@ -414,6 +414,9 @@ export function subaccountEmailCandidates(
  * (`CompanyId`), e guardar uma senha que ninguém usa seria um segredo a mais para
  * vazar. Débito declarado: se um dia for preciso entrar no painel DA SUBCONTA, o
  * caminho é reset de senha pelo `vendor_email`, não recuperação daqui.
+ * `channel_payment_exempt: true` — sem cobrança de ativação de canal pago. Só tem
+ * efeito com a revenda habilitada pelo fornecedor; sem isso ele descarta o campo
+ * em silêncio, e nenhuma rota de leitura devolve o valor gravado.
  */
 export function buildCreateAccountBody(params: {
   organizationId: string;
@@ -434,6 +437,7 @@ export function buildCreateAccountBody(params: {
       company_address: defaults.company_address,
       phone: defaults.phone,
       cpf_cnpj: defaults.cpf_cnpj,
+      channel_payment_exempt: true,
     },
   };
 }

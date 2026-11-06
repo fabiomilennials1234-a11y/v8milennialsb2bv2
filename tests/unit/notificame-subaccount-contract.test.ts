@@ -560,6 +560,20 @@ describe("buildCreateAccountBody — os dados da subconta são NOSSOS", () => {
     expect(company.active).toBe(true);
   });
 
+  it("subconta nasce isenta de canal pago — sem isso o cliente paga taxa de ativação", () => {
+    const fn = required<(p: Record<string, unknown>) => Record<string, unknown>>(
+      "buildCreateAccountBody",
+    );
+    const body = fn({
+      organizationId: "org-1",
+      orgName: "Cliente Qualquer",
+      defaults,
+      password: "x",
+    });
+    const company = (body.company ?? body) as Record<string, unknown>;
+    expect(company.channel_payment_exempt).toBe(true);
+  });
+
   it("cpf_cnpj/phone/endereço saem do NOSSO secret, nunca do cliente", () => {
     const fn = required<(p: Record<string, unknown>) => Record<string, unknown>>(
       "buildCreateAccountBody",

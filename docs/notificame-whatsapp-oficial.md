@@ -183,6 +183,15 @@ subconta — confirmado na doc e no node. Subconta é **irremovível e faturáve
 liberado. Cota esgotada faz o Seamless responder `channel limit exceeded`
 (Instagram) ou o enganoso `Nenhum canal de whatsapp liberado`.
 
+Medido em 06/11/2026: cota esgotada também responde `channel limit exceeded` para
+WhatsApp, e subconta com `active:false` responde `401 Invalid company` no Seamless.
+
+⚠️ `channel_payment_exempt` isenta a subconta da cobrança de canal pago. O Torque
+envia `true` em toda subconta nova; a existente recebe por `PUT /v2/accounts`
+(`{company_id, channel_payment_exempt}`). Com a revenda não habilitada, o fornecedor
+descarta o campo e responde `Sucesso` do mesmo jeito. Nenhuma rota de leitura devolve
+o valor: a conferência é no painel do Hub.
+
 ## 6. Realtime
 
 O fornecedor **não** oferece websocket/SSE. O tempo real é: webhook dele →
