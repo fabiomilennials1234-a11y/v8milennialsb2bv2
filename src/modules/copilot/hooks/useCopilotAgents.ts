@@ -7,6 +7,7 @@
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import type { Tables } from "@/integrations/supabase/types";
 import { useAuth } from "@/modules/identity";
 import { toast } from "sonner";
 import { generatePrompt, saveCopilotSystemPrompt, regenerateAndSavePrompt, computePromptHash } from "./useCopilotPromptBuilder";
@@ -631,7 +632,18 @@ export function useLinkAgentToWhatsAppInstance() {
 export function useCopilotAgentForEdit(agentId?: string) {
   return useQuery({
     queryKey: ["copilot_agent_for_edit", agentId],
-    queryFn: async (): Promise<{ wizardData: CopilotWizardData; existingDocuments: AgentDocument[] } | null> => {
+    queryFn: async (): Promise<{
+      wizardData: CopilotWizardData;
+      existingDocuments: AgentDocument[];
+      agent: Pick<
+        Tables<"copilot_agents">,
+        | "whatsapp_instance_id"
+        | "retention_enabled"
+        | "retention_config"
+        | "handoff_notify_phones"
+        | "handoff_notify_instructions"
+      >;
+    } | null> => {
       if (!agentId) return null;
 
       // Buscar tudo em paralelo
@@ -853,7 +865,20 @@ export function useCopilotAgentForEdit(agentId?: string) {
         moveRules: (agent as any).move_rules || [],
       } as any;
 
-      return { wizardData, existingDocuments: documents };
+      // Só as colunas que a tela carrega: a linha inteira trocaria a referência de
+      // `editData` a cada `updated_at`, e o efeito de carga do CopilotPlayground
+      // sobrescreveria a edição não salva.
+      return {
+        wizardData,
+        existingDocuments: documents,
+        agent: {
+          whatsapp_instance_id: agent.whatsapp_instance_id,
+          retention_enabled: agent.retention_enabled,
+          retention_config: agent.retention_config,
+          handoff_notify_phones: agent.handoff_notify_phones,
+          handoff_notify_instructions: agent.handoff_notify_instructions,
+        },
+      };
     },
     enabled: !!agentId,
     staleTime: 0, // Sempre buscar dados frescos ao editar
