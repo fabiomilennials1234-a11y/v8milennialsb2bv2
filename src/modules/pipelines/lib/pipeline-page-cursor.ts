@@ -8,7 +8,7 @@
  * Por que o id: import em lote grava dezenas de negócios no MESMO instante.
  * Com cursor só de `created_at` e `<` estrito, a borda de uma página caindo
  * dentro do grupo empatado pulava as irmãs para sempre — elas não entravam nem
- * nesta página nem na seguinte (Café Jurerê, 09/11/2026: ~800 de 2.212 cards
+ * nesta página nem na seguinte (prod, 09/11/2026: num funil de 2.212 cards, ~800
  * inalcançáveis na rolagem; prod inteira, 9.074 cards em grupos empatados).
  *
  * Cursor sempre carrega TODAS as colunas da ordem. Nunca devolva só o

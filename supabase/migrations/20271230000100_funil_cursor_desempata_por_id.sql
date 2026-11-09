@@ -11,7 +11,7 @@
 -- (o `<` estrito pula o instante inteiro). Somem de vez da rolagem; o badge
 -- (get_pipeline_stage_counts_by_id) segue contando todas.
 --
---   Café Jurerê, "ENVASE - NEGOCIAÇÃO EM ANDAMENTO" (8106f2dc…), 2.212 cards:
+--   Funil de um cliente com import em lote, 2.212 cards:
 --     novo          1.618 cards, 68 grupos empatados (maior: 49)  → ~670 inalcançáveis
 --     em_andamento    322 cards, 20 grupos empatados (maior: 46)  → ~132 inalcançáveis
 --   Prod inteira: 17 orgs, 58 colunas, 9.074 cards em grupos empatados,

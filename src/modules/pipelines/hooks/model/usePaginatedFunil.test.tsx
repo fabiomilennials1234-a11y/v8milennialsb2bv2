@@ -119,7 +119,7 @@ describe("usePaginatedFunil — via canônica por pipeline_id (SCRUM-632/626)", 
 //
 // Massa: 7 soltos, 30 empatados, 3 soltos, 49 empatados, 6 soltos = 95 cards.
 // Grupos empatados cruzam bordas de página (PAGE_SIZE = 20), como os lotes de
-// import da Café Jurerê (até 49 cards no mesmo instante).
+// import em lote medidos em prod (até 49 cards no mesmo instante).
 type FakeRow = { id: string; lead_id: string; stage_key: string; created_at: string; lead: { id: string; name: string } };
 
 function massaComEmpates(): FakeRow[] {
