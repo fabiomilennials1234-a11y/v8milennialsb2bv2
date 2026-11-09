@@ -57,6 +57,15 @@ import {
   PREVIEW_ATTENDANT,
 } from "@/lib/template-variables";
 import { supabase } from "@/integrations/supabase/client";
+import { useFeatureFlag } from "@/modules/platform/feature-flags";
+import {
+  TEMPLATE_MAX_BYTES,
+  buildTemplateStoragePath,
+  templateDocumentAccept,
+  templateDocumentMime,
+  templateFileNameFromUrl,
+  validateTemplateDocument,
+} from "@/modules/communication/lib/template-media";
 import { toast } from "sonner";
 import { notifyError } from "@/shared/errors";
 
@@ -64,8 +73,11 @@ const MEDIA_TYPE_CONFIG: Record<Exclude<MediaType, "text">, { label: string; ico
   image: { label: "Imagem", icon: Image, accept: "image/jpeg,image/png,image/webp,image/gif" },
   audio: { label: "Áudio", icon: Mic, accept: "audio/mpeg,audio/ogg,audio/wav,audio/mp4" },
   video: { label: "Vídeo", icon: Video, accept: "video/mp4,video/webm" },
-  document: { label: "Documento", icon: File, accept: "application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document" },
+  document: { label: "Documento", icon: File, accept: templateDocumentAccept(false) },
 };
+
+/** Planilhas, apresentações, CSV e TXT: só nas orgs com esta flag (Café Jurerê). */
+const OFFICE_ATTACHMENTS_FLAG = "template_anexos_office";
 
 const MEDIA_ICON: Record<MediaType, typeof FileText> = {
   text: FileText,
@@ -211,6 +223,7 @@ export default function MessageTemplates() {
 
   const navigate = useNavigate();
   const { data: instances } = useWhatsAppInstances();
+  const { enabled: officeAttachments } = useFeatureFlag(OFFICE_ATTACHMENTS_FLAG);
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState<MediaType | "all">("all");
   const [order, setOrder] = useState<"az" | "recent">("az");
@@ -308,13 +321,25 @@ export default function MessageTemplates() {
   );
 
   const handleFileUpload = useCallback(async (file: File) => {
+    const invalid =
+      mediaType === "document"
+        ? validateTemplateDocument(file, officeAttachments)
+        : file.size > TEMPLATE_MAX_BYTES
+          ? "O arquivo passa de 50 MB, o limite para templates."
+          : null;
+    if (invalid) {
+      toast.error(invalid);
+      return;
+    }
     setUploading(true);
     try {
-      const ext = file.name.split(".").pop() ?? "bin";
-      const path = `templates/${crypto.randomUUID()}.${ext}`;
+      // Nome original no path: o envio devolve esse nome ao WhatsApp.
+      const path = buildTemplateStoragePath(file.name);
+      // Pela extensão, não pelo `file.type`: no Windows o .csv chega vazio ou como ms-excel.
+      const contentType = (mediaType === "document" ? templateDocumentMime(file.name) : null) ?? file.type;
       const { error: uploadError } = await supabase.storage
         .from("media")
-        .upload(path, file, { contentType: file.type, upsert: false });
+        .upload(path, file, { contentType, upsert: false });
       if (uploadError) throw uploadError;
 
       const { data: urlData } = supabase.storage.from("media").getPublicUrl(path);
@@ -325,7 +350,7 @@ export default function MessageTemplates() {
     } finally {
       setUploading(false);
     }
-  }, []);
+  }, [mediaType, officeAttachments]);
 
   const handleSave = useCallback(async () => {
     if (!command || !displayName) return;
@@ -638,7 +663,7 @@ export default function MessageTemplates() {
                     {mediaType === "document" && (
                       <div className="flex items-center gap-2 text-sm">
                         <File className="h-5 w-5 text-muted-foreground" />
-                        <span className="truncate max-w-[200px]">{mediaUrl.split("/").pop()}</span>
+                        <span className="truncate max-w-[200px]">{templateFileNameFromUrl(mediaUrl) ?? mediaUrl.split("/").pop()}</span>
                       </div>
                     )}
                     <Button
@@ -664,13 +689,24 @@ export default function MessageTemplates() {
                     <span className="text-sm text-muted-foreground">
                       {uploading ? "Enviando..." : "Clique para enviar arquivo"}
                     </span>
+                    {mediaType === "document" && (
+                      <span className="text-xs text-muted-foreground/80">
+                        {officeAttachments
+                          ? "PDF, Word, Excel, PowerPoint, CSV ou TXT · até 50 MB"
+                          : "PDF ou Word · até 50 MB"}
+                      </span>
+                    )}
                   </div>
                 )}
                 <input
                   ref={fileInputRef}
                   type="file"
                   className="hidden"
-                  accept={MEDIA_TYPE_CONFIG[mediaType as keyof typeof MEDIA_TYPE_CONFIG]?.accept ?? "*/*"}
+                  accept={
+                    mediaType === "document"
+                      ? templateDocumentAccept(officeAttachments)
+                      : MEDIA_TYPE_CONFIG[mediaType as keyof typeof MEDIA_TYPE_CONFIG]?.accept ?? "*/*"
+                  }
                   onChange={(e) => {
                     const file = e.target.files?.[0];
                     if (file) handleFileUpload(file);

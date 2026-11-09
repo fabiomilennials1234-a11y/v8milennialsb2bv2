@@ -40,6 +40,7 @@ import {
 } from "@/modules/communication/lib/attachment-media-type";
 import type { LeadContext, AttendantContext } from "@/lib/template-variables";
 import type { MessageTemplate } from "@/modules/communication/hooks/useMessageTemplates";
+import { templateFileNameFromUrl } from "@/modules/communication/lib/template-media";
 import { notifyError } from "@/shared/errors";
 import { CreateMeetingDialog } from "@/modules/engagement";
 
@@ -271,6 +272,7 @@ export function MobileComposerContextual({
           instanceId,
           mediaType: template.media_type,
           media: template.media_url,
+          fileName: template.media_type === "document" ? templateFileNameFromUrl(template.media_url) : undefined,
           caption: template.media_type === "audio" ? undefined : (resolved || undefined),
           leadId: leadId ?? null,
         });
