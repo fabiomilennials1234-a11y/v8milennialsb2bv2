@@ -39,6 +39,8 @@ interface FunnelControlBarProps {
   onSearchChange: (value: string) => void;
   searchPlaceholder?: string;
 
+  /** Recorte de escopo (Meus · Todos) — antes da busca, decide de quem é o board. */
+  scope?: ReactNode;
   /** Visualizações salvas. */
   views?: ReactNode;
   /** Painel de filtros (o botão, não os chips). */
@@ -66,6 +68,7 @@ export const FunnelControlBar = memo(function FunnelControlBar({
   search,
   onSearchChange,
   searchPlaceholder = "Buscar lead, empresa, telefone…",
+  scope,
   views,
   filters,
   quickFilters,
@@ -103,6 +106,7 @@ export const FunnelControlBar = memo(function FunnelControlBar({
         </div>
 
         <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+          {scope}
           <div className="relative w-full sm:w-[260px]">
             <Search
               className="pointer-events-none absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"

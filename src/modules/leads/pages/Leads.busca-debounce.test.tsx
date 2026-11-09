@@ -27,6 +27,9 @@ vi.mock("@/modules/identity", () => ({
   useResponsibleMembers: () => [],
 }));
 vi.mock("@/modules/platform/hooks/useLeadsLabel", () => ({ useLeadsLabel: () => "Leads" }));
+vi.mock("@/modules/platform/hooks/useVisaoMeuTodos", () => ({
+  useVisaoMeuTodos: () => ({ disponivel: false, visao: "todos", setVisao: () => {}, donoForcado: null }),
+}));
 vi.mock("@/lib/analytics", () => ({ trackModuleVisit: vi.fn() }));
 vi.mock("@/shared/errors", () => ({ notifyError: vi.fn() }));
 vi.mock("@/shared/hooks/use-viewport", () => ({ useViewport: () => ({ isMobile: false }) }));

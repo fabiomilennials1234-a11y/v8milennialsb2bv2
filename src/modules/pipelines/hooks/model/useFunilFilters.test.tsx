@@ -39,6 +39,30 @@ describe("useFunilFilters — controller plugável por pipeline_id (SCRUM-633)",
     expect(result.current.activeCount).toBe(0);
   });
 
+  it("visão 'Meus' (donoForcado): força o responsável nas duas RPCs, some do painel e do badge", () => {
+    const { result } = renderHook(() => useFunilFilters("pipe-1", { donoForcado: "m-9" }));
+    expect(result.current.sections.map((s) => s.type)).not.toContain("responsible");
+    expect(result.current.paginatedFilters.responsibleId).toBe("m-9");
+    expect(result.current.leadIdsParams.responsibleId).toBe("m-9");
+    expect(result.current.responsibleIdEfetivo).toBe("m-9");
+    expect(result.current.activeCount).toBe(0);
+  });
+
+  it("visão 'Meus' vence a escolha guardada do painel; sem ela, a escolha volta", () => {
+    const { result, rerender } = renderHook(
+      ({ dono }: { dono: string | null }) =>
+        useFunilFilters("pipe-1", { initialState: { responsibleId: "m-1" }, donoForcado: dono }),
+      { initialProps: { dono: "m-9" as string | null } },
+    );
+    expect(result.current.paginatedFilters.responsibleId).toBe("m-9");
+    expect(result.current.state.responsibleId).toBe("m-1");
+
+    rerender({ dono: null });
+    expect(result.current.paginatedFilters.responsibleId).toBe("m-1");
+    expect(result.current.responsibleIdEfetivo).toBe("m-1");
+    expect(result.current.activeCount).toBe(1);
+  });
+
   it("monta as seções universais na ordem do painel, com dicionários de dentro (contexto = só pipelineId)", () => {
     const { result } = renderHook(() => useFunilFilters("pipe-1"));
     const types = result.current.sections.map((s) => s.type);

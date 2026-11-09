@@ -41,6 +41,9 @@ import { motorDeSom } from "../../lib/motor-de-som";
 import { usePreferenciasDeAviso } from "../../hooks/usePreferenciasDeAviso";
 import { useFeatureFlag } from "../../hooks/useFeatureFlag";
 import { navegarParaAviso } from "../../lib/abrir-aviso";
+import { useVisaoMeuTodos } from "../../hooks/useVisaoMeuTodos";
+import { useAvisosVisaoGeral, type AvisoDaOrg } from "../../hooks/useAvisosVisaoGeral";
+import { VisaoMeuTodosToggle } from "../VisaoMeuTodosToggle";
 
 /**
  * O sino. Lê a lista pronta do hook e não consulta banco: aqui só se decide
@@ -61,6 +64,13 @@ const ICONES: Record<string, { icone: typeof Bell; classe: string; fundo: string
   scheduled_message_sent: { icone: CalendarCheck, classe: "text-success-strong", fundo: "bg-success/10" },
   scheduled_message_failed: { icone: CalendarX, classe: "text-destructive", fundo: "bg-destructive/10" },
 };
+
+const LISTA_DA_ORG_VAZIA: AvisoDaOrg[] = [];
+
+/** Quem recebeu — só a lista da org traz (as funções de agrupamento devolvem `Aviso`). */
+function destinatariosDe(aviso: Aviso): string[] {
+  return (aviso as Partial<AvisoDaOrg>).destinatarios ?? [];
+}
 
 const PADRAO = { icone: Bell, classe: "text-muted-foreground", fundo: "bg-muted/50" };
 
@@ -84,7 +94,14 @@ export function AlertsDropdown({ rotulo, triggerVariant = "ghost" }: AlertsDropd
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
   const [familia, setFamilia] = useState<Familia>("tudo");
-  const { avisos, naoLidos, marcarComoLido, marcarTodosComoLidos } = useAvisos();
+  const { avisos: meusAvisos, naoLidos, marcarComoLido, marcarTodosComoLidos } = useAvisos();
+  // Visão Meus · Todos (flag `visao_meu_todos`, só admin). "Todos" troca a
+  // LISTA pela da org — o badge do sino segue sendo o do próprio usuário, e a
+  // lista da org é só leitura (o lido é de quem recebeu).
+  const visaoAvisos = useVisaoMeuTodos("avisos");
+  const daOrg = visaoAvisos.disponivel && visaoAvisos.visao === "todos";
+  const visaoGeral = useAvisosVisaoGeral({ enabled: open && daOrg });
+  const avisos: Aviso[] = daOrg ? (visaoGeral.data ?? LISTA_DA_ORG_VAZIA) : meusAvisos;
   const { preferencias, salvar, carregando, salvando } = usePreferenciasDeAviso();
   // Hotfix Café Jurerê: aviso de mensagem abre a conversa mesmo com o chat aberto.
   const { enabled: abreConversa } = useFeatureFlag("notificacao_abre_conversa");
@@ -108,12 +125,12 @@ export function AlertsDropdown({ rotulo, triggerVariant = "ghost" }: AlertsDropd
     [avisos, familia],
   );
 
-  const urgentesNaoLidos = avisos.filter(
+  const urgentesNaoLidos = meusAvisos.filter(
     (a) => a.read_at === null && URGENTES.has(a.type),
   ).length;
 
   const aoClicar = async (aviso: Aviso) => {
-    if (aviso.read_at === null) {
+    if (!daOrg && aviso.read_at === null) {
       await marcarComoLido(aviso.id);
     }
     if (aviso.link) {
@@ -181,7 +198,7 @@ export function AlertsDropdown({ rotulo, triggerVariant = "ghost" }: AlertsDropd
               )}
             </button>
           </div>
-          {naoLidos > 0 && (
+          {!daOrg && naoLidos > 0 && (
             <button
               type="button"
               onClick={() => marcarTodosComoLidos()}
@@ -191,6 +208,17 @@ export function AlertsDropdown({ rotulo, triggerVariant = "ghost" }: AlertsDropd
             </button>
           )}
         </div>
+
+        {visaoAvisos.disponivel && (
+          <div className="border-b border-border px-3 py-2">
+            <VisaoMeuTodosToggle
+              rotulo="Visão das notificações"
+              visao={visaoAvisos.visao}
+              onChange={visaoAvisos.setVisao}
+              className="w-full"
+            />
+          </div>
+        )}
 
         <div className="flex gap-1 overflow-x-auto border-b border-border px-3 py-2 scrollbar-hide">
           {FAMILIAS.map(({ chave, rotulo: nomeDaFamilia }) => (
@@ -217,7 +245,25 @@ export function AlertsDropdown({ rotulo, triggerVariant = "ghost" }: AlertsDropd
         {/* Rolagem simples em vez de ScrollArea: o viewport do Radix usa
             display:table, o que anula `truncate` nos filhos — a descrição
             vazava a largura do painel e era cortada no meio da palavra. */}
-        {grupos.length > 0 ? (
+        {daOrg && visaoGeral.isError ? (
+          <div className="p-8 text-center">
+            <AlertTriangle className="mx-auto mb-3 h-10 w-10 text-destructive/40" />
+            <p className="text-sm text-muted-foreground">Não foi possível carregar as notificações da equipe.</p>
+            <button
+              type="button"
+              onClick={() => void visaoGeral.refetch()}
+              className="mt-2 text-xs font-semibold text-foreground underline-offset-4 hover:underline"
+            >
+              Tentar de novo
+            </button>
+          </div>
+        ) : daOrg && visaoGeral.isLoading ? (
+          <div className="space-y-2 p-3" aria-busy="true" aria-label="Carregando notificações da equipe">
+            {[0, 1, 2].map((i) => (
+              <div key={i} className="h-14 animate-pulse rounded-xl bg-muted/60" />
+            ))}
+          </div>
+        ) : grupos.length > 0 ? (
           <div className="max-h-[320px] overflow-y-auto overscroll-contain">
             <div className="p-2">
               <AnimatePresence mode="popLayout">
@@ -263,6 +309,14 @@ export function AlertsDropdown({ rotulo, triggerVariant = "ghost" }: AlertsDropd
                                 addSuffix: true,
                                 locale: ptBR,
                               })}
+                              {daOrg && destinatariosDe(aviso).length > 0 && (
+                                <span className="text-muted-foreground/80">
+                                  {" · Para "}
+                                  <span className="font-medium text-foreground/80">
+                                    {destinatariosDe(aviso).join(", ")}
+                                  </span>
+                                </span>
+                              )}
                             </p>
                           </div>
                           {naoLido && <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-primary" />}
@@ -279,7 +333,9 @@ export function AlertsDropdown({ rotulo, triggerVariant = "ghost" }: AlertsDropd
           <div className="p-8 text-center">
             <CheckCircle className="mx-auto mb-3 h-12 w-12 text-success-strong/30" />
             <p className="text-sm text-muted-foreground">
-              {familia === "tudo"
+              {daOrg
+                ? "Nenhuma notificação da equipe nos últimos 14 dias."
+                : familia === "tudo"
                 ? "Tudo em dia! Nenhuma notificação pendente."
                 : "Nada nesta aba. Tente outra família."}
             </p>

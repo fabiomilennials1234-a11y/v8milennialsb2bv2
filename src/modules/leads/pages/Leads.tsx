@@ -87,6 +87,8 @@ import { DealPanelProvider } from "../components/deal-detail/DealPanelProvider";
 import { DealCardPanel } from "../components/deal-card/DealCardPanel";
 import { LeadPanelLayout } from "@/modules/platform/components/layout/LeadPanelLayout";
 import { useLeadsLabel } from "@/modules/platform/hooks/useLeadsLabel";
+import { useVisaoMeuTodos } from "@/modules/platform/hooks/useVisaoMeuTodos";
+import { VisaoMeuTodosToggle } from "@/modules/platform/components/VisaoMeuTodosToggle";
 import { useCanDo } from "@/modules/identity";
 import { useFeaturePermission } from "@/modules/identity";
 import {
@@ -256,7 +258,13 @@ function LeadsInner() {
   const filterQualification = filterState.filterQualification ?? "all";
   // Visão salva gravada antes deste filtro existir não traz a chave — o `??`
   // é o que impede o Select de virar não-controlado no meio do uso.
-  const filterResponsible = filterState.filterResponsible ?? "all";
+  const filterResponsibleEscolhido = filterState.filterResponsible ?? "all";
+  // Visão Meus · Todos (flag `visao_meu_todos`, só admin): "Meus" força o dono
+  // = o próprio membro em TUDO que recorta a lista — lista, contagens das abas,
+  // estatísticas e exportação leem `filterResponsible`, então leem o efetivo.
+  // O filtro escolhido fica guardado e volta ao trocar para "Todos".
+  const visaoLeads = useVisaoMeuTodos("leads");
+  const filterResponsible = visaoLeads.donoForcado ?? filterResponsibleEscolhido;
   // Visão salva gravada antes desta gaveta existir não traz a chave — sem o
   // `??` o Select vira não-controlado no meio do uso.
   const usaCadastroErpCafeJurere = useClassificacaoCafeJurere();
@@ -845,7 +853,14 @@ function LeadsInner() {
             },
             unassigned: {
               active: filterResponsible === "none",
-              toggle: () => setFilterResponsible(filterResponsible === "none" ? "all" : "none"),
+              toggle: () => {
+                // "Sem dono" e "Meus" se excluem: pedir os sem dono é sair do "Meus".
+                if (visaoLeads.donoForcado) {
+                  visaoLeads.setVisao("todos");
+                  return setFilterResponsible("none");
+                }
+                setFilterResponsible(filterResponsible === "none" ? "all" : "none");
+              },
             },
           }}
         />
@@ -883,6 +898,14 @@ function LeadsInner() {
       {/* Filtros — uma linha de chips (mockup V5). Cada chip abre a mesma
           lista que o Select abria; ligado, vira tinta e diz o valor. */}
       <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+        {visaoLeads.disponivel && (
+          <VisaoMeuTodosToggle
+            rotulo="Visão dos leads"
+            visao={visaoLeads.visao}
+            onChange={visaoLeads.setVisao}
+            className="self-start sm:self-auto"
+          />
+        )}
         {/* A busca respira no foco: cresce de 360 px até ~36 rem. */}
         <div
           className={cn(
@@ -957,7 +980,9 @@ function LeadsInner() {
             </DropdownMenuContent>
           </DropdownMenu>
           {/* Dono da conta — casa exatamente o que a coluna homônima da lista
-              mostra (`sale ?? pre_sale ?? responsible`, ver lead-list-filters). */}
+              mostra (`sale ?? pre_sale ?? responsible`, ver lead-list-filters).
+              Em "Meus" o dono já está decidido: o chip sai para não mentir. */}
+          {!visaoLeads.donoForcado && (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <FilterChip caret active={filterResponsible !== "all"} icon={filterResponsible === "none" ? UserX : undefined}>
@@ -982,6 +1007,7 @@ function LeadsInner() {
               </DropdownMenuRadioGroup>
             </DropdownMenuContent>
           </DropdownMenu>
+          )}
           <span className="hidden flex-1 sm:block" />
           <SavedViewsDropdown
             entityType="leads"
