@@ -1,0 +1,3 @@
+# filename<TAB>rule<TAB>exact source line<TAB>reviewed reason (required)
+20271227000000_app_representantes_enderecos.sql	R4-updated_at-anchor	    IF p_expected_updated_at IS NOT NULL AND v_cur.updated_at <> p_expected_updated_at THEN	Optimistic concurrency check in lead_address_upsert; compares versions, never a metric period.
+20271227000000_app_representantes_enderecos.sql	R4-updated_at-anchor	       AND a.updated_at < now() - p_debounce	Geocoding worker debounce in lead_address_claim_pending; waits after address edits before paying for geocoding, not sales attribution.

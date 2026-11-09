@@ -30,6 +30,15 @@ vi.mock("@/shared/hooks/use-viewport", () => ({
   useViewport: () => mockViewport(),
 }));
 
+// These cases exercise tab rendering/navigation without saved funnel history.
+// Identity-backed restoration is covered by MobileBottomNav.funil.test.tsx.
+vi.mock("@/modules/platform/hooks/useNavigationModel", () => ({
+  useNavigationModel: () => ({ primary: [] }),
+}));
+vi.mock("@/modules/platform/hooks/useFunilEntryPath", () => ({
+  useFunilEntryPath: () => ({ path: "/funis", restored: false }),
+}));
+
 import { MobileBottomNav } from "@/modules/platform/components/layout/MobileBottomNav";
 
 function renderNav(initialPath = "/") {

@@ -394,7 +394,14 @@ AS $fn$
     -- checks feature flag, assert_org_access and action-specific permission.
     -- Match the qualified call only; an unrelated same-name public function
     -- must not authorize a definer by accident.
-    '(\mprivate\s*\.\s*cobranca_exigir\s*\()'
+    '(\mprivate\s*\.\s*cobranca_exigir\s*\()|' ||
+    -- Reviewed lead-address gate (20271227000000_app_representantes_enderecos):
+    -- derives the subject from auth.uid(), rejects a missing session, absent/
+    -- deleted lead, foreign org, can_update_lead=false or leads.edit_address
+    -- denied. Its argument is the OBJECT, never a user ID to impersonate.
+    -- The real helper and both callers are executed with positive/negative
+    -- permission cases in lead-address-authorization.test.mjs.
+    '(\mpublic\s*\.\s*lead_address_authorize\s*\()'
   FROM public._rls_inv_gate_helpers();
 $fn$;
 

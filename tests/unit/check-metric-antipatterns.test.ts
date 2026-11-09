@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, rmSync, writeFileSync, mkdirSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -11,13 +11,14 @@ interface LintResult {
   output: string;
 }
 
-function runLint(migDir: string, baselineFile?: string): LintResult {
+function runLint(migDir: string, baselineFile?: string, allowlistFile?: string): LintResult {
   try {
     const output = execFileSync("bash", [SCRIPT, migDir], {
       encoding: "utf8",
       env: {
         ...process.env,
         METRIC_LINT_BASELINE: baselineFile ?? "/dev/null",
+        METRIC_LINT_ALLOWLIST: allowlistFile ?? "/dev/null",
       },
     });
     return { code: 0, output };
@@ -157,6 +158,43 @@ WHERE se.event_type = 'sale_won';`,
     const result = runLint(migDir);
 
     expect(result.code).toBe(0);
+  });
+
+  const addressMigration = "20271227000000_app_representantes_enderecos.sql";
+  const reviewedAllowlist = join(__dirname, "../../scripts/metric-antipatterns-allowlist.tsv");
+  const addressSql = () => readFileSync(join(__dirname, "../../supabase/migrations", addressMigration), "utf8");
+
+  it("aceita somente as duas linhas operacionais revisadas da migration de endereços", () => {
+    writeFileSync(join(migDir, addressMigration), addressSql());
+    expect(runLint(migDir, undefined, reviewedAllowlist).code).toBe(0);
+    expect(runLint(migDir).code).toBe(1);
+  });
+
+  it("uma exceção de linha não libera novos filtros de métricas no mesmo arquivo", () => {
+    writeFileSync(join(migDir, addressMigration),
+      addressSql() + "\nSELECT count(*) FROM leads WHERE updated_at >= p_start;");
+    const result = runLint(migDir, undefined, reviewedAllowlist);
+    expect(result.code).toBe(1);
+    expect(result.output).toContain("updated_at >= p_start");
+  });
+
+  it("alterar a linha revisada ou copiá-la para outra migration exige nova revisão", () => {
+    writeFileSync(join(migDir, addressMigration),
+      addressSql().replace("a.updated_at < now() - p_debounce", "a.updated_at < p_start"));
+    expect(runLint(migDir, undefined, reviewedAllowlist).code).toBe(1);
+    writeFileSync(join(migDir, addressMigration), "");
+    writeFileSync(join(migDir, "20280101000000_copy.sql"), addressSql());
+    expect(runLint(migDir, undefined, reviewedAllowlist).code).toBe(1);
+  });
+
+  it("a regra e a justificativa também fazem parte da exceção", () => {
+    const source = "WHERE updated_at >= p_start";
+    const allowlist = join(migDir, "allowlist.tsv");
+    writeFileSync(join(migDir, "probe.sql"), source);
+    writeFileSync(allowlist, "probe.sql\tR3-system-predicate\t" + source + "\twrong rule\n");
+    expect(runLint(migDir, undefined, allowlist).code).toBe(1);
+    writeFileSync(allowlist, "probe.sql\tR4-updated_at-anchor\t" + source + "\t\n");
+    expect(runLint(migDir, undefined, allowlist).code).toBe(1);
   });
 
   it("supressão consciente: '-- metric-lint-allow' na linha libera a exceção", () => {
