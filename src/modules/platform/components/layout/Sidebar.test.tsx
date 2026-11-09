@@ -39,6 +39,8 @@ vi.mock("@/shared/components/UpgradeModal", () => ({
 vi.mock("@/modules/pipelines", () => ({ usePrefetchPipes: () => vi.fn() }));
 vi.mock("@/modules/identity", () => ({
   useMasterAuth: () => masterRef.current,
+  useAuth: () => ({ user: { id: "user-1" } }),
+  useOrganization: () => ({ organizationId: "org-1" }),
   useOrganizationSettings: () => ({ settings: settingsRef.current }),
 }));
 vi.mock("@/modules/copilot", () => ({
@@ -108,6 +110,7 @@ beforeEach(() => {
   upgradeSpy.mockClear();
   masterRef.current = { isMaster: false, isOutbounder: false };
   settingsRef.current = null;
+  window.localStorage.clear();
 });
 
 describe("Sidebar — trilho de ícones", () => {
@@ -141,6 +144,34 @@ describe("Sidebar — trilho de ícones", () => {
   it("Funis leva ao funil padrão da org", async () => {
     const user = userEvent.setup();
     settingsRef.current = { default_pipeline_id: "f-123" };
+    renderSidebar();
+    await user.click(screen.getByRole("link", { name: "Funis" }));
+    expect(screen.getByTestId("onde")).toHaveTextContent("/funil/f-123");
+  });
+
+  it("Funis volta ao ÚLTIMO funil aberto, não ao padrão (estava no B, foi ao chat)", async () => {
+    const user = userEvent.setup();
+    settingsRef.current = { default_pipeline_id: "f-123" };
+    window.localStorage.setItem("v8:ui:last-funil:org-1:user-1", "vendas");
+    renderSidebar();
+    await user.click(screen.getByRole("link", { name: "Funis" }));
+    expect(screen.getByTestId("onde")).toHaveTextContent("/funil/vendas");
+  });
+
+  it("último funil que não aparece mais na lateral (apagado, inativo) cai no padrão", async () => {
+    const user = userEvent.setup();
+    settingsRef.current = { default_pipeline_id: "f-123" };
+    window.localStorage.setItem("v8:ui:last-funil:org-1:user-1", "apagado");
+    renderSidebar();
+    await user.click(screen.getByRole("link", { name: "Funis" }));
+    expect(screen.getByTestId("onde")).toHaveTextContent("/funil/f-123");
+  });
+
+  it("o último funil de OUTRA org ou OUTRO usuário não vaza", async () => {
+    const user = userEvent.setup();
+    settingsRef.current = { default_pipeline_id: "f-123" };
+    window.localStorage.setItem("v8:ui:last-funil:org-2:user-1", "vendas");
+    window.localStorage.setItem("v8:ui:last-funil:org-1:user-2", "vendas");
     renderSidebar();
     await user.click(screen.getByRole("link", { name: "Funis" }));
     expect(screen.getByTestId("onde")).toHaveTextContent("/funil/f-123");

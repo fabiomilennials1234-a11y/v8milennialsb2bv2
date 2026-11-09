@@ -95,6 +95,7 @@ import { revivePeriodState, createInitialPeriodState, type MetricsPeriodState } 
 import { CONFIRMACAO_OVERDUE_EXCLUDE_STATUS_KEYS } from "@/modules/pipelines/lib/kanbanFilterParams";
 import { calcularEtapaPorDataDaReuniao, podeAplicarDx } from "@/modules/pipelines/lib/meeting-dx";
 import {
+  useAuth,
   useFeaturePermission,
   useConfirmacaoOverdueDays,
   useOrganization,
@@ -102,6 +103,7 @@ import {
 } from "@/modules/identity";
 import { useTags } from "@/modules/leads/hooks/useTags";
 import { trackModuleVisit } from "@/lib/analytics";
+import { LAST_FUNNEL_EVENT, browserStorage, lastFunnelKey, writeLastFunnel } from "@/lib/last-funnel";
 import {
   startOfDay,
   endOfDay,
@@ -188,6 +190,7 @@ function FunilPageInner() {
 
   const { openDeal } = useDealSheet();
   const { organizationId } = useOrganization();
+  const { user } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
 
   const {
@@ -209,6 +212,16 @@ function FunilPageInner() {
     conferidoNoServidor.current.add(param);
     void refetchPipelines();
   }, [precisaConferir, param, refetchPipelines]);
+  // Memoriza o funil aberto: o item "Funil" do menu volta para ele depois de uma
+  // ida ao chat (ou a qualquer outra tela). Só grava funil que resolveu.
+  const slugAberto = pipeline?.slug;
+  useEffect(() => {
+    const key = lastFunnelKey(organizationId, user?.id);
+    const storage = browserStorage();
+    if (!key || !slugAberto || !storage) return;
+    writeLastFunnel(storage, key, slugAberto);
+    window.dispatchEvent(new Event(LAST_FUNNEL_EVENT));
+  }, [organizationId, user?.id, slugAberto]);
   const ehCustom = pipeline?.type === "custom";
   const ehSystem = pipeline?.type === "system";
   /** Slug de sistema do trio legado — liga os portes específicos de família. */

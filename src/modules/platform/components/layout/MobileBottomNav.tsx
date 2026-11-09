@@ -2,6 +2,8 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { MessageSquare, GitBranch, Users, CalendarDays, MoreHorizontal } from "lucide-react";
 import { useViewport } from "@/shared/hooks/use-viewport";
 import { useMobileChatContext } from "@/contexts/MobileChatContext";
+import { useNavigationModel } from "@/modules/platform/hooks/useNavigationModel";
+import { useFunilEntryPath } from "@/modules/platform/hooks/useFunilEntryPath";
 import { cn } from "@/lib/utils";
 
 // ─── Tab definitions ────────────────────────────────────────
@@ -42,6 +44,10 @@ export function MobileBottomNav() {
   const navigate = useNavigate();
 
   const { isChatThreadOpen } = useMobileChatContext();
+  const model = useNavigationModel();
+  // A aba Funis volta ao último funil aberto (ver `useFunilEntryPath`). Sem
+  // histórico válido segue no hub, como sempre foi no mobile.
+  const funilEntry = useFunilEntryPath(model.primary);
 
   if (!isMobile) return null;
   if (isChatThreadOpen) return null;
@@ -72,7 +78,7 @@ export function MobileBottomNav() {
               key={tab.id}
               data-testid={`tab-${tab.id}`}
               data-active={active}
-              onClick={() => navigate(tab.path)}
+              onClick={() => navigate(tab.id === "funis" && funilEntry.restored ? funilEntry.path : tab.path)}
               className={cn(
                 "relative flex flex-col items-center justify-center gap-0.5 flex-1 h-full",
                 "transition-colors duration-150",
