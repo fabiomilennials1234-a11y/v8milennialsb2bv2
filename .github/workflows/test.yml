@@ -279,7 +279,9 @@ jobs:
           exit 1
       - name: Create playwright auth dir
         run: mkdir -p .playwright-auth
-      - run: npx playwright test
+      # Show the failing scenario immediately instead of buffering only dots.
+      # A broken environment fails fast; a green run still executes every test.
+      - run: npx playwright test --reporter=line,github --max-failures=5
         env:
           SUPABASE_URL: http://localhost:54321
           VITE_SUPABASE_URL: http://localhost:54321
