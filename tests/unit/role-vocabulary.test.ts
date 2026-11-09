@@ -62,6 +62,8 @@ const NAO_E_APP_ROLE: Record<string, string> = {
   authenticated: "role do Postgres, não do app",
   service_role: "role do Postgres, não do app",
   anon: "role do Postgres, não do app",
+  // Semântica ARIA em props de elementos interativos, não permissão de usuário.
+  button: "papel ARIA de interação (PilhaDeCartoes), não app_role",
   // Rótulo de interface, escrito em português para o vendedor ler.
   Vendas: "rótulo de UI em Performance.tsx, não valor de banco",
   // Ator FORA do enum, guardado em tabela própria — a mesma classe de confusão
