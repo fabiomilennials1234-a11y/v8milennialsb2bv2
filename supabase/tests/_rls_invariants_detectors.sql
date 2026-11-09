@@ -366,7 +366,13 @@ AS $fn$
     SELECT unnest(ARRAY['assert_org_access', 'assert_org_member', 'resolve_org_for_rpc']::name[])
     UNION
     -- object-parameter gates: reviewed by hand, body shown in the header
-    SELECT unnest(ARRAY['lead_in_my_org']::name[])
+    --   lead_address_authorize(p_lead_id) — 20271227000000_app_representantes_enderecos.sql.
+    --   The caller picks WHICH lead, never WHO: the body refuses without
+    --   auth.uid() (42501), requires organization_id IN get_my_organization_ids()
+    --   (PT404 for a foreign org), then can_update_lead(p_lead_id) and
+    --   has_feature_permission('leads.edit_address', v_org). Only
+    --   auth.role() = 'service_role' (JWT claim) skips the member checks.
+    SELECT unnest(ARRAY['lead_in_my_org', 'lead_address_authorize']::name[])
   ),
   closure AS (
     SELECT proname FROM seed
