@@ -41,6 +41,7 @@ const APP_ROLES = [...ROLES_DO_ENUM].sort();
  * próximo bug igual a este.
  */
 const NAO_E_APP_ROLE: Record<string, string> = {
+  button: "papel ARIA de elemento interativo (HTML), não team_members.role",
   venda: "papel do responsável no negócio (lead_owners), não app_role",
   pre_venda: "papel do responsável no negócio (lead_owners), não app_role",
   co: "co-responsável do negócio (lead_owners), não app_role",
