@@ -5,6 +5,11 @@ import { useOrganization } from "@/modules/identity";
 import { usePipelineId, flattenMetadata, type PipelineType } from "./usePipelineEntries";
 import { useRealtimeSubscription } from "@/shared/realtime/useRealtimeSubscription";
 import type { PipelineStage } from "./usePipelineStages";
+import {
+  nextPipelinePageCursor,
+  pipelinePageCursorArgs,
+  type PipelinePageCursor,
+} from "@/modules/pipelines/lib/pipeline-page-cursor";
 
 // Exportados p/ o hook irmão `usePaginatedFunil` (SCRUM-632): mesma cadência de
 // página/debounce/slots nos dois boards até a W6 fundir os hooks.
@@ -201,16 +206,14 @@ function useStageSlot(
         ...sharedParams,
         p_stage_id: stageKey!,
         p_page_size: PAGE_SIZE,
-        p_cursor: pageParam ?? null,
+        ...pipelinePageCursorArgs(pageParam),
       }));
       if (error) throw error;
       return (data ?? []).map(flattenRpcEntry);
     },
-    initialPageParam: null as string | null,
-    getNextPageParam: (lastPage) => {
-      if (lastPage.length < PAGE_SIZE) return undefined;
-      return lastPage[lastPage.length - 1]?.created_at ?? undefined;
-    },
+    initialPageParam: null as PipelinePageCursor | null,
+    // Cursor composto (created_at, id) — ver lib/pipeline-page-cursor.
+    getNextPageParam: (lastPage) => nextPipelinePageCursor(lastPage, PAGE_SIZE),
     enabled: enabled && !!organizationId && !!stageKey,
     staleTime: 30_000,
   });
