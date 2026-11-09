@@ -366,7 +366,11 @@ AS $fn$
     SELECT unnest(ARRAY['assert_org_access', 'assert_org_member', 'resolve_org_for_rpc']::name[])
     UNION
     -- object-parameter gates: reviewed by hand, body shown in the header
-    SELECT unnest(ARRAY['lead_in_my_org']::name[])
+    -- lead_address_authorize (20271227000000), reviewed: rejects missing
+    -- auth.uid(), resolves the lead's organization, rejects non-members,
+    -- requires can_update_lead AND leads.edit_address; only service_role bypasses.
+    -- Callers set_pin/retry_geocode invoke it before any write.
+    SELECT unnest(ARRAY['lead_in_my_org', 'lead_address_authorize']::name[])
   ),
   closure AS (
     SELECT proname FROM seed

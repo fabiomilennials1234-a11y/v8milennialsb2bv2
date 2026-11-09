@@ -59,6 +59,14 @@ for file in "$MIG_DIR"/*.sql; do
   while IFS=: read -r line_no line; do
     [ -z "$line_no" ] && continue
     echo "$line" | grep -qi 'metric-lint-allow' && continue
+    # Optimistic concurrency compares versions, not a reporting period.
+    echo "$line" | grep -qiE 'updated_at\s*<>\s*p_expected_updated_at' && continue
+    # The geocode claim worker debounces edits before reserving work. Match
+    # the complete predicate so other time boundaries still fail this rule.
+    if [ "$(basename "$file")" = '20271227000000_app_representantes_enderecos.sql' ] &&
+       echo "$line" | grep -qiE '^\s*AND a\.updated_at < now\(\) - p_debounce\s*$'; then
+      continue
+    fi
     report "R4-updated_at-anchor" "$file" "$line_no" "$line" \
       "updated_at não é âncora temporal de métrica — use a data gravada no evento (sold_at/occurred_at)"
   done < <(grep -inE "coalesce\([^)]*updated_at|updated_at\s*(>=|<=|<|>|between)" "$file" || true)
