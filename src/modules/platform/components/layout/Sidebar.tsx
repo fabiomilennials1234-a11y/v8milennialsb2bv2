@@ -28,8 +28,9 @@ import { cn } from "@/lib/utils";
 import { UpgradeModal } from "@/shared/components/UpgradeModal";
 import { usePrefetchPipes } from "@/modules/pipelines";
 import { useOraculoBriefing } from "@/modules/copilot";
-import { useMasterAuth, useOrganizationSettings } from "@/modules/identity";
+import { useMasterAuth } from "@/modules/identity";
 import { useNavigationModel } from "@/modules/platform/hooks/useNavigationModel";
+import { useFunilEntryPath } from "@/modules/platform/hooks/useFunilEntryPath";
 import { PITSTOP_HUB_PATH, RAIL_WIDTH, type NavNode } from "@/modules/platform/lib/navigation-model";
 import type { FeatureKey } from "@/modules/platform/lib/feature-registry";
 import { SidebarBrand } from "./SidebarBrand";
@@ -99,7 +100,6 @@ export function Sidebar() {
   const navigate = useNavigate();
   const briefing = useOraculoBriefing();
   const { isMaster, isOutbounder } = useMasterAuth();
-  const { settings } = useOrganizationSettings();
   const [upgradeFeature, setUpgradeFeature] = useState<FeatureKey | null>(null);
 
   const openUpgrade = useCallback(
@@ -110,9 +110,10 @@ export function Sidebar() {
     [model],
   );
 
-  // Funis no trilho abre o funil PADRÃO da org (o hub virou a aba "Todos os
-  // funis" dentro da página). Sem padrão, cai no hub.
-  const funilPadrao = settings?.default_pipeline_id ? `/funil/${settings.default_pipeline_id}` : "/funis";
+  // Funis no trilho volta ao ÚLTIMO funil que o usuário abriu (o hub virou a aba
+  // "Todos os funis" dentro da página). Sem histórico válido: o padrão da org;
+  // sem padrão, o hub.
+  const funilPadrao = useFunilEntryPath(model.primary).path;
 
   const principais = model.primary.filter((item) => item.path !== "/turbo");
   const turbo = model.primary.find((item) => item.path === "/turbo")?.children ?? [];

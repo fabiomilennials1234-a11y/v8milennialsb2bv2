@@ -26,6 +26,8 @@ vi.mock("@/shared/components/UpgradeModal", () => ({ UpgradeModal: () => <div />
 vi.mock("@/modules/pipelines", () => ({ usePrefetchPipes: () => vi.fn() }));
 vi.mock("@/modules/identity", () => ({
   useMasterAuth: () => ({ isMaster: false, isOutbounder: false }),
+  useAuth: () => ({ user: { id: "user-1" } }),
+  useOrganization: () => ({ organizationId: "org-1" }),
   useOrganizationSettings: () => ({ settings: null }),
 }));
 vi.mock("@/modules/copilot", () => ({
