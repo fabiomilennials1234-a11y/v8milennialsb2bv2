@@ -13,6 +13,7 @@
 import { supabase } from "@/integrations/supabase/client";
 import { extractEdgeFunctionError } from "./edgeFunctionError";
 import { sharePendingRead } from "./sharePendingRead";
+import { parseGroupParticipants, type GroupParticipant } from "./groupMentionComposer";
 
 type ProxyResponse<T> = {
   ok?: boolean;
@@ -452,4 +453,21 @@ export async function listGroups(instanceId: string): Promise<InstanceGroupList>
     groups: Array.isArray(r?.groups) ? r.groups : [],
     truncated: r?.truncated === true,
   };
+}
+
+// ============================================================================
+// Participantes de grupo (seletor de menção do composer)
+// ============================================================================
+
+/**
+ * Participantes do grupo, enxutos (telefone, LID, nome, admin). Só Uazapi —
+ * nos demais o proxy responde 400 `group_participants_not_supported`. Passa
+ * pelo mesmo gate de conversa do envio ao grupo.
+ */
+export async function groupParticipants(instanceId: string, groupJid: string): Promise<GroupParticipant[]> {
+  const r = await callProxy<unknown>("groupParticipants", {
+    instance_id: instanceId,
+    payload: { groupjid: groupJid },
+  });
+  return parseGroupParticipants(r);
 }

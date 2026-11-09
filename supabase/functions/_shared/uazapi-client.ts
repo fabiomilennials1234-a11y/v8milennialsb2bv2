@@ -423,6 +423,20 @@ export class UazapiClient {
   }
 
   // =========================================================================
+  // Group
+  // =========================================================================
+
+  /**
+   * Metadados do grupo, com `Participants` (POST /group/info). Leitura: sem
+   * link de convite nem pedidos pendentes — só o que o seletor de menção usa.
+   * A forma crua é normalizada por `normalizeGroupParticipants`.
+   */
+  async groupInfo(groupjid: string): Promise<unknown> {
+    if (!groupjid?.trim()) throw new Error("A group JID is required");
+    return this.request<unknown>("POST", "/group/info", { groupjid }, { timeoutMs: 10_000 });
+  }
+
+  // =========================================================================
   // Sender (mass send)
   // =========================================================================
 
@@ -1011,6 +1025,8 @@ export class UazapiClient {
    */
   private static circuitGroup(path: string): string {
     if (path.startsWith("/send/media")) return "media";
+    // Leitura de grupo (seletor de menção) não pode abrir o breaker do envio.
+    if (path.startsWith("/group/")) return "group";
     return "default";
   }
 

@@ -23,6 +23,8 @@ import type { WhatsAppMessage, FailedMessage, ReplyContext } from "./types";
 import { makeOptimisticId, promoteOptimisticMessage } from "./shared/optimistic-messages";
 import { userMessageOf } from "@/shared/errors";
 import { MEDIA_UPLOAD_TIMEOUT_MS, MediaOperationError, withMediaDeadline } from "@/modules/communication/lib/media-operation";
+import { deriveMentions } from "@/modules/communication/lib/groupMentionComposer";
+import { readCachedMentionablePhones } from "./useGroupParticipants";
 
 /**
  * Lê o id do provider carimbado em `_localMessage` pelo mutationFn.
@@ -50,6 +52,23 @@ const INVALID_GROUP_MESSAGE = "Não foi possível identificar este grupo do What
 
 /** SZ Chat só fala com números; não há rota para JID de grupo. */
 const SZ_CHAT_GROUP_MESSAGE = "Envio para grupo não está disponível nesta conexão";
+
+/**
+ * `mentions` do envio ao grupo, tirados do TEXTO FINAL contra os participantes
+ * já carregados pelo seletor. Fora de grupo, ou sem menção, nada — o payload
+ * fica idêntico ao de sempre.
+ */
+function groupMentionsField(
+  queryClient: QueryClient,
+  isGroup: boolean | undefined,
+  instanceId: string | null | undefined,
+  groupJid: string,
+  text: string | null | undefined,
+): { mentions?: string[] } {
+  if (!isGroup) return {};
+  const mentions = deriveMentions(text, readCachedMentionablePhones(queryClient, instanceId, groupJid));
+  return mentions.length > 0 ? { mentions } : {};
+}
 
 function resolveDestinationOrThrow(phoneNumber: string, isGroup: boolean | undefined): WhatsAppDestination {
   const destination = resolveWhatsAppDestination(phoneNumber, isGroup);
@@ -288,6 +307,7 @@ export function useSendWhatsAppMessage() {
             text: message,
             ...(replyContext ? { replyid: replyContext.messageId } : {}),
             ...(leadId ? { lead_id: leadId } : {}),
+            ...groupMentionsField(queryClient, isGroup, instanceId, formattedNumber, message),
           },
         }, SEND_TIMEOUT_MS, recoveryContext(queryClient, teamMember.organization_id, phoneNumber, destination, instanceId, _sendId, message));
         data = result.data;
@@ -554,6 +574,7 @@ export function useSendWhatsAppMedia() {
                 file: mediaUrl,
                 filename: fileName || `file_${Date.now()}`,
                 caption: caption || "",
+                ...groupMentionsField(queryClient, isGroup, instanceId, formattedNumber, caption),
               };
         if (leadId) proxyPayload.lead_id = leadId;
         if (replyContext) proxyPayload.replyid = replyContext.messageId;

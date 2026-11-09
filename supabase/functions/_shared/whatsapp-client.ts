@@ -23,6 +23,7 @@ import type {
 } from "./uazapi-types.ts";
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { normalizeSeamlessType } from "./notificame.ts";
+import type { GroupParticipant } from "./group-mentions.ts";
 
 // ---------------------------------------------------------------------------
 // Shared types
@@ -65,6 +66,11 @@ export type SendTextOptions = {
   readchat?: boolean;
   /** Rótulo nativo "Encaminhada" no WhatsApp. Só a Uazapi implementa; os demais ignoram. */
   forward?: boolean;
+  /**
+   * Menções em grupo: números (só dígitos) ou `"all"`. Só a Uazapi implementa;
+   * os demais ignoram. Já chega sanitizado (`_shared/group-mentions.ts`).
+   */
+  mentions?: string[];
   trackSource?: string;
   trackId?: string;
 };
@@ -79,6 +85,11 @@ export type SendMediaOptions = {
   delay?: number;
   /** Rótulo nativo "Encaminhada" no WhatsApp. Só a Uazapi implementa; os demais ignoram. */
   forward?: boolean;
+  /**
+   * Menções em grupo: números (só dígitos) ou `"all"`. Só a Uazapi implementa;
+   * os demais ignoram. Já chega sanitizado (`_shared/group-mentions.ts`).
+   */
+  mentions?: string[];
   trackSource?: string;
   trackId?: string;
 };
@@ -316,6 +327,8 @@ export interface WhatsAppProvider {
     codigoPromocional?: string;
   }): Promise<unknown>;
   listSignupInvites?(limite?: number): Promise<unknown>;
+  /** Participantes de um grupo (POST /group/info), já enxutos. Uazapi-only. */
+  getGroupParticipants?(groupjid: string): Promise<GroupParticipant[]>;
   listChats?(type?: "all" | "individual" | "group"): Promise<Array<{ id: string; name?: string; isGroup?: boolean; lastMessageTimestamp?: number }>>;
   requestHistory?(opts: { number: string; mode?: "history" | "exact"; messageid?: string; count?: number }): Promise<{ success: boolean; mode?: string }>;
   historySync?(opts: {

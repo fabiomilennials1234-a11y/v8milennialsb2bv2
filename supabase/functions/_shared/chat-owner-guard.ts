@@ -46,6 +46,10 @@ const TARGETED_ACTIONS = new Set([
   // Aqui o alvo é o DESTINO (`number`). A conversa de origem tem o seu próprio
   // crivo dentro da action — ver `_shared/whatsapp-forward.ts`.
   "forwardMessage",
+  // Seletor de menção: o alvo é o grupo (`groupjid`), o mesmo valor que o
+  // envio ao grupo apresenta como `number`. Quem não pode escrever no grupo
+  // não lista os participantes dele.
+  "groupParticipants",
 ]);
 
 export interface ChatTarget {
@@ -70,6 +74,13 @@ export function extractChatTarget(
 
   const ids = payload.message_ids;
   const firstId = Array.isArray(ids) && ids.length > 0 ? String(ids[0]) : null;
+
+  // groupParticipants: o alvo é SÓ o `groupjid` — o mesmo campo que a action
+  // usa. Aceitar `number` aqui deixaria passar um telefone permitido no gate e
+  // ler os participantes de outro grupo.
+  if (action === "groupParticipants") {
+    return { leadId: null, rawPhone: typeof payload.groupjid === "string" ? payload.groupjid : null, messageId: null };
+  }
 
   return {
     leadId: (payload.lead_id as string | undefined) ?? null,
