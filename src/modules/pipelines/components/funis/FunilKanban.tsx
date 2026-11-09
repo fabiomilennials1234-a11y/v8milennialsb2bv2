@@ -24,6 +24,7 @@ import { cardClosedAt, cardOutcome } from "./funil-card-outcome";
 import type { ClosedGroupingAccessors } from "@/modules/pipelines/lib/closed-outcome-groups";
 import { recorteCanonicoDeContagem } from "@/modules/pipelines/lib/stage-counts-query";
 import { useFunilDesfechoPorMes } from "@/modules/pipelines/hooks/model/useFunilDesfechoPorMes";
+import { useFeatureFlag } from "@/modules/platform/hooks/useFeatureFlag";
 
 /**
  * Card de funil na página unificada — o shape que `get_pipeline_page` devolve,
@@ -226,7 +227,16 @@ export function FunilKanban({
       Object.keys(recorteCanonicoDeContagem(filterParams)).every((k) => k === "p_org_id"),
     [filterParams],
   );
-  const { porEtapa: desfechoPorEtapa } = useFunilDesfechoPorMes(pipelineId, { enabled: semFiltro });
+  // Hotfix Café Jurerê (flag `funil_total_com_filtro`): com filtro ativo, o
+  // resumo vem da versão filtrada (mesmo WHERE dos cards). A pilha mostra o
+  // total certo sem "Carregar mais", com ou sem filtro.
+  const { enabled: totalComFiltro } = useFeatureFlag("funil_total_com_filtro");
+  const { porEtapa: desfechoPorEtapa } = useFunilDesfechoPorMes(
+    pipelineId,
+    totalComFiltro && filterParams && !semFiltro
+      ? { enabled: true, filtros: filterParams }
+      : { enabled: semFiltro },
+  );
 
   // Destino do "Marcar perdido": papel PRIMEIRO, flag depois — em duas
   // passadas. Um `find` único com OR escolhe por acidente de posição: etapa de
