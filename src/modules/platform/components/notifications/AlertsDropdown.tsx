@@ -39,6 +39,8 @@ import {
 import { useAvisos } from "../../hooks/useAvisos";
 import { motorDeSom } from "../../lib/motor-de-som";
 import { usePreferenciasDeAviso } from "../../hooks/usePreferenciasDeAviso";
+import { useFeatureFlag } from "../../hooks/useFeatureFlag";
+import { navegarParaAviso } from "../../lib/abrir-aviso";
 
 /**
  * O sino. Lê a lista pronta do hook e não consulta banco: aqui só se decide
@@ -84,6 +86,8 @@ export function AlertsDropdown({ rotulo, triggerVariant = "ghost" }: AlertsDropd
   const [familia, setFamilia] = useState<Familia>("tudo");
   const { avisos, naoLidos, marcarComoLido, marcarTodosComoLidos } = useAvisos();
   const { preferencias, salvar, carregando, salvando } = usePreferenciasDeAviso();
+  // Hotfix Café Jurerê: aviso de mensagem abre a conversa mesmo com o chat aberto.
+  const { enabled: abreConversa } = useFeatureFlag("notificacao_abre_conversa");
 
   const alternarSom = async () => {
     const ligar = !preferencias.sound_enabled;
@@ -113,7 +117,7 @@ export function AlertsDropdown({ rotulo, triggerVariant = "ghost" }: AlertsDropd
       await marcarComoLido(aviso.id);
     }
     if (aviso.link) {
-      navigate(aviso.link);
+      navegarParaAviso(navigate, aviso.link, abreConversa);
       setOpen(false);
     }
   };
