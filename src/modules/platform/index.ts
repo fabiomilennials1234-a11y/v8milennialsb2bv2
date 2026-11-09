@@ -33,6 +33,10 @@ export * from "./hooks/use-push-subscription";
 export * from "./hooks/use-sw-update";
 export * from "./hooks/useConsent";
 export * from "./hooks/useFeatureFlag";
+// Visão MEU / TODOS (hotfix Café Jurerê, flag `visao_meu_todos`).
+export { useVisaoMeuTodos, type VisaoMeuTodos } from "./hooks/useVisaoMeuTodos";
+export { VisaoMeuTodosToggle } from "./components/VisaoMeuTodosToggle";
+export { type Visao, type SuperficieDaVisao, VISAO_MEU_TODOS_FLAG } from "./lib/visao-meu-todos";
 export * from "./hooks/useHealthHistory";
 export * from "./hooks/useHelpCenter";
 export * from "./hooks/useSupportTickets";
