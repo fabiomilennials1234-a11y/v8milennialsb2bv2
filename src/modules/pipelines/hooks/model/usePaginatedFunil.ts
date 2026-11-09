@@ -24,6 +24,11 @@ import {
   type MoveOtimista,
 } from "@/modules/pipelines/lib/funil-move-cache";
 import type { CustomPipelineStage } from "@/contracts/pipe";
+import {
+  nextPipelinePageCursor,
+  pipelinePageCursorArgs,
+  type PipelinePageCursor,
+} from "@/modules/pipelines/lib/pipeline-page-cursor";
 
 /**
  * Board paginado da PÁGINA UNIFICADA `/funil/:slug` (SCRUM-632, F4).
@@ -108,17 +113,16 @@ function useStageSlot(
           p_pipeline_id: pipelineId!,
           p_stage_id: stageKey!,
           p_page_size: PAGE_SIZE,
-          p_cursor: pageParam ?? null,
+          ...pipelinePageCursorArgs(pageParam),
         }),
       );
       if (error) throw error;
       return ((data ?? []) as RpcPageRow[]).map(flattenRpcEntry);
     },
-    initialPageParam: null as string | null,
-    getNextPageParam: (lastPage) => {
-      if (lastPage.length < PAGE_SIZE) return undefined;
-      return lastPage[lastPage.length - 1]?.created_at ?? undefined;
-    },
+    initialPageParam: null as PipelinePageCursor | null,
+    // Cursor composto (created_at, id): empate de created_at na borda da página
+    // não pula mais as irmãs (ver lib/pipeline-page-cursor).
+    getNextPageParam: (lastPage) => nextPipelinePageCursor(lastPage, PAGE_SIZE),
     enabled: enabled && !!organizationId && !!pipelineId && !!stageKey,
     staleTime: 30_000,
   });
@@ -261,12 +265,9 @@ export interface StageEntryRef {
 /**
  * Todos os negócios de UMA etapa dentro do recorte ativo, inclusive os que a
  * coluna ainda não carregou. Pagina `get_pipeline_page` pelo mesmo cursor
- * (`created_at` do último) que a coluna usa, com os mesmos filtros — o que se
- * seleciona é exatamente o que a coluna mostraria rolando até o fim.
- *
- * Herda o limite do cursor estrito (`created_at < cursor`): entradas com o
- * MESMO `created_at` na fronteira de uma página de 1.000 ficam de fora, como
- * já ficam no "carregar mais" da coluna.
+ * composto `(created_at, id)` que a coluna usa, com os mesmos filtros — o que
+ * se seleciona é exatamente o que a coluna mostraria rolando até o fim,
+ * inclusive negócios empatados no mesmo `created_at` na borda da página.
  */
 export async function fetchStageEntryRefs({
   pipelineId,
@@ -282,7 +283,7 @@ export async function fetchStageEntryRefs({
   pageSize?: number;
 }): Promise<{ refs: StageEntryRef[]; truncated: boolean }> {
   const refs: StageEntryRef[] = [];
-  let cursor: string | null = null;
+  let cursor: PipelinePageCursor | null = null;
   for (;;) {
     const { data, error } = await supabase.rpc(
       "get_pipeline_page",
@@ -291,7 +292,7 @@ export async function fetchStageEntryRefs({
         p_pipeline_id: pipelineId,
         p_stage_id: stageKey,
         p_page_size: pageSize,
-        p_cursor: cursor,
+        ...pipelinePageCursorArgs(cursor),
       }),
     );
     if (error) throw error;
@@ -301,8 +302,9 @@ export async function fetchStageEntryRefs({
       if (refs.length >= cap) return { refs, truncated: true };
       refs.push({ entryId: row.id, leadId: row.lead_id });
     }
-    if (rows.length < pageSize) return { refs, truncated: false };
-    cursor = rows[rows.length - 1].created_at;
+    const next = nextPipelinePageCursor(rows, pageSize);
+    if (!next) return { refs, truncated: false };
+    cursor = next;
   }
 }
 
