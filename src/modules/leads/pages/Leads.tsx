@@ -86,6 +86,7 @@ import { LeadCardPanel } from "../components/lead-card/LeadCardPanel";
 import { DealPanelProvider } from "../components/deal-detail/DealPanelProvider";
 import { DealCardPanel } from "../components/deal-card/DealCardPanel";
 import { LeadPanelLayout } from "@/modules/platform/components/layout/LeadPanelLayout";
+import { useLeadsLabel } from "@/modules/platform/hooks/useLeadsLabel";
 import { useCanDo } from "@/modules/identity";
 import { useFeaturePermission } from "@/modules/identity";
 import {
@@ -276,6 +277,8 @@ function LeadsInner() {
   // A aba Clientes saiu de `/leads` (CTO 2026-10-16): `"cliente"` vindo de
   // estado persistido ou visão salva vira redirect para `/carteira`.
   const redirecionarParaCarteira = useRedirecionaAbaClientes(filterClassificacao, filterState, setFilterState);
+  // Hotfix Café Jurerê: título "Ficha do Parceiro" só com a flag da org.
+  const leadsLabel = useLeadsLabel();
   const setFilterClassificacao = (v: string) =>
     setFilterState((f) => ({ ...f, filterClassificacao: v }));
   // De onde vem a verdade sobre "é cliente?" nesta org: cadastro no ERP, para
@@ -769,7 +772,7 @@ function LeadsInner() {
   return (
     <div className="space-y-5">
       <PageHeader
-        title="Leads"
+        title={leadsLabel}
         subtitle="Da primeira conversa à próxima compra."
         secondaryActions={[
           { label: "Importações", icon: History, onSelect: () => setIsImportHistoryOpen(true) },

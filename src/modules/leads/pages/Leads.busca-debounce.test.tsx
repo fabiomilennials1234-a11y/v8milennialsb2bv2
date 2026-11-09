@@ -26,6 +26,7 @@ vi.mock("@/modules/identity", () => ({
   useCurrentTeamMember: () => ({ data: { id: "tm-1" }, isLoading: false, isFetching: false }),
   useResponsibleMembers: () => [],
 }));
+vi.mock("@/modules/platform/hooks/useLeadsLabel", () => ({ useLeadsLabel: () => "Leads" }));
 vi.mock("@/lib/analytics", () => ({ trackModuleVisit: vi.fn() }));
 vi.mock("@/shared/errors", () => ({ notifyError: vi.fn() }));
 vi.mock("@/shared/hooks/use-viewport", () => ({ useViewport: () => ({ isMobile: false }) }));
