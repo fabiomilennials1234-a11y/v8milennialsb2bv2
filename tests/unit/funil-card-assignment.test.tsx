@@ -9,6 +9,10 @@ vi.mock("@/modules/pipelines/components/kanban/DraggableKanbanBoard", () => ({
 }));
 vi.mock("@/modules/leads", () => ({ LeadCard: ({ lead }: { lead: LeadCardData }) => <output data-testid="card">{JSON.stringify(lead)}</output>, CardEffectsHost: () => null, useEntradasEmDesfecho: () => new Set() }));
 vi.mock("@/modules/identity", () => ({ useCanDo: () => ({ allowed: true }) }));
+// Estes cenários usam o resumo padrão, sem a flag de total filtrado por org.
+vi.mock("@/modules/platform/hooks/useFeatureFlag", () => ({
+  useFeatureFlag: () => ({ enabled: false, isLoading: false }),
+}));
 // Pilha de Ganhos/Perdidos (Chamado 172ef046): sem resumo, modo parcial.
 vi.mock("@/modules/pipelines/hooks/model/useFunilDesfechoPorMes", () => ({ useFunilDesfechoPorMes: () => ({ porEtapa: null, isLoading: false, isError: false }) }));
 vi.mock("@/modules/workflows/hooks/useStageWorkflows", () => ({ useCustomPipeWorkflowCounts: () => ({ data: {} }), useCustomPipeStageWorkflows: () => ({ data: [] }) }));
