@@ -35,6 +35,7 @@ import {
 } from "@/modules/platform/lib/navigation-model";
 import { SETTINGS_BASE_PATH } from "@/modules/platform/lib/settings-tabs";
 import { useFeatureFlag } from "@/modules/platform/hooks/useFeatureFlag";
+import { useLeadsLabel } from "@/modules/platform/hooks/useLeadsLabel";
 import {
   filterByGate,
   filterByMaster,
@@ -81,6 +82,8 @@ export function useNavigationModel(): NavigationModel {
   const { enabled: cobranca } = useFeatureFlag("cobranca");
   // Piloto da Lista fria (ADR-0042): mesma regra, fail-closed.
   const { enabled: listaFria } = useFeatureFlag("lista_fria");
+  // Hotfix Café Jurerê: "Leads" vira "Ficha do Parceiro" só com a flag da org.
+  const leadsLabel = useLeadsLabel();
 
   const canViewRoute = useMemo(
     () => makeCanViewRoute({ isMaster, isAdmin, featurePerms }),
@@ -135,9 +138,11 @@ export function useNavigationModel(): NavigationModel {
 
   const primary = useMemo(() => {
     // Cópia: a constante do módulo nunca é escrita.
-    const withChildren = SIDEBAR_PRIMARY.map((item) =>
-      item.path === "/funis" ? { ...item, children: funisChildren } : { ...item },
-    );
+    const withChildren = SIDEBAR_PRIMARY.map((item) => {
+      if (item.path === "/funis") return { ...item, children: funisChildren };
+      if (item.path === "/leads") return { ...item, label: leadsLabel };
+      return { ...item };
+    });
     const filtered = filterByPermission(
       filterByGate(
         filterByMaster(filterByOutbound(withChildren, isOutboundMember), isMaster),
@@ -148,6 +153,7 @@ export function useNavigationModel(): NavigationModel {
     return pruneChildren(filtered, canViewRoute);
   }, [
     funisChildren,
+    leadsLabel,
     isOutboundMember,
     isMaster,
     metaPagesConnected,
