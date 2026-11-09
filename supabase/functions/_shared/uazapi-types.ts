@@ -47,8 +47,11 @@ export type UazapiSendTextInput = {
   readchat?: boolean;
   /** Mark message as read */
   readmessages?: boolean;
-  /** JIDs to mention */
-  mentions?: string[];
+  /**
+   * Números a mencionar, separados por vírgula (só em grupo), ou `all`.
+   * STRING no contrato uazapiGO — não array. Ver `_shared/group-mentions.ts`.
+   */
+  mentions?: string;
   forward?: boolean;
   viewOnce?: boolean;
   /** Source tag in our system (e.g. "copilot-agent-xxx") */
@@ -82,6 +85,8 @@ export type UazapiSendMediaInput = {
   delay?: number;
   replyid?: string;
   readchat?: boolean;
+  /** Mesmo contrato do `/send/text`: números separados por vírgula, ou `all`. */
+  mentions?: string;
   /** Marca a mensagem como encaminhada no WhatsApp. */
   forward?: boolean;
   track_source?: string;

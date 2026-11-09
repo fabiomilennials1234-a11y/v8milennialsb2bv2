@@ -39,12 +39,16 @@ export type MessageSegment =
   /** `raw` é o token como veio (`@59738817577139`); `name`, quando conhecido. */
   | { kind: "mention"; jid: string; raw: string; name: string | null };
 
-/** Teto defensivo: um payload com lista gigante não vira regex gigante. */
-const MAX_MENTIONS = 50;
+/**
+ * Teto de menções por mensagem — leitura (payload gigante não vira regex
+ * gigante) e envio (`groupMentionComposer.ts`; o servidor repete o teto em
+ * `_shared/group-mentions.ts`).
+ */
+export const MAX_MENTIONS = 50;
 const MENTION_JID = /^(\d{5,20})@(?:lid|s\.whatsapp\.net)$/;
 const SENDER_LID = /^\d{5,20}@lid$/;
 /** O que não pode vir colado antes do `@`: letra, número ou `_` (e-mail, `a@1`). */
-const WORD_CHAR = /[\p{L}\p{N}_]/u;
+export const WORD_CHAR = /[\p{L}\p{N}_]/u;
 
 const object = (v: unknown): Record<string, unknown> =>
   v && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, unknown>) : {};

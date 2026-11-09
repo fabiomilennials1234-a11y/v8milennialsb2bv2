@@ -14,6 +14,7 @@ import { assertLegacyWebhookWriteAllowed } from "../uazapi-ingress-write-guard.t
 import { configureUazapiWebhook, normalizeWebhook } from "../uazapi-webhook-policy.ts";
 import { normalizeUazapiMessageResult } from "../uazapi-message-result.ts";
 import { UazapiClient } from "../uazapi-client.ts";
+import { normalizeGroupParticipants, type GroupParticipant } from "../group-mentions.ts";
 import { extractOwnerNumber } from "../whatsapp-owner.ts";
 import { deriveDeviceName } from "../whatsapp-device-name.ts";
 import {
@@ -273,6 +274,7 @@ export class UazapiProvider implements WhatsAppProvider {
       replyid: opts.replyid,
       readchat: opts.readchat,
       ...(opts.forward ? { forward: true } : {}),
+      ...(opts.mentions?.length ? { mentions: opts.mentions.join(",") } : {}),
       track_source: opts.trackSource,
       track_id: opts.trackId,
     });
@@ -307,6 +309,7 @@ export class UazapiProvider implements WhatsAppProvider {
       caption: opts.caption,
       delay: opts.delay,
       ...(opts.forward ? { forward: true } : {}),
+      ...(opts.mentions?.length ? { mentions: opts.mentions.join(",") } : {}),
       track_source: opts.trackSource,
       track_id: opts.trackId,
     });
@@ -492,6 +495,10 @@ export class UazapiProvider implements WhatsAppProvider {
 
   async listChats(type: "all" | "individual" | "group" = "all"): Promise<Array<{ id: string; name?: string; isGroup?: boolean; lastMessageTimestamp?: number }>> {
     return this.client.listChats(type);
+  }
+
+  async getGroupParticipants(groupjid: string): Promise<GroupParticipant[]> {
+    return normalizeGroupParticipants(await this.client.groupInfo(groupjid));
   }
 
   async historySync(opts: {
