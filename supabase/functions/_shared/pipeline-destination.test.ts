@@ -113,21 +113,21 @@ Deno.test("org antiga: preferido 'confirmacao' vale como sempre — etapa litera
   assertEquals(dest, { ref: "confirmacao", stageKey: "reuniao_marcada", usedDefaultPipeline: false });
 });
 
-Deno.test("org nova (sem trio): reunião cai no funil padrão pela etapa de PAPEL meeting_booked", async () => {
+Deno.test("destino ausente: não encaminha reunião para o antigo padrão", async () => {
   __clearPipelineResolutionCache();
   const supa = fakeSupa(ORG_NOVA);
   const dest = await resolveMeetingDestination(supa, ORG, { ref: "confirmacao", stageKey: "reuniao_marcada" });
-  assertEquals(dest, { ref: VENDAS, stageKey: "reuniao_marcada", usedDefaultPipeline: true });
+  assertEquals(dest, null);
 });
 
-Deno.test("funil padrão SEM papel de reunião: 1ª etapa ativa (comportamento definido, não silêncio)", async () => {
+Deno.test("destino ausente: não escolhe a primeira etapa do antigo padrão", async () => {
   __clearPipelineResolutionCache();
   const supa = fakeSupa({
     ...ORG_NOVA,
     stages: ORG_NOVA.stages.filter((s) => s.stage_role !== "meeting_booked"),
   });
   const dest = await resolveMeetingDestination(supa, ORG, { ref: "confirmacao", stageKey: "reuniao_marcada" });
-  assertEquals(dest, { ref: VENDAS, stageKey: "novo", usedDefaultPipeline: true });
+  assertEquals(dest, null);
 });
 
 Deno.test("org sem funil padrão e sem o preferido → null (lead sem card, decisão do chamador)", async () => {
@@ -137,11 +137,11 @@ Deno.test("org sem funil padrão e sem o preferido → null (lead sem card, deci
   assertEquals(await resolveLeadDestination(supa, ORG, { ref: "whatsapp" }), null);
 });
 
-Deno.test("lead comum em org nova: funil padrão + 1ª etapa ativa", async () => {
+Deno.test("lead comum: antigo padrão não substitui destino ausente", async () => {
   __clearPipelineResolutionCache();
   const supa = fakeSupa(ORG_NOVA);
   const dest = await resolveLeadDestination(supa, ORG, { ref: "whatsapp" });
-  assertEquals(dest, { ref: VENDAS, stageKey: "novo", usedDefaultPipeline: true });
+  assertEquals(dest, null);
 });
 
 Deno.test("lead comum em org antiga com 'whatsapp': preferido vale, 1ª etapa ativa do próprio funil", async () => {
@@ -158,4 +158,15 @@ Deno.test("lead comum em org antiga com 'whatsapp': preferido vale, 1ª etapa at
   });
   const dest = await resolveLeadDestination(supa, ORG, { ref: "whatsapp" });
   assertEquals(dest, { ref: "whatsapp", stageKey: "novo", usedDefaultPipeline: false });
+});
+
+Deno.test("destino explícito continua válido mesmo sendo o antigo padrão", async () => {
+  __clearPipelineResolutionCache();
+  const dest = await resolveLeadDestination(fakeSupa(ORG_NOVA), ORG, { ref: VENDAS });
+  assertEquals(dest, { ref: VENDAS, stageKey: "novo", usedDefaultPipeline: false });
+});
+Deno.test("sem destino informado não escolhe nenhum funil", async () => {
+  __clearPipelineResolutionCache();
+  assertEquals(await resolveLeadDestination(fakeSupa(ORG_NOVA), ORG), null);
+  assertEquals(await resolveMeetingDestination(fakeSupa(ORG_NOVA), ORG), null);
 });

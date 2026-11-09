@@ -123,41 +123,16 @@ Deno.test("moveLeadStage — calls injected mover with mapped params, 200 on suc
   assertEquals(moverArg!.params.target_stage, "compareceu");
 });
 
-Deno.test("SCRUM-641: moveLeadStage sem `pipe` cai no funil PADRÃO da org, não mais no literal whatsapp", async () => {
+Deno.test("moveLeadStage exige pipe explícito e não move quando está ausente", async () => {
   const c = ctx("POST", "https://x/api/v1/leads/l-1/stage", { stage: "novo" }, { data: true });
-  // O default lê organizations.default_pipeline_id — dá um .from ao fake.
-  (c.supabase as Record<string, unknown>).from = (_t: string) => {
-    const b: Record<string, unknown> = {};
-    b.select = () => b;
-    b.eq = () => b;
-    b.maybeSingle = () => Promise.resolve({ data: { default_pipeline_id: "11111111-1111-4111-8111-111111111111" }, error: null });
-    return b;
-  };
-  let moverArg: ActionInput | null = null;
-  const res = await moveLeadStage(c, (input) => {
-    moverArg = input;
+  let called = false;
+  const res = await moveLeadStage(c, () => {
+    called = true;
     return Promise.resolve({ success: true });
   });
-  assertEquals(res.status, 200);
-  assertEquals(moverArg!.params.target_pipe, "11111111-1111-4111-8111-111111111111");
-});
-
-Deno.test("SCRUM-641: moveLeadStage sem `pipe` e org SEM funil padrão preserva o literal legado (erra tipado adiante)", async () => {
-  const c = ctx("POST", "https://x/api/v1/leads/l-1/stage", { stage: "novo" }, { data: true });
-  (c.supabase as Record<string, unknown>).from = (_t: string) => {
-    const b: Record<string, unknown> = {};
-    b.select = () => b;
-    b.eq = () => b;
-    b.maybeSingle = () => Promise.resolve({ data: { default_pipeline_id: null }, error: null });
-    return b;
-  };
-  let moverArg: ActionInput | null = null;
-  const res = await moveLeadStage(c, (input) => {
-    moverArg = input;
-    return Promise.resolve({ success: true });
-  });
-  assertEquals(res.status, 200);
-  assertEquals(moverArg!.params.target_pipe, "whatsapp");
+  assertEquals(res.status, 400);
+  assertEquals((await res.json()).error.code, "missing_pipe");
+  assertEquals(called, false);
 });
 
 Deno.test("moveLeadStage — 422 when mover fails (invalid stage)", async () => {

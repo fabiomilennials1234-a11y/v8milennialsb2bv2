@@ -110,10 +110,8 @@ export function Sidebar() {
     [model],
   );
 
-  // Funis no trilho volta ao ÚLTIMO funil que o usuário abriu (o hub virou a aba
-  // "Todos os funis" dentro da página). Sem histórico válido: o padrão da org;
-  // sem padrão, o hub.
-  const funilPadrao = useFunilEntryPath(model.primary).path;
+  // Retoma apenas a escolha anterior deste usuário; sem histórico, abre a lista.
+  const funilEntryPath = useFunilEntryPath(model.primary).path;
 
   const principais = model.primary.filter((item) => item.path !== "/turbo");
   const turbo = model.primary.find((item) => item.path === "/turbo")?.children ?? [];
@@ -162,7 +160,7 @@ export function Sidebar() {
 
         <nav aria-label="Telas" className="flex flex-col items-center gap-1.5">
           {principais.map((item) =>
-            item.path === "/funis" ? renderItem(item, { path: funilPadrao }) : renderItem(item),
+            item.path === "/funis" ? renderItem(item, { path: funilEntryPath }) : renderItem(item),
           )}
 
           {turbo.length > 0 && <Separador />}

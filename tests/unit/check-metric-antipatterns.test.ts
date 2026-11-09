@@ -121,6 +121,21 @@ WHERE COALESCE(pp.closed_at, pp.updated_at) >= p_start;`,
     expect(result.output).toMatch(/R4/);
   });
 
+  it("accepts optimistic version checks and the reviewed geocode debounce", () => {
+    writeFileSync(join(migDir, "20271227000000_app_representantes_enderecos.sql"),
+      "IF p_expected_updated_at IS NOT NULL AND v_cur.updated_at <> p_expected_updated_at THEN\nAND a.updated_at < now() - p_debounce\n");
+    expect(runLint(migDir).code).toBe(0);
+  });
+
+  it("still rejects metric boundaries in the same migration and debounce elsewhere", () => {
+    writeFileSync(join(migDir, "20271227000000_app_representantes_enderecos.sql"),
+      "AND a.updated_at < now() - p_debounce\nAND a.updated_at >= p_start\n");
+    expect(runLint(migDir).code).toBe(1);
+    writeFileSync(join(migDir, "20271227000000_app_representantes_enderecos.sql"), "SELECT 1;");
+    writeFileSync(join(migDir, "20271227000001_other.sql"), "AND a.updated_at < now() - p_debounce\n");
+    expect(runLint(migDir).code).toBe(1);
+  });
+
   it("não flaga updated_at em trigger de manutenção (SET updated_at = now())", () => {
     writeFileSync(
       join(migDir, "20270301000005_touch_trigger.sql"),

@@ -68,22 +68,22 @@ describe("funilEntryPath", () => {
   const slugs = ["whatsapp", "vendas-b", "pos-venda"];
 
   it("volta ao último funil, o caso do bug (estava no B, foi ao chat)", () => {
-    expect(funilEntryPath({ lastSlug: "vendas-b", availableSlugs: slugs, defaultPipelineId: "uuid-a" })).toBe("/funil/vendas-b");
+    expect(funilEntryPath({ lastSlug: "vendas-b", availableSlugs: slugs })).toBe("/funil/vendas-b");
   });
 
-  it("último funil apagado, inativo ou sem acesso: cai no padrão da org", () => {
-    expect(funilEntryPath({ lastSlug: "sumiu", availableSlugs: slugs, defaultPipelineId: "uuid-a" })).toBe("/funil/uuid-a");
+  it("último funil apagado, inativo ou sem acesso: abre a lista", () => {
+    expect(funilEntryPath({ lastSlug: "sumiu", availableSlugs: slugs })).toBe("/funis");
   });
 
-  it("nunca visitou: padrão da org", () => {
-    expect(funilEntryPath({ lastSlug: null, availableSlugs: slugs, defaultPipelineId: "uuid-a" })).toBe("/funil/uuid-a");
+  it("nunca visitou: lista de funis", () => {
+    expect(funilEntryPath({ lastSlug: null, availableSlugs: slugs })).toBe("/funis");
   });
 
   it("sem último e sem padrão: hub", () => {
-    expect(funilEntryPath({ lastSlug: null, availableSlugs: slugs, defaultPipelineId: null })).toBe("/funis");
+    expect(funilEntryPath({ lastSlug: null, availableSlugs: slugs })).toBe("/funis");
   });
 
   it("lista de funis ainda carregando: não confia no último, mantém o comportamento de antes", () => {
-    expect(funilEntryPath({ lastSlug: "vendas-b", availableSlugs: [], defaultPipelineId: "uuid-a" })).toBe("/funil/uuid-a");
+    expect(funilEntryPath({ lastSlug: "vendas-b", availableSlugs: [] })).toBe("/funis");
   });
 });

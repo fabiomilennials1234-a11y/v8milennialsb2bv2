@@ -55,9 +55,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useTags, useCreateTag, useUpdateTag, useDeleteTag, Tag as TagType } from "@/modules/leads/hooks/useTags";
-import { useFunisDaOrg } from "@/modules/pipelines";
 import { useIdentity } from "@/modules/identity";
 import { useOrganizationSettings } from "@/modules/identity";
 import { useOrganization } from "@/modules/identity";
@@ -422,70 +420,6 @@ function ConfirmacaoOverdueSettings() {
   );
 }
 
-/**
- * Funil padrão da org (SCRUM-624, ADR-0034 D4) — o fallback único das portas de
- * entrada sem destino declarado (ex.: lead-webhook sem `place_in_pipe`).
- * "Sem funil padrão" é estado válido: o lead entra na lista de Leads sem card.
- * A deleção do funil apontado é recusada pelo banco (trigger) até o admin
- * escolher um substituto aqui.
- */
-function DefaultPipelineSettings() {
-  const { settings, isAdmin, updateSettings, isUpdating, isLoading: settingsLoading } = useOrganizationSettings();
-  // Nome que a ORG usa — ver `useFunisDaOrg`.
-  const { data: pipelines = [], isLoading: pipelinesLoading } = useFunisDaOrg();
-
-  const NONE = "__none__";
-  const current = settings.default_pipeline_id ?? NONE;
-  const loading = settingsLoading || pipelinesLoading;
-
-  const handleChange = async (value: string) => {
-    const next = value === NONE ? null : value;
-    if (next === settings.default_pipeline_id) return;
-    try {
-      await updateSettings({ default_pipeline_id: next });
-      toast.success(next ? "Funil padrão atualizado!" : "Funil padrão removido");
-    } catch (caught) {
-      notifyError(caught, { fallback: "Não foi possível salvar o funil padrão." });
-    }
-  };
-
-  return (
-    <div className="space-y-4">
-      <div>
-        <h3 className="text-lg font-medium">Funil padrão</h3>
-        <p className="text-sm text-muted-foreground">
-          Onde entra um lead que chega por integração sem funil de destino declarado
-        </p>
-      </div>
-      <div className="grid gap-2 max-w-sm">
-        <Label htmlFor="default-pipeline">Funil de entrada</Label>
-        <Select
-          value={loading ? undefined : current}
-          onValueChange={handleChange}
-          disabled={!isAdmin || isUpdating || loading}
-        >
-          <SelectTrigger id="default-pipeline">
-            <SelectValue placeholder={loading ? "Carregando…" : "Escolha um funil"} />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value={NONE}>Sem funil padrão</SelectItem>
-            {pipelines.map((p) => (
-              <SelectItem key={p.id} value={p.id}>
-                {p.label}
-                {p.is_active === false ? " (inativo)" : ""}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
-      <p className="text-xs text-muted-foreground">
-        Leads de webhooks e integrações que não declaram destino caem na primeira etapa ativa
-        deste funil. Sem funil padrão, o lead é criado apenas na lista de Leads, sem card.
-      </p>
-    </div>
-  );
-}
-
 function ReorderCycleSettings() {
   const { settings, isAdmin, updateSettings, isUpdating } = useOrganizationSettings();
   const [localDays, setLocalDays] = useState(settings.default_reorder_cycle_days);
@@ -614,10 +548,6 @@ function GeneralSettings() {
         </div>
 
         <InterfaceDaOrgSetting />
-      </div>
-
-      <div className="pt-6 border-t border-border">
-        <DefaultPipelineSettings />
       </div>
 
       <div className="pt-6 border-t border-border">

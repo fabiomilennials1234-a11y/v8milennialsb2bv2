@@ -60,15 +60,14 @@ export function writeLastFunnel(storage: KeyValueStorage, key: string | null, sl
 
 /**
  * Para onde o item "Funil" aponta: o último funil se ele ainda existe para este
- * usuário; senão o padrão da org; senão o hub.
+ * usuário; senão o hub.
  */
 export function funilEntryPath(args: {
   lastSlug: string | null;
   /** Slugs dos funis visíveis na lateral. Vazio = ainda carregando. */
   availableSlugs: readonly string[];
-  defaultPipelineId: string | null | undefined;
 }): string {
-  const { lastSlug, availableSlugs, defaultPipelineId } = args;
+  const { lastSlug, availableSlugs } = args;
   if (lastSlug && availableSlugs.includes(lastSlug)) return `/funil/${lastSlug}`;
-  return defaultPipelineId ? `/funil/${defaultPipelineId}` : "/funis";
+  return "/funis";
 }

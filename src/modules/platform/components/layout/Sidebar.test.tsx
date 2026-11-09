@@ -16,7 +16,7 @@ import { Sidebar } from "./Sidebar";
  * O que este arquivo trava:
  * - toda porta tem nome acessível (ícone sem nome é adivinhação);
  * - o grupo "Turbo" virou duas portas diretas, sem clique intermediário;
- * - Funis leva ao funil padrão da org (o hub virou aba dentro da página);
+ * - Funis abre a lista mesmo com uma designação antiga (o hub virou aba dentro da página);
  * - Agenda e Pitstop navegam para páginas — não abrem mais painel;
  * - item trancado por plano abre o upgrade em vez de navegar;
  * - o escudo do Master só existe para master.
@@ -141,12 +141,12 @@ describe("Sidebar — trilho de ícones", () => {
     expect(screen.getByTestId("onde")).toHaveTextContent("/copilot");
   });
 
-  it("Funis leva ao funil padrão da org", async () => {
+  it("Funis abre a lista mesmo com uma designação antiga", async () => {
     const user = userEvent.setup();
     settingsRef.current = { default_pipeline_id: "f-123" };
     renderSidebar();
     await user.click(screen.getByRole("link", { name: "Funis" }));
-    expect(screen.getByTestId("onde")).toHaveTextContent("/funil/f-123");
+    expect(screen.getByTestId("onde")).toHaveTextContent("/funis");
   });
 
   it("Funis volta ao ÚLTIMO funil aberto, não ao padrão (estava no B, foi ao chat)", async () => {
@@ -158,13 +158,13 @@ describe("Sidebar — trilho de ícones", () => {
     expect(screen.getByTestId("onde")).toHaveTextContent("/funil/vendas");
   });
 
-  it("último funil que não aparece mais na lateral (apagado, inativo) cai no padrão", async () => {
+  it("último funil que não aparece mais na lateral (apagado, inativo) abre a lista", async () => {
     const user = userEvent.setup();
     settingsRef.current = { default_pipeline_id: "f-123" };
     window.localStorage.setItem("v8:ui:last-funil:org-1:user-1", "apagado");
     renderSidebar();
     await user.click(screen.getByRole("link", { name: "Funis" }));
-    expect(screen.getByTestId("onde")).toHaveTextContent("/funil/f-123");
+    expect(screen.getByTestId("onde")).toHaveTextContent("/funis");
   });
 
   it("o último funil de OUTRA org ou OUTRO usuário não vaza", async () => {
@@ -174,7 +174,7 @@ describe("Sidebar — trilho de ícones", () => {
     window.localStorage.setItem("v8:ui:last-funil:org-1:user-2", "vendas");
     renderSidebar();
     await user.click(screen.getByRole("link", { name: "Funis" }));
-    expect(screen.getByTestId("onde")).toHaveTextContent("/funil/f-123");
+    expect(screen.getByTestId("onde")).toHaveTextContent("/funis");
   });
 
   it("sem funil padrão, Funis cai no hub", async () => {

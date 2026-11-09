@@ -82,22 +82,22 @@ describe("useAnalyticsPipelineOptions", () => {
     expect(result.current.options[2]).toEqual({ id: "id-cus", name: "Carteira Sul", slug: "carteira-sul" });
   });
 
-  it("orgDefault = funil padrão da org (SCRUM-624) quando ativo", () => {
+  it("seleção inicial segue a lista, sem designação de padrão", () => {
     const { result } = renderHook(() => useAnalyticsPipelineOptions(), {
       wrapper: createWrapper(),
     });
     expect(result.current.orgDefault).toBe("id-whats");
   });
 
-  it("orgDefault cai para o primeiro funil quando o padrão da org não existe/está inativo", () => {
-    mockSettings.mockReturnValue({ default_pipeline_id: "id-off" });
+  it("designação legada de outro funil não muda a seleção inicial", () => {
+    mockSettings.mockReturnValue({ default_pipeline_id: "id-cus" });
     const { result } = renderHook(() => useAnalyticsPipelineOptions(), {
       wrapper: createWrapper(),
     });
     expect(result.current.orgDefault).toBe("id-whats");
   });
 
-  it("closingDefault respeita o funil padrão escolhido pela organização", () => {
+  it("seleção de fechamento também segue a lista", () => {
     const { result } = renderHook(() => useAnalyticsPipelineOptions(), {
       wrapper: createWrapper(),
     });

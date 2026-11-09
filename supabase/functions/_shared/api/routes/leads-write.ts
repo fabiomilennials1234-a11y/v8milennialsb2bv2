@@ -16,7 +16,6 @@
 import type { ApiRouteContext } from "../router.ts";
 import { apiError, apiResource } from "../responses.ts";
 import { moveStage } from "../../action-handlers/move-stage.ts";
-import { getOrgDefaultPipelineRef } from "../../pipeline-destination.ts";
 import type { ActionInput, ActionResult } from "../../action-handlers/types.ts";
 
 interface RpcClient {
@@ -138,13 +137,10 @@ export async function moveLeadStage(
   if (body === INVALID || !isPlainObject(body)) {
     return apiError(400, "invalid_body", "Corpo deve ser um objeto JSON", ctx.cors);
   }
-  // SCRUM-641: `pipe` omitido cai no funil PADRÃO da org (D4), não mais no
-  // literal 'whatsapp'. Para as orgs antigas é o mesmo funil (106/108 têm o
-  // default apontando o whatsapp semeado); org sem funil padrão mantém o
-  // literal legado — que, sem o funil, vira o erro tipado do adapter (D6).
-  const pipe = typeof body.pipe === "string" && body.pipe
-    ? body.pipe
-    : (await getOrgDefaultPipelineRef(ctx.supabase as never, ctx.organizationId)) ?? "whatsapp";
+  const pipe = body.pipe;
+  if (typeof pipe !== "string" || !pipe.trim()) {
+    return apiError(400, "missing_pipe", "Campo 'pipe' é obrigatório", ctx.cors);
+  }
   const stage = body.stage;
   if (typeof stage !== "string" || !stage) {
     return apiError(400, "missing_stage", "Campo 'stage' é obrigatório", ctx.cors);

@@ -2,11 +2,11 @@ import { isPipelineVisible, selectVisiblePipelines } from "../lib/pipeline-navig
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useTemporaryFunnels } from "@/modules/pipelines/hooks/custom/useCustomPipelines";
-import { useOrganization, useOrganizationSettings } from "@/modules/identity";
+import { useOrganization } from "@/modules/identity";
 import { trackModuleVisit } from "@/lib/analytics";
 import { cn } from "@/lib/utils";
-import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/ui/page-header";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -15,13 +15,8 @@ import {
   Kanban,
   ChevronDown,
   ArrowRight,
-  LayoutGrid,
-  List,
-  BarChart3,
-  Layers,
   Timer,
 } from "lucide-react";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { CreateFunilOuCampanhaModal } from "@/modules/pipelines/components/funis/CreateFunilOuCampanhaModal";
 import { FunnelActionsMenu } from "@/modules/pipelines/components/funis/FunnelActionsMenu";
 import { usePipelines, type Pipeline } from "@/modules/pipelines/hooks/model/usePipelines";
@@ -57,13 +52,6 @@ interface FunilCard {
   pipeline?: Pipeline;
 }
 
-/** Valor da aba "Todos os funis" — a deste hub. */
-const HUB_TAB = "todos-os-funis";
-const HUB_VIEWS = [
-  { value: "kanban", label: "Kanban", icon: LayoutGrid },
-  { value: "list", label: "Lista", icon: List },
-  { value: "analytics", label: "Analytics", icon: BarChart3 },
-] as const;
 
 /** Texto/ícone sobre o ladrilho preenchido: escuro em cor clara (ouro), branco no resto. */
 function tileText(hex: string): string {
@@ -88,7 +76,6 @@ export default function FunisHub() {
   // Registro único → cor/ícone reais de qualquer funil.
   const pipeById = new Map(pipelines.map((p) => [p.id, p] as const));
   const temporaryById = new Map(temporaryFunnels.map((p) => [p.id, p] as const));
-  const { settings } = useOrganizationSettings();
   const [createOpen, setCreateOpen] = useState(false);
   const [showEnded, setShowEnded] = useState(false);
 
@@ -140,11 +127,6 @@ export default function FunisHub() {
       };
     });
 
-  // A pílula do funil vive aqui também (V5): "Todos os funis" é a 5ª aba. As
-  // outras abrem o funil padrão da org já na visão escolhida.
-  const defaultPath = settings?.default_pipeline_id
-    ? `/funil/${settings.default_pipeline_id}`
-    : allFunnels[0]?.path ?? null;
 
   return (
     <div className="space-y-5">
@@ -156,37 +138,6 @@ export default function FunisHub() {
             <Plus />
             Criar
           </Button>
-        }
-        tabs={
-          // `min-w-0 max-w-full` na raiz: sem eles ela não encolhe no slot da
-          // barra, a pílula vaza da tela em vez de rolar e "Todos os funis" (a
-          // ativa) fica cortada na borda — a pílula só traz a ativa para dentro
-          // quando ela mesma rola.
-          <Tabs
-            value={HUB_TAB}
-            onValueChange={(v) => {
-              if (v !== HUB_TAB && defaultPath) navigate(defaultPath, { state: { view: v } });
-            }}
-            className="min-w-0 max-w-full"
-          >
-            <TabsList variant="pill" aria-label="Visão do funil">
-              {HUB_VIEWS.map(({ value, label, icon: Icon }) => (
-                <TabsTrigger key={value} value={value} disabled={!defaultPath}>
-                  <Icon className="size-4" aria-hidden />
-                  {label}
-                </TabsTrigger>
-              ))}
-              <TabsTrigger value={HUB_TAB}>
-                <Layers className="size-4" aria-hidden />
-                Todos os funis
-                {allFunnels.length > 0 && (
-                  <span className="rounded-full bg-primary-foreground px-1.5 py-px text-[10px] font-extrabold tabular-nums text-primary">
-                    {allFunnels.length}
-                  </span>
-                )}
-              </TabsTrigger>
-            </TabsList>
-          </Tabs>
         }
       />
 
@@ -208,7 +159,6 @@ export default function FunisHub() {
           {(allFunnels.length > 0 || endedTemporary.length > 0) && (
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
               {allFunnels.map((funil) => {
-                const isDefault = settings?.default_pipeline_id === funil.key;
                 const TileIcon = funil.temporary ? Timer : funil.icon;
                 const apoio = funil.temporary
                   ? funil.temporary.endsAt
@@ -246,11 +196,6 @@ export default function FunisHub() {
                           <span className="truncate text-[14.5px] font-bold leading-snug tracking-[-0.01em]" title={funil.name}>
                             {funil.name}
                           </span>
-                          {isDefault && (
-                            <Badge variant="gold" className="shrink-0 px-2 py-0 text-[10px] uppercase tracking-[.04em]">
-                              Padrão
-                            </Badge>
-                          )}
                         </span>
                         {apoio && <span className="mt-0.5 line-clamp-1 text-[12px] text-muted-foreground">{apoio}</span>}
                         {(funil.temporary || funil.meta) && (

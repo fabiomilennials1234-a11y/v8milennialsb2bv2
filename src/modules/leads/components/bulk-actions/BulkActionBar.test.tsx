@@ -109,6 +109,8 @@ describe("BulkActionBar — paridade por pipeline_id (SCRUM-633)", () => {
     renderBar(new Set(["l-1"]), { pipelineId: "pipe-cus-1", entryIds: ["entry-1"] });
     fireEvent.click(screen.getByRole("button", { name: /^mover$/i }));
     const dialog = await screen.findByRole("dialog");
+    fireEvent.keyDown(within(dialog).getAllByRole("combobox")[0], { key: "ArrowDown" });
+    fireEvent.click(await screen.findByRole("option", { name: "Qualificação" }));
     fireEvent.keyDown(within(dialog).getAllByRole("combobox")[1], { key: "ArrowDown" });
     fireEvent.click(await screen.findByRole("option", { name: "Novo" }));
     fireEvent.click(within(dialog).getByRole("button", { name: /^mover$/i }));
@@ -118,7 +120,7 @@ describe("BulkActionBar — paridade por pipeline_id (SCRUM-633)", () => {
     }));
   });
 
-  it("Mover abre o diálogo unificado: etapas resolvidas pelo ID do funil default (nada de PipelineType nem sentinela custom:)", async () => {
+  it("Mover exige a escolha explícita de um funil", async () => {
     renderBar();
     fireEvent.click(screen.getByRole("button", { name: /adicionar ao funil/i }));
 
@@ -126,7 +128,7 @@ describe("BulkActionBar — paridade por pipeline_id (SCRUM-633)", () => {
     // O hack `(isCustom ? "whatsapp" : pipe)` morreu: o dropdown de etapas é
     // alimentado por useFunnelStages(pipeline.id) — default = 1º funil de
     // SISTEMA ativo (paridade com o antigo default "whatsapp").
-    expect(useFunnelStages).toHaveBeenCalledWith("pipe-sys-1");
+    expect(useFunnelStages).not.toHaveBeenCalledWith("pipe-sys-1");
     // Funil inativo não entra na conta do default.
     expect(useFunnelStages).not.toHaveBeenCalledWith("pipe-sys-off");
   });
@@ -151,6 +153,8 @@ describe("BulkActionBar — mover em massa para etapa de perda pede UM motivo", 
   async function moverPara(etapa: string) {
     fireEvent.click(screen.getByRole("button", { name: /^mover$/i }));
     const dialog = await screen.findByRole("dialog");
+    fireEvent.keyDown(within(dialog).getAllByRole("combobox")[0], { key: "ArrowDown" });
+    fireEvent.click(await screen.findByRole("option", { name: "Qualificação" }));
     fireEvent.keyDown(within(dialog).getAllByRole("combobox")[1], { key: "ArrowDown" });
     fireEvent.click(await screen.findByRole("option", { name: etapa }));
     fireEvent.click(within(dialog).getByRole("button", { name: /^mover$/i }));
@@ -189,6 +193,8 @@ describe("BulkActionBar — mover em massa para etapa de perda pede UM motivo", 
     renderBar();
     fireEvent.click(screen.getByRole("button", { name: /adicionar ao funil/i }));
     const dialog = await screen.findByRole("dialog");
+    fireEvent.keyDown(within(dialog).getAllByRole("combobox")[0], { key: "ArrowDown" });
+    fireEvent.click(await screen.findByRole("option", { name: "Qualificação" }));
     fireEvent.keyDown(within(dialog).getAllByRole("combobox")[1], { key: "ArrowDown" });
     expect(await screen.findByRole("option", { name: "Perdido/Desqualificado" })).toHaveAttribute("data-disabled");
     expect(screen.getByRole("option", { name: "Novo" })).not.toHaveAttribute("data-disabled");

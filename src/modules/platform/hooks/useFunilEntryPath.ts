@@ -2,11 +2,11 @@
  * Para onde o item "Funil" da navegação aponta.
  *
  * O último funil que o usuário abriu (memória em `@/lib/last-funnel`), se ele
- * ainda aparece na lateral; senão o funil padrão da org; senão o hub.
+ * ainda aparece na lateral; senão o hub.
  */
 
 import { useCallback, useSyncExternalStore } from "react";
-import { useAuth, useOrganization, useOrganizationSettings } from "@/modules/identity";
+import { useAuth, useOrganization } from "@/modules/identity";
 import {
   LAST_FUNNEL_EVENT,
   browserStorage,
@@ -30,14 +30,13 @@ function subscribe(onChange: () => void): () => void {
 
 export interface FunilEntry {
   path: string;
-  /** `true` quando `path` é o último funil do usuário (e não o padrão/hub). */
+  /** `true` quando `path` é o último funil do usuário (e não o hub). */
   restored: boolean;
 }
 
 export function useFunilEntryPath(primary: readonly NavNode[]): FunilEntry {
   const { organizationId } = useOrganization();
   const { user } = useAuth();
-  const { settings } = useOrganizationSettings();
 
   const key = lastFunnelKey(organizationId, user?.id);
   const getSnapshot = useCallback(() => {
@@ -55,7 +54,6 @@ export function useFunilEntryPath(primary: readonly NavNode[]): FunilEntry {
     path: funilEntryPath({
       lastSlug,
       availableSlugs,
-      defaultPipelineId: settings?.default_pipeline_id ?? null,
     }),
     restored: !!lastSlug && availableSlugs.includes(lastSlug),
   };

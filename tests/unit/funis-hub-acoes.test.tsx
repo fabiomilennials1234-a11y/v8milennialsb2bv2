@@ -78,7 +78,7 @@ vi.mock("@/modules/identity", () => ({
     allowed: chave === "pipeline.custom_delete" ? podeExcluir : true,
   }),
   useOrganizationSettings: () => ({
-    settings: { default_pipeline_id: null },
+    settings: { default_pipeline_id: "p-sys" },
     updateSettings,
     isAdmin: true,
     isLoading: false,
@@ -202,4 +202,10 @@ describe("Hub de funis — renomear e excluir no cartão", () => {
 
     expect(navigate).toHaveBeenCalledWith("/funil/pos-venda");
   });
+});
+
+it("não destaca o antigo padrão nem abre um funil automaticamente", () => {
+  render(<FunisHub />);
+  expect(screen.queryByText(/^padrão$/i)).toBeNull();
+  expect(navigate).not.toHaveBeenCalled();
 });

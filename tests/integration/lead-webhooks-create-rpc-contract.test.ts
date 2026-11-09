@@ -137,7 +137,7 @@ describe.skipIf(shouldSkip)('lead webhooks → create_lead_with_pipe contract', 
     await cleanupOrganization();
   });
 
-  it('creates a new lead through webhook-new-lead', async () => {
+  it('creates a new lead without a card when no destination exists', async () => {
     const { response, payload } = await postWebhook('webhook-new-lead', {
       name: 'Webhook New Contract',
       email: EMAILS[0],
@@ -157,9 +157,9 @@ describe.skipIf(shouldSkip)('lead webhooks → create_lead_with_pipe contract', 
 
     const entry = await expectOk(
       'read new-lead entry',
-      supabase.from('pipeline_entries').select('metadata').eq('lead_id', payload.lead_id).single(),
+      supabase.from('pipeline_entries').select('metadata').eq('lead_id', payload.lead_id),
     );
-    expect(entry?.metadata).toMatchObject({ pre_sale_responsible_id: SDR_ID });
+    expect(entry).toEqual([]);
   });
 
   it('creates a meeting lead through webhook-confirmacao', async () => {

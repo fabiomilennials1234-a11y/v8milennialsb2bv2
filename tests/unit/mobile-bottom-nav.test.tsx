@@ -30,6 +30,16 @@ vi.mock("@/shared/hooks/use-viewport", () => ({
   useViewport: () => mockViewport(),
 }));
 
+// Navigation now reads the user/org to restore the last visited funnel.
+// Keep that hook real, with an empty authorized funnel list for these hub tests.
+vi.mock("@/modules/identity", () => ({
+  useAuth: () => ({ user: { id: "mobile-nav-user" } }),
+  useOrganization: () => ({ organizationId: "mobile-nav-org" }),
+}));
+vi.mock("@/modules/platform/hooks/useNavigationModel", () => ({
+  useNavigationModel: () => ({ primary: [] }),
+}));
+
 import { MobileBottomNav } from "@/modules/platform/components/layout/MobileBottomNav";
 
 function renderNav(initialPath = "/") {
