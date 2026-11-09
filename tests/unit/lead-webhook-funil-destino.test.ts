@@ -10,8 +10,7 @@
  *     semeados;
  *   • funil inexistente → 4xx ANTES de criar o lead (fim do 200 + descarte);
  *     funil inativo → 409;
- *   • lead SEM place_in_pipe → cai no funil PADRÃO da org
- *     (organizations.default_pipeline_id), na 1ª etapa ativa;
+ *   • lead SEM place_in_pipe é criado sem card, mesmo com referência legada;
  *   • org SEM funil padrão → lead criado SEM card (comportamento definido);
  *   • runtime_logs grava a INTENÇÃO (place_in_pipe pedido) no payload_snapshot.
  */
@@ -234,7 +233,7 @@ describe("lead-webhook — funil que não resolve erra ALTO e ANTES (D6)", () =>
 });
 
 describe("lead-webhook — funil padrão da org (D4)", () => {
-  it("lead SEM place_in_pipe cai no funil padrão, na 1ª etapa ativa", async () => {
+  it("lead sem destino fica sem card mesmo com uma designação antiga", async () => {
     const { getInserted } = seedTables({ defaultPipelineId: PIPE_CUSTOM });
     const res = await invoke({
       source: "meta_ads",
@@ -244,8 +243,7 @@ describe("lead-webhook — funil padrão da org (D4)", () => {
     const body = await res.json();
     expect(body.is_new).toBe(true);
     const seeded = getInserted("pipeline_entries").find((e) => e.pipeline_id === PIPE_CUSTOM);
-    expect(seeded).toBeTruthy();
-    expect(seeded?.stage_key).toBe("kickoff"); // 1ª ativa (position 0)
+    expect(seeded).toBeUndefined();
     // Nada foi semeado no funil whatsapp — o hardcode morreu.
     expect(getInserted("pipeline_entries").some((e) => e.pipeline_id === PIPE_WA)).toBe(false);
   });
@@ -263,7 +261,7 @@ describe("lead-webhook — funil padrão da org (D4)", () => {
     expect(getInserted("pipeline_entries")).toHaveLength(0);
   });
 
-  it("caminho deduplicado com lead NOVO também semeia o funil padrão", async () => {
+  it("caminho deduplicado também fica sem card quando não há destino explícito", async () => {
     const { getInserted } = seedTables({ defaultPipelineId: PIPE_CUSTOM });
     mockGetOrCreateLead.mockResolvedValue({
       lead: { id: "lead-novo", name: "X", phone: "11999", email: null, organization_id: ORG },
@@ -276,10 +274,10 @@ describe("lead-webhook — funil padrão da org (D4)", () => {
       fields: { phone: "11999" },
     });
     expect(res.status).toBe(200);
-    // lead-service não semeia mais (skipPipeSeed: true) — a porta semeia.
+    // lead-service e a porta não criam card sem destino explícito.
     expect(mockGetOrCreateLead.mock.calls[0][1]).toMatchObject({ skipPipeSeed: true });
     const seeded = getInserted("pipeline_entries").find((e) => e.pipeline_id === PIPE_CUSTOM);
-    expect(seeded).toBeTruthy();
+    expect(seeded).toBeUndefined();
   });
 
   it("caminho deduplicado com lead EXISTENTE não ressemeia", async () => {

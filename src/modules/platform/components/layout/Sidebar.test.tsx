@@ -16,7 +16,7 @@ import { Sidebar } from "./Sidebar";
  * O que este arquivo trava:
  * - toda porta tem nome acessível (ícone sem nome é adivinhação);
  * - o grupo "Turbo" virou duas portas diretas, sem clique intermediário;
- * - Funis leva ao funil padrão da org (o hub virou aba dentro da página);
+ * - Funis abre a lista mesmo com uma designação antiga (o hub virou aba dentro da página);
  * - Agenda e Pitstop navegam para páginas — não abrem mais painel;
  * - item trancado por plano abre o upgrade em vez de navegar;
  * - o escudo do Master só existe para master.
@@ -138,12 +138,12 @@ describe("Sidebar — trilho de ícones", () => {
     expect(screen.getByTestId("onde")).toHaveTextContent("/copilot");
   });
 
-  it("Funis leva ao funil padrão da org", async () => {
+  it("Funis abre a lista mesmo com uma designação antiga", async () => {
     const user = userEvent.setup();
     settingsRef.current = { default_pipeline_id: "f-123" };
     renderSidebar();
     await user.click(screen.getByRole("link", { name: "Funis" }));
-    expect(screen.getByTestId("onde")).toHaveTextContent("/funil/f-123");
+    expect(screen.getByTestId("onde")).toHaveTextContent("/funis");
   });
 
   it("sem funil padrão, Funis cai no hub", async () => {

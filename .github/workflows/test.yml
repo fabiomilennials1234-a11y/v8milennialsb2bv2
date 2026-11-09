@@ -148,6 +148,8 @@ jobs:
       # teste em tests/classic/, com `@` → classic/src. Sem ratchet: nasce verde.
       - name: Vitest da interface clássica
         run: npm run test:classic
+      - name: Funis sem padrão (preservação de dados e compatibilidade)
+        run: node --test tests/integration/no-default-pipeline.test.mjs
       - name: Ajustes de pedidos ganhos (Postgres isolado)
         run: npm run test:won-order
       - name: Correção de data e valor de vendas (Postgres isolado)

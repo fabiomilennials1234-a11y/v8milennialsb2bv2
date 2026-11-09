@@ -393,7 +393,6 @@ serve(withErrorBoundary('lead-webhook', async (req) => {
     // Leads de Cal.com já entram em pipe_confirmacao (reunião agendada) — nunca devem
     // ser semeados em whatsapp/novo. Sem isso o lead aparece duplicado na coluna "Novo"
     // do funil WhatsApp (incomoda no fluxo cal.com, onde toda entrada é reunião marcada).
-    const skipDefaultSeed = origin === "cal";
 
     // ── Cal.com bypass ──────────────────────────────────────────────────
     // Leads vindos do Cal.com já têm reunião agendada — pulam pipe_whatsapp
@@ -499,57 +498,7 @@ serve(withErrorBoundary('lead-webhook', async (req) => {
       }
     }
 
-    // ── D4: semeadura pelo funil PADRÃO da org (substitui o hardcode
-    // whatsapp/novo). Etapa = 1ª ativa do funil padrão. Org sem funil padrão
-    // (`default_pipeline_id` NULL — 2/108 em prod no backfill) = comportamento
-    // definido: lead criado SEM card, com log explícito (o mesmo destino que
-    // essas orgs já tinham quando o funil semeado não existia).
-    const seedDefaultPipeline = async (leadId: string) => {
-      try {
-        const { data: orgRow, error: orgErr } = await supabase
-          .from("organizations")
-          .select("default_pipeline_id")
-          .eq("id", orgIdResolved)
-          .maybeSingle();
-        if (orgErr) {
-          console.warn("[lead-webhook] leitura de default_pipeline_id falhou; lead fica sem card:", orgErr.message);
-          return;
-        }
-        const defaultRef = (orgRow as { default_pipeline_id?: string | null } | null)?.default_pipeline_id;
-        if (!defaultRef) {
-          console.log(
-            `[lead-webhook] lead ${leadId} criado SEM card: org ${organizationId} não tem funil padrão (Configurações → Geral).`,
-          );
-          return;
-        }
-        const stageKey = await resolveActiveStageKey(supabase, orgIdResolved, defaultRef);
-        if (!stageKey) {
-          // Funil padrão sem NENHUMA etapa ativa: gravar um literal criaria um
-          // card fantasma invisível no kanban — pior que não criar.
-          console.warn(
-            `[lead-webhook] funil padrão ${defaultRef} da org ${organizationId} sem etapas ativas; lead ${leadId} fica sem card.`,
-          );
-          return;
-        }
-        const seed = await upsertPipeEntryDetailed(supabase, {
-          leadId,
-          orgId: orgIdResolved,
-          slug: defaultRef,
-          stageKey,
-          metadata: { sdr_id: payload.assigned_user_id ?? null },
-          assignedTo: payload.assigned_user_id ?? null,
-        });
-        if (seed.status === "no_pipeline") {
-          console.warn(
-            `[lead-webhook] funil padrão ${defaultRef} não resolveu no upsert (corrida com deleção?); lead ${leadId} sem card.`,
-          );
-        } else if (seed.status !== "created" && seed.status !== "updated") {
-          console.warn(`[lead-webhook] semeadura no funil padrão falhou (${seed.status}) para lead ${leadId}.`);
-        }
-      } catch (pipeError) {
-        console.warn("[lead-webhook] semeadura no funil padrão falhou:", pipeError);
-      }
-    };
+    // Sem destino explícito, o lead é criado sem card.
 
     // Padrão: sempre criar novo lead. Só busca por telefone/email quando o cliente envia update_existing_if_match = true.
     // Aceita boolean true ou string "true" (n8n body fields envia como string).
@@ -563,9 +512,7 @@ serve(withErrorBoundary('lead-webhook', async (req) => {
         email: email || null,
         name: name || "Lead sem nome",
         origin,
-        // SCRUM-624 (D4): a semeadura sai do lead-service (que hardcoda o
-        // funil 'whatsapp') e passa a ser feita AQUI pelo funil padrão da org
-        // — ver seedDefaultPipeline. skipPipeSeed sempre true nesta porta.
+        // Esta porta só cria card quando place_in_pipe informa o destino.
         skipPipeSeed: true,
       });
 
@@ -581,12 +528,6 @@ serve(withErrorBoundary('lead-webhook', async (req) => {
       }
       console.log("[lead-webhook] update_existing_if_match: lead resolved:", result.lead.id, "created:", result.created);
 
-      // Lead NOVO no caminho deduplicado: mesma semeadura do caminho de
-      // criação direta — funil padrão da org (não mais whatsapp hardcoded).
-      // Lead reaproveitado não é ressemeado (comportamento inalterado).
-      if (result.created && !skipDefaultSeed) {
-        await seedDefaultPipeline(result.lead.id);
-      }
     } else {
       // Sempre criar novo lead (padrão do sistema)
       const leadName = name || "Lead sem nome";
@@ -633,15 +574,6 @@ serve(withErrorBoundary('lead-webhook', async (req) => {
         return errorResponse(500, "Failed to create lead", corsHeaders, { req, details: createError.message });
       }
 
-      // Cal.com não semeia — o lead é colocado em confirmacao pelo bloco place_in_pipe abaixo.
-      //
-      // SCRUM-624 (D4): a semeadura hardcoded whatsapp/novo morreu. O lead novo
-      // cai no FUNIL PADRÃO da org (etapa = 1ª ativa); org sem padrão = lead
-      // sem card, logado (o destino que "org sem funil de Oportunidades" já
-      // tinha — agora é configuração explícita, não acidente de seed).
-      if (!skipDefaultSeed) {
-        await seedDefaultPipeline(newLead.id);
-      }
 
       result = { lead: newLead, created: true, source: "created" };
       console.log("[lead-webhook] New lead created:", newLead.id);

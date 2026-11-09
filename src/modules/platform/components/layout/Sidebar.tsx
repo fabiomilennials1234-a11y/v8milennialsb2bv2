@@ -28,7 +28,7 @@ import { cn } from "@/lib/utils";
 import { UpgradeModal } from "@/shared/components/UpgradeModal";
 import { usePrefetchPipes } from "@/modules/pipelines";
 import { useOraculoBriefing } from "@/modules/copilot";
-import { useMasterAuth, useOrganizationSettings } from "@/modules/identity";
+import { useMasterAuth } from "@/modules/identity";
 import { useNavigationModel } from "@/modules/platform/hooks/useNavigationModel";
 import { PITSTOP_HUB_PATH, RAIL_WIDTH, type NavNode } from "@/modules/platform/lib/navigation-model";
 import type { FeatureKey } from "@/modules/platform/lib/feature-registry";
@@ -99,7 +99,6 @@ export function Sidebar() {
   const navigate = useNavigate();
   const briefing = useOraculoBriefing();
   const { isMaster, isOutbounder } = useMasterAuth();
-  const { settings } = useOrganizationSettings();
   const [upgradeFeature, setUpgradeFeature] = useState<FeatureKey | null>(null);
 
   const openUpgrade = useCallback(
@@ -110,9 +109,6 @@ export function Sidebar() {
     [model],
   );
 
-  // Funis no trilho abre o funil PADRÃO da org (o hub virou a aba "Todos os
-  // funis" dentro da página). Sem padrão, cai no hub.
-  const funilPadrao = settings?.default_pipeline_id ? `/funil/${settings.default_pipeline_id}` : "/funis";
 
   const principais = model.primary.filter((item) => item.path !== "/turbo");
   const turbo = model.primary.find((item) => item.path === "/turbo")?.children ?? [];
@@ -161,7 +157,7 @@ export function Sidebar() {
 
         <nav aria-label="Telas" className="flex flex-col items-center gap-1.5">
           {principais.map((item) =>
-            item.path === "/funis" ? renderItem(item, { path: funilPadrao }) : renderItem(item),
+            renderItem(item),
           )}
 
           {turbo.length > 0 && <Separador />}

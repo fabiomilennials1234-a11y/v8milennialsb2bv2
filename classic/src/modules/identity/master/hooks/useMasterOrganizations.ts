@@ -67,10 +67,7 @@ const CLONEABLE_STAGE_COLUMNS =
  * mecanismo preservado; as policies `master_all_pipelines`,
  * `master_all_pipeline_stages` e `master_ghost_all_pipeline_display_config`
  * (FOR ALL USING is_master_user()) cobrem leitura e escrita nas 3 tabelas.
- * SCRUM-641: a org-alvo nasce COM o "Funil de Vendas" semeado (trigger
- * trg_seed_default_funnel, 20270918000000) já apontado como funil padrão —
- * os deletes abaixo removem o seed antes de aplicar o template (o padrão é
- * solto antes e reapontado no fim; ver passos 2 e 6).
+ * Os funis do modelo são clonados sem atribuir um padrão à organização.
  */
 async function cloneFunnelStages(sourceOrgId: string, targetOrgId: string) {
   // 1. Lê a org-base: funis, registro e etapas (só as vivas — com FK).
@@ -101,19 +98,6 @@ async function cloneFunnelStages(sourceOrgId: string, targetOrgId: string) {
   }
 
   // 2. Limpa o alvo (ordem FK: etapas antes dos funis).
-  //
-  // SCRUM-641: a org nova nasce com o "Funil de Vendas" semeado JÁ como
-  // `default_pipeline_id` (trigger trg_seed_default_funnel). O DELETE abaixo
-  // morreria em `trg_guard_default_pipeline_delete` ("funil padrão exige
-  // substituto") — então o padrão é solto ANTES e reapontado no passo 6 para
-  // o funil clonado. `as never` no update: `default_pipeline_id`
-  // (20270908004000) ainda não está no types.ts gerado — mesmo padrão de
-  // useOrganizationSettings.
-  const clearDefault = await supabase
-    .from("organizations")
-    .update({ default_pipeline_id: null } as never)
-    .eq("id", targetOrgId);
-  if (clearDefault.error) throw clearDefault.error;
 
   const delStages = await supabase.from("pipeline_stages").delete().eq("organization_id", targetOrgId);
   if (delStages.error) throw delStages.error;
@@ -165,29 +149,6 @@ async function cloneFunnelStages(sourceOrgId: string, targetOrgId: string) {
     if (ins.error) throw ins.error;
   }
 
-  // 6. Funil padrão da org clonada (D4): espelha o padrão da org-base quando
-  //    ele resolveu no clone; senão o primeiro funil clonado por display_order.
-  //    Sem isto a org nova com template ficaria SEM padrão (as portas de
-  //    entrada criariam lead sem card).
-  const { data: srcOrg } = await supabase
-    .from("organizations")
-    .select("default_pipeline_id" as "id")
-    .eq("id", sourceOrgId)
-    .maybeSingle();
-  const srcDefault = (srcOrg as { default_pipeline_id?: string | null } | null)?.default_pipeline_id ?? null;
-  const mappedDefault = srcDefault ? newIdByOldId.get(srcDefault) ?? null : null;
-  const fallbackDefault = [...srcPipelines]
-    .sort((a, b) => Number(a.display_order ?? 0) - Number(b.display_order ?? 0))
-    .map((p) => newIdByOldId.get(p.id as string) ?? null)
-    .find((id) => id != null) ?? null;
-  const newDefault = mappedDefault ?? fallbackDefault;
-  if (newDefault) {
-    const setDefault = await supabase
-      .from("organizations")
-      .update({ default_pipeline_id: newDefault } as never)
-      .eq("id", targetOrgId);
-    if (setDefault.error) throw setDefault.error;
-  }
 }
 
 /**

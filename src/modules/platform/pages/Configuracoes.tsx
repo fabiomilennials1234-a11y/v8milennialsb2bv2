@@ -14,7 +14,6 @@ import {
   MoreHorizontal,
   Code,
   Copy,
-  ArrowDownToLine,
   Globe,
   Repeat,
   CalendarClock,
@@ -63,9 +62,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useTags, useCreateTag, useUpdateTag, useDeleteTag, Tag as TagType } from "@/modules/leads/hooks/useTags";
-import { useFunisDaOrg } from "@/modules/pipelines";
 import { useIdentity } from "@/modules/identity";
 import { useOrganizationSettings } from "@/modules/identity";
 import { useOrganization, useOrgSwitcher } from "@/modules/identity";
@@ -504,66 +501,6 @@ function ConfirmacaoOverdueSettings() {
   );
 }
 
-/**
- * Funil padrão da org (SCRUM-624, ADR-0034 D4) — o fallback único das portas de
- * entrada sem destino declarado (ex.: lead-webhook sem `place_in_pipe`).
- * "Sem funil padrão" é estado válido: o lead entra na lista de Leads sem card.
- * A deleção do funil apontado é recusada pelo banco (trigger) até o admin
- * escolher um substituto aqui.
- */
-function DefaultPipelineSettings() {
-  const { settings, isAdmin, updateSettings, isUpdating, isLoading: settingsLoading } = useOrganizationSettings();
-  // Nome que a ORG usa — ver `useFunisDaOrg`.
-  const { data: pipelines = [], isLoading: pipelinesLoading } = useFunisDaOrg();
-
-  const NONE = "__none__";
-  const current = settings.default_pipeline_id ?? NONE;
-  const loading = settingsLoading || pipelinesLoading;
-
-  const handleChange = async (value: string) => {
-    const next = value === NONE ? null : value;
-    if (next === settings.default_pipeline_id) return;
-    try {
-      await updateSettings({ default_pipeline_id: next });
-      toast.success(next ? "Funil padrão atualizado!" : "Funil padrão removido");
-    } catch (caught) {
-      notifyError(caught, { fallback: "Não foi possível salvar o funil padrão." });
-    }
-  };
-
-  return (
-    <LinhaDeAjuste
-      rotulo="Funil de entrada"
-      htmlFor="default-pipeline"
-      ajuda={
-        <>
-          Leads de webhooks e integrações que não declaram destino caem na primeira etapa ativa deste funil. Sem funil
-          padrão, o lead é criado apenas na lista de Leads, sem card.
-        </>
-      }
-    >
-      <Select
-        value={loading ? undefined : current}
-        onValueChange={handleChange}
-        disabled={!isAdmin || isUpdating || loading}
-      >
-        <SelectTrigger id="default-pipeline" className="sm:w-[340px]">
-          <SelectValue placeholder={loading ? "Carregando…" : "Escolha um funil"} />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value={NONE}>Sem funil padrão</SelectItem>
-          {pipelines.map((p) => (
-            <SelectItem key={p.id} value={p.id}>
-              {p.label}
-              {p.is_active === false ? " (inativo)" : ""}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-    </LinhaDeAjuste>
-  );
-}
-
 function ReorderCycleSettings() {
   const { settings, isAdmin, updateSettings, isUpdating } = useOrganizationSettings();
   const [localDays, setLocalDays] = useState(settings.default_reorder_cycle_days);
@@ -645,8 +582,7 @@ function GeneralSettings() {
         </LinhaDeAjuste>
       </CartaoDeAjustes>
 
-      <CartaoDeAjustes titulo="Funis e entrada de leads" descricao="Para onde vai o lead que chega sem destino declarado">
-        <DefaultPipelineSettings />
+      <CartaoDeAjustes titulo="Funis" descricao="Configurações de acompanhamento">
         <ConfirmacaoOverdueSettings />
       </CartaoDeAjustes>
 
@@ -701,7 +637,7 @@ function AparenciaSettings() {
 
 /**
  * "Como está configurado" — o resumo fixo da aba Geral. Só lê o que a página
- * já carrega (organização, plano, funil padrão, fuso, recompra); nada novo é
+ * já carrega (organização, plano, fuso, recompra); nada novo é
  * buscado nem calculado.
  */
 function ComoEstaConfigurado() {
@@ -709,13 +645,9 @@ function ComoEstaConfigurado() {
   const { orgs } = useOrgSwitcher();
   const { planName } = useOrgFeatures();
   const { settings, isLoading } = useOrganizationSettings();
-  const { data: funis = [] } = useFunisDaOrg();
 
   const nome = orgs.find((o) => o.id === organizationId)?.name;
   const plano = planName && planName !== "free" ? planName.toUpperCase() : null;
-  const funil = settings.default_pipeline_id
-    ? funis.find((f) => f.id === settings.default_pipeline_id)?.label ?? "—"
-    : "Sem funil padrão";
   // Mesmo critério do seletor de organização: a sandbox nasce com "[Sandbox]" no nome.
   const ehSandbox = !!nome?.includes("[Sandbox]");
   const iniciais =
@@ -729,7 +661,6 @@ function ComoEstaConfigurado() {
       .toUpperCase() || "O";
 
   const linhas: { icone: LucideIcon; rotulo: string; valor: ReactNode }[] = [
-    { icone: ArrowDownToLine, rotulo: "Leads novos entram em", valor: isLoading ? "—" : funil },
     { icone: Globe, rotulo: "Fuso horário", valor: timezone ?? "—" },
     { icone: Repeat, rotulo: "Recompra sugerida", valor: isLoading ? "—" : `a cada ${settings.default_reorder_cycle_days} dias` },
     { icone: CalendarClock, rotulo: "Atraso de reunião", valor: isLoading ? "—" : `${settings.confirmacao_overdue_days} dias sem interação` },

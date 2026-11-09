@@ -262,7 +262,7 @@ const endpoints: ApiEndpoint[] = [
     auth,
     parameters: [
       leadIdParam,
-      { name: "pipe", type: "string", required: false, description: "Slug ou id de qualquer funil da organização. Default: o funil padrão da organização.", defaultValue: "funil padrão da organização" },
+      { name: "pipe", type: "string", required: true, description: "Slug ou id do funil de destino da organização." },
       { name: "stage", type: "string", required: true, description: "stage_key de destino (validado contra as etapas do funil)." },
     ],
     requestExample: { pipe: "vendas", stage: "proposta_enviada" },

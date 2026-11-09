@@ -1,7 +1,6 @@
 import { memo, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { Timer } from "lucide-react";
-import { useOrganizationSettings } from "@/modules/identity";
 import { FilterChip } from "@/shared/components/FilterChip";
 import { cn } from "@/lib/utils";
 import { useFunnelOptions } from "../../lib/funnel-nav";
@@ -10,8 +9,7 @@ import { useFunnelOptions } from "../../lib/funnel-nav";
  * Faixa de funis — um chip por funil, o aberto em tinta (mockup V5).
  *
  * Substitui o seletor que morava no título: com o título fixo "Funis", trocar
- * de funil vira um clique à vista em vez de abrir uma lista. O funil padrão da
- * org (`organizations.default_pipeline_id`) leva o selo PADRÃO; funil com prazo
+ * de funil vira um clique à vista em vez de abrir uma lista. Funil com prazo
  * leva o relógio. Encerrado não entra (mora no hub, em "Todos os funis") —
  * a não ser que seja o aberto.
  *
@@ -27,8 +25,6 @@ interface FunnelChipStripProps {
 export const FunnelChipStrip = memo(function FunnelChipStrip({ currentKey, className }: FunnelChipStripProps) {
   const navigate = useNavigate();
   const { options } = useFunnelOptions();
-  const { settings } = useOrganizationSettings();
-  const defaultId = settings?.default_pipeline_id ?? null;
   const ref = useRef<HTMLDivElement>(null);
 
   const items = options.filter((o) => !o.ended || o.key === currentKey);
@@ -76,7 +72,6 @@ export const FunnelChipStrip = memo(function FunnelChipStrip({ currentKey, class
       >
         {items.map((option) => {
           const active = option.key === currentKey;
-          const isDefault = !!defaultId && option.pipeline?.id === defaultId;
           return (
             <FilterChip
               key={option.key}
@@ -90,16 +85,6 @@ export const FunnelChipStrip = memo(function FunnelChipStrip({ currentKey, class
               className={cn(option.ended && "opacity-60")}
             >
               <span className="max-w-[220px] truncate">{option.label}</span>
-              {isDefault && (
-                <span
-                  className={cn(
-                    "rounded-full px-1.5 py-px text-[9.5px] font-extrabold uppercase tracking-[.04em]",
-                    active ? "bg-primary text-primary-foreground" : "bg-primary-soft text-primary-soft-foreground",
-                  )}
-                >
-                  Padrão
-                </span>
-              )}
               {option.group === "prazo" && (
                 <Timer
                   aria-label="Funil com prazo"

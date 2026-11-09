@@ -1,5 +1,3 @@
-import { isPipelineVisible, sortPipelinesForNavigation } from "@/modules/pipelines/lib/pipeline-navigation";
-import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { AlertTriangle, Loader2 } from "lucide-react";
 import { toast } from "sonner";
@@ -15,22 +13,11 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { useOrganizationSettings } from "@/modules/identity";
-import { usePipelines } from "../../hooks/model/usePipelines";
 import {
   useDeletePipelineById,
   usePipelineDeleteImpact,
 } from "../../hooks/config/usePipelineDelete";
 
-const SEM_PADRAO = "__none__";
 
 export interface DeletePipelineDialogProps {
   open: boolean;
@@ -48,13 +35,7 @@ export interface DeletePipelineDialogProps {
  * duas espécies, sobre o par único da 626 (`pipeline_delete_impact` +
  * `delete_pipeline`).
  *
- * Três estados:
- *   1. BLOQUEADO — `cards_invasores > 0` (ramo custom): não é aviso, é recusa.
- *   2. FUNIL PADRÃO da org (624) — o diálogo EXIGE o substituto e atualiza
- *      `organizations.default_pipeline_id` ANTES do delete. Isto mata o erro
- *      cru do trigger `pipeline_is_org_default`, que continua lá como cinto de
- *      segurança para caminhos que não passam por esta tela.
- *   3. Confirmação com o impacto medido (números do banco, não estimativa).
+ * Exibe o impacto medido e bloqueia a exclusão enquanto houver cards de outro funil.
  */
 export function DeletePipelineDialog({
   open,
@@ -64,39 +45,14 @@ export function DeletePipelineDialog({
   navigateOnDelete = true,
 }: DeletePipelineDialogProps) {
   const navigate = useNavigate();
-  const [substituto, setSubstituto] = useState<string>("");
 
   const { data: impacto } = usePipelineDeleteImpact(pipeline.id, open);
-  const { settings, updateSettings } = useOrganizationSettings();
-  const { data: pipelines = [] } = usePipelines();
   const excluir = useDeletePipelineById();
 
-  const ehPadrao = settings.default_pipeline_id === pipeline.id;
   const bloqueado = (impacto?.cards_invasores ?? 0) > 0;
-  const candidatosPadrao = sortPipelinesForNavigation(pipelines).filter(
-    (p) => p.id !== pipeline.id && p.is_active !== false && isPipelineVisible(p),
-  );
-  // Substituto é obrigatório quando o funil é o padrão — "sem padrão" é uma
-  // escolha explícita válida (D4: default NULL = lead entra sem card).
-  const faltaSubstituto = ehPadrao && !substituto;
-
-  // Estado zera a cada abertura — o diálogo pode ser reaberto para outro funil.
-  useEffect(() => {
-    if (!open) setSubstituto("");
-  }, [open]);
-
   const handleExcluir = async () => {
-    if (bloqueado || faltaSubstituto) return;
+    if (bloqueado) return;
     try {
-      // Ordem importa (624): o substituto entra ANTES do delete — senão o
-      // trigger de guarda recusa com o erro cru que este diálogo existe para
-      // matar. O FK ON DELETE SET NULL segue como rede.
-      if (ehPadrao) {
-        await updateSettings({
-          default_pipeline_id: substituto === SEM_PADRAO ? null : substituto,
-        });
-      }
-
       const r = await excluir.mutateAsync(pipeline.id);
       const detalhe = [
         r?.cards ? `${r.cards} card(s)` : null,
@@ -209,45 +165,12 @@ export function DeletePipelineDialog({
           </AlertDialogDescription>
         </AlertDialogHeader>
 
-        {/* Funil padrão da org (624): substituto obrigatório ANTES do delete. */}
-        {!bloqueado && ehPadrao && (
-          <div className="space-y-2 rounded-2xl border border-warning/35 bg-warning/10 p-3">
-            <div className="flex items-start gap-2 text-sm">
-              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warning-strong" />
-              <span>
-                Este é o <strong>funil padrão</strong> da organização — leads que chegam
-                sem destino declarado caem nele. Escolha o novo padrão antes de excluir.
-              </span>
-            </div>
-            <Label className="text-xs text-muted-foreground">Novo funil padrão:</Label>
-            <Select value={substituto} onValueChange={setSubstituto}>
-              <SelectTrigger>
-                <SelectValue placeholder="Selecione o funil substituto" />
-              </SelectTrigger>
-              <SelectContent>
-                {candidatosPadrao.map((p) => (
-                  <SelectItem key={p.id} value={p.id}>
-                    {p.name}
-                  </SelectItem>
-                ))}
-                <SelectItem value={SEM_PADRAO}>
-                  Nenhum — leads sem destino entram sem card
-                </SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-        )}
-
         <AlertDialogFooter>
           <AlertDialogCancel>{bloqueado ? "Entendi" : "Cancelar"}</AlertDialogCancel>
           {!bloqueado && (
             <AlertDialogAction
-              onClick={(e) => {
-                // Sem substituto escolhido o diálogo fica aberto para escolher.
-                if (faltaSubstituto) e.preventDefault();
-                handleExcluir();
-              }}
-              disabled={excluir.isPending || faltaSubstituto}
+              onClick={handleExcluir}
+              disabled={excluir.isPending}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
               {excluir.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}

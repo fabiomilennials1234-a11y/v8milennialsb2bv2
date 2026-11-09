@@ -29,7 +29,7 @@ const FALLBACK = "Não foi possível excluir o funil.";
 export function traducaoDeFalhaAoExcluir(e: unknown): string | null {
   const msg = getErrorMessage(e);
   if (msg.includes("pipeline_is_org_default")) {
-    return "Este funil ainda é o padrão da organização. Escolha o substituto e tente de novo.";
+    return "Não foi possível excluir o funil. A atualização do sistema ainda não foi concluída.";
   }
   if (msg.includes("não encontrado") || msg.includes("não tem o funil")) {
     return "Este funil já não existe nesta organização.";

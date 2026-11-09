@@ -12,12 +12,6 @@ const DEFAULT_REORDER_CYCLE_DAYS = 30;
 export interface OrganizationSettings {
   confirmacao_overdue_days: number;
   default_reorder_cycle_days: number;
-  /**
-   * Funil padrão da org (SCRUM-624, ADR-0034 D4): fallback único das portas de
-   * entrada sem destino declarado (ex.: lead-webhook sem place_in_pipe).
-   * NULL = sem padrão — lead entra sem card.
-   */
-  default_pipeline_id: string | null;
 }
 
 export function useOrganizationSettings() {
@@ -29,39 +23,35 @@ export function useOrganizationSettings() {
     queryKey: ["organization-settings", organizationId],
     queryFn: async (): Promise<OrganizationSettings> => {
       if (!organizationId) {
-        return { confirmacao_overdue_days: DEFAULT_OVERDUE_DAYS, default_reorder_cycle_days: DEFAULT_REORDER_CYCLE_DAYS, default_pipeline_id: null };
+        return { confirmacao_overdue_days: DEFAULT_OVERDUE_DAYS, default_reorder_cycle_days: DEFAULT_REORDER_CYCLE_DAYS };
       }
       const { data, error } = await supabase
         .from("organizations")
-        // default_pipeline_id: coluna da 20270908004000 — cast até o próximo
-        // `supabase gen types` pós-apply (precedente: default_reorder_cycle_days).
-        .select("confirmacao_overdue_days, default_reorder_cycle_days, default_pipeline_id" as "confirmacao_overdue_days, default_reorder_cycle_days")
+        .select("confirmacao_overdue_days, default_reorder_cycle_days")
         .eq("id", organizationId)
         .single();
 
       if (error) {
         if (error.code === "PGRST116" || error.message?.includes("column")) {
-          return { confirmacao_overdue_days: DEFAULT_OVERDUE_DAYS, default_reorder_cycle_days: DEFAULT_REORDER_CYCLE_DAYS, default_pipeline_id: null };
+          return { confirmacao_overdue_days: DEFAULT_OVERDUE_DAYS, default_reorder_cycle_days: DEFAULT_REORDER_CYCLE_DAYS };
         }
         throw error;
       }
 
       const days = data?.confirmacao_overdue_days;
       const cycleDays = (data as any)?.default_reorder_cycle_days;
-      const defaultPipelineId = (data as any)?.default_pipeline_id;
       return {
         confirmacao_overdue_days:
           typeof days === "number" && days >= 1 && days <= 365 ? days : DEFAULT_OVERDUE_DAYS,
         default_reorder_cycle_days:
           typeof cycleDays === "number" && cycleDays >= 1 && cycleDays <= 365 ? cycleDays : DEFAULT_REORDER_CYCLE_DAYS,
-        default_pipeline_id: typeof defaultPipelineId === "string" ? defaultPipelineId : null,
       };
     },
     enabled: isReady && !!organizationId,
   });
 
   const updateMutation = useMutation({
-    mutationFn: async (payload: Partial<{ confirmacao_overdue_days: number; default_reorder_cycle_days: number; default_pipeline_id: string | null }>) => {
+    mutationFn: async (payload: Partial<{ confirmacao_overdue_days: number; default_reorder_cycle_days: number }>) => {
       if (!organizationId) throw new Error("Sem organização");
       const update: Record<string, number | string | null> = {};
       if (payload.confirmacao_overdue_days != null) {
@@ -69,10 +59,6 @@ export function useOrganizationSettings() {
       }
       if (payload.default_reorder_cycle_days != null) {
         update.default_reorder_cycle_days = Math.min(365, Math.max(1, payload.default_reorder_cycle_days));
-      }
-      // `null` explícito é válido: limpa o funil padrão (org fica "sem padrão").
-      if ("default_pipeline_id" in payload) {
-        update.default_pipeline_id = payload.default_pipeline_id ?? null;
       }
       // Escrita vai por RPC, não pela tabela. `organizations` NÃO tem policy de
       // UPDATE para não-master, e isso é proteção, não esquecimento: a tabela
@@ -104,7 +90,7 @@ export function useOrganizationSettings() {
   });
 
   return {
-    settings: query.data ?? { confirmacao_overdue_days: DEFAULT_OVERDUE_DAYS, default_reorder_cycle_days: DEFAULT_REORDER_CYCLE_DAYS, default_pipeline_id: null },
+    settings: query.data ?? { confirmacao_overdue_days: DEFAULT_OVERDUE_DAYS, default_reorder_cycle_days: DEFAULT_REORDER_CYCLE_DAYS },
     isLoading: query.isLoading,
     isAdmin,
     updateSettings: updateMutation.mutateAsync,

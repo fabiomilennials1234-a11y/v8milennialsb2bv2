@@ -26,14 +26,14 @@ const erroSupabase = (over: Record<string, unknown> = {}) => ({
 });
 
 describe("mensagemDeFalhaAoExcluir", () => {
-  it("reconhece o funil padrão da org vindo como PostgrestError (não como Error)", () => {
+  it("recusa legada não orienta a escolher outro padrão", () => {
     const e = erroSupabase({
       message:
         'pipeline_is_org_default: o funil "Oportunidades" é o funil padrão da organização.',
     });
     // Antes: `e instanceof Error` = false -> "" -> genérico.
     expect(mensagemDeFalhaAoExcluir(e)).toBe(
-      "Este funil ainda é o padrão da organização. Escolha o substituto e tente de novo.",
+      "Não foi possível excluir o funil. A atualização do sistema ainda não foi concluída.",
     );
   });
 

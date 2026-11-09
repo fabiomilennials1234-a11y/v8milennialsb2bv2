@@ -162,7 +162,7 @@ export function PipelineTemplateEditor({ templateId, onClose }: Props) {
 
         <div className="p-3 rounded-lg border border-border/40 bg-muted/30">
           <p className="text-xs text-muted-foreground">
-            Toda org nova já nasce com o <strong>Funil de Vendas</strong> como funil padrão.
+            Toda org nova já nasce com o <strong>Funil de Vendas</strong> como um funil comum.
             O template soma a ele os funis da lista abaixo.
           </p>
         </div>
