@@ -18,7 +18,7 @@ const text = Object.fromEntries(Object.entries(files).map(([k, f]) => [k, fs.rea
 type Step = { uses?: string; run?: string; with?: Record<string, unknown>; env?: Record<string, string>; name?: string; if?: string };
 type Job = {
   if?: string;
-  needs?: string;
+  needs?: string | string[];
   environment?: string | { name: string; url: string };
   permissions?: Record<string, string>;
   env?: Record<string, string>;
@@ -29,7 +29,7 @@ type Input = { type?: string };
 type Workflow = {
   on: {
     push?: { branches: string[] };
-    pull_request?: { branches: string[]; paths: string[] };
+    pull_request?: { branches: string[]; paths?: string[] };
     workflow_dispatch?: { inputs: Record<string, Input> };
   };
   permissions?: Record<string, string>;
@@ -231,11 +231,24 @@ describe("deploy-front-cloudflare.yml", () => {
 describe("verify-front-cloudflare.yml", () => {
   const w = wf.verify;
 
-  it("só pull_request (nunca pull_request_target), filtrado pelos caminhos do front", () => {
+  it("só pull_request (nunca pull_request_target), em TODO PR: é check obrigatório da main", () => {
     expect(Object.keys(w.on)).toEqual(["pull_request"]);
-    const paths: string[] = w.on.pull_request!.paths;
-    for (const p of ["src/**", "classic/**", "cloudflare/**", "scripts/cloudflare/**", "tests/unit/cloudflare/**", "Dockerfile", "package-lock.json", ".github/workflows/deploy-front-cloudflare.yml"]) {
-      expect(paths, p).toContain(p);
+    // Filtro no gatilho deixaria PR sem front sem o check, travado para sempre.
+    expect(w.on.pull_request!.paths).toBeUndefined();
+  });
+
+  it("verify só roda quando o PR mexe em front; pulado conta como aprovado", () => {
+    expect(w.jobs.verify!.needs).toEqual(["changes"]);
+    expect(w.jobs.verify!.if).toBe("needs.changes.outputs.front == 'true'");
+    const filtro = w.jobs.changes!.steps.find((s) => s.name === "Arquivos de front no PR")!.run!;
+    const re = new RegExp(
+      [...filtro.matchAll(/re\+?='([^']+)'/g)].map(([, part]) => part).join(""),
+    );
+    for (const f of ["src/App.tsx", "classic/x.ts", "cloudflare/worker.ts", "scripts/cloudflare/a.mjs", "tests/unit/cloudflare/a.test.ts", "Dockerfile", "package-lock.json", "tsconfig.app.json", ".github/workflows/deploy-front-cloudflare.yml", ".github/workflows/verify-front-cloudflare.yml"]) {
+      expect(re.test(f), f).toBe(true);
+    }
+    for (const f of ["supabase/migrations/x.sql", "supabase/functions/api/index.ts", "docs/adr/1.md", ".github/workflows/test.yml", "scripts/check.sh"]) {
+      expect(re.test(f), f).toBe(false);
     }
   });
 
