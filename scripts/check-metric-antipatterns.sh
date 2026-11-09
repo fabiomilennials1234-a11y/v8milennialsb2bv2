@@ -14,6 +14,7 @@ set -euo pipefail
 
 MIG_DIR="${1:-supabase/migrations}"
 BASELINE="${METRIC_LINT_BASELINE:-scripts/metric-antipatterns-baseline.txt}"
+ALLOWLIST="${METRIC_LINT_ALLOWLIST:-scripts/metric-antipatterns-allowlist.tsv}"
 
 fail=0
 
@@ -24,6 +25,15 @@ is_baselined() {
 
 report() {
   local rule="$1" file="$2" line_no="$3" line="$4" why="$5"
+  # Applied migrations are immutable. Review an exception by exact filename,
+  # rule AND source line; any edited predicate or new violation still fails.
+  # Unlike the frozen file baseline, this never exempts the rest of the file.
+  if [ -f "$ALLOWLIST" ] && awk -F '\t' \
+    -v file="$(basename "$file")" -v rule="$rule" -v source="$line" \
+    '$1 == file && $2 == rule && $3 == source && length($4) > 0 { found=1 }
+     END { exit !found }' "$ALLOWLIST"; then
+    return
+  fi
   echo "FAIL [$rule] $(basename "$file"):$line_no" >&2
   echo "    $line" >&2
   echo "    → $why (ver ADR-0017: docs/adr/0017-event-sourced-sales-and-stage-metrics.md)" >&2

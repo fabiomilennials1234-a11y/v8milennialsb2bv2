@@ -30,7 +30,7 @@ CREATE EXTENSION IF NOT EXISTS pgtap;
 \ir _rls_invariants_detectors.sql
 \ir rls_invariants_baseline.sql
 
-SELECT plan(11);
+SELECT plan(15);
 
 -- ===========================================================================
 -- (1) THE GATE — live count must not exceed the frozen ceiling.
@@ -277,6 +277,21 @@ SELECT ok(NOT (public._rls_inv_strip_sql_comments(
   'BEGIN /* private.cobranca_exigir(p_org, ''view'') */ RETURN; END') ~*
   (SELECT pattern FROM public._rls_inv_gate_helper_pattern())),
   'INV-6 commented private gate is not trusted');
+
+SELECT ok('BEGIN v_org := public.lead_address_authorize(p_lead); END' ~*
+  (SELECT pattern FROM public._rls_inv_gate_helper_pattern()),
+  'INV-6 reviewed lead-address authorization gate is recognized');
+SELECT ok(NOT ('BEGIN PERFORM other_schema.lead_address_authorize(p_lead); END' ~*
+  (SELECT pattern FROM public._rls_inv_gate_helper_pattern())),
+  'INV-6 same-name address helper in another schema is not trusted');
+SELECT ok(NOT (public._rls_inv_strip_sql_comments(
+  'BEGIN /* public.lead_address_authorize(p_lead) */ RETURN; END') ~*
+  (SELECT pattern FROM public._rls_inv_gate_helper_pattern())),
+  'INV-6 commented address gate is not trusted');
+SELECT is(
+  (SELECT count(*)::int FROM public._rls_inv_definer_without_gate()
+   WHERE functionname IN ('lead_address_set_pin', 'lead_address_retry_geocode')),
+  0, 'INV-6 both address RPCs execute the reviewed authorization gate');
 
 SELECT * FROM finish();
 
