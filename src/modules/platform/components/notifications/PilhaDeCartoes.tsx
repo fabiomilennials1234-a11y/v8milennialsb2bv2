@@ -1,4 +1,4 @@
-import { useEffect, useSyncExternalStore } from "react";
+import { useEffect, useSyncExternalStore, type KeyboardEvent } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { AlertTriangle, Calendar, CalendarCheck, CalendarX, Clock, MessageSquare, UserPlus, X } from "lucide-react";
 import { useNavigate } from "react-router-dom";
@@ -7,6 +7,8 @@ import { useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
 import { useAvisos } from "../../hooks/useAvisos";
+import { useFeatureFlag } from "../../hooks/useFeatureFlag";
+import { navegarParaAviso } from "../../lib/abrir-aviso";
 
 import {
   assinarCartoes,
@@ -40,6 +42,9 @@ export function PilhaDeCartoes() {
   useAvisos({ entregar: true });
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  // Hotfix Café Jurerê: o cartão inteiro abre a conversa (antes só o botão "Abrir"),
+  // mesmo com o chat já aberto.
+  const { enabled: abreConversa } = useFeatureFlag("notificacao_abre_conversa");
   const { pilha, excedente } = useSyncExternalStore(assinarCartoes, estadoDosCartoes, estadoDosCartoes);
 
   // Um varredor só, no dono da pilha — um timer por cartão seria N timers para
@@ -59,7 +64,7 @@ export function PilhaDeCartoes() {
       .update({ read_at: new Date().toISOString() })
       .eq("id", avisoId);
     await queryClient.invalidateQueries({ queryKey: ["avisos"] });
-    if (link) navigate(link);
+    if (link) navegarParaAviso(navigate, link, abreConversa);
   };
 
   return (
@@ -78,6 +83,7 @@ export function PilhaDeCartoes() {
             borda: "border-border",
           };
           const Icone = visual.icone;
+          const cartaoClicavel = abreConversa && !!cartao.link;
 
           return (
             <motion.div
@@ -87,8 +93,22 @@ export function PilhaDeCartoes() {
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: 24 }}
               transition={{ duration: 0.18 }}
+              {...(cartaoClicavel && {
+                role: "button",
+                tabIndex: 0,
+                "aria-label": `Abrir: ${cartao.titulo}`,
+                onClick: () => void abrir(cartao.id, cartao.avisoId, cartao.link),
+                onKeyDown: (e: KeyboardEvent) => {
+                  if (e.target !== e.currentTarget) return;
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    void abrir(cartao.id, cartao.avisoId, cartao.link);
+                  }
+                },
+              })}
               className={cn(
                 "pointer-events-auto flex gap-3 rounded-card border bg-card p-3.5 shadow-relevo-alto",
+                cartaoClicavel && "cursor-pointer transition-colors hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                 visual.borda,
               )}
             >
@@ -112,7 +132,10 @@ export function PilhaDeCartoes() {
                 {cartao.link && (
                   <button
                     type="button"
-                    onClick={() => void abrir(cartao.id, cartao.avisoId, cartao.link)}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      void abrir(cartao.id, cartao.avisoId, cartao.link);
+                    }}
                     className="mt-2 rounded-full bg-primary px-3 py-1 text-xs font-semibold text-primary-foreground shadow-brilho-ouro"
                   >
                     {cartao.fixo ? "Ver o que parou" : "Abrir"}
@@ -122,7 +145,10 @@ export function PilhaDeCartoes() {
 
               <button
                 type="button"
-                onClick={() => dispensarCartao(cartao.id)}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  dispensarCartao(cartao.id);
+                }}
                 aria-label="Dispensar"
                 className="h-fit rounded-lg p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
               >

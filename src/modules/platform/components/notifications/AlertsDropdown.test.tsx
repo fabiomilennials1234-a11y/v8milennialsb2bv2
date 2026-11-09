@@ -13,6 +13,7 @@ vi.mock("@/components/ui/dropdown-menu", () => ({
   DropdownMenuTrigger: ({ children }: { children: ReactNode }) => <div>{children}</div>,
 }));
 vi.mock("../../hooks/useAvisos", () => ({ useAvisos: () => ({ avisos: [], naoLidos: 0 }) }));
+vi.mock("../../hooks/useFeatureFlag", () => ({ useFeatureFlag: () => ({ enabled: false, isLoading: false }) }));
 vi.mock("../../hooks/usePreferenciasDeAviso", () => ({ usePreferenciasDeAviso: () => ({
   preferencias: { sound_enabled: false, volume: 55 }, salvar: mocks.salvar, carregando: false, salvando: false,
 }) }));

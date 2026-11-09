@@ -9,28 +9,15 @@ name: Verify Front (Cloudflare)
 # leitura e sem secret. Build sem VITE_* é de propósito: aqui se prova que o
 # front compila e que o artefato sai limpo, não o bundle de produção.
 
+#
+# Roda em TODO PR para main: o job `verify` é check obrigatório da main
+# (ruleset "main-checks-rapidos"). Com filtro `paths:` no gatilho, PR sem front
+# (só SQL, só edge) nunca receberia o check e ficaria travado esperando. O
+# filtro mora no job `changes`: sem arquivo de front, `verify` é pulado, e job
+# pulado conta como aprovado para check obrigatório.
 on:
   pull_request:
     branches: [main]
-    paths:
-      - 'src/**'
-      - 'classic/**'
-      - 'public/**'
-      - 'index.html'
-      - 'vite.config.ts'
-      - 'vitest.config.ts'
-      - 'tailwind.config.ts'
-      - 'postcss.config.js'
-      - 'tsconfig*.json'
-      - 'package.json'
-      - 'package-lock.json'
-      - 'Dockerfile'
-      - 'cloudflare/**'
-      - 'scripts/cloudflare/**'
-      - 'scripts/ui-classic/**'
-      - 'tests/unit/cloudflare/**'
-      - '.github/workflows/deploy-front-cloudflare.yml'
-      - '.github/workflows/verify-front-cloudflare.yml'
 
 permissions: {}
 
@@ -39,8 +26,41 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  changes:
+    name: front mudou?
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    outputs:
+      front: ${{ steps.filtro.outputs.front }}
+    steps:
+      # O checkout de pull_request é o merge ref: HEAD^1 = ponta da main,
+      # HEAD = merge. A diferença entre os dois é o que o PR traz.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 2
+
+      - id: filtro
+        name: Arquivos de front no PR
+        run: |
+          set -euo pipefail
+          files="$(git diff --name-only HEAD^1 HEAD)"
+          re='^(src/|classic/|public/|cloudflare/|scripts/cloudflare/|scripts/ui-classic/|tests/unit/cloudflare/)'
+          re+='|^(index\.html|vite\.config\.ts|vitest\.config\.ts|tailwind\.config\.ts|postcss\.config\.js|package\.json|package-lock\.json|Dockerfile)$'
+          re+='|^tsconfig[^/]*\.json$'
+          re+='|^\.github/workflows/(deploy|verify)-front-cloudflare\.yml$'
+          if printf '%s\n' "$files" | grep -Eq "$re"; then
+            echo "front=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "front=false" >> "$GITHUB_OUTPUT"
+          fi
+
   verify:
     name: build:dual + cf:prepare + tipos + testes
+    needs: [changes]
+    if: needs.changes.outputs.front == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
