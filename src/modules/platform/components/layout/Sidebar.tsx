@@ -30,6 +30,7 @@ import { usePrefetchPipes } from "@/modules/pipelines";
 import { useOraculoBriefing } from "@/modules/copilot";
 import { useMasterAuth } from "@/modules/identity";
 import { useNavigationModel } from "@/modules/platform/hooks/useNavigationModel";
+import { useFunilEntryPath } from "@/modules/platform/hooks/useFunilEntryPath";
 import { PITSTOP_HUB_PATH, RAIL_WIDTH, type NavNode } from "@/modules/platform/lib/navigation-model";
 import type { FeatureKey } from "@/modules/platform/lib/feature-registry";
 import { SidebarBrand } from "./SidebarBrand";
@@ -109,6 +110,8 @@ export function Sidebar() {
     [model],
   );
 
+  // Retoma apenas a escolha anterior deste usuário; sem histórico, abre a lista.
+  const funilEntryPath = useFunilEntryPath(model.primary).path;
 
   const principais = model.primary.filter((item) => item.path !== "/turbo");
   const turbo = model.primary.find((item) => item.path === "/turbo")?.children ?? [];
@@ -157,7 +160,7 @@ export function Sidebar() {
 
         <nav aria-label="Telas" className="flex flex-col items-center gap-1.5">
           {principais.map((item) =>
-            renderItem(item),
+            item.path === "/funis" ? renderItem(item, { path: funilEntryPath }) : renderItem(item),
           )}
 
           {turbo.length > 0 && <Separador />}
