@@ -47,6 +47,7 @@ import {
 import type { LeadContext, AttendantContext } from "@/lib/template-variables";
 import type { MessageTemplate } from "@/modules/communication/hooks/useMessageTemplates";
 import { templateFileNameFromUrl } from "@/modules/communication/lib/template-media";
+import { usePasteAttachment } from "@/modules/communication/hooks/chat/usePasteAttachment";
 import type { DensityMode } from "@/modules/communication/components/chat/layout/ChatShell";
 import { ChatQuickActions } from "./ChatQuickActions";
 import { ComposerEmojiPicker } from "./ComposerEmojiPicker";
@@ -338,6 +339,16 @@ export function ChatComposer({
     setSendAsSticker(false);
   }, []);
 
+  // Ctrl+V de print/arquivo: mesmo caminho do botão de anexar (validação + preview).
+  const composerRootRef = useRef<HTMLDivElement>(null);
+  usePasteAttachment(composerRootRef, canReply && !isRecording, (file) => {
+    if (sendMedia.isPending || isPreparing) {
+      toast.info("Aguarde o envio anterior finalizar.");
+      return;
+    }
+    handleFileSelect(file);
+  });
+
   const handleFileInputChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     handleFileSelect(e.target.files?.[0] ?? null);
     // Permite reanexar o mesmo arquivo (onChange não dispara se value igual).
@@ -456,6 +467,7 @@ export function ChatComposer({
 
   return (
     <div
+      ref={composerRootRef}
       className={cn(
         "min-w-0 shrink-0 border-t border-border/60 bg-card px-3 pb-2.5 pt-2.5",
         isDragOver && "ring-2 ring-ring ring-inset bg-muted/30",
