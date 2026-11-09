@@ -4,6 +4,8 @@ import { UazapiIngressWriteGuardError } from "../_shared/uazapi-ingress-write-gu
 import { providerPassthroughStatus } from "../_shared/provider-error-status.ts";
 import { transcribeChatAudio, TranscriptionError } from "../_shared/whatsapp-transcription.ts";
 import { authorizeGroupListing, listInstanceGroups } from "../_shared/whatsapp-group-list.ts";
+import { sanitizeMentions } from "../_shared/group-mentions.ts";
+import { isValidGroupJid } from "../_shared/whatsapp-jid.ts";
 // deno-lint-ignore-file no-explicit-any
 
 /**
@@ -650,6 +652,28 @@ Deno.serve(
       }
 
       // -----------------------------------------------------------------------
+      // groupParticipants — seletor de menção (@) do composer em conversa de
+      // grupo. Já passou pela fronteira de org e pelo gate de responsável
+      // acima (o alvo é o `groupjid`, o mesmo valor que o envio ao grupo
+      // apresenta ao gate). Aqui só formato e provedor: só Uazapi tem grupo.
+      // -----------------------------------------------------------------------
+      if (action === "groupParticipants") {
+        if (!isValidGroupJid(payload.groupjid)) {
+          return jsonResponse(400, { error: "Grupo inválido" }, corsHeaders);
+        }
+        if ((instance as WhatsAppInstance).provider !== "uazapi") {
+          return jsonResponse(
+            400,
+            {
+              error: "Participantes de grupo só estão disponíveis em números conectados por QR Code (Uazapi).",
+              code: "group_participants_not_supported",
+            },
+            corsHeaders,
+          );
+        }
+      }
+
+      // -----------------------------------------------------------------------
       // deleteInstance — handled before getWhatsAppProvider because orphan
       // instances (failed createInstance) have no provider credentials.
       // -----------------------------------------------------------------------
@@ -1218,12 +1242,15 @@ Deno.serve(
             return jsonResponse(400, { error: "Missing number/text" }, corsHeaders);
           }
           const sentAtMs = Date.now();
+          // Menção em grupo: inválido/fora de grupo é descartado, nunca 4xx/5xx.
+          const mentions = sanitizeMentions(number, payload.mentions);
           try {
             result = await provider.sendText({
               number,
               text,
               delay,
               replyid,
+              ...(mentions ? { mentions } : {}),
               trackSource: "whatsapp-api-proxy",
               trackId: callerTeamMemberId ?? undefined,
             });
@@ -1309,6 +1336,8 @@ Deno.serve(
           if (!number || !type || !file) {
             return jsonResponse(400, { error: "Missing number/type/file" }, corsHeaders);
           }
+          // Menção só faz sentido com legenda; sem ela a lista é descartada.
+          const mentions = caption ? sanitizeMentions(number, payload.mentions) : undefined;
           result = await provider.sendMedia({
             number,
             type,
@@ -1317,6 +1346,7 @@ Deno.serve(
             caption,
             delay,
             replyid: quoted?.messageId,
+            ...(mentions ? { mentions } : {}),
             trackSource: "whatsapp-api-proxy",
             trackId: callerTeamMemberId ?? undefined,
           });
@@ -1784,6 +1814,15 @@ Deno.serve(
             cursor?: string;
           };
           result = await provider.historySync({ chat_jid, limit, cursor });
+          break;
+        }
+
+        case "groupParticipants": {
+          // Formato do groupjid + provedor Uazapi já checados antes do provider.
+          if (!provider.getGroupParticipants) {
+            return jsonResponse(400, { error: "Provider does not support group participants" }, corsHeaders);
+          }
+          result = await provider.getGroupParticipants(payload.groupjid as string);
           break;
         }
 

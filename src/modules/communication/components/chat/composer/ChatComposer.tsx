@@ -60,6 +60,10 @@ import { sendMenu as enviarMenuNoProxy } from "@/modules/communication/lib/whats
 import { SendPixDialog } from "./SendPixDialog";
 import { notifyError } from "@/shared/errors";
 import { CreateMeetingDialog } from "@/modules/engagement";
+import { resolveWhatsAppDestination } from "@/modules/communication/lib/whatsappPhone";
+import { useGroupParticipants } from "@/modules/communication/hooks/chat/useGroupParticipants";
+import { useMentionAutocomplete } from "@/modules/communication/hooks/chat/useMentionAutocomplete";
+import { MentionPopover } from "./MentionPopover";
 
 // ─── Props ────────────────────────────────────────────────────────────────────
 
@@ -185,6 +189,18 @@ export function ChatComposer({
   // Templates para slash command
   const { data: templates } = useMessageTemplates();
 
+  // Menção (@) em grupo — só Uazapi manda `mentions`. Os participantes só são
+  // buscados depois do primeiro `@` digitado NESTA conversa: o composer não
+  // remonta na troca de conversa, então o "já pediu" é amarrado à conversa.
+  const groupJid = isGroup ? resolveWhatsAppDestination(phoneNumber, true)?.number ?? null : null;
+  const mentionsEnabled = !!groupJid && canReply && caps.canUseUazapiActions;
+  const mentionScope = `${instanceId}:${groupJid ?? ""}`;
+  const [mentionsWantedFor, setMentionsWantedFor] = useState<string | null>(null);
+  const markMentionsWanted = useCallback(() => setMentionsWantedFor(mentionScope), [mentionScope]);
+  const participants = useGroupParticipants(instanceId, groupJid, mentionsEnabled && mentionsWantedFor === mentionScope);
+  const textMention = useMentionAutocomplete({ enabled: mentionsEnabled, value: message, onChange: setMessage, inputRef, resetKey: conversationKey, onOpen: markMentionsWanted });
+  const captionMention = useMentionAutocomplete({ enabled: mentionsEnabled, value: caption, onChange: setCaption, inputRef: captionRef, resetKey: conversationKey, onOpen: markMentionsWanted });
+
   // Dados do lead para resolução de variáveis de template
   const { data: leadForTemplates } = useQuery({
     queryKey: ["lead-for-templates", leadId],
@@ -290,7 +306,8 @@ export function ChatComposer({
   }, [leadForTemplates, selectedContact, message, isBusy, phoneNumber, isGroup, instanceName, instanceId, leadId, teamMember, sendMedia, setMessage]);
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    // Slash popover captura Enter para selecionar template
+    // Slash popover captura Enter para selecionar template. O seletor de
+    // menção nem chega aqui: com opção na tela ele para o Enter na captura.
     if (showSlashPopover) return;
 
     const isMod = e.metaKey || e.ctrlKey;
@@ -531,12 +548,31 @@ export function ChatComposer({
                   {!sendAsSticker && (
                     <div className="flex items-center gap-1">
                       <ComposerEmojiPicker inputRef={captionRef} onChange={setCaption} disabled={sendMedia.isPending || isPreparing} />
-                      <Input
-                        ref={captionRef}
-                        placeholder="Adicionar legenda (opcional)..."
-                        value={caption}
-                        onChange={(e) => setCaption(e.target.value)}
-                      />
+                      <div className="relative flex-1">
+                        {captionMention.trigger && (
+                          <MentionPopover
+                            query={captionMention.trigger.query}
+                            participants={participants.data}
+                            loading={participants.isLoading}
+                            onSelect={captionMention.select}
+                            onClose={captionMention.close}
+                          />
+                        )}
+                        <Input
+                          ref={captionRef}
+                          placeholder="Adicionar legenda (opcional)..."
+                          value={caption}
+                          onChange={(e) => {
+                            setCaption(e.target.value);
+                            captionMention.sync(e.target);
+                          }}
+                          onClick={(e) => captionMention.sync(e.currentTarget)}
+                          onKeyUp={(e) => {
+                            if (e.key === "ArrowLeft" || e.key === "ArrowRight" || e.key === "Home" || e.key === "End") captionMention.sync(e.currentTarget);
+                          }}
+                          onBlur={captionMention.close}
+                        />
+                      </div>
                     </div>
                   )}
                   <div className="flex gap-2">
@@ -599,6 +635,17 @@ export function ChatComposer({
               />
             )}
 
+            {/* Seletor de menção (@) — só em grupo Uazapi */}
+            {textMention.trigger && !showSlashPopover && (
+              <MentionPopover
+                query={textMention.trigger.query}
+                participants={participants.data}
+                loading={participants.isLoading}
+                onSelect={textMention.select}
+                onClose={textMention.close}
+              />
+            )}
+
             {/* Andar 1 — o texto. Textarea p/ suportar quebra de linha (⇧⏎). */}
             <Textarea
               ref={inputRef}
@@ -609,10 +656,18 @@ export function ChatComposer({
                 const val = e.target.value;
                 setMessage(val);
                 setShowSlashPopover(val.startsWith("/") && val.length > 0);
+                textMention.sync(e.target);
                 if (val.trim()) presence.typing();
                 else presence.stop();
               }}
-              onBlur={presence.stop}
+              onClick={(e) => textMention.sync(e.currentTarget)}
+              onKeyUp={(e) => {
+                if (e.key === "ArrowLeft" || e.key === "ArrowRight" || e.key === "Home" || e.key === "End") textMention.sync(e.currentTarget);
+              }}
+              onBlur={() => {
+                presence.stop();
+                textMention.close();
+              }}
               onKeyDown={handleKeyDown}
               aria-label={`Digite uma mensagem para ${contactName}`}
               className="block w-full min-h-[52px] max-h-[140px] resize-none border-0 bg-transparent px-3.5 pb-1 pt-3 text-sm leading-5 shadow-none focus-visible:ring-0 focus-visible:ring-offset-0"
