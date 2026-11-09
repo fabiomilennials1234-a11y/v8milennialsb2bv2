@@ -2,7 +2,7 @@
 import { act, render, screen } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import type { ReactNode } from "react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const { m, query, mutation, nada, visao } = vi.hoisted(() => ({
   visao: { disponivel: false, visao: "todos" as "meu" | "todos", setVisao: () => {}, donoForcado: null as string | null },
