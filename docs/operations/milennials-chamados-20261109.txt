@@ -1,0 +1,78 @@
+Relatório técnico — chamados Milennials — 09/11/2026
+Organização: 6030520a-2ca7-477d-be89-55758e2cd808
+Execução: projeto local + Supabase de produção; sem navegador.
+Os dois chamados foram movidos de Aberto para Em andamento às 12:16 BRT.
+Diagnósticos e resultados foram registrados em support_ticket_diagnoses.
+
+1. Copilot não funciona
+Chamado: 11291100-c273-402f-9009-75eb591c9338
+Causa reproduzida: envio humano inicia a pausa temporária de 60 minutos.
+Ativar a IA pelos RPCs existentes alterava ai_disabled, mas deixava
+human_paused_until no telefone e na conversa. O gate continuava bloqueando.
+
+Evidência do caso: envio humano em 06/11 às 20:41:06 UTC, reativação
+às 20:41:38 UTC e novas mensagens recebidas durante a pausa.
+O agente Milena está ativo, vinculado à instância Leo Meireles e restrito
+ao funil Reativação. Essas restrições foram preservadas.
+O contato de teste tem um único cadastro vivo; o segundo está excluído
+logicamente e não disputa o roteamento.
+
+Correção aplicada em produção nos três RPCs:
+toggle_lead_ai, toggle_phone_ai e master_set_copilot_disabled.
+A ativação explícita agora encerra a pausa do telefone e das conversas
+do mesmo número na organização. Desativar não limpa a pausa.
+Novos envios humanos continuam sujeitos à pausa configurada.
+Autorização, ACLs, histórico e sincronização de duplicatas preservados.
+
+Migration: 20271230000000_copilot_explicit_reactivation_clears_pause.sql.
+Arquivo inicialmente criado pela CLI e ordenado depois da migration mais
+recente do repositório (20271229000000), para não ser sobrescrito por
+definições anteriores. O MCP registrou inicialmente 20261109152743;
+o registro foi alinhado ao arquivo ordenado, sem reaplicar o SQL.
+
+Validação: 14 testes PostgreSQL/PGlite passaram. Seis desses cenários
+falham nas funções originais. Inclui membro, master, telefone sem lead,
+lead sem telefone, duplicatas e isolamento por organização.
+As três definições e ACLs foram conferidas após a aplicação.
+O contato de teste está com IA habilitada e sem pausa ativa.
+Resultado: correção aplicada; falta confirmar uma nova resposta real.
+Não houve envio de mensagem de teste nem replay de mensagens antigas.
+
+2. Ainda á leads duplicados
+Chamado: aff42fb5-3472-4ae7-a48e-498fa199054c
+Caso: Marcello / Rebran, lead 78e36ab4-50e6-4627-a38e-9919b58f9fd4.
+Era um cadastro com duas entradas abertas no Closers, etapa Negociando.
+A entrada antiga de maio foi movida de Oportunidades para Closers em
+30/09, onde já existia o card com proposta comercial desde setembro.
+
+Removida somente a entrada redundante:
+9ead8f15-477f-4413-b1e9-8b3ae99b55aa.
+Preservada a entrada a5bb28c6-156b-4981-81e1-09722723d77e,
+negócio da281134-e286-4003-b835-16fd33cb978f, valor R$ 4.920,
+um produto Milennials Growth, o contato e a entrada no outro funil.
+O negócio legado sem valor também foi preservado.
+
+A transação bloqueou os dois cards, conferiu valor/produtos e todas
+as FKs da entrada redundante; não havia referências dependentes.
+Snapshot completo foi salvo em lead_history:
+action = duplicate_pipeline_entry_removed
+metadata.ticket_id = aff42fb5-3472-4ae7-a48e-498fa199054c
+metadata.removed_entry = linha completa removida.
+Esse snapshot permite revisar/restaurar a entrada se necessário;
+não restaurar sem conferir se outro card substituto foi criado.
+
+O código atual exclui o card por pipeline_entries.id, preservando
+leads e deals. Os testes de exclusão individual e recusa por permissão
+passaram. Não foi aplicada deduplicação indiscriminada a outros negócios.
+Resultado: caso corrigido e conferido no banco; chamado segue Em andamento.
+
+Validação adicional:
+40 testes existentes passaram em excluir-negocio, excluir-negocio-painel,
+hooks-copilot-toggle e funnel-gate.
+Avisos de acessibilidade já existentes nos mocks de Dialog não falharam.
+Comando novo: node --test tests/integration/copilot-reactivation-pause.test.mjs
+Comando relacionado: npx vitest run tests/unit/excluir-negocio.test.tsx tests/unit/excluir-negocio-painel.test.tsx tests/unit/hooks-copilot-toggle.test.ts tests/unit/funnel-gate.test.ts
+
+Branch local: fix/milennials-chamados-20261109.
+Nenhum push direto para main. A credencial válida do Git Credential Manager
+foi recuperada para autenticar a publicação, sem persistir tokens em arquivos.
