@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useOrganization } from "@/modules/identity";
 import type { ClosedMonthSummary } from "@/modules/pipelines/lib/closed-outcome-groups";
+import { recorteCanonicoDeContagem } from "@/modules/pipelines/lib/stage-counts-query";
 
 /**
  * Resumo dos negócios ENCERRADOS de cada etapa de um funil, por desfecho e mês
@@ -62,12 +63,23 @@ export async function fetchDesfechoPorMes(args: {
   pipelineId: string;
   orgId: string;
   tz: string;
+  /**
+   * Recorte do board (`usePaginatedFunil().filterParams`). Presente = a versão
+   * filtrada (`get_funil_desfecho_por_mes_filtrado`, migration
+   * 20271231000000): a pilha soma os mesmos cards que a coluna pagina.
+   */
+  filtros?: Record<string, unknown> | null;
 }): Promise<DesfechoPorMesPorEtapa | null> {
   // `as never`: RPC mais nova que o types.ts gerado de prod; morre no regen.
-  const { data, error } = await supabase.rpc(
-    "get_funil_desfecho_por_mes" as never,
-    { p_pipeline_id: args.pipelineId, p_org_id: args.orgId, p_tz: args.tz } as never,
-  );
+  const { data, error } = args.filtros
+    ? await supabase.rpc(
+        "get_funil_desfecho_por_mes_filtrado" as never,
+        { ...args.filtros, p_pipeline_id: args.pipelineId, p_org_id: args.orgId, p_tz: args.tz } as never,
+      )
+    : await supabase.rpc(
+        "get_funil_desfecho_por_mes" as never,
+        { p_pipeline_id: args.pipelineId, p_org_id: args.orgId, p_tz: args.tz } as never,
+      );
   if (error) throw error;
 
   const rows = (data ?? []) as RpcRow[];
@@ -91,15 +103,27 @@ export async function fetchDesfechoPorMes(args: {
 
 export function useFunilDesfechoPorMes(
   pipelineId: string | null | undefined,
-  { enabled = true }: { enabled?: boolean } = {},
+  {
+    enabled = true,
+    filtros = null,
+  }: { enabled?: boolean; filtros?: Record<string, unknown> | null } = {},
 ) {
   const { organizationId, isReady } = useOrganization();
   const tz = fusoDoNavegador();
   const ativo = enabled && isReady && !!organizationId && !!pipelineId;
+  // Mesmo recorte canônico da contagem das colunas: filtro equivalente = mesma
+  // chave. A chave começa por [KEY, pipelineId], então as invalidações por
+  // prefixo (move de card, ganho/perda) continuam pegando a versão filtrada.
+  // Sem filtro, a chave é a de sempre (4 posições).
+  const recorte = filtros ? JSON.stringify(recorteCanonicoDeContagem(filtros)) : null;
+  const queryKey = recorte
+    ? ([DESFECHO_POR_MES_KEY, pipelineId, organizationId, tz, recorte] as const)
+    : ([DESFECHO_POR_MES_KEY, pipelineId, organizationId, tz] as const);
 
   const query = useQuery({
-    queryKey: [DESFECHO_POR_MES_KEY, pipelineId, organizationId, tz] as const,
-    queryFn: () => fetchDesfechoPorMes({ pipelineId: pipelineId!, orgId: organizationId!, tz }),
+    queryKey,
+    queryFn: () =>
+      fetchDesfechoPorMes({ pipelineId: pipelineId!, orgId: organizationId!, tz, filtros }),
     enabled: ativo,
     staleTime: 30_000,
     // O resumo é um extra: falhou, a pilha mostra o carregado e se declara
@@ -108,8 +132,8 @@ export function useFunilDesfechoPorMes(
   });
 
   return {
-    // Desligado (ex.: filtro ativo no board) NÃO devolve o que ficou no cache:
-    // o resumo é da etapa sem recorte, e a coluna filtrada é outra conta.
+    // Desligado (ex.: filtro ativo sem a versão filtrada) NÃO devolve o que
+    // ficou no cache: aquele resumo é de outro recorte que não o da coluna.
     porEtapa: ativo && !query.isError ? (query.data ?? null) : null,
     isLoading: ativo && query.isLoading,
     isError: query.isError,

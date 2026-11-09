@@ -42,6 +42,9 @@ import {
   type AddableFunnel,
 } from "./contextPanelFunnelHelpers";
 import { notifyError } from "@/shared/errors";
+import { useFeatureFlag } from "@/modules/platform/feature-flags";
+import { CHAT_GANHO_PERDA_FLAG } from "@/modules/communication/lib/fechar-negocio-chat";
+import { GanhoPerdaDoNegocio } from "./GanhoPerdaDoNegocio";
 
 interface ContextPanelFunnelsProps {
   leadId: string;
@@ -63,6 +66,8 @@ export function ContextPanelFunnels({ leadId }: ContextPanelFunnelsProps) {
   // Mesma permissão do kanban (paridade — nada burla o gate no chat).
   const gates = useLeadActionGates(leadId);
   const canMove = gates.canMoveMeeting.allowed;
+  // Ganho/Perda abaixo de cada negócio: piloto por org (Café Jurerê).
+  const { enabled: comGanhoPerda } = useFeatureFlag(CHAT_GANHO_PERDA_FLAG);
   const canAdd = gates.canAddToPipe.allowed;
 
   const rows = useMemo(() => toFunnelRows(pipelines, displayConfig), [pipelines, displayConfig]);
@@ -236,10 +241,8 @@ export function ContextPanelFunnels({ leadId }: ContextPanelFunnelsProps) {
         const current = row.stages.find((s) => s.key === currentKey) ?? null;
         const isMoving = pending[row.entryId] != null;
         return (
-          <div
-            key={row.key}
-            className="flex items-center justify-between gap-2 rounded-xl bg-muted/50 p-2.5"
-          >
+          <div key={row.key} className="rounded-xl bg-muted/50 p-2.5">
+          <div className="flex items-center justify-between gap-2">
             <div className="flex min-w-0 items-center gap-2.5">
               <span className="h-8 w-[3px] shrink-0 rounded-full" style={{ background: row.color }} />
               <div className="min-w-0">
@@ -308,6 +311,18 @@ export function ContextPanelFunnels({ leadId }: ContextPanelFunnelsProps) {
                 </div>
               </PopoverContent>
             </Popover>
+          </div>
+          {comGanhoPerda && (
+            <GanhoPerdaDoNegocio
+              entryId={row.entryId}
+              funil={row.label}
+              etapas={row.stages.map((s) => ({ key: s.key, stageId: s.stageId, label: s.label }))}
+              etapaAtualKey={currentKey}
+              podeMover={canMove}
+              moverEtapa={moveEntry.mutateAsync}
+              capturarMotivoDaPerda={capturarMotivoDaPerda}
+            />
+          )}
           </div>
         );
       })}

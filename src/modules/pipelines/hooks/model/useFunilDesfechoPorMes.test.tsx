@@ -93,6 +93,55 @@ describe("useFunilDesfechoPorMes (Chamado 172ef046)", () => {
     expect(result.current.porEtapa).toBeNull();
   });
 
+  it("com filtros: chama a versão filtrada com o recorte do board e o resumo vale", async () => {
+    rpc.mockResolvedValue({
+      data: [{ stage_key: "vendido", outcome: "won", month_key: "2026-10", cnt: 2, total: "500" }],
+      error: null,
+    });
+    const filtros = { p_org_id: "org-1", p_search: "Alfa", p_responsible_id: null, p_tag_ids: null };
+    const { result } = renderHook(() => useFunilDesfechoPorMes(PIPELINE_ID, { filtros }), { wrapper });
+
+    await waitFor(() => expect(result.current.porEtapa).not.toBeNull());
+    expect(rpc).toHaveBeenCalledWith("get_funil_desfecho_por_mes_filtrado", {
+      ...filtros,
+      p_pipeline_id: PIPELINE_ID,
+      p_org_id: "org-1",
+      p_tz: TZ,
+    });
+    expect(result.current.porEtapa).toEqual({
+      vendido: [{ outcome: "won", monthKey: "2026-10", count: 2, total: 500 }],
+    });
+  });
+
+  it("com filtros: a chave começa por [KEY, pipelineId] (as invalidações por prefixo pegam)", async () => {
+    rpc.mockResolvedValue({ data: [], error: null });
+    const filtros = { p_org_id: "org-1", p_search: "Alfa" };
+    const { result } = renderHook(() => useFunilDesfechoPorMes(PIPELINE_ID, { filtros }), { wrapper });
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+    const q = client.getQueryCache().find({ queryKey: [DESFECHO_POR_MES_KEY, PIPELINE_ID], exact: false });
+    expect(q?.queryKey).toEqual([
+      DESFECHO_POR_MES_KEY,
+      PIPELINE_ID,
+      "org-1",
+      TZ,
+      JSON.stringify({ p_org_id: "org-1", p_search: "Alfa" }),
+    ]);
+  });
+
+  it("filtro diferente = outra chave (não reaproveita o total de outro recorte)", async () => {
+    rpc.mockResolvedValue({ data: [], error: null });
+    const { rerender } = renderHook(
+      ({ busca }: { busca: string }) =>
+        useFunilDesfechoPorMes(PIPELINE_ID, { filtros: { p_org_id: "org-1", p_search: busca } }),
+      { wrapper, initialProps: { busca: "Alfa" } },
+    );
+    await waitFor(() => expect(rpc).toHaveBeenCalledTimes(1));
+    rerender({ busca: "Beta" });
+    await waitFor(() => expect(rpc).toHaveBeenCalledTimes(2));
+    expect(rpc.mock.calls[1][1]).toMatchObject({ p_search: "Beta" });
+  });
+
   it("resposta no teto de linhas do PostgREST é tratada como incompleta", async () => {
     rpc.mockResolvedValue({
       data: Array.from({ length: 1000 }, (_, i) => ({

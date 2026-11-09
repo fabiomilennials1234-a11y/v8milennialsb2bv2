@@ -10,6 +10,7 @@ const state = vi.hoisted(() => ({
   refetch: vi.fn(),
   move: vi.fn(),
   capturar: vi.fn(),
+  ganhoPerda: false,
 }));
 
 vi.mock("@/integrations/supabase/client", () => ({ supabase: { from: () => ({}) } }));
@@ -38,6 +39,14 @@ vi.mock("@/modules/pipelines", () => ({
   usePipelineDisplayConfig: () => ({ data: [] }),
 }));
 vi.mock("@/shared/errors", () => ({ notifyError: vi.fn() }));
+vi.mock("@/modules/platform/feature-flags", () => ({
+  useFeatureFlag: (key: string) => ({ enabled: key === "chat_ganho_perda_negocio" && state.ganhoPerda, isLoading: false }),
+}));
+vi.mock("../GanhoPerdaDoNegocio", () => ({
+  GanhoPerdaDoNegocio: (p: { entryId: string; funil: string; etapaAtualKey: string | null }) => (
+    <div data-testid="ganho-perda-stub">{`${p.entryId}|${p.funil}|${p.etapaAtualKey}`}</div>
+  ),
+}));
 
 import { ContextPanelFunnels } from "../ContextPanelFunnels";
 
@@ -75,6 +84,24 @@ beforeEach(() => {
   state.refetch.mockReset();
   state.move.mockReset();
   state.capturar.mockReset();
+  state.ganhoPerda = false;
+});
+
+describe("ContextPanelFunnels — Ganho/Perda abaixo do negócio (flag por org)", () => {
+  it("flag desligada: o painel fica como sempre foi", () => {
+    state.pipelines = COM_NEGOCIO;
+    renderCard();
+    expect(screen.queryByTestId("ganho-perda-stub")).not.toBeInTheDocument();
+  });
+
+  it("flag ligada: um bloco por negócio, com a etapa atual dele", () => {
+    state.ganhoPerda = true;
+    state.pipelines = COM_NEGOCIO;
+    renderCard();
+    const blocos = screen.getAllByTestId("ganho-perda-stub");
+    expect(blocos).toHaveLength(1); // só o funil com negócio (entry-1); Cafeteria é "adicionar"
+    expect(blocos[0]).toHaveTextContent("entry-1|Envase|");
+  });
 });
 
 describe("ContextPanelFunnels — card Funis do lead no chat", () => {

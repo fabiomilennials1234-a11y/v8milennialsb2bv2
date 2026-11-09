@@ -86,6 +86,8 @@ import {
   prepararDissolucao,
 } from "@/modules/leads";
 import { LeadPanelLayout } from "@/modules/platform/components/layout/LeadPanelLayout";
+import { useVisaoMeuTodos } from "@/modules/platform/hooks/useVisaoMeuTodos";
+import { VisaoMeuTodosToggle } from "@/modules/platform/components/VisaoMeuTodosToggle";
 import { AddLeadToPipeModal } from "@/modules/pipelines/components/custom/AddLeadToPipeModal";
 import { CustomPipeSettingsDialog } from "@/modules/pipelines/components/custom/CustomPipeSettingsDialog";
 import { DisparoWizard, type DisparoBoardFilter, type DisparoSource } from "../components/disparo";
@@ -254,7 +256,10 @@ function FunilPageInner() {
   const { data: systemWorkflowCounts = {} } = useStageWorkflowCounts(trioSlug ?? undefined);
 
   // ── Filtros: bloco universal (SCRUM-633) + dimensões extras por capacidade ─
-  const controller = useFunilFilters(pipeline?.id);
+  // Visão Meus · Todos (flag `visao_meu_todos`, só admin): "Meus" recorta o
+  // board pelos negócios em que o membro é responsável.
+  const visaoFunis = useVisaoMeuTodos("funis");
+  const controller = useFunilFilters(pipeline?.id, { donoForcado: visaoFunis.donoForcado });
   // O hub ("Todos os funis") abre o funil já na visão escolhida na pílula.
   const location = useLocation();
   const initialView = (location.state as { view?: FunilViewMode } | null)?.view;
@@ -487,7 +492,9 @@ function FunilPageInner() {
     const chips: string[] = [];
     const term = controller.search.trim();
     if (term) chips.push(`Busca: "${term}"`);
-    if (controller.state.responsibleId !== "all") {
+    if (visaoFunis.donoForcado) {
+      chips.push("Responsável: você");
+    } else if (controller.state.responsibleId !== "all") {
       const member = controller.sections.find((s) => s.type === "responsible");
       const name =
         member && "members" in member
@@ -503,11 +510,11 @@ function FunilPageInner() {
     }
     return {
       search: controller.search,
-      responsibleId: controller.state.responsibleId,
+      responsibleId: controller.responsibleIdEfetivo,
       tagIds: controller.state.tagIds,
       chips,
     };
-  }, [controller.search, controller.state.responsibleId, controller.state.tagIds, controller.sections, orgTags]);
+  }, [controller.search, controller.state.responsibleId, controller.responsibleIdEfetivo, controller.state.tagIds, controller.sections, orgTags, visaoFunis.donoForcado]);
 
   const handleOpenDisparoStage = useCallback(() => {
     setDisparoManualIds([]);
@@ -699,6 +706,16 @@ function FunilPageInner() {
         subtitle={pipeline.description || undefined}
         search={controller.search}
         onSearchChange={controller.setSearch}
+        scope={
+          visaoFunis.disponivel ? (
+            <VisaoMeuTodosToggle
+              rotulo="Visão dos negócios"
+              visao={visaoFunis.visao}
+              onChange={visaoFunis.setVisao}
+              className="self-start sm:self-auto"
+            />
+          ) : undefined
+        }
         tabs={
           <TabsList variant="pill" aria-label="Visão do funil">
             {stages.length > 0 &&

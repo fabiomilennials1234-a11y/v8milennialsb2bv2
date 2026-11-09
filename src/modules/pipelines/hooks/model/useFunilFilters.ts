@@ -74,6 +74,12 @@ export interface FunilFiltersController {
   metricsRange: DateRange | null;
   /** Nº de dimensões ativas (badge do botão Filtros). */
   activeCount: number;
+  /**
+   * Responsável que de fato recorta o board: o forçado pela visão "Meus"
+   * (`options.donoForcado`) ou o escolhido no painel. É o que o Disparo deve
+   * descrever — `state.responsibleId` é só a escolha guardada.
+   */
+  responsibleIdEfetivo: string;
   clearAll: () => void;
 }
 
@@ -98,8 +104,17 @@ export interface FunilFiltersController {
  */
 export function useFunilFilters(
   pipelineId: string | null | undefined,
-  options: { initialState?: Partial<FunilFilterState> } = {},
+  options: {
+    initialState?: Partial<FunilFilterState>;
+    /**
+     * Visão "Meus" (flag `visao_meu_todos`, só admin): `team_members.id` que
+     * substitui o filtro de responsável em todo recorte server-side, e tira a
+     * seção do painel. `null`/ausente = o filtro do painel vale.
+     */
+    donoForcado?: string | null;
+  } = {},
 ): FunilFiltersController {
+  const donoForcado = options.donoForcado ?? null;
   const [state, setState] = useState<FunilFilterState>(() => ({
     ...createInitialFunilFilterState(),
     ...options.initialState,
@@ -111,6 +126,8 @@ export function useFunilFilters(
   // cards da pessoa, então "Responsável: todos" não existe — e escolher outra
   // pessoa devolveria vazio. A seção some; o estado fica em "all".
   const onlyMine = useFunnelVisibilityLevel() === "own";
+  const responsibleIdEfetivo = donoForcado ?? state.responsibleId;
+  const escondeResponsavel = onlyMine || donoForcado !== null;
   const { data: orgTags = [] } = useTags();
 
   const patch = useCallback(
@@ -124,7 +141,7 @@ export function useFunilFilters(
     () => [
       { type: "created-period", value: state.period, onChange: patch("period") },
       { type: "stalled-days", value: state.stalled, onChange: patch("stalled") },
-      ...(onlyMine
+      ...(escondeResponsavel
         ? []
         : ([
             {
@@ -148,7 +165,7 @@ export function useFunilFilters(
       },
       { type: "scheduled", value: state.scheduled, onChange: patch("scheduled") },
     ],
-    [state, patch, responsibleMembers, orgTags, onlyMine],
+    [state, patch, responsibleMembers, orgTags, escondeResponsavel],
   );
 
   const metricsRange = useMemo(() => getDateRange(state.period), [state.period]);
@@ -157,7 +174,7 @@ export function useFunilFilters(
   const paginatedFilters = useMemo<PaginatedFilters>(
     () => ({
       search,
-      responsibleId: state.responsibleId,
+      responsibleId: responsibleIdEfetivo,
       tagIds: state.tagIds,
       origins: state.origins.length ? state.origins : undefined,
       qualificationTier: state.qualificationTier,
@@ -168,19 +185,19 @@ export function useFunilFilters(
       stalledMinDays: stalledBucket?.minDays ?? null,
       stalledMaxDays: stalledBucket?.maxDays ?? null,
     }),
-    [search, state, metricsRange, stalledBucket],
+    [search, state, responsibleIdEfetivo, metricsRange, stalledBucket],
   );
 
   const leadIdsParams = useMemo<PipelineLeadIdsParams>(
     () => ({
       search,
-      responsibleId: state.responsibleId,
+      responsibleId: responsibleIdEfetivo,
       tagIds: state.tagIds,
       qualificationTier: state.qualificationTier,
       preQualificationTier: state.preQualificationTier,
       origin: state.origins,
     }),
-    [search, state],
+    [search, state, responsibleIdEfetivo],
   );
 
   const leadIdsUnsupportedDims = useMemo(() => {
@@ -193,7 +210,8 @@ export function useFunilFilters(
 
   const activeCount = useMemo(() => {
     let n = 0;
-    if (state.responsibleId !== "all") n++;
+    // "Meus" não é filtro do painel — tem controle próprio, fora do badge.
+    if (donoForcado === null && state.responsibleId !== "all") n++;
     if (state.origins.length) n++;
     if (state.tagIds.length) n++;
     if (state.qualificationTier.length) n++;
@@ -202,7 +220,7 @@ export function useFunilFilters(
     if (metricsRange) n++;
     if (stalledBucket) n++;
     return n;
-  }, [state, metricsRange, stalledBucket]);
+  }, [state, donoForcado, metricsRange, stalledBucket]);
 
   const clearAll = useCallback(() => {
     setState(createInitialFunilFilterState());
@@ -227,6 +245,7 @@ export function useFunilFilters(
     leadIdsUnsupportedDims,
     metricsRange,
     activeCount,
+    responsibleIdEfetivo,
     clearAll,
   };
 }
