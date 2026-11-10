@@ -85,15 +85,6 @@ function TelaDoComando({ isAdmin, itens: iniciais }: { isAdmin: boolean; itens: 
           <KpiTile label="Agendas atrasadas" value={String(n("atrasada"))} icon={AlarmClock} tone={n("atrasada") ? "bad" : "good"} note="Passaram da data, ainda abertas" />
           <KpiTile label="Reuniões hoje" value="2" icon={CalendarCheck} tone="info" note="0 realizadas" />
         </KpiRow>
-        <div className="grid items-start gap-4 lg:grid-cols-3">
-          <div className="min-w-0 lg:col-span-2">
-            {/* Metas do mês: bloco inalterado, só ocupa o lugar dele aqui. */}
-            <ComandoCard icon={Target} title="Metas do mês" isEmpty emptyTitle="Metas do mês" emptyHint="Bloco inalterado — fica como está hoje." className="min-h-[318px]" />
-          </div>
-          <div className="min-w-0">
-            <ResumoAgendaView linhas={linhas} hoje={HOJE} isAdmin={isAdmin && visao === "todos"} filtro={filtro} onFiltro={setFiltro} />
-          </div>
-        </div>
         <AgendaContatosView
           itens={itens}
           hoje={HOJE}
@@ -113,6 +104,15 @@ function TelaDoComando({ isAdmin, itens: iniciais }: { isAdmin: boolean; itens: 
           }
           onConcluir={(a) => setItens((xs) => xs.filter((x) => x.id !== a.id))}
         />
+        <div className="grid items-start gap-4 lg:grid-cols-3">
+          <div className="min-w-0 lg:col-span-2">
+            {/* Metas do mês: bloco inalterado, só ocupa o lugar dele aqui. */}
+            <ComandoCard icon={Target} title="Metas do mês" isEmpty emptyTitle="Metas do mês" emptyHint="Bloco inalterado — fica como está hoje." className="min-h-[318px]" />
+          </div>
+          <div className="min-w-0">
+            <ResumoAgendaView linhas={linhas} hoje={HOJE} isAdmin={isAdmin && visao === "todos"} filtro={filtro} onFiltro={setFiltro} />
+          </div>
+        </div>
       </div>
     </TooltipProvider>
   );
