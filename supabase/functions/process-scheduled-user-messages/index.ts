@@ -457,7 +457,18 @@ Deno.serve(withErrorBoundary("process-scheduled-user-messages", async (req) => {
             .from("whatsapp_instances")
             .select("*")
             .eq("id", msg.whatsapp_instance_id)
+            // Defesa em profundidade: a linha da fila é escrita pelo cliente.
+            // Sem este filtro, uma instância de OUTRA org na linha mandaria a
+            // mensagem pela caixa dela. O banco já barra isso (trigger
+            // scheduled_user_messages_tenant_integrity); aqui é a segunda trava.
+            .eq("organization_id", msg.organization_id)
             .single();
+          // A linha escolheu caixa e ela não é desta org (ou sumiu entre o
+          // apagar e o SET NULL da FK): falha alto. Cair no fallback "mais
+          // antiga da org" mandaria por um número que ninguém escolheu.
+          if (!inst) {
+            throw new Error("Instancia da mensagem nao encontrada nesta organizacao");
+          }
           instance = inst;
           isSzChat = inst?.metadata?.provider === "szchat";
         }
