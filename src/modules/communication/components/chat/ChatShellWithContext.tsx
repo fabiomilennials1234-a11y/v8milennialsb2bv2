@@ -480,6 +480,7 @@ function ChatView({
           leadName={contactName}
           phoneNumber={phoneNumber ?? ""}
           instanceId={instanceId ?? undefined}
+          conversationKey={conversationKey}
         />
       )}
 

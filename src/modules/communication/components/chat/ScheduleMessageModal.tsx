@@ -34,6 +34,11 @@ interface ScheduleMessageModalProps {
   editingId?: string;
   editingContent?: string;
   editingScheduledAt?: Date;
+  /**
+   * A linha em edição é uma FALHA (bandeja do chat): salvar a reprograma.
+   * Opt-in — sem isto o update mantém o CAS só em `scheduled` (contrato da Agenda).
+   */
+  editingFailed?: boolean;
 }
 
 const MEDIA_ICON_MAP: Record<string, typeof ImageIcon> = {
@@ -62,6 +67,7 @@ export function ScheduleMessageModal({
   editingId,
   editingContent,
   editingScheduledAt,
+  editingFailed = false,
 }: ScheduleMessageModalProps) {
   const [message, setMessage] = useState(editingContent ?? initialMessage);
   const [mediaFile, setMediaFile] = useState<File | null>(initialMediaFile ?? null);
@@ -111,6 +117,7 @@ export function ScheduleMessageModal({
           id: editingId,
           messageContent: message.trim() || undefined,
           scheduledAt: scheduledDateTime,
+          reviverFalha: editingFailed,
         });
       } else {
         await createMutation.mutateAsync({

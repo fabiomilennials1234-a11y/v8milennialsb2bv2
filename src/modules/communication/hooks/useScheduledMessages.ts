@@ -4,8 +4,9 @@ import { useOrganization } from "@/modules/identity";
 import { useCurrentTeamMember } from "@/modules/identity";
 import { useLogLeadAction } from "@/shared/hooks/useLogLeadAction";
 import { toast } from "sonner";
-import type { TablesInsert } from "@/integrations/supabase/types";
+import type { TablesInsert, TablesUpdate } from "@/integrations/supabase/types";
 import { notifyError } from "@/shared/errors";
+import { FALHA_JANELA_MS } from "@/modules/communication/lib/scheduledTray";
 
 export interface ScheduledMessage {
   id: string;
@@ -27,7 +28,28 @@ export interface ScheduledMessage {
   created_at: string;
 }
 
-/** Mensagens agendadas pendentes de um lead específico */
+/**
+ * O que a bandeja da conversa mostra: o que ainda vai sair (`scheduled`), o que
+ * está saindo agora (`sending`) e o que falhou nos últimos 7 dias (`failed`).
+ *
+ * A falha entra porque sumir com ela era o defeito: o worker desiste depois de
+ * 3 tentativas, a linha virava `failed` e a conversa voltava a parecer limpa —
+ * a pessoa não sabia que o cliente nunca recebeu. A janela de 7 dias evita que
+ * uma falha de meses atrás fique no topo para sempre.
+ *
+ * Única consumidora: `ScheduledMessagesBanner` (verificado por grep em 2026-11-09).
+ * `useLeadsWithScheduledMessages` e `useMyScheduledMessages` seguem com a
+ * semântica própria.
+ */
+export const BANDEJA_STATUSES = ["scheduled", "sending", "failed"] as const;
+
+/** Filtro plano (sem `and()` aninhado): "não é falha OU é recente". Janela única: `FALHA_JANELA_MS`. */
+function falhaRecenteFilter(now: number = Date.now()): string {
+  const desde = new Date(now - FALHA_JANELA_MS).toISOString();
+  return `status.neq.failed,scheduled_at.gte.${desde}`;
+}
+
+/** Mensagens da bandeja (pendentes, saindo, falhas recentes) de um lead específico */
 export function useScheduledMessagesForLead(leadId: string | null) {
   return useQuery({
     queryKey: ["scheduled-messages", "lead", leadId],
@@ -37,18 +59,22 @@ export function useScheduledMessagesForLead(leadId: string | null) {
         .from("scheduled_user_messages")
         .select("*")
         .eq("lead_id", leadId)
-        .eq("status", "scheduled")
+        .in("status", [...BANDEJA_STATUSES])
+        .or(falhaRecenteFilter())
         .order("scheduled_at", { ascending: true });
       if (error) return [];
       return (data ?? []) as ScheduledMessage[];
     },
     enabled: !!leadId,
     retry: false,
+    // Mesmo ritmo da consulta por conversa: `sending` → `sent`/`failed` muda
+    // sozinho no servidor, e a bandeja precisa refletir sem a pessoa recarregar.
+    refetchInterval: 60_000,
     staleTime: 60_000,
   });
 }
 
-/** Conversation lookup also survives linking a lead after scheduling. */
+/** Conversation lookup also survives linking a lead after scheduling. Mesmo recorte de status da bandeja. */
 export function useScheduledMessagesForConversation(phoneNumber: string, instanceId?: string) {
   const { organizationId } = useOrganization();
   const phone = phoneNumber.replace(/\D/g, "");
@@ -62,7 +88,8 @@ export function useScheduledMessagesForConversation(phoneNumber: string, instanc
         .eq("organization_id", organizationId)
         .eq("whatsapp_instance_id", instanceId)
         .eq("phone_number", phone)
-        .eq("status", "scheduled")
+        .in("status", [...BANDEJA_STATUSES])
+        .or(falhaRecenteFilter())
         .order("scheduled_at", { ascending: true });
       if (error) throw error;
       return (data ?? []) as ScheduledMessage[];
@@ -200,7 +227,10 @@ export const AGENDAMENTO_FORA_DE_JANELA =
  * mesma armadilha que o worker documenta no próprio lock (`if (!locked?.length)
  * continue`).
  */
-export function useCancelScheduledMessage() {
+export function useCancelScheduledMessage(opts?: {
+  /** Quem chama já avisou (ex.: toast com Desfazer da bandeja) — sem 2º toast. */
+  silencioso?: boolean;
+}) {
   const queryClient = useQueryClient();
 
   return useMutation({
@@ -217,7 +247,7 @@ export function useCancelScheduledMessage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["scheduled-messages"] });
       queryClient.invalidateQueries({ queryKey: ["agenda-events"] });
-      toast.success("Agendamento cancelado");
+      if (!opts?.silencioso) toast.success("Agendamento cancelado");
     },
     onError: (err: Error) => {
       // Sem isto a falha era muda: a mutation não tinha `onError`, então a
@@ -234,6 +264,10 @@ export function useCancelScheduledMessage() {
  *
  * Mesma guarda de janela do cancelamento, pelo mesmo motivo: editar a linha que
  * o worker já travou é um UPDATE que casa zero linha e volta 200.
+ *
+ * `reviverFalha` (opt-in, só a bandeja do chat passa): se a linha for uma
+ * FALHA, salvar a reprograma (2º ramo). Sem ele, o contrato antigo vale — CAS
+ * só em `scheduled`, e falha cai na guarda de janela (Agenda).
  */
 export function useUpdateScheduledMessage() {
   const queryClient = useQueryClient();
@@ -243,8 +277,9 @@ export function useUpdateScheduledMessage() {
       id: string;
       messageContent?: string;
       scheduledAt?: Date;
+      reviverFalha?: boolean;
     }) => {
-      const updates: Record<string, unknown> = {};
+      const updates: TablesUpdate<"scheduled_user_messages"> = {};
       if (input.messageContent !== undefined) updates.message_content = input.messageContent;
       if (input.scheduledAt) updates.scheduled_at = input.scheduledAt.toISOString();
 
@@ -260,7 +295,21 @@ export function useUpdateScheduledMessage() {
         .eq("status", "scheduled")
         .select("id");
       if (error) throw error;
-      if (!data?.length) throw new Error(AGENDAMENTO_FORA_DE_JANELA);
+      if (data?.length) return;
+      if (!input.reviverFalha) throw new Error(AGENDAMENTO_FORA_DE_JANELA);
+
+      // Editar uma FALHA (bandeja do chat) é reprogramá-la: volta para a fila
+      // com o texto/horário novos e as 3 tentativas do worker zeradas. Ramo
+      // separado, com CAS próprio em `failed`, para não mexer no `retry_count`
+      // de uma linha `scheduled` que está no meio dos retries do worker.
+      const { data: reprogramada, error: errFalha } = await supabase
+        .from("scheduled_user_messages")
+        .update({ ...updates, status: "scheduled", retry_count: 0, error_message: null })
+        .eq("id", input.id)
+        .eq("status", "failed")
+        .select("id");
+      if (errFalha) throw errFalha;
+      if (!reprogramada?.length) throw new Error(AGENDAMENTO_FORA_DE_JANELA);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["scheduled-messages"] });
@@ -274,6 +323,114 @@ export function useUpdateScheduledMessage() {
       notifyError(err, { fallback: "Não foi possível atualizar agendamento." });
       queryClient.invalidateQueries({ queryKey: ["scheduled-messages"] });
       queryClient.invalidateQueries({ queryKey: ["agenda-events"] });
+    },
+  });
+}
+
+/**
+ * A falha saiu do estado em que podia ser reenviada ou descartada — alguém já
+ * reenviou, descartou ou a linha mudou por outro caminho entre o render e o clique.
+ */
+export const FALHA_FORA_DE_JANELA =
+  "Esta mensagem não está mais marcada como falha — alguém já reenviou ou descartou.";
+
+function invalidarBandeja(queryClient: ReturnType<typeof useQueryClient>) {
+  queryClient.invalidateQueries({ queryKey: ["scheduled-messages"] });
+  queryClient.invalidateQueries({ queryKey: ["agenda-events"] });
+}
+
+/**
+ * "Enviar agora": antecipa o horário para AGORA e deixa o worker enviar.
+ *
+ * Não envia do navegador — o envio continua passando pelo mesmo caminho do
+ * agendamento (lock CAS do worker, dedup, governor). Por isso o toast diz
+ * "no próximo minuto": o cron roda a cada minuto e só então a mensagem sai.
+ *
+ * Mesmo CAS do cancelar: se o worker já pegou a linha, o UPDATE casa zero linha
+ * e a guarda devolve a verdade em vez de um sucesso falso.
+ */
+export function useSendScheduledMessageNow() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const { data, error } = await supabase
+        .from("scheduled_user_messages")
+        .update({ scheduled_at: new Date().toISOString() })
+        .eq("id", id)
+        .eq("status", "scheduled")
+        .select("id");
+      if (error) throw error;
+      if (!data?.length) throw new Error(AGENDAMENTO_FORA_DE_JANELA);
+    },
+    onSuccess: () => {
+      invalidarBandeja(queryClient);
+      toast.success("Enviando no próximo minuto");
+    },
+    onError: (err: Error) => {
+      notifyError(err, { fallback: "Não foi possível antecipar o envio." });
+      invalidarBandeja(queryClient);
+    },
+  });
+}
+
+/**
+ * "Tentar de novo" numa falha: devolve a linha à fila, para agora, com as 3
+ * tentativas do worker zeradas. CAS em `failed` — duas pessoas clicando ao
+ * mesmo tempo resultam em UM reenvio, e a segunda recebe a explicação.
+ */
+export function useRetryFailedScheduledMessage() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const { data, error } = await supabase
+        .from("scheduled_user_messages")
+        .update({
+          status: "scheduled",
+          scheduled_at: new Date().toISOString(),
+          retry_count: 0,
+          error_message: null,
+        })
+        .eq("id", id)
+        .eq("status", "failed")
+        .select("id");
+      if (error) throw error;
+      if (!data?.length) throw new Error(FALHA_FORA_DE_JANELA);
+    },
+    onSuccess: () => {
+      invalidarBandeja(queryClient);
+      toast.success("Reenviando no próximo minuto");
+    },
+    onError: (err: Error) => {
+      notifyError(err, { fallback: "Não foi possível reenviar a mensagem." });
+      invalidarBandeja(queryClient);
+    },
+  });
+}
+
+/** "Descartar" uma falha: ela sai da bandeja como cancelada. CAS em `failed`. */
+export function useDiscardFailedScheduledMessage(opts?: { silencioso?: boolean }) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const { data, error } = await supabase
+        .from("scheduled_user_messages")
+        .update({ status: "cancelled" })
+        .eq("id", id)
+        .eq("status", "failed")
+        .select("id");
+      if (error) throw error;
+      if (!data?.length) throw new Error(FALHA_FORA_DE_JANELA);
+    },
+    onSuccess: () => {
+      invalidarBandeja(queryClient);
+      if (!opts?.silencioso) toast.success("Mensagem descartada");
+    },
+    onError: (err: Error) => {
+      notifyError(err, { fallback: "Não foi possível descartar a mensagem." });
+      invalidarBandeja(queryClient);
     },
   });
 }

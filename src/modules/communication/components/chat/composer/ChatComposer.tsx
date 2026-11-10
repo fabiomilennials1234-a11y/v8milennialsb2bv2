@@ -30,6 +30,7 @@ import { cn } from "@/lib/utils";
 import { useAuth } from "@/modules/identity";
 import { useCurrentTeamMember } from "@/modules/identity";
 import { useConversationDraft } from "@/modules/communication/hooks/useConversationDraft";
+import { publishComposerEscape, publishComposerHasText, usePendingBadge } from "@/modules/communication/lib/composerTrayBus";
 import { useSendWhatsAppMessage, useSendWhatsAppMedia } from "@/modules/communication/hooks/chat/useWhatsAppSend";
 import { useTypingPresence } from "@/modules/communication/hooks/chat/useTypingPresence";
 import { AudioRecorder } from "@/modules/communication/components/chat/media/AudioRecorder";
@@ -50,6 +51,7 @@ import { templateFileNameFromUrl } from "@/modules/communication/lib/template-me
 import { usePasteAttachment } from "@/modules/communication/hooks/chat/usePasteAttachment";
 import type { DensityMode } from "@/modules/communication/components/chat/layout/ChatShell";
 import { ChatQuickActions } from "./ChatQuickActions";
+import { SeloDeProgramadas } from "./SeloDeProgramadas";
 import { ComposerEmojiPicker } from "./ComposerEmojiPicker";
 import { QUICK_ACTION_BUTTON } from "./quick-action-button";
 import { SendMenuDialog } from "./SendMenuDialog";
@@ -153,6 +155,15 @@ export function ChatComposer({
 
   // Draft persistido — user-scoped (B1 pattern)
   const { draft: message, setDraft: setMessage } = useConversationDraft(conversationKey, user?.id);
+
+  // Bandeja de programadas: "tem texto?" sai daqui só quando o boolean muda
+  // (nunca por tecla), e o contador do selo do Enviar volta de lá.
+  const hasText = message.trim().length > 0;
+  useEffect(() => {
+    publishComposerHasText(conversationKey, hasText);
+  }, [conversationKey, hasText]);
+  useEffect(() => () => publishComposerHasText(conversationKey, false), [conversationKey]);
+  const programadasPendentes = usePendingBadge(conversationKey);
 
   // State local
   const [showSlashPopover, setShowSlashPopover] = useState(false);
@@ -326,8 +337,10 @@ export function ChatComposer({
       e.preventDefault();
       if (showSlashPopover) setShowSlashPopover(false);
       if (isRecording) setIsRecording(false);
+      // Fecha a bandeja de programadas aberta desta conversa (evento, sem estado).
+      else publishComposerEscape(conversationKey);
     }
-  }, [showSlashPopover, isRecording, handleSend, setMessage]);
+  }, [showSlashPopover, isRecording, handleSend, setMessage, conversationKey]);
 
   const handleFileSelect = useCallback((file: File | null) => {
     if (!file) return;
@@ -756,22 +769,27 @@ export function ChatComposer({
 
               {/* Enviar — tinta, redondo. Sem texto, fica desabilitado (o
                   gravador mora na régua, não troca de lugar com o enviar). */}
-              <Button
-                type="button"
-                variant="ink"
-                size="icon"
-                onClick={handleSend}
-                disabled={!message.trim() || isBusy}
-                aria-label={isBusy ? "Aguardando envio da mensagem anterior" : "Enviar mensagem"}
-                title={isBusy ? "Aguardando envio da mensagem anterior" : undefined}
-                className="h-[38px] w-[38px] shrink-0 rounded-full"
-              >
-                {sendMessage.isPending ? (
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                ) : (
-                  <Send className="w-4 h-4" />
-                )}
-              </Button>
+              {/* Selo IRMÃO do botão: dentro dele herdaria o opacity-50 do
+                  disabled (campo vazio), e é justo aí que ele mais importa. */}
+              <span className="relative inline-flex shrink-0">
+                <Button
+                  type="button"
+                  variant="ink"
+                  size="icon"
+                  onClick={handleSend}
+                  disabled={!message.trim() || isBusy}
+                  aria-label={isBusy ? "Aguardando envio da mensagem anterior" : "Enviar mensagem"}
+                  title={isBusy ? "Aguardando envio da mensagem anterior" : undefined}
+                  className="h-[38px] w-[38px] shrink-0 rounded-full"
+                >
+                  {sendMessage.isPending ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Send className="w-4 h-4" />
+                  )}
+                </Button>
+                <SeloDeProgramadas n={programadasPendentes} />
+              </span>
             </div>
           </div>
 

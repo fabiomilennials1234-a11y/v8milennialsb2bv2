@@ -138,7 +138,105 @@ const DIAS_DO_CRIADOR = 20;
 type RegraDaCaixa =
   | "conversa_do_lead"
   | "conversa_do_telefone"
-  | "caixa_mais_usada_pelo_criador";
+  | "caixa_mais_usada_pelo_criador"
+  | "chip_do_criador";
+
+/** Flag por org (organizations.feature_flags): agendada sem chip sai pelo chip de quem agendou. */
+const FLAG_CHIP_DO_CRIADOR = "agendamento_chip_do_criador";
+
+/** Fail-closed: erro ou org sem a chave = desligada. */
+async function flagDaOrg(supabase: any, organizationId: string, chave: string): Promise<boolean> {
+  const { data, error } = await supabase
+    .from("organizations")
+    .select("feature_flags")
+    .eq("id", organizationId)
+    .maybeSingle();
+  if (error) return false;
+  const valor = data?.feature_flags?.[chave];
+  return valor === true || valor === "true";
+}
+
+/**
+ * Agendada sem chip: o chip de QUEM AGENDOU (Café Jurerê, 09/11). A regra da
+ * conversa olha a mensagem mais recente do cliente, e se outro vendedor falou
+ * com ele depois do agendamento, a mensagem saía pelo chip desse outro.
+ *
+ * Chips do criador = os que ele atende (`whatsapp_instance_allowed_members`) +
+ * o preferido dele, só entre os elegíveis do fallback (mesma org, conectado,
+ * uazapi/evolution, não reservado). Com mais de um: o dele em que a conversa
+ * com o cliente é mais recente; senão o preferido; senão o primeiro. Sem chip
+ * elegível, devolve nulo e vale a regra antiga.
+ */
+async function resolverChipDoCriador(
+  supabase: any,
+  msg: {
+    organization_id: string;
+    lead_id?: string | null;
+    phone_number?: string | null;
+    created_by?: string | null;
+  },
+): Promise<any | null> {
+  if (!msg.created_by) return null;
+
+  const [{ data: vinculos }, { data: membro }] = await Promise.all([
+    supabase
+      .from("whatsapp_instance_allowed_members")
+      .select("whatsapp_instance_id")
+      .eq("team_member_id", msg.created_by),
+    supabase
+      .from("team_members")
+      .select("preferred_whatsapp_instance_id")
+      .eq("id", msg.created_by)
+      .eq("organization_id", msg.organization_id)
+      .maybeSingle(),
+  ]);
+
+  const preferido: string | null = membro?.preferred_whatsapp_instance_id ?? null;
+  const ids = new Set<string>();
+  for (const v of vinculos ?? []) if (v?.whatsapp_instance_id) ids.add(v.whatsapp_instance_id);
+  if (preferido) ids.add(preferido);
+  if (ids.size === 0) return null;
+
+  const { data } = await supabase
+    .from("whatsapp_instances")
+    .select("*")
+    .eq("organization_id", msg.organization_id)
+    .in("id", [...ids])
+    .in("provider", PROVIDERS_LEGADOS)
+    .in("status", STATUS_CONECTADO)
+    .is("reserved_for", null);
+  const elegiveis: any[] = (data ?? []).slice().sort((a: any, b: any) => String(a.id).localeCompare(String(b.id)));
+  if (elegiveis.length === 0) return null;
+  if (elegiveis.length === 1) return elegiveis[0];
+
+  const idsElegiveis = elegiveis.map((i) => i.id);
+  const maisRecenteDaConversa = async (aplicar: (q: any) => any): Promise<any | null> => {
+    const { data: recentes } = await aplicar(
+      supabase
+        .from("whatsapp_messages")
+        .select("instance_id")
+        .eq("organization_id", msg.organization_id)
+        .in("instance_id", idsElegiveis),
+    )
+      .order("timestamp", { ascending: false })
+      .limit(1);
+    const id = recentes?.[0]?.instance_id;
+    return id ? elegiveis.find((i) => i.id === id) ?? null : null;
+  };
+
+  if (msg.lead_id) {
+    const porLead = await maisRecenteDaConversa((q) => q.eq("lead_id", msg.lead_id));
+    if (porLead) return porLead;
+  }
+  const digitos = (msg.phone_number ?? "").replace(/\D/g, "");
+  if (digitos.length >= 8) {
+    const porTelefone = await maisRecenteDaConversa((q) =>
+      q.ilike("phone_number", `%${digitos.slice(-8)}%`));
+    if (porTelefone) return porTelefone;
+  }
+
+  return elegiveis.find((i) => i.id === preferido) ?? elegiveis[0];
+}
 
 /**
  * Agendada sem caixa escolhida: a resposta certa é a caixa DA CONVERSA do
@@ -297,6 +395,8 @@ Deno.serve(withErrorBoundary("process-scheduled-user-messages", async (req) => {
     let dispatched = 0;
 
     const runStartedAt = Date.now();
+    // Uma leitura da flag por org por tick, não por mensagem.
+    const flagPorOrg = new Map<string, boolean>();
 
     for (const msg of messages) {
       // Wall-clock guard: jitter can stretch a batch past the 1-min tick; stop
@@ -376,6 +476,21 @@ Deno.serve(withErrorBoundary("process-scheduled-user-messages", async (req) => {
         // Só quando a linha não escolheu caixa (e o strict não decidiu): a
         // caixa da conversa do cliente vence a mais antiga da org.
         let regraDaCaixa: string | null = null;
+        if (!instance && !msg.whatsapp_instance_id && msg.created_by) {
+          let ligada = flagPorOrg.get(msg.organization_id);
+          if (ligada === undefined) {
+            ligada = await flagDaOrg(supabase, msg.organization_id, FLAG_CHIP_DO_CRIADOR);
+            flagPorOrg.set(msg.organization_id, ligada);
+          }
+          if (ligada) {
+            const doCriador = await resolverChipDoCriador(supabase, msg);
+            if (doCriador) {
+              instance = doCriador;
+              isSzChat = instance?.metadata?.provider === "szchat";
+              regraDaCaixa = "chip_do_criador";
+            }
+          }
+        }
         if (!instance && !msg.whatsapp_instance_id) {
           const daConversa = await resolverCaixaDaConversa(supabase, msg);
           if (daConversa) {
