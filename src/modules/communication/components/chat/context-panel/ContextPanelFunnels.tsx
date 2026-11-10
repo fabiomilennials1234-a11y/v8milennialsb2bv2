@@ -258,75 +258,81 @@ export function ContextPanelFunnels({ leadId }: ContextPanelFunnelsProps) {
               className="mb-2"
             />
           )}
-          <div className="flex items-center justify-between gap-2">
-            <div className="flex min-w-0 items-center gap-2.5">
-              <span className="h-8 w-[3px] shrink-0 rounded-full" style={{ background: row.color }} />
-              <div className="min-w-0">
-                <div className="truncate text-[13px] font-bold text-foreground">{row.label}</div>
-                <div className="text-[10.5px] text-muted-foreground">Clique na etapa para mover</div>
+          {/* Nome do funil numa linha, a etapa na seguinte, cada um com a largura
+              inteira. Lado a lado, um nome longo sempre espremia o outro — e os
+              da Café Jurerê são longos dos dois lados ("ENVASE - NEGOCIAÇÃO EM
+              ANDAMENTO", "Disparo de mensagem automação"). */}
+          <div className="flex gap-2.5">
+            <span className="w-[3px] shrink-0 self-stretch rounded-full" style={{ background: row.color }} />
+            <div className="min-w-0 flex-1 space-y-1.5">
+              <div className="truncate text-[13px] font-bold text-foreground" title={row.label}>
+                {row.label}
+              </div>
+              <div className="flex min-w-0">
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <button
+                      type="button"
+                      disabled={!canMove}
+                      className={cn(
+                        "inline-flex min-w-0 max-w-full items-center gap-1.5 rounded-md px-2 py-1 text-[12px] font-semibold text-foreground transition-opacity",
+                        isMoving && "opacity-60",
+                        !canMove && "cursor-not-allowed opacity-50",
+                      )}
+                      // A cor da etapa fica no fundo e no ponto; o texto é tinta —
+                      // "Ciclo vencendo" na cor crua dava 1,9:1.
+                      style={{ background: `${row.color}22` }}
+                      aria-label={`Etapa em ${row.label}: ${current?.label ?? "—"}`}
+                      // A dica de sempre mora aqui: sozinho na linha e com a seta, o
+                      // chip já se lê como seletor.
+                      title={canMove ? "Clique para mover de etapa" : "Sem permissão para mover etapa"}
+                    >
+                      <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: row.color }} />
+                      <span className="min-w-0 truncate">{current?.label ?? "—"}</span>
+                      {isMoving ? (
+                        <Loader2 className="h-3 w-3 shrink-0 animate-spin" />
+                      ) : (
+                        <ChevronDown className="h-3 w-3 shrink-0 opacity-70" />
+                      )}
+                    </button>
+                  </PopoverTrigger>
+                  <PopoverContent align="start" className="w-52 p-1">
+                    <p className="px-2.5 pb-1 pt-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/60">
+                      {row.label}
+                    </p>
+                    <div className="flex flex-col gap-0.5">
+                      {row.stages.map((s) => {
+                        const active = s.key === currentKey;
+                        const kind = terminalKind(s);
+                        return (
+                          <button
+                            key={s.key}
+                            type="button"
+                            onClick={() => void onPickStage(row, s)}
+                            className={cn(
+                              "flex items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-[12.5px] transition-colors hover:bg-muted",
+                              active && "bg-muted",
+                            )}
+                          >
+                            <span
+                              className="h-2 w-2 shrink-0 rounded-full"
+                              style={{ background: kind ? (kind === "won" ? "hsl(var(--success))" : "hsl(var(--destructive))") : row.color }}
+                            />
+                            <span className="min-w-0 flex-1 truncate">{s.label}</span>
+                            {kind && (
+                              <span className="text-[9px] font-semibold uppercase tracking-wide text-muted-foreground/60">
+                                {kind === "won" ? "ganho" : "perda"}
+                              </span>
+                            )}
+                            {active && <Check className="h-3.5 w-3.5 shrink-0 text-primary" />}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </PopoverContent>
+                </Popover>
               </div>
             </div>
-
-            <Popover>
-              <PopoverTrigger asChild>
-                <button
-                  type="button"
-                  disabled={!canMove}
-                  className={cn(
-                    "inline-flex shrink-0 items-center gap-1.5 rounded-md px-2 py-1 text-[12px] font-semibold text-foreground transition-opacity",
-                    isMoving && "opacity-60",
-                    !canMove && "cursor-not-allowed opacity-50",
-                  )}
-                  // A cor da etapa fica no fundo e no ponto; o texto é tinta —
-                  // "Ciclo vencendo" na cor crua dava 1,9:1.
-                  style={{ background: `${row.color}22` }}
-                  aria-label={`Etapa em ${row.label}: ${current?.label ?? "—"}`}
-                  title={canMove ? undefined : "Sem permissão para mover etapa"}
-                >
-                  <span className="h-1.5 w-1.5 rounded-full" style={{ background: row.color }} />
-                  {current?.label ?? "—"}
-                  {isMoving ? (
-                    <Loader2 className="h-3 w-3 animate-spin" />
-                  ) : (
-                    <ChevronDown className="h-3 w-3 opacity-70" />
-                  )}
-                </button>
-              </PopoverTrigger>
-              <PopoverContent align="end" className="w-52 p-1">
-                <p className="px-2.5 pb-1 pt-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/60">
-                  {row.label}
-                </p>
-                <div className="flex flex-col gap-0.5">
-                  {row.stages.map((s) => {
-                    const active = s.key === currentKey;
-                    const kind = terminalKind(s);
-                    return (
-                      <button
-                        key={s.key}
-                        type="button"
-                        onClick={() => void onPickStage(row, s)}
-                        className={cn(
-                          "flex items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-[12.5px] transition-colors hover:bg-muted",
-                          active && "bg-muted",
-                        )}
-                      >
-                        <span
-                          className="h-2 w-2 shrink-0 rounded-full"
-                          style={{ background: kind ? (kind === "won" ? "hsl(var(--success))" : "hsl(var(--destructive))") : row.color }}
-                        />
-                        <span className="min-w-0 flex-1 truncate">{s.label}</span>
-                        {kind && (
-                          <span className="text-[9px] font-semibold uppercase tracking-wide text-muted-foreground/60">
-                            {kind === "won" ? "ganho" : "perda"}
-                          </span>
-                        )}
-                        {active && <Check className="h-3.5 w-3.5 shrink-0 text-primary" />}
-                      </button>
-                    );
-                  })}
-                </div>
-              </PopoverContent>
-            </Popover>
           </div>
           {comGanhoPerda && (
             <GanhoPerdaDoNegocio
