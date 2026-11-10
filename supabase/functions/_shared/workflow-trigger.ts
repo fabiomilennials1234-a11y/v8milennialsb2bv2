@@ -942,6 +942,27 @@ export function matchesTriggerConfig(
       return true;
     }
 
+    // Espelho de `matches_workflow_trigger_config` (20280103000000). Lista
+    // ausente ou vazia = qualquer; tipo inválido falha fechado.
+    case "qualification_changed": {
+      const lists = ["fields", "tiers", "stage_ids"] as const;
+      for (const key of lists) {
+        if (!(key in config)) continue;
+        const v = config[key];
+        if (!Array.isArray(v) || v.some((x) => typeof x !== "string" || x.trim() === "")) return false;
+      }
+      const fields = (config.fields as string[] | undefined) ?? [];
+      const tiers = (config.tiers as string[] | undefined) ?? [];
+      const stageIds = (config.stage_ids as string[] | undefined) ?? [];
+      if (fields.length > 0 && !fields.includes(String(context.field ?? ""))) return false;
+      if (tiers.length > 0 && !tiers.includes(String(context.new_tier ?? ""))) return false;
+      if (stageIds.length > 0) {
+        const leadStages = Array.isArray(context.stage_ids) ? (context.stage_ids as unknown[]) : null;
+        if (!leadStages || !stageIds.some((id) => leadStages.includes(id))) return false;
+      }
+      return true;
+    }
+
     case "cron": {
       // Cron matching is done by the caller
       return true;
