@@ -51,6 +51,8 @@ export const TRIGGER_TYPES = [
   "campaign_lead_no_reply",
   "campaign_completed",
   "field_changed",
+  // Pré-qualificação / qualificação do lead (20280103000000).
+  "qualification_changed",
   "scheduled_date",
   "deal_created",
   "deal_won",

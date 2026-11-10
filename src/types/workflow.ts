@@ -59,6 +59,9 @@ export type WorkflowTriggerType =
   | "campaign_lead_no_reply"
   | "campaign_completed"
   | "field_changed"
+  // Pré-qualificação (SDR) ou qualificação (vendedor) recebeu um nível.
+  // Gatilho de banco: trg_workflow_qualification_changed (20280103000000).
+  | "qualification_changed"
   | "scheduled_date"
   | "deal_created"
   // Ganhar e perder são MOVIMENTOS para a etapa terminal (ADR-0023 §4/§5), não
@@ -1278,6 +1281,7 @@ export const TRIGGER_LABELS: Record<WorkflowTriggerType, string> = {
   campaign_lead_no_reply: "Lead Não Respondeu na Campanha",
   campaign_completed: "Lead Concluiu a Campanha",
   field_changed: "Campo do Lead Alterado",
+  qualification_changed: "Qualificação Alterada",
   scheduled_date: "Antes de uma data",
   deal_created: "Negócio Criado",
   deal_won: "Negócio Ganho",
@@ -1511,7 +1515,7 @@ export const WORKFLOW_VARIABLES: WorkflowVariable[] = [
 export const TRIGGER_CATEGORIES: TriggerCategory[] = [
   {
     label: "Lead",
-    triggers: ["lead_created", "lead_assigned", "field_changed", "tag_added"],
+    triggers: ["lead_created", "lead_assigned", "qualification_changed", "field_changed", "tag_added"],
   },
   {
     label: "Comunicação",

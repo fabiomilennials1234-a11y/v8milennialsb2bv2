@@ -26,7 +26,7 @@ import {
 } from "@/modules/pipelines";
 import { useWhatsAppInstances } from "@/modules/communication";
 import { useCampanhas, useCampanhaStages } from "@/modules/campaigns/hooks/useCampanhas";
-import { useLeadOrigins } from "@/modules/leads";
+import { useLeadOrigins, QUALIFICATION_TIERS, QUALIFICATION_TIER_CONFIG } from "@/modules/leads";
 import { CampaignSelectorField } from "./CampaignSelectorField";
 
 interface TriggerPanelProps {
@@ -99,6 +99,7 @@ export function TriggerPanel({ data, onUpdate }: TriggerPanelProps) {
                      t === "campaign_lead_no_reply" ? "Lead Não Respondeu na Campanha" :
                      t === "campaign_completed" ? "Lead Concluiu a Campanha" :
                      t === "field_changed" ? "Campo do Lead Alterado" :
+                     t === "qualification_changed" ? "Qualificação Alterada" :
                      t === "scheduled_date" ? "Antes de uma data" :
                      t === "deal_created" ? "Negócio Criado" :
                      t === "deal_won" ? "Negócio Ganho" :
@@ -375,11 +376,156 @@ export function TriggerPanel({ data, onUpdate }: TriggerPanelProps) {
       {data.triggerType === "deal_created" && (
         <DealCreatedConfig cfg={cfg} updateConfig={updateConfig} />
       )}
+
+      {/* ── qualification_changed ── */}
+      {data.triggerType === "qualification_changed" && (
+        <QualificationChangedConfig cfg={cfg} updateConfig={updateConfig} />
+      )}
     </div>
   );
 }
 
 // ── Sub-componente para deal_created (Negócios) ──
+
+/** Lista de strings da config; `null` quando a chave existe com tipo inválido. */
+function readStringList(cfg: Record<string, unknown>, key: string): string[] | null {
+  if (!Object.prototype.hasOwnProperty.call(cfg, key)) return [];
+  const v = cfg[key];
+  return Array.isArray(v) && v.every((x) => typeof x === "string" && x.trim() !== "")
+    ? (v as string[])
+    : null;
+}
+
+const QUALIFICATION_FIELDS = [
+  { value: "pre_qualification_tier", label: "Pré-qualificação", hint: "Pré-venda · SDR" },
+  { value: "qualification_tier", label: "Qualificação", hint: "Vendedor" },
+] as const;
+
+/**
+ * Config de `qualification_changed`. O servidor (matches_workflow_trigger_config)
+ * lê `fields`, `tiers` e `stage_ids`; lista vazia = qualquer. Dispara quando o
+ * nível MUDA para um valor (limpar o nível não dispara).
+ */
+function QualificationChangedConfig({
+  cfg,
+  updateConfig,
+}: {
+  cfg: Record<string, unknown>;
+  updateConfig: (updates: Record<string, unknown>) => void;
+}) {
+  const { data: pipelines } = useFunisDaOrg();
+  const { data: allStages } = useAllPipelineStages();
+  const fields = readStringList(cfg, "fields");
+  const tiers = readStringList(cfg, "tiers");
+  const stageIds = readStringList(cfg, "stage_ids");
+  const invalid = fields === null || tiers === null || stageIds === null;
+  const selFields = fields ?? [];
+  const selTiers = tiers ?? [];
+  const selStages = stageIds ?? [];
+
+  const toggle = (key: string, list: string[], value: string, checked: boolean) =>
+    updateConfig({ [key]: checked ? [...list, value] : list.filter((v) => v !== value) });
+
+  const visiblePipelines = sortPipelinesForNavigation(pipelines || []).filter(
+    (pipeline) =>
+      (pipeline.is_active && isPipelineVisible(pipeline)) ||
+      (allStages || []).some((st) => st.pipeline_id === pipeline.id && selStages.includes(st.id)),
+  );
+
+  return (
+    <>
+      {invalid && (
+        <p className="rounded-md border border-destructive/50 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+          Configuração inválida. Revise a seleção antes de ativar.
+        </p>
+      )}
+
+      <div className="space-y-2">
+        <Label>Campo</Label>
+        <div className="space-y-1 rounded-md border border-border/60 p-2">
+          {QUALIFICATION_FIELDS.map((f) => (
+            <label
+              key={f.value}
+              className="flex cursor-pointer items-center gap-2 rounded px-1 py-0.5 text-sm hover:bg-muted/50"
+            >
+              <Checkbox
+                checked={selFields.includes(f.value)}
+                onCheckedChange={(c) => toggle("fields", selFields, f.value, c === true)}
+              />
+              {f.label}
+              <span className="text-xs text-muted-foreground">{f.hint}</span>
+            </label>
+          ))}
+        </div>
+        {selFields.length === 0 && (
+          <p className="text-xs text-muted-foreground">Nenhum marcado = qualquer um dos dois</p>
+        )}
+      </div>
+
+      <div className="space-y-2">
+        <Label>Novo nível</Label>
+        <div className="space-y-1 rounded-md border border-border/60 p-2">
+          {QUALIFICATION_TIERS.map((tier) => (
+            <label
+              key={tier}
+              className="flex cursor-pointer items-center gap-2 rounded px-1 py-0.5 text-sm hover:bg-muted/50"
+            >
+              <Checkbox
+                checked={selTiers.includes(tier)}
+                onCheckedChange={(c) => toggle("tiers", selTiers, tier, c === true)}
+              />
+              {QUALIFICATION_TIER_CONFIG[tier].label}
+            </label>
+          ))}
+        </div>
+        {selTiers.length === 0 && (
+          <p className="text-xs text-muted-foreground">Nenhum marcado = qualquer nível</p>
+        )}
+      </div>
+
+      <div className="space-y-2">
+        <Label>Só leads nestas etapas (opcional)</Label>
+        <div className="max-h-60 space-y-3 overflow-y-auto rounded-md border border-border/60 p-2">
+          {visiblePipelines.map((pipeline) => {
+            const stages = (allStages || []).filter(
+              (stage) =>
+                stage.pipeline_id === pipeline.id &&
+                (stage.is_active || selStages.includes(stage.id)),
+            );
+            if (stages.length === 0) return null;
+            return (
+              <div key={pipeline.id} className="space-y-1">
+                <p className="px-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                  {pipeline.label}
+                </p>
+                {stages.map((stage) => (
+                  <label
+                    key={stage.id}
+                    className="flex cursor-pointer items-center gap-2 rounded px-1 py-0.5 text-sm hover:bg-muted/50"
+                  >
+                    <Checkbox
+                      checked={selStages.includes(stage.id)}
+                      onCheckedChange={(c) => toggle("stage_ids", selStages, stage.id, c === true)}
+                    />
+                    {stage.name}
+                    {!stage.is_active && (
+                      <span className="text-xs text-muted-foreground">(desativada)</span>
+                    )}
+                  </label>
+                ))}
+              </div>
+            );
+          })}
+        </div>
+        <p className="text-xs text-muted-foreground">
+          {selStages.length === 0
+            ? "Nenhuma marcada = lead em qualquer etapa"
+            : `Lead precisa estar em ${selStages.length === 1 ? "esta etapa" : "uma destas etapas"} quando o nível mudar`}
+        </p>
+      </div>
+    </>
+  );
+}
 
 function DealCreatedConfig({
   cfg,

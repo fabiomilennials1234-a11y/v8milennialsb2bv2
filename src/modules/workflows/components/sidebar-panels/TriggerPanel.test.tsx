@@ -50,6 +50,14 @@ vi.mock("@/modules/campaigns/hooks/useCampanhas", () => ({
 
 vi.mock("@/modules/leads", () => ({
   useLeadOrigins: () => ({ origins: [], labelOf: (v: string) => v, colorOf: () => "#000", isLoading: false }),
+  QUALIFICATION_TIERS: ["diamante", "ouro", "prata", "bronze", "desqualificado"],
+  QUALIFICATION_TIER_CONFIG: {
+    diamante: { label: "Diamante" },
+    ouro: { label: "Ouro" },
+    prata: { label: "Prata" },
+    bronze: { label: "Bronze" },
+    desqualificado: { label: "Desqualificado" },
+  },
 }));
 
 vi.mock("./CampaignSelectorField", () => ({
@@ -543,5 +551,46 @@ describe("TriggerPanel — referências canônicas de funil", () => {
     );
     fireEvent.click(checkboxFor("Proposta Enviada"));
     expect(lastConfig(onUpdate).stages).toEqual([ETAPA_ENVIADA]);
+  });
+});
+
+describe("TriggerPanel — qualification_changed", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockPipelines.mockReturnValue({ data: PIPELINES });
+    mockStages.mockReturnValue({ data: ETAPAS });
+    mockInstances.mockReturnValue({ data: [] });
+    mockHasFeature.mockImplementation((key: string) => key === "deals");
+  });
+
+  const renderQual = (config: Record<string, unknown> = {}) =>
+    renderPanel(config, "qualification_changed");
+
+  it("config vazia comunica qualquer campo, nível e etapa", () => {
+    renderQual();
+    expect(screen.getByText("Nenhum marcado = qualquer um dos dois")).toBeInTheDocument();
+    expect(screen.getByText("Nenhum marcado = qualquer nível")).toBeInTheDocument();
+    expect(screen.getByText("Nenhuma marcada = lead em qualquer etapa")).toBeInTheDocument();
+  });
+
+  it("grava campos e níveis como listas (prata pra cima)", () => {
+    const { onUpdate } = renderQual({ tiers: ["diamante", "ouro"] });
+    fireEvent.click(checkboxFor("Prata"));
+    expect(lastConfig(onUpdate).tiers).toEqual(["diamante", "ouro", "prata"]);
+    fireEvent.click(checkboxFor("Pré-qualificação"));
+    expect(lastConfig(onUpdate).fields).toEqual(["pre_qualification_tier"]);
+  });
+
+  it("grava etapa por uuid e desmarca", () => {
+    const { onUpdate } = renderQual({ stage_ids: [ETAPA_ENVIADA] });
+    fireEvent.click(checkboxFor("Em Negociação"));
+    expect(lastConfig(onUpdate).stage_ids).toEqual([ETAPA_ENVIADA, ETAPA_NEGOCIACAO]);
+    fireEvent.click(checkboxFor("Proposta Enviada"));
+    expect(lastConfig(onUpdate).stage_ids).toEqual([]);
+  });
+
+  it("config com tipo inválido avisa antes de ativar", () => {
+    renderQual({ tiers: "prata" });
+    expect(screen.getByText("Configuração inválida. Revise a seleção antes de ativar.")).toBeInTheDocument();
   });
 });
