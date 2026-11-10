@@ -81,7 +81,7 @@ SELECT ok((SELECT lead_id IS NULL FROM public.whatsapp_messages WHERE message_id
 
 -- a2 abre negocio (mais antigo): a2 vence.
 INSERT INTO public.deals (id, organization_id, title, source, source_lead_id, created_at) VALUES
-  ('99067f13-0000-4000-8000-0000000002b2', '99067f13-0000-4000-8000-00000000000a', 'Negocio a2', 'manual', '99067f13-0000-4000-8000-0000000000a2', now() - interval '2 days');
+  ('99067f13-0000-4000-8000-0000000002b2', '99067f13-0000-4000-8000-00000000000a', 'Negocio a2', 'human', '99067f13-0000-4000-8000-0000000000a2', now() - interval '2 days');
 INSERT INTO public.whatsapp_messages (organization_id, phone_number, normalized_phone, remote_jid, direction, content, message_id, timestamp)
 VALUES ('99067f13-0000-4000-8000-00000000000a', '5548977770001', '48977770001', '5548977770001@s.whatsapp.net', 'incoming', 'oi', 'tnn-rs-2', now());
 SELECT is((SELECT lead_id FROM public.whatsapp_messages WHERE message_id = 'tnn-rs-2'),
@@ -90,7 +90,7 @@ SELECT is((SELECT lead_id FROM public.whatsapp_messages WHERE message_id = 'tnn-
 
 -- a1 abre negocio MAIS RECENTE: a1 vence.
 INSERT INTO public.deals (id, organization_id, title, source, source_lead_id, created_at) VALUES
-  ('99067f13-0000-4000-8000-0000000002a1', '99067f13-0000-4000-8000-00000000000a', 'Negocio a1', 'manual', '99067f13-0000-4000-8000-0000000000a1', now() - interval '1 day');
+  ('99067f13-0000-4000-8000-0000000002a1', '99067f13-0000-4000-8000-00000000000a', 'Negocio a1', 'human', '99067f13-0000-4000-8000-0000000000a1', now() - interval '1 day');
 INSERT INTO public.whatsapp_messages (organization_id, phone_number, normalized_phone, remote_jid, direction, content, message_id, timestamp)
 VALUES ('99067f13-0000-4000-8000-00000000000a', '5548977770001', '48977770001', '5548977770001@s.whatsapp.net', 'incoming', 'oi', 'tnn-rs-3', now());
 SELECT is((SELECT lead_id FROM public.whatsapp_messages WHERE message_id = 'tnn-rs-3'),
