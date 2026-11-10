@@ -107,14 +107,23 @@ describe("ContextPanelFunnels — Ir para o negócio (flag por org)", () => {
     expect(screen.getByText("Clique na etapa para mover")).toBeInTheDocument();
   });
 
-  it("flag ligada: um por negócio, na 2ª linha, no lugar da dica", () => {
+  it("flag ligada: um por negócio, ACIMA do nome do funil (longe do chip e do Ganho/Perda)", () => {
     state.irParaNegocio = true;
+    state.ganhoPerda = true;
     state.pipelines = COM_NEGOCIO;
     renderCard();
     const botoes = screen.getAllByTestId("ir-para-negocio-stub");
     expect(botoes).toHaveLength(1); // Cafeteria não tem negócio: só "adicionar"
     expect(botoes[0]).toHaveTextContent("entry-1|pipe-envase|Envase");
-    expect(screen.queryByText("Clique na etapa para mover")).not.toBeInTheDocument();
+    // Ordem na linha: botão → nome do funil + chip da etapa → Ganho/Perda.
+    const nome = screen.getByText("Envase");
+    const chip = screen.getByRole("button", { name: "Etapa em Envase: Em andamento" });
+    const desfecho = screen.getByTestId("ganho-perda-stub");
+    expect(botoes[0].compareDocumentPosition(nome) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(botoes[0].compareDocumentPosition(chip) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(chip.compareDocumentPosition(desfecho) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    // A 2ª linha volta a ser a dica de sempre.
+    expect(screen.getByText("Clique na etapa para mover")).toBeInTheDocument();
   });
 
   it("lead com dois negócios: cada linha leva ao SEU negócio (sem adivinhar)", () => {
