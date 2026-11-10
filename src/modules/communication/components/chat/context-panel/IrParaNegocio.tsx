@@ -1,20 +1,22 @@
 /**
- * "Ir para o negócio" — na 2ª linha de cada negócio em "Funis do lead".
+ * "Ir para o negócio" — no topo de cada negócio em "Funis do lead", ACIMA do
+ * nome do funil.
  *
- * Link compacto, no lugar da dica "Clique na etapa para mover" (a linha ganha
- * só a altura do alvo de toque, 24 px), e Ganho/Perda continua sendo o peso
- * visual do cartão (é a decisão comercial; navegar é secundário). Numa linha
- * só: o chip da etapa espreme a coluna, e o texto trunca em vez de quebrar e
- * vazar da caixa. É um LINK de verdade — o destino é uma URL
- * (`/funil/<funil>?negocio=<negócio>`) —, então Ctrl/⌘+clique abre o negócio
- * noutra aba sem perder a conversa. O board lê o endereço, rola até o card e o
- * faz brilhar.
+ * Botão de largura inteira, da família do Ganho/Perda (`Button` outline, 32 px):
+ * longe do chip da etapa (que move o card) e dos botões de desfecho, para que
+ * navegar e decidir nunca disputem o mesmo clique. Neutro de propósito — o
+ * Ganho/Perda continua sendo a decisão comercial do cartão.
+ *
+ * É um LINK de verdade — o destino é uma URL (`/funil/<funil>?negocio=<negócio>`)
+ * —, então Ctrl/⌘+clique abre o negócio noutra aba sem perder a conversa. O
+ * board lê o endereço, rola até o card e o faz brilhar.
  *
  * Mesmas portas da rota do board: permissão `pipeline.view` e o plano com
- * funis. Sem elas o funil não existe para a pessoa — o link também não.
+ * funis. Sem elas o funil não existe para a pessoa — o botão também não.
  */
 import { ArrowUpRight } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { caminhoDoNegocio } from "@/contracts/pipe/negocio-no-funil";
 import { useCanDo } from "@/modules/identity";
@@ -26,6 +28,7 @@ export function IrParaNegocio({
   funil,
   etapa,
   movendo,
+  className,
 }: {
   /** `pipelines.id` do negócio. */
   pipelineId: string;
@@ -36,48 +39,57 @@ export function IrParaNegocio({
   etapa: string | null;
   /** A etapa desta linha está mudando agora (chip com spinner). */
   movendo: boolean;
+  /** Espaço até o resto da linha (vale também para a reserva do carregamento). */
+  className?: string;
 }) {
   const navigate = useNavigate();
   const verFunil = useCanDo("pipeline.view");
   const planoTemFunis = useOrgFeaturesOptional()?.hasFeature("funnels") ?? true;
 
-  if (verFunil.isLoading) return <div data-testid="ir-para-negocio-reserva" className="h-6" aria-hidden />;
+  if (verFunil.isLoading) {
+    return <div data-testid="ir-para-negocio-reserva" className={cn("h-8", className)} aria-hidden />;
+  }
   if (!verFunil.allowed || !planoTemFunis) return null;
 
   const destino = caminhoDoNegocio({ pipelineId, entryId });
   return (
-    <Link
-      to={destino}
-      aria-label={`Ir para o negócio em ${funil}${etapa ? `, etapa ${etapa}` : ""}`}
-      aria-disabled={movendo || undefined}
-      title={movendo ? "Aguarde a etapa terminar de mudar" : undefined}
-      onClick={(e) => {
-        if (movendo) {
-          e.preventDefault();
-          return;
-        }
-        // Enter no link (`detail === 0`): o board leva também o FOCO até o card.
-        // Clique do mouse segue o link como sempre. Com modificador (Ctrl/⌘/
-        // Shift+Enter ou +clique), o navegador abre noutra aba/janela — não toca.
-        const comModificador = e.metaKey || e.ctrlKey || e.shiftKey || e.altKey;
-        if (e.detail === 0 && !comModificador) {
-          e.preventDefault();
-          navigate(destino, { state: { viaTeclado: true } });
-        }
-      }}
+    <Button
+      asChild
+      variant="outline"
+      size="sm"
       className={cn(
-        "group/ir -ml-1.5 inline-flex h-6 max-w-full items-center gap-1 whitespace-nowrap rounded-md px-1.5",
-        "text-[11px] font-semibold text-muted-foreground transition-colors",
-        "hover:bg-muted/60 hover:text-foreground",
-        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-        movendo && "cursor-not-allowed opacity-60 hover:bg-transparent hover:text-muted-foreground",
+        // `text-foreground` explícito: o outline não define a tinta e herdaria a do contêiner.
+        "group/ir h-8 w-full gap-1.5 text-[12px] text-foreground",
+        movendo && "cursor-not-allowed opacity-60 hover:translate-y-0 hover:border-input",
+        className,
       )}
     >
-      <span className="min-w-0 truncate">Ir para o negócio</span>
-      <ArrowUpRight
-        className="size-3 shrink-0 transition-transform duration-200 ease-out-expo group-hover/ir:-translate-y-px group-hover/ir:translate-x-px motion-reduce:transition-none"
-        aria-hidden
-      />
-    </Link>
+      <Link
+        to={destino}
+        aria-label={`Ir para o negócio em ${funil}${etapa ? `, etapa ${etapa}` : ""}`}
+        aria-disabled={movendo || undefined}
+        title={movendo ? "Aguarde a etapa terminar de mudar" : undefined}
+        onClick={(e) => {
+          if (movendo) {
+            e.preventDefault();
+            return;
+          }
+          // Enter no link (`detail === 0`): o board leva também o FOCO até o card.
+          // Clique do mouse segue o link como sempre. Com modificador (Ctrl/⌘/
+          // Shift+Enter ou +clique), o navegador abre noutra aba/janela — não toca.
+          const comModificador = e.metaKey || e.ctrlKey || e.shiftKey || e.altKey;
+          if (e.detail === 0 && !comModificador) {
+            e.preventDefault();
+            navigate(destino, { state: { viaTeclado: true } });
+          }
+        }}
+      >
+        <span className="min-w-0 truncate">Ir para o negócio</span>
+        <ArrowUpRight
+          className="transition-transform duration-200 ease-out-expo group-hover/ir:-translate-y-px group-hover/ir:translate-x-px motion-reduce:transition-none"
+          aria-hidden
+        />
+      </Link>
+    </Button>
   );
 }

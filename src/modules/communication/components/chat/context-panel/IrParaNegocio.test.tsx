@@ -50,6 +50,13 @@ describe("IrParaNegocio", () => {
     expect(link).toHaveTextContent("Ir para o negócio");
   });
 
+  it("é um botão grande — largura inteira, 32 px — contra o clique errado", () => {
+    montar();
+    const link = screen.getByRole("link", { name: NOME });
+    expect(link.className).toContain("w-full");
+    expect(link.className).toContain("h-8");
+  });
+
   it("clique do mouse leva ao funil com o negócio pedido", () => {
     montar();
     fireEvent.click(screen.getByRole("link", { name: NOME }), { detail: 1 });

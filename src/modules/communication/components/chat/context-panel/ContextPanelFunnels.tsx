@@ -246,24 +246,24 @@ export function ContextPanelFunnels({ leadId }: ContextPanelFunnelsProps) {
         const isMoving = pending[row.entryId] != null;
         return (
           <div key={row.key} className="rounded-xl bg-muted/50 p-2.5">
+          {comIrParaNegocio && (
+            // No topo, acima do nome: longe do chip da etapa e do Ganho/Perda —
+            // navegar e decidir não disputam o mesmo clique.
+            <IrParaNegocio
+              pipelineId={row.pipelineId}
+              entryId={row.entryId}
+              funil={row.label}
+              etapa={current?.label ?? null}
+              movendo={isMoving}
+              className="mb-2"
+            />
+          )}
           <div className="flex items-center justify-between gap-2">
             <div className="flex min-w-0 items-center gap-2.5">
               <span className="h-8 w-[3px] shrink-0 rounded-full" style={{ background: row.color }} />
               <div className="min-w-0">
                 <div className="truncate text-[13px] font-bold text-foreground">{row.label}</div>
-                {comIrParaNegocio ? (
-                  // O chip já diz que move (chevron + nome acessível); a 2ª
-                  // linha vira o caminho até o card no board.
-                  <IrParaNegocio
-                    pipelineId={row.pipelineId}
-                    entryId={row.entryId}
-                    funil={row.label}
-                    etapa={current?.label ?? null}
-                    movendo={isMoving}
-                  />
-                ) : (
-                  <div className="text-[10.5px] text-muted-foreground">Clique na etapa para mover</div>
-                )}
+                <div className="text-[10.5px] text-muted-foreground">Clique na etapa para mover</div>
               </div>
             </div>
 
