@@ -8,7 +8,10 @@ import type { TablesInsert, TablesUpdate } from "@/integrations/supabase/types";
 import { notifyError } from "@/shared/errors";
 import { FALHA_JANELA_MS } from "@/modules/communication/lib/scheduledTray";
 import { resolverChipDeQuemAgenda } from "@/modules/communication/lib/chipDeQuemAgenda";
-import { useFeatureFlag } from "@/modules/platform";
+// A entrada estreita das flags: o barril `@/modules/platform` carrega o sino de
+// avisos inteiro (useAvisos → usePreferenciasDeAviso lê o cliente Supabase na
+// importação) só para a bandeja de agendadas ler uma flag.
+import { useFeatureFlag } from "@/modules/platform/feature-flags";
 
 /** Agendamento sem chip escolhido grava o chip de quem agenda (Café Jurerê). */
 export const FLAG_CHIP_DO_CRIADOR = "agendamento_chip_do_criador";

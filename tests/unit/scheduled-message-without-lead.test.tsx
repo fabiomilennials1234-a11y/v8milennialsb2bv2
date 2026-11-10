@@ -4,7 +4,7 @@ import { renderHook, act, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createMockSupabase } from '../helpers/supabase-mock';
 const mocks = vi.hoisted(() => ({ log: vi.fn(), db: null as ReturnType<typeof createMockSupabase> | null, flagChip: false }));
-vi.mock('@/modules/platform', () => ({
+vi.mock('@/modules/platform/feature-flags', () => ({
   useFeatureFlag: (key: string) => ({ enabled: key === 'agendamento_chip_do_criador' && mocks.flagChip, isLoading: false }),
 }));
 vi.mock('@/modules/identity', () => ({
