@@ -25,6 +25,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
 import { useAuth, useCurrentTeamMember } from "@/modules/identity";
 import { useConversationDraft } from "@/modules/communication/hooks/useConversationDraft";
+import { publishComposerEscape, publishComposerHasText, usePendingBadge } from "@/modules/communication/lib/composerTrayBus";
+import { SeloDeProgramadas } from "./SeloDeProgramadas";
 import { useSendWhatsAppMessage, useSendWhatsAppMedia } from "@/modules/communication/hooks/chat/useWhatsAppSend";
 import { useMessageTemplates } from "@/modules/communication/hooks/useMessageTemplates";
 import { useKeyboardOffset } from "@/shared/hooks/use-keyboard-offset";
@@ -139,6 +141,12 @@ export function MobileComposerContextual({
 
   const isSending = sendMessage.isPending || sendMedia.isPending;
   const hasText = message.trim().length > 0;
+  // Bandeja de programadas — ver ChatComposer: publica só na troca do boolean.
+  useEffect(() => {
+    publishComposerHasText(conversationKey, hasText);
+  }, [conversationKey, hasText]);
+  useEffect(() => () => publishComposerHasText(conversationKey, false), [conversationKey]);
+  const programadasPendentes = usePendingBadge(conversationKey);
 
   // Derived state machine
   const state: ComposerState = isRecording
@@ -526,6 +534,10 @@ export function MobileComposerContextual({
               setMessage(val);
               setShowSlashPopover(val.startsWith("/") && val.length > 0);
             }}
+            onKeyDown={(e) => {
+              // Teclado físico: Esc fecha a bandeja de programadas aberta.
+              if (e.key === "Escape") publishComposerEscape(conversationKey);
+            }}
             disabled={isSending}
             aria-label={`Mensagem para ${contactName}`}
             className="w-full min-h-[40px] max-h-32 resize-none rounded-[20px] border border-border/60 bg-sunken py-2 leading-5 focus-visible:bg-card"
@@ -539,13 +551,14 @@ export function MobileComposerContextual({
             disabled={isSending}
             size="icon"
             aria-label="Enviar mensagem"
-            className="shrink-0 rounded-full"
+            className="relative shrink-0 rounded-full"
           >
             {isSending ? (
               <Loader2 className="w-4 h-4 animate-spin" />
             ) : (
               <Send className="w-4 h-4" />
             )}
+            <SeloDeProgramadas n={programadasPendentes} />
           </Button>
         ) : (
           <Button

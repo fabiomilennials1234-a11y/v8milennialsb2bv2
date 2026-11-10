@@ -79,6 +79,23 @@ export default {
           DEFAULT: "hsl(var(--insights))",
           foreground: "hsl(var(--insights-foreground))",
         },
+        // Bandeja de mensagens programadas (chat). Ver --scheduled em index.css.
+        scheduled: {
+          DEFAULT: "hsl(var(--scheduled))",
+          foreground: "hsl(var(--scheduled-foreground))",
+          ink: "hsl(var(--scheduled-ink))",
+          deep: "hsl(var(--scheduled-deep))",
+          "deep-2": "hsl(var(--scheduled-deep-2))",
+          line: "hsl(var(--scheduled-line))",
+          strong: "hsl(var(--scheduled-strong))",
+        },
+        "scheduled-danger": {
+          DEFAULT: "hsl(var(--scheduled-danger))",
+          ink: "hsl(var(--scheduled-danger-ink))",
+          deep: "hsl(var(--scheduled-danger-deep))",
+          line: "hsl(var(--scheduled-danger-line))",
+          strong: "hsl(var(--scheduled-danger-strong))",
+        },
         muted: {
           DEFAULT: "hsl(var(--muted))",
           foreground: "hsl(var(--muted-foreground))",
@@ -245,6 +262,11 @@ export default {
           from: { opacity: "0", transform: "translateY(-6px)" },
           to: { opacity: "1", transform: "translateY(0)" },
         },
+        // Bandeja de programadas: disco "sai em breve" (<15 min) respirando.
+        "scheduled-beat": {
+          "0%, 100%": { boxShadow: "0 0 0 0 hsl(var(--scheduled) / 0.3)" },
+          "50%": { boxShadow: "0 0 0 5px hsl(var(--scheduled) / 0.3)" },
+        },
       },
       animation: {
         "accordion-down": "accordion-down 0.2s ease-out",
@@ -254,6 +276,7 @@ export default {
         "scale-in": "scale-in 0.2s ease-out",
         "shimmer": "shimmer 1.6s infinite",
         "novo-pulso": "novo-pulso 2.2s ease-out infinite",
+        "scheduled-beat": "scheduled-beat 1.6s ease-in-out infinite",
       },
     },
   },

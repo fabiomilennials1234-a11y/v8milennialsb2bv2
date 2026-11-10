@@ -125,6 +125,26 @@
     --insights: 205 90% 40%;
     --insights-foreground: 210 40% 98%;
 
+    /* Programadas — azul de AÇÃO da bandeja de mensagens agendadas (B1).
+       Superfície SÓLIDA, nunca lavagem com alpha (o CTO reprovou o pastel).
+       Hue 219, distinto do --insights 205 (área master). O ouro continua só
+       no Enviar. `deep`/`deep-2` = superfície/realce; `line` = aresta e trilho;
+       `ink` = texto sobre `deep`. */
+    --scheduled: 219 88% 50%;
+    --scheduled-foreground: 0 0% 100%;
+    --scheduled-ink: 220 90% 44%;
+    --scheduled-deep: 0 0% 100%;
+    --scheduled-deep-2: 222 100% 97%;
+    --scheduled-line: 219 88% 50%;
+    /* Preenchimento de botão com texto branco (≥4,5:1). No claro = --scheduled. */
+    --scheduled-strong: 219 88% 50%;
+    /* Falha da bandeja — vermelho próprio, sólido, para a mensagem não enviada. */
+    --scheduled-danger: 4 72% 48%;
+    --scheduled-danger-ink: 4 74% 40%;
+    --scheduled-danger-deep: 0 0% 100%;
+    --scheduled-danger-line: 4 72% 48%;
+    --scheduled-danger-strong: 4 72% 48%;  /* fill de "Tentar de novo", branco 5:1 */
+
     --border: 40 12% 88%;
     --input: 40 12% 86%;
     --ring: 47 100% 50%;
@@ -340,6 +360,23 @@
     /* Insights (dark) — azul mais claro p/ vibrar sobre warm-dark, AA ~6:1. */
     --insights: 205 90% 60%;
     --insights-foreground: 36 11% 9%;
+
+    /* Programadas (dark) — marinho sólido sobre o preto do V5. */
+    --scheduled: 219 100% 56%;
+    --scheduled-foreground: 0 0% 100%;
+    --scheduled-ink: 218 100% 65%;
+    --scheduled-deep: 221 76% 13%;
+    --scheduled-deep-2: 221 74% 18%;
+    --scheduled-line: 221 73% 42%;
+    /* --scheduled (56%) dá 4,47:1 com branco — reprova AA. Fill de botão usa este. */
+    --scheduled-strong: 219 100% 53%;  /* branco 4,9:1 */
+    --scheduled-danger: 3 100% 63%;
+    --scheduled-danger-ink: 4 100% 72%;
+    --scheduled-danger-deep: 4 65% 10%;
+    --scheduled-danger-line: 3 63% 34%;
+    /* --scheduled-danger (63%) é tinta de aresta/realce; branco sobre ele reprova.
+       Fill de botão escurece para o vermelho do claro: branco 5:1. */
+    --scheduled-danger-strong: 4 72% 48%;
 
     --border: 0 0% 14%;
     --input: 0 0% 14%;
