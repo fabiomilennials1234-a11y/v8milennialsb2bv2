@@ -81,7 +81,7 @@
 --   * Linhas existentes: (2) só avalia coluna que MUDOU. Linha antiga
 --     inconsistente não trava o worker; ela só não pode ser reescrita.
 --
--- Rollback: supabase/migrations/rollback/20280102000000_scheduled_user_messages_fecha_escrita_cross_tenant.sql
+-- Rollback: supabase/migrations/rollback/20280102000100_scheduled_user_messages_fecha_escrita_cross_tenant.sql
 -- =============================================================================
 
 BEGIN;

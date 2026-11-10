@@ -1,4 +1,4 @@
--- Rollback de 20280102000000_scheduled_user_messages_fecha_escrita_cross_tenant.sql
+-- Rollback de 20280102000100_scheduled_user_messages_fecha_escrita_cross_tenant.sql
 -- Volta às policies INSERT/UPDATE vigentes em prod em 10/11/2026 (texto lido de
 -- pg_policies) e remove os dois triggers e suas funções.
 --

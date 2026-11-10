@@ -1,4 +1,4 @@
-// scheduled_user_messages (20280102000000): a fila de envio deixa de aceitar
+// scheduled_user_messages (20280102000100): a fila de envio deixa de aceitar
 // escrita cross-tenant.
 //
 // O esqueleto (fixtures/scheduled-user-messages-rls-baseline.sql) carrega o
@@ -22,8 +22,8 @@ import { readFileSync } from 'node:fs';
 import { PGlite } from '@electric-sql/pglite';
 
 const read = (p) => readFileSync(new URL(p, import.meta.url), 'utf8');
-const MIG = read('../../supabase/migrations/20280102000000_scheduled_user_messages_fecha_escrita_cross_tenant.sql');
-const RB = read('../../supabase/migrations/rollback/20280102000000_scheduled_user_messages_fecha_escrita_cross_tenant.sql');
+const MIG = read('../../supabase/migrations/20280102000100_scheduled_user_messages_fecha_escrita_cross_tenant.sql');
+const RB = read('../../supabase/migrations/rollback/20280102000100_scheduled_user_messages_fecha_escrita_cross_tenant.sql');
 const SKELETON = read('./fixtures/scheduled-user-messages-rls-baseline.sql');
 
 const id = (p, n) => `${p}000000-0000-0000-0000-${String(n).padStart(12, '0')}`;
