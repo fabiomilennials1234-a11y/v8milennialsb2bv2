@@ -95,10 +95,12 @@ function ComandoComAgenda() {
     <EscopoAgendaProvider value={escopo}>
     <div className="flex flex-col gap-4">
       <LinhaDeIndicadoresAgenda onFiltro={setFiltro} />
+      {/* A Agenda é o trabalho do dia: logo abaixo dos indicadores, acima das
+          conversas (pedido do CTO, 10/11). Largura toda — é uma planilha:
+          cliente, empresa, data, dados, contato e o X precisam caber sem
+          rolagem lateral. */}
+      <CardAgendaContatos hoje={hoje} filtro={filtro} onFiltro={setFiltro} />
       <CardConversasAguardando />
-      {/* Metas e o mapa da agenda lado a lado; a Agenda embaixo, na largura
-          toda — é uma planilha: cliente, empresa, data, dados, contato e o X
-          precisam caber sem rolagem lateral. */}
       <div className="grid items-start gap-4 lg:grid-cols-3">
         <div className="min-w-0 lg:col-span-2">
           <CardMetas />
@@ -107,7 +109,6 @@ function ComandoComAgenda() {
           <CardResumoAgenda hoje={hoje} filtro={filtro} onFiltro={setFiltro} />
         </div>
       </div>
-      <CardAgendaContatos hoje={hoje} filtro={filtro} onFiltro={setFiltro} />
     </div>
     </EscopoAgendaProvider>
   );
