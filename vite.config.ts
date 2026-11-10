@@ -200,6 +200,11 @@ export default defineConfig(({ mode }) => {
         // Do not force its download when the service worker first installs.
         // LP é publicada à parte e tem CSP própria: nada dela passa pelo SW.
         globIgnores: ['**/*.html', '**/noto-color-emoji-*', 'lp/**'],
+        // Default é 2 MiB, e asset acima disso REPROVA o build (não só fica fora
+        // do precache). O chunk principal passou de 2 MiB em 10/11 (#2471) e
+        // travou todo deploy de front. 3 MiB devolve o comportamento anterior
+        // (o index segue precacheado). Dívida: dividir o chunk principal.
+        maximumFileSizeToCacheInBytes: 3 * 1024 * 1024,
       },
       devOptions: {
         enabled: false, // Don't run SW in dev
