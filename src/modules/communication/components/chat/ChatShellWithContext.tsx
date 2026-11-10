@@ -58,6 +58,7 @@ import { MobileChatThreadHeader } from "@/modules/communication/components/chat/
 import { MessageList } from "@/modules/communication/components/chat/view/MessageList";
 import { ChatComposer } from "@/modules/communication/components/chat/composer/ChatComposer";
 import { ScheduledMessagesBanner } from "@/modules/communication/components/chat/ScheduledMessagesBanner";
+import { CadastrosDoNumeroFaixa } from "@/modules/communication/components/chat/view/CadastrosDoNumeroFaixa";
 import { LeadAgendaStrip } from "@/modules/communication/components/chat/LeadAgendaStrip";
 import { MobileComposerContextual } from "@/modules/communication/components/chat/composer/MobileComposerContextual";
 import { ContextPanel } from "@/modules/communication/components/chat/context-panel/ContextPanel";
@@ -423,6 +424,14 @@ function ChatView({
           conversa e decidir responder, não no instante em que já está
           digitando. Só aparece na divergência. */}
       <AvisoDaAutomacao telefone={phoneNumber} caixaAberta={instanceId} />
+
+      {/* De quem é este número: 1+ cadastros, com ou sem negócio aberto — sem
+          clique (flag `chat_cadastros_do_numero`). */}
+      <CadastrosDoNumeroFaixa
+        telefone={phoneNumber}
+        leadIdDaConversa={effectiveLeadId}
+        isGroup={selectedContact?.is_group === true}
+      />
 
       <div className="flex-1 min-h-0 min-w-0 overflow-hidden flex flex-col">
         {threadState === "loading" ? (
