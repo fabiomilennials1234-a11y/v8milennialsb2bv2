@@ -285,10 +285,15 @@ export function ContextPanelFunnels({ leadId }: ContextPanelFunnelsProps) {
                       aria-label={`Etapa em ${row.label}: ${current?.label ?? "—"}`}
                       // A dica de sempre mora aqui: sozinho na linha e com a seta, o
                       // chip já se lê como seletor.
-                      title={canMove ? "Clique para mover de etapa" : "Sem permissão para mover etapa"}
+                      // O nome inteiro da etapa vem primeiro (o rótulo pode cortar).
+                      title={[current?.label, canMove ? "Clique para mover de etapa" : "Sem permissão para mover etapa"]
+                        .filter(Boolean)
+                        .join(" — ")}
                     >
                       <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: row.color }} />
-                      <span className="min-w-0 truncate">{current?.label ?? "—"}</span>
+                      {/* Linha própria: o nome quebra em até 2 linhas antes de cortar.
+                          `text-left`: o <button> centraliza o texto por padrão. */}
+                      <span className="min-w-0 line-clamp-2 break-words text-left">{current?.label ?? "—"}</span>
                       {isMoving ? (
                         <Loader2 className="h-3 w-3 shrink-0 animate-spin" />
                       ) : (

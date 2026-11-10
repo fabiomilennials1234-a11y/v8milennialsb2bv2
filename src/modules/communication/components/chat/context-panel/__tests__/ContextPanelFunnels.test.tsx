@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { PipelineStatus } from "@/modules/leads/hooks/useLeadAllPipelines";
+import type { CustomPipelineStatus, PipelineStatus } from "@/modules/leads/hooks/useLeadAllPipelines";
 
 const state = vi.hoisted(() => ({
   pipelines: undefined as unknown,
@@ -66,7 +66,9 @@ const STAGES = [
   { id: "stage-2", name: "Vendido", color: "#22c55e", position: 1, role: "won" },
 ];
 
-const COM_NEGOCIO: PipelineStatus[] = [
+// Os dois são funis custom: tipados assim, `{ ...COM_NEGOCIO[0], pipelineName }`
+// não se distribui pelo ramo standard da união (TS2322 no ratchet do CI).
+const COM_NEGOCIO: CustomPipelineStatus[] = [
   {
     type: "custom", pipelineId: "pipe-envase", pipelineName: "Envase", pipelineColor: "#f59e0b",
     pipelineIcon: "", entryId: "entry-1", closedAt: null, currentStageId: "stage-1",
@@ -190,7 +192,9 @@ describe("ContextPanelFunnels — card Funis do lead no chat", () => {
     expect(nome).toHaveAttribute("title", "ENVASE - NEGOCIAÇÃO EM ANDAMENTO");
     expect(chip.className).toContain("max-w-full");
     // A dica "clique para mover" virou o tooltip do chip.
-    expect(chip).toHaveAttribute("title", "Clique para mover de etapa");
+    expect(chip).toHaveAttribute("title", "Disparo de mensagem automação — Clique para mover de etapa");
+    // E o rótulo quebra em até 2 linhas em vez de cortar numa só.
+    expect(screen.getByText("Disparo de mensagem automação").className).toContain("line-clamp-2");
   });
 
   it("com dados mostra o chip da etapa e 'Adicionar a um funil'", () => {
