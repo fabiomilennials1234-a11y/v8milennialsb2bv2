@@ -3,7 +3,10 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderHook, act, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createMockSupabase } from '../helpers/supabase-mock';
-const mocks = vi.hoisted(() => ({ log: vi.fn(), db: null as ReturnType<typeof createMockSupabase> | null }));
+const mocks = vi.hoisted(() => ({ log: vi.fn(), db: null as ReturnType<typeof createMockSupabase> | null, flagChip: false }));
+vi.mock('@/modules/platform', () => ({
+  useFeatureFlag: (key: string) => ({ enabled: key === 'agendamento_chip_do_criador' && mocks.flagChip, isLoading: false }),
+}));
 vi.mock('@/modules/identity', () => ({
   useOrganization: () => ({ organizationId: 'org' }),
   useCurrentTeamMember: () => ({ data: { id: 'member' } }),
@@ -19,8 +22,105 @@ function mount() {
 }
 beforeEach(() => {
   vi.clearAllMocks();
+  mocks.flagChip = false;
   mocks.db = createMockSupabase();
   mocks.db.mockTable('scheduled_user_messages', []);
+  mocks.db.mockTable('whatsapp_instance_allowed_members', []);
+  mocks.db.mockTable('team_members', []);
+  mocks.db.mockTable('whatsapp_instances', []);
+  mocks.db.mockTable('whatsapp_messages', []);
+});
+
+// A agenda pelo card do lead (sem chip na tela); B falou por último com o cliente.
+describe('agendamento sem chip na tela grava o chip de quem agenda (flag)', () => {
+  const chip = (id: string, extra: Record<string, unknown> = {}) =>
+    ({ id, organization_id: 'org', provider: 'uazapi', status: 'connected', reserved_for: null, ...extra });
+  const atende = (...ids: string[]) => ids.map((id) => ({ whatsapp_instance_id: id, team_member_id: 'member' }));
+  const peloCard = { ...input, leadId: 'lead', instanceId: undefined };
+  const gravado = () => mocks.db!.getInserted('scheduled_user_messages')[0]?.whatsapp_instance_id;
+  const seed = (t: { instances: unknown[]; allowed?: unknown[]; members?: unknown[]; messages?: unknown[] }) => {
+    mocks.db!.mockTable('whatsapp_instances', t.instances as Record<string, unknown>[]);
+    mocks.db!.mockTable('whatsapp_instance_allowed_members', [
+      ...(t.allowed ?? []), { whatsapp_instance_id: 'inst-b', team_member_id: 'outro' },
+    ] as Record<string, unknown>[]);
+    mocks.db!.mockTable('team_members', (t.members ?? []) as Record<string, unknown>[]);
+    mocks.db!.mockTable('whatsapp_messages', (t.messages ?? []) as Record<string, unknown>[]);
+  };
+  const B_FALOU = { organization_id: 'org', lead_id: 'lead', instance_id: 'inst-b', phone_number: input.phoneNumber, timestamp: '2026-11-09T15:00:00Z' };
+
+  it('grava o chip de quem agenda, não o de quem falou por último', async () => {
+    mocks.flagChip = true;
+    seed({ instances: [chip('inst-a'), chip('inst-b')], allowed: atende('inst-a'), messages: [B_FALOU] });
+    const { result } = mount();
+    await act(async () => { await result.current.mutateAsync(peloCard); });
+    expect(gravado()).toBe('inst-a');
+  });
+
+  it('sem a flag, segue gravando nulo', async () => {
+    seed({ instances: [chip('inst-a'), chip('inst-b')], allowed: atende('inst-a') });
+    const { result } = mount();
+    await act(async () => { await result.current.mutateAsync(peloCard); });
+    expect(gravado()).toBeNull();
+  });
+
+  it('chip escolhido na tela vence, com flag', async () => {
+    mocks.flagChip = true;
+    seed({ instances: [chip('inst-a'), chip('inst-b')], allowed: atende('inst-a') });
+    const { result } = mount();
+    await act(async () => { await result.current.mutateAsync({ ...peloCard, instanceId: 'inst-b' }); });
+    expect(gravado()).toBe('inst-b');
+  });
+
+  it('o preferido conta como chip de quem agenda', async () => {
+    mocks.flagChip = true;
+    seed({ instances: [chip('inst-a'), chip('inst-b')], members: [{ id: 'member', organization_id: 'org', preferred_whatsapp_instance_id: 'inst-a' }], messages: [B_FALOU] });
+    const { result } = mount();
+    await act(async () => { await result.current.mutateAsync(peloCard); });
+    expect(gravado()).toBe('inst-a');
+  });
+
+  it('dois chips: o dele com a conversa mais recente; sem conversa, o preferido', async () => {
+    mocks.flagChip = true;
+    seed({
+      instances: [chip('inst-a'), chip('inst-a2'), chip('inst-b')],
+      allowed: atende('inst-a', 'inst-a2'),
+      messages: [
+        { organization_id: 'org', lead_id: 'lead', instance_id: 'inst-a', timestamp: '2026-11-01T10:00:00Z' },
+        { organization_id: 'org', lead_id: 'lead', instance_id: 'inst-a2', timestamp: '2026-11-05T10:00:00Z' },
+        B_FALOU,
+      ],
+    });
+    const { result } = mount();
+    await act(async () => { await result.current.mutateAsync(peloCard); });
+    expect(gravado()).toBe('inst-a2');
+
+    mocks.db!.mockTable('scheduled_user_messages', []);
+    seed({
+      instances: [chip('inst-a'), chip('inst-a2')],
+      allowed: atende('inst-a', 'inst-a2'),
+      members: [{ id: 'member', organization_id: 'org', preferred_whatsapp_instance_id: 'inst-a2' }],
+    });
+    await act(async () => { await result.current.mutateAsync(peloCard); });
+    expect(gravado()).toBe('inst-a2');
+  });
+
+  it('chip desconectado, reservado, Meta ou de outra org não entra: grava nulo e o worker decide', async () => {
+    mocks.flagChip = true;
+    seed({
+      instances: [
+        chip('inst-a', { status: 'disconnected' }),
+        chip('inst-a2', { reserved_for: 'cobranca' }),
+        chip('inst-a3', { provider: 'meta_cloud' }),
+        chip('inst-a4', { organization_id: 'outra' }),
+        chip('inst-b'),
+      ],
+      allowed: atende('inst-a', 'inst-a2', 'inst-a3', 'inst-a4'),
+      messages: [B_FALOU],
+    });
+    const { result } = mount();
+    await act(async () => { await result.current.mutateAsync(peloCard); });
+    expect(gravado()).toBeNull();
+  });
 });
 describe('schedule from a conversation without a lead', () => {
   it('finds the pending message by organization, selected instance and phone', async () => {

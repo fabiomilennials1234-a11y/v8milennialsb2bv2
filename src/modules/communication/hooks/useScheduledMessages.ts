@@ -7,6 +7,11 @@ import { toast } from "sonner";
 import type { TablesInsert, TablesUpdate } from "@/integrations/supabase/types";
 import { notifyError } from "@/shared/errors";
 import { FALHA_JANELA_MS } from "@/modules/communication/lib/scheduledTray";
+import { resolverChipDeQuemAgenda } from "@/modules/communication/lib/chipDeQuemAgenda";
+import { useFeatureFlag } from "@/modules/platform";
+
+/** Agendamento sem chip escolhido grava o chip de quem agenda (Café Jurerê). */
+export const FLAG_CHIP_DO_CRIADOR = "agendamento_chip_do_criador";
 
 export interface ScheduledMessage {
   id: string;
@@ -126,6 +131,7 @@ export function useCreateScheduledMessage() {
   const { organizationId } = useOrganization();
   const { data: member } = useCurrentTeamMember();
   const logAction = useLogLeadAction();
+  const { enabled: chipDoCriador } = useFeatureFlag(FLAG_CHIP_DO_CRIADOR);
 
   return useMutation({
     mutationFn: async (input: {
@@ -165,6 +171,19 @@ export function useCreateScheduledMessage() {
         else mediaType = "document";
       }
 
+      // Tela que não escolhe chip (card, detalhe do lead, Revisão): grava o de
+      // quem agenda, senão o envio saía pelo chip de quem falou por último com
+      // o cliente. Falha ao resolver não impede o agendamento — o worker decide.
+      let instanceId = input.instanceId?.trim() || null;
+      if (!instanceId && chipDoCriador) {
+        instanceId = await resolverChipDeQuemAgenda(supabase, {
+          organizationId,
+          teamMemberId: member.id,
+          leadId,
+          phoneNumber: input.phoneNumber,
+        }).catch(() => null);
+      }
+
       const { data, error } = await supabase
         .from("scheduled_user_messages")
         .insert({
@@ -173,7 +192,7 @@ export function useCreateScheduledMessage() {
           phone_number: input.phoneNumber.replace(/\D/g, ""),
           created_by: member.id,
           assigned_to: member.id,
-          whatsapp_instance_id: input.instanceId || null,
+          whatsapp_instance_id: instanceId,
           message_content: input.messageContent || null,
           media_url: mediaUrl,
           media_type: mediaType,
