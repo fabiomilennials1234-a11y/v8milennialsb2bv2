@@ -143,6 +143,10 @@ interface Seed {
   messages?: Record<string, unknown>[];
   /** Agendadas já criadas (status != scheduled) — histórico de caixa do criador. */
   scheduledHistory?: Record<string, unknown>[];
+  /** organizations.feature_flags — sem linha, toda flag está desligada. */
+  organizations?: Record<string, unknown>[];
+  /** Quem atende cada chip (whatsapp_instance_allowed_members). */
+  allowedMembers?: Record<string, unknown>[];
 }
 
 async function runTick(seed: Seed) {
@@ -155,6 +159,8 @@ async function runTick(seed: Seed) {
   mock.mockTable("whatsapp_messages", seed.messages ?? []);
   mock.mockTable("team_members", seed.teamMembers ?? []);
   mock.mockTable("notifications", []);
+  mock.mockTable("organizations", seed.organizations ?? []);
+  mock.mockTable("whatsapp_instance_allowed_members", seed.allowedMembers ?? []);
   mock.mockRpc("fn_emit_aviso", "aviso-1");
 
   // Registra o PAYLOAD de cada update — o estado final da linha não distingue
@@ -907,5 +913,143 @@ describe("process-scheduled-user-messages — instância nula sem conversa usa a
       scheduledHistory: [hist("inst-tatiane", 1)],
     });
     expect(usada()).toBe("inst-do-responsavel");
+  });
+});
+
+// ─── Flag agendamento_chip_do_criador: o chip de quem agendou ─────────────
+
+describe("process-scheduled-user-messages — agendada sem chip sai pelo chip de quem agendou (flag)", () => {
+  // A agenda (tm-1, chip A); depois B (tm-2, chip B) conversa com o cliente.
+  const CHIP_A = { ...CHIP_CONECTADO, id: "inst-a" };
+  const CHIP_A2 = { ...CHIP_CONECTADO, id: "inst-a2" };
+  const CHIP_B = { ...CHIP_CONECTADO, id: "inst-b" };
+  const ORG_COM_FLAG = { id: "org-1", feature_flags: { agendamento_chip_do_criador: true } };
+  const A_ATENDE = (...chips: string[]) =>
+    chips.map((c) => ({ whatsapp_instance_id: c, team_member_id: "tm-1" }));
+  const B_ATENDE = { whatsapp_instance_id: "inst-b", team_member_id: "tm-2" };
+  const B_FALOU_POR_ULTIMO = {
+    organization_id: "org-1", lead_id: "lead-1", instance_id: "inst-b",
+    phone_number: "5511999887766", timestamp: "2026-11-09T15:00:00Z",
+  };
+  const usada = () => sendText.mock.calls[0][1].id;
+  const pendente = () => ({ ...AGENDADA, lead_id: "lead-1", created_by: "tm-1" });
+
+  it("A agendou, B conversou depois: sai pelo chip de A", async () => {
+    const { historico } = await runTick({
+      scheduled: [pendente()],
+      instances: [CHIP_A, CHIP_B],
+      organizations: [ORG_COM_FLAG],
+      allowedMembers: [...A_ATENDE("inst-a"), B_ATENDE],
+      messages: [B_FALOU_POR_ULTIMO],
+    });
+    expect(usada()).toBe("inst-a");
+    expect(historico.at(-1)!.instance_id).toBe("inst-a");
+  });
+
+  it("sem a flag, comportamento antigo: a conversa mais recente (B) vence", async () => {
+    await runTick({
+      scheduled: [pendente()],
+      instances: [CHIP_A, CHIP_B],
+      allowedMembers: [...A_ATENDE("inst-a"), B_ATENDE],
+      messages: [B_FALOU_POR_ULTIMO],
+    });
+    expect(usada()).toBe("inst-b");
+  });
+
+  it("o chip preferido de A conta como chip de A, mesmo sem vínculo de atendimento", async () => {
+    await runTick({
+      scheduled: [pendente()],
+      instances: [CHIP_A, CHIP_B],
+      organizations: [ORG_COM_FLAG],
+      teamMembers: [{ id: "tm-1", organization_id: "org-1", preferred_whatsapp_instance_id: "inst-a" }],
+      allowedMembers: [B_ATENDE],
+      messages: [B_FALOU_POR_ULTIMO],
+    });
+    expect(usada()).toBe("inst-a");
+  });
+
+  it("A tem dois chips: o dele em que a conversa com o cliente é mais recente", async () => {
+    await runTick({
+      scheduled: [pendente()],
+      instances: [CHIP_A, CHIP_A2, CHIP_B],
+      organizations: [ORG_COM_FLAG],
+      allowedMembers: [...A_ATENDE("inst-a", "inst-a2"), B_ATENDE],
+      messages: [
+        { organization_id: "org-1", lead_id: "lead-1", instance_id: "inst-a", timestamp: "2026-11-01T10:00:00Z" },
+        { organization_id: "org-1", lead_id: "lead-1", instance_id: "inst-a2", timestamp: "2026-11-05T10:00:00Z" },
+        B_FALOU_POR_ULTIMO,
+      ],
+    });
+    expect(usada()).toBe("inst-a2");
+  });
+
+  it("A tem dois chips e nenhuma conversa com o cliente: o preferido de A", async () => {
+    await runTick({
+      scheduled: [pendente()],
+      instances: [CHIP_A, CHIP_A2, CHIP_B],
+      organizations: [ORG_COM_FLAG],
+      teamMembers: [{ id: "tm-1", organization_id: "org-1", preferred_whatsapp_instance_id: "inst-a2" }],
+      allowedMembers: [...A_ATENDE("inst-a", "inst-a2")],
+    });
+    expect(usada()).toBe("inst-a2");
+  });
+
+  it("chip de A desconectado: cai na regra antiga, sem travar o envio", async () => {
+    await runTick({
+      scheduled: [pendente()],
+      instances: [{ ...CHIP_A, status: "disconnected" }, CHIP_B],
+      organizations: [ORG_COM_FLAG],
+      allowedMembers: [...A_ATENDE("inst-a"), B_ATENDE],
+      messages: [B_FALOU_POR_ULTIMO],
+    });
+    expect(usada()).toBe("inst-b");
+  });
+
+  it("chip de A reservado, Meta ou de outra org nunca é escolhido", async () => {
+    await runTick({
+      scheduled: [pendente()],
+      instances: [
+        { ...CHIP_A, reserved_for: "cobranca" },
+        { ...CHIP_A2, provider: "meta_cloud" },
+        { ...CHIP_CONECTADO, id: "inst-a3", organization_id: "org-2" },
+        CHIP_B,
+      ],
+      organizations: [ORG_COM_FLAG],
+      allowedMembers: [...A_ATENDE("inst-a", "inst-a2", "inst-a3"), B_ATENDE],
+      messages: [B_FALOU_POR_ULTIMO],
+    });
+    expect(usada()).toBe("inst-b");
+  });
+
+  it("chip gravado na linha segue intocado, com flag", async () => {
+    await runTick({
+      scheduled: [{ ...pendente(), whatsapp_instance_id: "inst-b" }],
+      instances: [CHIP_A, CHIP_B],
+      organizations: [ORG_COM_FLAG],
+      allowedMembers: [...A_ATENDE("inst-a")],
+    });
+    expect(usada()).toBe("inst-b");
+  });
+
+  it("o strict do responsável segue vencendo, com flag", async () => {
+    strictResolve.mockResolvedValue({ ...CHIP_CONECTADO, id: "inst-do-responsavel" });
+    await runTick({
+      scheduled: [pendente()],
+      instances: [CHIP_A, CHIP_B],
+      organizations: [ORG_COM_FLAG],
+      allowedMembers: [...A_ATENDE("inst-a")],
+    });
+    expect(usada()).toBe("inst-do-responsavel");
+  });
+
+  it("flag de outra org não liga nesta", async () => {
+    await runTick({
+      scheduled: [pendente()],
+      instances: [CHIP_A, CHIP_B],
+      organizations: [{ id: "org-2", feature_flags: { agendamento_chip_do_criador: true } }],
+      allowedMembers: [...A_ATENDE("inst-a"), B_ATENDE],
+      messages: [B_FALOU_POR_ULTIMO],
+    });
+    expect(usada()).toBe("inst-b");
   });
 });
