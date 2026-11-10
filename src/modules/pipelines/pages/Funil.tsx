@@ -1,5 +1,6 @@
 import { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import { useParams, useNavigate, useSearchParams, useLocation } from "react-router-dom";
+import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
@@ -118,6 +119,13 @@ import { IconChip } from "@/components/ui/bento";
 import { FilterChip } from "@/shared/components/FilterChip";
 import { useFunnelOptions } from "@/modules/pipelines/lib/funnel-nav";
 import { notifyError, userMessageOf } from "@/shared/errors";
+import { caminhoDoNegocio } from "@/contracts/pipe/negocio-no-funil";
+import { useFocoNoNegocio } from "@/modules/pipelines/hooks/model/useFocoNoNegocio";
+import { usePedidoDoNegocio } from "@/modules/pipelines/hooks/model/usePedidoDoNegocio";
+import { aplicarFocoNoBoard, decidirIrAoNegocio, focoEfetivo } from "@/modules/pipelines/lib/foco-no-funil";
+import { toastAviso, toastLocalizando, toastTodos, useAvisoLocalizando } from "@/modules/pipelines/lib/avisos-do-foco";
+import type { AlvoDaCamera } from "@/modules/pipelines/components/funis/useLevarAoNegocio";
+import type { Visao } from "@/modules/platform/lib/visao-meu-todos";
 
 const MONTHS_PT = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
 function formatPeriodLabel(range: { startStr: string; endStr: string }): string {
@@ -194,6 +202,25 @@ function FunilPageInner() {
   const { organizationId } = useOrganization();
   const { user } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
+  const location = useLocation();
+  const queryClient = useQueryClient();
+
+  // ── "Ir para o negócio" (chat): o pedido chega pela URL ───────────────────
+  // Consumido uma vez (e só com a flag da org). O que fazer com ele também é
+  // decidido uma vez só, sobre a 1ª resposta fresca do banco — ver mais abaixo.
+  const { pedido: pedidoAtivo, ligado: irParaNegocioLigado } = usePedidoDoNegocio(param);
+  // "Meus" escondendo o negócio pedido vira Todos SÓ nesta visita: a escolha
+  // gravada (30 dias) não muda, e ao sair do funil volta para Meus.
+  const [visaoDaVisita, setVisaoDaVisita] = useState<Visao | null>(null);
+  const [levarAte, setLevarAte] = useState<AlvoDaCamera | null>(null);
+  // O nonce do pedido que JÁ viajou (câmera + brilho). Vive na página: o Kanban
+  // desmonta e remonta (aba Lista, breakpoint) e não pode repetir a chegada.
+  const viagemFeita = useRef<number | null>(null);
+  // A página não desmonta ao trocar de funil: a visita do funil anterior acaba.
+  useEffect(() => {
+    setVisaoDaVisita(null);
+    setLevarAte(null);
+  }, [param]);
 
   const {
     data: pipelines = [],
@@ -259,9 +286,9 @@ function FunilPageInner() {
   // Visão Meus · Todos (flag `visao_meu_todos`, só admin): "Meus" recorta o
   // board pelos negócios em que o membro é responsável.
   const visaoFunis = useVisaoMeuTodos("funis");
-  const controller = useFunilFilters(pipeline?.id, { donoForcado: visaoFunis.donoForcado });
+  const donoForcado = visaoDaVisita === "todos" ? null : visaoFunis.donoForcado;
+  const controller = useFunilFilters(pipeline?.id, { donoForcado });
   // O hub ("Todos os funis") abre o funil já na visão escolhida na pílula.
-  const location = useLocation();
   const initialView = (location.state as { view?: FunilViewMode } | null)?.view;
   const [viewMode, setViewMode] = useState<FunilViewMode>(initialView ?? "kanban");
   const { options: funnelOptions } = useFunnelOptions();
@@ -339,7 +366,18 @@ function FunilPageInner() {
     [controller.paginatedFilters, controller.metricsRange, extra, closedStatusKeys, timeParams],
   );
 
-  const { stageData, isLoading: loadingBoard, filterParams } = usePaginatedFunil(pipeline?.id, stages, filters);
+  const { stageData: stageDataNatural, isLoading: loadingBoard, filterParams } = usePaginatedFunil(pipeline?.id, stages, filters);
+
+  // O negócio pedido, lido com o MESMO recorte do board, só depois de a visão
+  // salva (Meus · Todos) ser lida — senão a 1ª resposta viria com o recorte errado.
+  const focoQuery = useFocoNoNegocio(pipeline?.id, pedidoAtivo, filterParams, { pronto: visaoFunis.pronto });
+  const etapasDoBoard = useMemo(() => new Set(stages.map((s) => s.stage_key)), [stages]);
+  const foco = useMemo(
+    () => focoEfetivo(focoQuery.data, { entryId: pedidoAtivo?.entryId, pipelineId: pipeline?.id, etapas: etapasDoBoard }),
+    [focoQuery.data, pedidoAtivo?.entryId, pipeline?.id, etapasDoBoard],
+  );
+  // O board de sempre, com o negócio pedido fixado no topo da coluna dele.
+  const stageData = useMemo(() => aplicarFocoNoBoard(stageDataNatural, foco), [stageDataNatural, foco]);
 
   const allItems = useMemo(
     () => stages.flatMap((s) => stageData[s.stage_key]?.items ?? []),
@@ -492,7 +530,7 @@ function FunilPageInner() {
     const chips: string[] = [];
     const term = controller.search.trim();
     if (term) chips.push(`Busca: "${term}"`);
-    if (visaoFunis.donoForcado) {
+    if (donoForcado) {
       chips.push("Responsável: você");
     } else if (controller.state.responsibleId !== "all") {
       const member = controller.sections.find((s) => s.type === "responsible");
@@ -514,7 +552,7 @@ function FunilPageInner() {
       tagIds: controller.state.tagIds,
       chips,
     };
-  }, [controller.search, controller.state.responsibleId, controller.responsibleIdEfetivo, controller.state.tagIds, controller.sections, orgTags, visaoFunis.donoForcado]);
+  }, [controller.search, controller.state.responsibleId, controller.responsibleIdEfetivo, controller.state.tagIds, controller.sections, orgTags, donoForcado]);
 
   const handleOpenDisparoStage = useCallback(() => {
     setDisparoManualIds([]);
@@ -582,6 +620,149 @@ function FunilPageInner() {
       if (stage) handleMove(entryId, stage);
     },
     [stages, handleMove],
+  );
+
+  // ── "Ir para o negócio": a decisão, UMA vez por pedido ────────────────────
+  // Depois dela, respostas novas do foco (refetch por invalidação, troca de
+  // filtro, "Voltar para Meus") só fixam ou soltam o card, em silêncio: nada de
+  // navegar, avisar ou trocar a visão de novo.
+  const decidido = useRef<number | null>(null);
+  const mostrouTodosNoPedido = useRef<number | null>(null);
+  const abrirNegocio = useCallback(
+    (entryId: string, leadId: string | null) => openDeal(entryId, leadId),
+    [openDeal],
+  );
+
+  // Funil que não abre (não existe, desativado, outra org, erro): nada a
+  // localizar AGORA. O pedido continua vivo — o "Tentar de novo" pode resolvê-lo.
+  const funilSemResolver = !pipeline && !isLoading && !precisaConferir && !fetchingPipelines;
+
+  // Busca demorada: "Localizando o negócio…" (sai em toda saída — ver o hook).
+  // Depois do "Mostrando Todos", o aviso dele já diz o que está acontecendo.
+  const nonceAtivo = pedidoAtivo?.nonce ?? null;
+  useAvisoLocalizando(nonceAtivo, {
+    pausado: funilSemResolver,
+    aindaEsperando: () => decidido.current !== nonceAtivo && mostrouTodosNoPedido.current !== nonceAtivo,
+  });
+
+  useEffect(() => {
+    if (!pedidoAtivo || !pipeline || loadingStages || decidido.current === pedidoAtivo.nonce) return;
+    const { nonce, entryId, viaTeclado } = pedidoAtivo;
+    // "Todos" não bastou para chegar a ele: a visita volta para Meus.
+    const desfazerTodos = () => {
+      if (mostrouTodosNoPedido.current !== nonce) return;
+      setVisaoDaVisita(null);
+      toast.dismiss(toastTodos(nonce));
+    };
+    if (focoQuery.isError) {
+      decidido.current = nonce;
+      toast.dismiss(toastLocalizando(nonce));
+      desfazerTodos();
+      notifyError(focoQuery.error, { fallback: "Não foi possível localizar o negócio." });
+      return;
+    }
+    // Só a resposta FRESCA desta viagem decide — nunca placeholder nem cache.
+    if (!focoQuery.isSuccess || focoQuery.isFetching || focoQuery.isPlaceholderData) return;
+
+    const decisao = decidirIrAoNegocio(focoQuery.data, {
+      pipelineId: pipeline.id,
+      etapas: etapasDoBoard,
+      mobile: isMobile,
+      meusAtivo: donoForcado !== null,
+      jaMostrouTodos: mostrouTodosNoPedido.current === nonce,
+    });
+    const leadId = focoQuery.data?.leadId ?? null;
+    const abrir = { label: "Abrir negócio", onClick: () => abrirNegocio(entryId, leadId) };
+    toast.dismiss(toastLocalizando(nonce));
+
+    if (decisao.tipo === "mostrar-todos") {
+      // Decide de novo com o recorte Todos (a próxima resposta fresca).
+      mostrouTodosNoPedido.current = nonce;
+      setVisaoDaVisita("todos");
+      toast("Mostrando Todos para chegar ao negócio", {
+        id: toastTodos(nonce),
+        description: "Ele não está em Meus. Ao sair do funil, volta para Meus.",
+        duration: 6000,
+        action: { label: "Voltar para Meus", onClick: () => setVisaoDaVisita(null) },
+      });
+      return;
+    }
+
+    decidido.current = nonce;
+    const id = toastAviso(nonce);
+    switch (decisao.tipo) {
+      case "indisponivel":
+        desfazerTodos();
+        toast("Não encontramos este negócio", {
+          id,
+          description: "Ele pode ter sido excluído ou estar fora do seu acesso.",
+        });
+        // A linha velha no chat se corrige na volta.
+        void queryClient.invalidateQueries({ queryKey: ["lead_all_pipelines"] });
+        return;
+      case "outro-funil":
+        navigate(caminhoDoNegocio({ pipelineId: decisao.pipelineId, entryId }), {
+          replace: true,
+          state: { viaTeclado },
+        });
+        return;
+      case "filtro-esconde":
+        desfazerTodos();
+        toast("Este negócio não aparece no quadro", { id, action: abrir });
+        return;
+      case "etapa-fora":
+        desfazerTodos();
+        toast("Este negócio está numa etapa desativada", {
+          id,
+          description: "A etapa dele não aparece no quadro.",
+          action: abrir,
+        });
+        return;
+      case "abrir-painel":
+        // Celular: a lista não tem o board — abre o negócio.
+        abrirNegocio(decisao.entryId, decisao.leadId);
+        return;
+      case "levar": {
+        setViewMode("kanban");
+        const lead = focoQuery.data?.linha?.lead as { name?: string | null } | null | undefined;
+        setLevarAte({
+          entryId: decisao.entryId,
+          stageKey: decisao.stageKey,
+          nonce,
+          viaTeclado,
+          nomeDoLead: lead?.name ?? null,
+          nomeDaEtapa: stages.find((s) => s.stage_key === decisao.stageKey)?.name ?? null,
+        });
+        return;
+      }
+    }
+  }, [
+    pedidoAtivo,
+    pipeline,
+    loadingStages,
+    focoQuery.isError,
+    focoQuery.error,
+    focoQuery.isSuccess,
+    focoQuery.isFetching,
+    focoQuery.isPlaceholderData,
+    focoQuery.data,
+    etapasDoBoard,
+    isMobile,
+    donoForcado,
+    abrirNegocio,
+    queryClient,
+    navigate,
+    stages,
+  ]);
+
+  const naoDeuParaMostrar = useCallback(
+    (alvo: AlvoDaCamera) => {
+      toast("Não foi possível mostrar o negócio no quadro", {
+        id: toastAviso(alvo.nonce),
+        action: { label: "Abrir negócio", onClick: () => abrirNegocio(alvo.entryId, focoQuery.data?.leadId ?? null) },
+      });
+    },
+    [abrirNegocio, focoQuery.data?.leadId],
   );
 
   const handleRemoveEntry = async () => {
@@ -710,8 +891,12 @@ function FunilPageInner() {
           visaoFunis.disponivel ? (
             <VisaoMeuTodosToggle
               rotulo="Visão dos negócios"
-              visao={visaoFunis.visao}
-              onChange={visaoFunis.setVisao}
+              visao={visaoDaVisita ?? visaoFunis.visao}
+              onChange={(v) => {
+                // Escolher no controle desfaz o Todos da visita e grava, como sempre.
+                setVisaoDaVisita(null);
+                visaoFunis.setVisao(v);
+              }}
               className="self-start sm:self-auto"
             />
           ) : undefined
@@ -940,6 +1125,11 @@ function FunilPageInner() {
                 stages={stages}
                 stageData={stageData}
                 filterParams={filterParams}
+                focoEntryId={foco?.entryId ?? null}
+                levarAte={levarAte}
+                viagemFeita={viagemFeita}
+                onNaoDeuParaMostrar={naoDeuParaMostrar}
+                tecladoAbreCard={irParaNegocioLigado}
                 onMove={handleMove}
                 onRemoveEntry={canDeleteCards ? (id) => setRemoveEntryId(id) : undefined}
                 onClickEntry={(entry) => openDeal(entry.id, entry.lead_id)}

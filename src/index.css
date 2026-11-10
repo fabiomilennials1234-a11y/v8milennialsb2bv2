@@ -1282,6 +1282,97 @@
   .cmd-drawline { animation-duration: .01s; animation-delay: 0s !important; }
 }
 
+/* ===== Destaque do card: "Ir para o negócio" (CardDestaque.tsx) =====
+   Um gesto só, nativo do V5: a borda do cartão acende em ouro. Tudo DENTRO do
+   cartão — o `overflow-hidden` + `rounded-2xl` do card recortam o efeito no
+   formato dele, em qualquer posição da coluna (o corpo da coluna não tem
+   folga no topo). Pinta uma vez e anima só opacity/transform: compositor.
+   Linha do tempo de 5120 ms; o 0% é 120 ms ANTES de a câmera parar (T0−120).
+     pouso      T0−120 → T0+160   aro entra de fora (escala 1,035 → 0,99), out-expo
+     assenta    T0+160 → T0+400   0,99 → 1, standard (a "mola")
+     clarão     T0−120 → T0+780   sobe e some — nunca fica tinta pastel
+     respira    T0+780 → T0+4380  o brilho interno respira duas vezes
+     apaga      T0+4400 → T0+5000 */
+/* SEM z-index, de propósito: z-index faria desta camada um grupo isolado, e o
+   clarão (que mistura cor) misturaria com o vazio dela — vira um véu chapado
+   que apaga o texto. Último filho do card (`isolate`), ela pinta por cima do
+   conteúdo e o clarão mistura com ele: marca-texto. */
+.card-destaque {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  transition: opacity 240ms theme('transitionTimingFunction.standard');
+}
+.card-destaque[data-saindo] { opacity: 0; }
+/* Opacidade < 1 isola a camada: na saída, o clarão sai na hora (aro e brilho
+   não misturam cor e apagam juntos). */
+.card-destaque[data-saindo] .card-destaque__clarao { display: none; }
+.card-destaque > span {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  animation-duration: 5120ms;
+  animation-fill-mode: both;
+  animation-delay: var(--destaque-atraso, 0ms);
+}
+/* Claro: marca-texto (o branco vira ouro claro, o texto preto continua preto). */
+.card-destaque__clarao { opacity: 0; background: hsl(var(--gold-soft)); mix-blend-mode: multiply; animation-name: destaque-clarao; }
+.dark .card-destaque__clarao { mix-blend-mode: screen; }
+.card-destaque__brilho { box-shadow: inset 0 0 22px -6px hsl(var(--primary) / .6); animation-name: destaque-brilho; }
+.dark .card-destaque__brilho { box-shadow: inset 0 0 24px -6px hsl(var(--primary) / .5); }
+/* Claro: fio âmbar escuro (≈6:1 sobre o branco) + o ouro da marca por dentro.
+   Escuro: o ouro sozinho já dá ≈12:1 sobre o cartão. */
+.card-destaque__aro {
+  box-shadow: inset 0 0 0 1px hsl(var(--gold-soft-foreground) / .8), inset 0 0 0 2.5px hsl(var(--primary));
+  animation-name: destaque-aro;
+}
+.dark .card-destaque__aro { box-shadow: inset 0 0 0 1.5px hsl(var(--primary)); }
+
+@keyframes destaque-aro {
+  0%      { opacity: 0; transform: scale(1.035); animation-timing-function: theme('transitionTimingFunction.out-expo'); }
+  5.469%  { opacity: 1; transform: scale(.99);   animation-timing-function: theme('transitionTimingFunction.standard'); }
+  10.156% { opacity: 1; transform: scale(1); }
+  88.281% { opacity: 1; transform: scale(1);     animation-timing-function: theme('transitionTimingFunction.standard'); }
+  100%    { opacity: 0; transform: scale(1); }
+}
+@keyframes destaque-brilho {
+  0%      { opacity: 0;   animation-timing-function: theme('transitionTimingFunction.out-expo'); }
+  7.031%  { opacity: 1; }
+  17.578% { opacity: 1;   animation-timing-function: theme('transitionTimingFunction.standard'); }
+  35.156% { opacity: .45; animation-timing-function: theme('transitionTimingFunction.standard'); }
+  52.734% { opacity: 1;   animation-timing-function: theme('transitionTimingFunction.standard'); }
+  70.313% { opacity: .45; animation-timing-function: theme('transitionTimingFunction.standard'); }
+  87.891% { opacity: 1; }
+  88.281% { opacity: 1;   animation-timing-function: theme('transitionTimingFunction.standard'); }
+  100%    { opacity: 0; }
+}
+@keyframes destaque-clarao {
+  0%      { opacity: 0;  animation-timing-function: theme('transitionTimingFunction.out-expo'); }
+  3.125%  { opacity: .9; animation-timing-function: theme('transitionTimingFunction.standard'); }
+  17.578% { opacity: 0; }
+  100%    { opacity: 0; }
+}
+/* Movimento reduzido: o destaque é INFORMAÇÃO e fica — sem transform, sem
+   respiração, sem clarão. Aro e brilho entram em 160 ms, seguram e apagam. */
+@keyframes destaque-fixo {
+  0%      { opacity: 0; animation-timing-function: theme('transitionTimingFunction.standard'); }
+  3.125%  { opacity: 1; }
+  88.281% { opacity: 1; animation-timing-function: theme('transitionTimingFunction.standard'); }
+  100%    { opacity: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .card-destaque__aro, .card-destaque__brilho { animation-name: destaque-fixo; }
+  .card-destaque__clarao { animation-name: none; }
+}
+/* Alto contraste do Windows zera sombras e fundos: o aro vira contorno do
+   sistema, e a faixa do card em foco ("Ir para o negócio") vira Highlight. */
+@media (forced-colors: active) {
+  .card-destaque__aro { outline: 3px solid Highlight; outline-offset: -3px; }
+  .card-destaque__brilho, .card-destaque__clarao { display: none; }
+  .kanban-card[data-em-foco]::before { forced-color-adjust: none; background: Highlight; opacity: 1; }
+}
+
 /* ===== Marca da lateral ===== */
 /* O logotipo abre e fecha pela largura real da arte (1fr → 0fr), não por um
    `max-width` chutado. Ver SidebarBrand.tsx. As durações são assimétricas de

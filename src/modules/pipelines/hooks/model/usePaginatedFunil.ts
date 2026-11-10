@@ -90,7 +90,8 @@ function rpcArgs<T extends object>(params: T): never {
 
 type RpcPageRow = Record<string, unknown> & { lead?: unknown };
 
-function flattenRpcEntry(row: RpcPageRow) {
+/** Linha do `get_pipeline_page` no formato do card — também a do foco ("Ir para o negócio"). */
+export function flattenRpcEntry(row: RpcPageRow) {
   const lead = typeof row.lead === "string" ? JSON.parse(row.lead) : row.lead;
   return flattenMetadata({ ...row, lead });
 }
@@ -367,7 +368,7 @@ export function useMoverCardNoFunil(pipeline: { id: string; type: "system" | "cu
       // Sem permissão o mutationFn recusa — não pisca o card à toa.
       if (!movePermission.allowed) return { move: null, fromStage: null, negado: true };
       const origem = colunaDoCardNoCache(queryClient, pipeline.id, entryId);
-      await cancelarFetchDoMove(queryClient, { pipelineId: pipeline.id, stages: [origem, stageKey] });
+      await cancelarFetchDoMove(queryClient, { pipelineId: pipeline.id, stages: [origem, stageKey], entryId });
       const move = aplicarMoveOtimista(queryClient, { pipelineId: pipeline.id, entryId, toStage: stageKey });
       return { move, fromStage: move.snapshot.fromStage ?? origem };
     },

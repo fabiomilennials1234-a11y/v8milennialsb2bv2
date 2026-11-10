@@ -708,6 +708,31 @@ describe("completarMove — card muda na hora; falha devolve à origem", () => {
     expect(qc.getQueryData(countsK)).toEqual({ aberto: 1, descartado: 0 });
   });
 
+  it("leitura do foco ('Ir para o negócio') em voo é cancelada: a resposta velha não devolve o card", async () => {
+    const qc = montar(pipelineDe("custom", "meu-funil"), stagesLost, [entryAberto]);
+    semear(qc);
+    const kf = ["pipeline-page", "pl-1", "__foco__", "org-1", "f", "e-1", 1];
+    const focoAberto = {
+      entryId: "e-1",
+      pipelineId: "pl-1",
+      stageKey: "aberto",
+      leadId: "lead-1",
+      visivel: true,
+      linha: { id: "e-1", stage_key: "aberto", lead_id: "lead-1" },
+    };
+    qc.setQueryData(kf, focoAberto);
+    let soltar!: (v: typeof focoAberto) => void;
+    const emVoo = qc
+      .fetchQuery({ queryKey: kf, queryFn: () => new Promise<typeof focoAberto>((r) => (soltar = r)), staleTime: 0 })
+      .catch(() => null);
+
+    await confirmarPerda();
+    await waitFor(() => expect(moverAsync).toHaveBeenCalledTimes(1));
+    soltar(focoAberto); // saiu antes do move: ainda diz "aberto"
+    await emVoo;
+    expect((qc.getQueryData(kf) as typeof focoAberto).stageKey).toBe("descartado");
+  });
+
   it("metadata falha → nada move; card volta à origem", async () => {
     patchEntryMetadata.mockRejectedValueOnce(new Error("rls"));
     const qc = montar(pipelineDe("custom", "meu-funil"), stagesLost, [entryAberto]);

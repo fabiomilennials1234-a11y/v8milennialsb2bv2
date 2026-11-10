@@ -4,6 +4,7 @@ import {
   rollbackPipelineEntryMove,
   type OptimisticMoveSnapshot,
 } from "./optimistic-move";
+import { FOCO_SEGMENTO, ehFocoDoNegocio } from "./foco-no-funil";
 
 /**
  * Cache do board da página unificada `/funil/:slug` — o que um move faz com as
@@ -67,13 +68,37 @@ export function reverterMoveOtimista(qc: QueryClient, move: MoveOtimista): void 
  */
 export async function cancelarFetchDoMove(
   qc: QueryClient,
-  { pipelineId, stages }: { pipelineId: string; stages: Array<string | null | undefined> },
+  {
+    pipelineId,
+    stages,
+    entryId,
+  }: { pipelineId: string; stages: Array<string | null | undefined>; entryId?: string },
 ): Promise<void> {
   const alvo = new Set(stages.filter((s): s is string => !!s));
   await Promise.all([
     ...[...alvo].map((stage) => qc.cancelQueries({ queryKey: [PAGE, pipelineId, stage] })),
     qc.cancelQueries({ queryKey: [COUNTS, pipelineId] }),
+    // O foco do "Ir para o negócio" é uma coluna a mais: uma leitura dele em voo
+    // (com ou sem dado ainda) fixaria o card na coluna antiga ao aterrissar.
+    ...(entryId ? [qc.cancelQueries({ queryKey: [PAGE, pipelineId, FOCO_SEGMENTO], predicate: focoDoCard(entryId) })] : []),
   ]);
+}
+
+/** Query de foco do card: `[PAGE, pipelineId, FOCO_SEGMENTO, org, filtros, entryId, nonce]`. */
+function focoDoCard(entryId: string) {
+  return (q: { queryKey: QueryKey }) => q.queryKey[5] === entryId;
+}
+
+/**
+ * O card é o negócio focado pelo "Ir para o negócio" (query de foco deste
+ * funil)? Devolve o segmento do foco — para invalidar e cancelar, ele é uma
+ * coluna a mais: `["pipeline-page", pipelineId, FOCO_SEGMENTO]`.
+ */
+export function colunaDoFoco(qc: QueryClient, pipelineId: string, entryId: string): string | null {
+  for (const [, data] of qc.getQueriesData({ queryKey: [PAGE, pipelineId, FOCO_SEGMENTO] })) {
+    if (ehFocoDoNegocio(data) && data.entryId === entryId) return FOCO_SEGMENTO;
+  }
+  return null;
 }
 
 /** Em que coluna do funil o card está no cache (`null` se em nenhuma). */
@@ -161,6 +186,10 @@ export function reconciliarMoveNoFunil(qc: QueryClient, p: ReconciliarMoveParams
     // restrito a ESTE funil.
     qc.invalidateQueries({ queryKey: [PAGE, p.pipelineId] });
   }
+  // O negócio focado relê a linha dele (etapa e desfecho frescos). Pelo id na
+  // chave, não pelo dado: um foco que o move cancelou antes da 1ª resposta
+  // ainda não tem dado e precisa buscar de novo.
+  qc.invalidateQueries({ queryKey: [PAGE, p.pipelineId, FOCO_SEGMENTO], predicate: focoDoCard(p.entryId) });
   qc.invalidateQueries({ queryKey: [COUNTS, p.pipelineId] });
   qc.invalidateQueries({ queryKey: [DESFECHO_POR_MES, p.pipelineId] });
   qc.invalidateQueries({ queryKey: ["deal-card-extras", p.entryId] });
@@ -293,6 +322,9 @@ export function planejarInvalidacaoRealtime(
   if (novo && novo.pipeline_id === pipelineId && typeof novo.stage_key === "string") {
     stages.add(novo.stage_key);
   }
+  // Outra pessoa (ou automação) mexeu no negócio focado: o foco relê a linha.
+  const noFoco = colunaDoFoco(qc, pipelineId, id);
+  if (noFoco) stages.add(noFoco);
   if (stages.size === 0) return null;
   return { stages: [...stages] };
 }

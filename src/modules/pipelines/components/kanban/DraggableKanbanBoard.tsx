@@ -18,7 +18,7 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import type { DraggableItem, StageRole } from "@/contracts/pipe";
-import { motion } from "framer-motion";
+import { motion, useReducedMotion } from "framer-motion";
 import {
   Plus,
   MoreHorizontal,
@@ -113,7 +113,30 @@ interface DraggableKanbanBoardProps<T extends DraggableItem> {
    * plana como sempre foi. Ver `closed-outcome-groups`.
    */
   closedGrouping?: ClosedGroupingAccessors<T>;
+  /**
+   * Card que precisa ESTAR À VISTA ("Ir para o negócio"): se ele é encerrado e
+   * mora numa pilha recolhida, o board abre o grupo e o mês dele — uma vez por
+   * id (quem recolher depois, recolheu). Card aberto não precisa de nada.
+   */
+  revelarId?: string | null;
+  /**
+   * Teclado no card: Enter/Espaço abrem o negócio, o contorno de foco é
+   * desenhado por dentro (legível nos dois temas) e o leitor de tela recebe as
+   * instruções em português. Piloto do "Ir para o negócio": desligado, o board
+   * fica exatamente como era.
+   */
+  tecladoAbreCard?: boolean;
 }
+
+/**
+ * Instruções do leitor de tela no card arrastável (com `tecladoAbreCard`). As
+ * padrão do dnd-kit são em inglês e prometem arrasto por teclado, que este
+ * board não tem. Sem permissão de mover, só a parte que vale.
+ */
+const INSTRUCOES_DO_LEITOR = {
+  draggable: "Enter abre o negócio. Para mudar de etapa, arraste com o mouse ou use o menu do card.",
+};
+const INSTRUCOES_SO_ABRIR = { draggable: "Enter abre o negócio." };
 
 /**
  * Aviso de que a ordenação só alcança o que já foi carregado.
@@ -175,11 +198,12 @@ function DroppableColumn<T extends DraggableItem>({
   const { setNodeRef, isOver } = useDroppable({
     id: column.id,
   });
+  const reduzido = useReducedMotion();
 
   return (
     <motion.div
       ref={setNodeRef}
-      initial={{ opacity: 0, y: 20 }}
+      initial={reduzido ? false : { opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.3 }}
       data-stage={column.id}
@@ -325,7 +349,7 @@ function DroppableColumn<T extends DraggableItem>({
 
       {sortKey && sortKey !== DEFAULT_COLUMN_SORT && column.hasMore && <PartialSortNotice />}
 
-      <div className="min-h-[100px] flex-1 space-y-2.5 overflow-y-auto px-2.5 pb-2.5">
+      <div data-corpo-coluna className="min-h-[100px] flex-1 space-y-2.5 overflow-y-auto px-2.5 pb-2.5">
         {children}
         {column.hasMore && column.onLoadMore && (autoLoadMore ? (
           <LoadMoreSentinel onLoadMore={column.onLoadMore} isFetching={column.isFetchingMore ?? false} />
@@ -369,9 +393,12 @@ function DroppableColumn<T extends DraggableItem>({
 function SortableCard<T extends DraggableItem>({
   item,
   renderCard,
+  tecladoAbreCard = false,
 }: {
   item: T;
   renderCard: (item: T, isDragging?: boolean) => React.ReactNode;
+  /** Ver `DraggableKanbanBoardProps.tecladoAbreCard`. */
+  tecladoAbreCard?: boolean;
 }) {
   const {
     attributes,
@@ -402,8 +429,26 @@ function SortableCard<T extends DraggableItem>({
           listeners?.onPointerDown?.(event);
         }
       }}
+      onKeyDown={
+        tecladoAbreCard
+          ? (event) => {
+              // O wrapper é o que recebe foco (role=button do dnd-kit); o clique
+              // que abre o negócio está no card de dentro. Enter/Espaço fazem o
+              // mesmo — nunca no meio de um arrasto.
+              if (isDragging || event.target !== event.currentTarget) return;
+              if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                event.currentTarget.querySelector<HTMLElement>("[data-lead-id]")?.click();
+              }
+            }
+          : undefined
+      }
       className={cn(
         "relative group/card cursor-grab active:cursor-grabbing touch-none",
+        // Contorno de foco por DENTRO (a coluna corta o de fora) e por cima de
+        // tudo do card (faixa, brilho): tinta do texto no claro, ouro no escuro.
+        tecladoAbreCard &&
+          "rounded-2xl focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-foreground dark:focus-visible:outline-ring",
         isDragging && "opacity-50 z-50"
       )}
     >
@@ -485,6 +530,8 @@ export function DraggableKanbanBoard<T extends DraggableItem>({
   onCreateInColumn,
   disabled,
   closedGrouping,
+  revelarId,
+  tecladoAbreCard = false,
 }: DraggableKanbanBoardProps<T>) {
   const [activeItem, setActiveItem] = useState<T | null>(null);
   // Ordenação por coluna: cada etapa guarda a sua. Fica no board (e não na
@@ -498,6 +545,25 @@ export function DraggableKanbanBoard<T extends DraggableItem>({
   // coluna, como a ordenação: vive no board, não entra em URL nem em view salva.
   const [expandedGroups, setExpandedGroups] = useState<ReadonlySet<string>>(() => new Set());
   const [openMonths, setOpenMonths] = useState<ReadonlySet<string>>(() => new Set());
+
+  // "Ir para o negócio": o card encerrado que precisa aparecer mora numa pilha
+  // recolhida. Abre o grupo e o mês dele, uma vez por id.
+  const revelado = useRef<string | null>(null);
+  useEffect(() => {
+    if (!revelarId || !closedGrouping || revelado.current === revelarId) return;
+    for (const column of columns) {
+      const ordenados = sortColumnItems(column.items, sortByColumn[column.id] ?? DEFAULT_COLUMN_SORT);
+      const { closed } = partitionClosedOutcomes(ordenados, closedGrouping, column.closedSummary);
+      for (const group of closed) {
+        const mes = group.months.find((m) => m.items.some((item) => item.id === revelarId));
+        if (!mes) continue;
+        revelado.current = revelarId;
+        setExpandedGroups((prev) => new Set(prev).add(groupKey(column.id, group.outcome)));
+        setOpenMonths((prev) => new Set(prev).add(monthKey(column.id, group.outcome, mes.key)));
+        return;
+      }
+    }
+  }, [revelarId, columns, closedGrouping, sortByColumn]);
   const scrollRef = useRef<HTMLDivElement>(null);
   const topScrollRef = useRef<HTMLDivElement>(null);
   const [scrollWidth, setScrollWidth] = useState(0);
@@ -606,11 +672,18 @@ export function DraggableKanbanBoard<T extends DraggableItem>({
       onDragStart={handleDragStart}
       onDragEnd={handleDragEnd}
       onDragOver={handleDragOver}
+      accessibility={
+        tecladoAbreCard
+          ? { screenReaderInstructions: disabled ? INSTRUCOES_SO_ABRIR : INSTRUCOES_DO_LEITOR }
+          : undefined
+      }
     >
-      {/* Top scrollbar */}
+      {/* Top scrollbar — espelho do trilho; a câmera do "Ir para o negócio"
+          escreve os dois com o mesmo valor (`data-quadro`). */}
       <div
         ref={topScrollRef}
         onScroll={handleTopScroll}
+        data-quadro="barra-topo"
         className="overflow-x-auto overflow-y-hidden"
         style={{ height: 12 }}
       >
@@ -621,6 +694,7 @@ export function DraggableKanbanBoard<T extends DraggableItem>({
       <div
         ref={scrollRef}
         onScroll={handleMainScroll}
+        data-quadro="rolagem"
         // O topo V5 do funil tem cabeçalho, pílula, faixa de funis e barra de
         // controle; o quadro ocupa o resto da altura e rola por coluna.
         className="flex gap-3 overflow-x-auto overflow-y-hidden pb-4 max-h-[calc(100vh-300px)] min-h-[420px] scrollbar-hide"
@@ -643,7 +717,7 @@ export function DraggableKanbanBoard<T extends DraggableItem>({
           const closedCount = closedGroups.reduce((n, g) => n + g.items.length, 0);
           const hidesClosed = visibleClosed.length < closedCount;
           const renderSortable = (item: T) => (
-            <SortableCard key={item.id} item={item} renderCard={renderCard} />
+            <SortableCard key={item.id} item={item} renderCard={renderCard} tecladoAbreCard={tecladoAbreCard} />
           );
 
           return (

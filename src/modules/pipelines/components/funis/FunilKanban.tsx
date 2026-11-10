@@ -1,4 +1,4 @@
-import { useMemo, useState, type ReactNode } from "react";
+import { useMemo, useRef, useState, type MutableRefObject, type ReactNode } from "react";
 import { toast } from "sonner";
 import { DraggableKanbanBoard, type KanbanColumn } from "@/modules/pipelines/components/kanban/DraggableKanbanBoard";
 import { ExportStageDialog } from "@/modules/pipelines/components/kanban/ExportStageDialog";
@@ -25,6 +25,8 @@ import type { ClosedGroupingAccessors } from "@/modules/pipelines/lib/closed-out
 import { recorteCanonicoDeContagem } from "@/modules/pipelines/lib/stage-counts-query";
 import { useFunilDesfechoPorMes } from "@/modules/pipelines/hooks/model/useFunilDesfechoPorMes";
 import { useFeatureFlag } from "@/modules/platform/hooks/useFeatureFlag";
+import { ChegadaAoNegocio } from "./ChegadaAoNegocio";
+import type { AlvoDaCamera } from "./useLevarAoNegocio";
 
 /**
  * Card de funil na página unificada — o shape que `get_pipeline_page` devolve,
@@ -107,7 +109,29 @@ interface FunilKanbanProps {
    * inteira com ESTE recorte — o mesmo que a coluna pagina.
    */
   filterParams?: FunilFilterParams;
+  /**
+   * "Ir para o negócio": o negócio fixado no topo da coluna (a página já o pôs
+   * em `stageData`). Faixa lateral em ouro no card e, se encerrado, a pilha
+   * dele abre no mês certo.
+   */
+  focoEntryId?: string | null;
+  /** A chegada a levar até a tela (uma vez por pedido) — câmera + brilho de 5 s. */
+  levarAte?: AlvoDaCamera | null;
+  /**
+   * O nonce da chegada que JÁ aconteceu. Da página, não deste componente: o
+   * Kanban desmonta e remonta (aba Lista, breakpoint) e não repete a viagem.
+   */
+  viagemFeita?: MutableRefObject<number | null>;
+  /** O card não apareceu no prazo: a página oferece abrir o negócio. */
+  onNaoDeuParaMostrar?: (alvo: AlvoDaCamera) => void;
+  /**
+   * Enter/Espaço no card focado abrem o negócio, com contorno de foco legível
+   * nos dois temas. Piloto do "Ir para o negócio" (a página liga com a flag).
+   */
+  tecladoAbreCard?: boolean;
 }
+
+const NADA_A_FAZER = () => {};
 
 function FunilStageBadge({
   pipelineId,
@@ -160,8 +184,24 @@ export function FunilKanban({
   renderStageBadge,
   onCreateInStage,
   filterParams,
+  focoEntryId = null,
+  levarAte = null,
+  viagemFeita,
+  onNaoDeuParaMostrar = NADA_A_FAZER,
+  tecladoAbreCard = false,
 }: FunilKanbanProps) {
   const createAcaoDoDia = useCreateAcaoDoDia();
+  const viagemLocal = useRef<number | null>(null);
+  // A câmera só parte com o card do pedido JÁ numa coluna (a linha do foco
+  // chegou e foi fixada) — e mira a coluna em que ele está AGORA: ele pode ter
+  // mudado de etapa (automação, outra pessoa, um arrasto) desde a decisão.
+  const etapaDoAlvo = useMemo(() => {
+    if (!levarAte) return null;
+    for (const [stageKey, slot] of Object.entries(stageData)) {
+      if (((slot?.items ?? []) as FunilEntry[]).some((e) => e.id === levarAte.entryId)) return stageKey;
+    }
+    return null;
+  }, [levarAte, stageData]);
   const { allowed: canMovePipe } = useCanDo("move_pipe_record");
   // Workflows pendurados no funil: para custom o trigger_config guarda o
   // pipeline_id + stage_key — a MESMA chave serve aqui. Funil de sistema não
@@ -327,6 +367,7 @@ export function FunilKanban({
       // funil sem etapa de ganho também pinta de verde. Ver `cardOutcome`.
       outcome: cardOutcome(entry, stageRoleByKey.get(entry.stage_key)),
       closedAt: cardClosedAt(entry),
+      emFoco: !!focoEntryId && entry.id === focoEntryId,
       pipelineId,
       meetingDate,
       // ── A reunião no card (S6) ──
@@ -365,7 +406,7 @@ export function FunilKanban({
         };
       }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [stages, stageData, metricsMap, desfechoPorEtapa],
+    [stages, stageData, metricsMap, desfechoPorEtapa, focoEntryId],
   );
 
   const findEntry = (entryId: string): FunilEntry | undefined => {
@@ -386,6 +427,8 @@ export function FunilKanban({
         }}
         disabled={!canMovePipe}
         closedGrouping={closedGrouping}
+        revelarId={focoEntryId}
+        tecladoAbreCard={tecladoAbreCard}
         onDeleteAllLeads={onDeleteAllLeads}
         onSelectAllStage={filterParams ? (stageKey) => void selectAllStage(stageKey) : undefined}
         selectingStageId={selectingStageId}
@@ -477,6 +520,16 @@ export function FunilKanban({
           e do chat — a partir de um clique dado sobre um card de negócio. */}
       {/* Poeira dos cards excluídos — ver `prepararDissolucao`. */}
       <CardEffectsHost />
+      {/* "Ir para o negócio": câmera + brilho, e a chegada dita ao leitor de tela. */}
+      {levarAte && (
+        <ChegadaAoNegocio
+          alvo={levarAte}
+          etapa={etapaDoAlvo}
+          pipelineId={pipelineId}
+          registro={viagemFeita ?? viagemLocal}
+          onNaoDeu={onNaoDeuParaMostrar}
+        />
+      )}
       <BulkActionBar
         selectedIds={bulk.selectedIds}
         onClear={clearSelection}

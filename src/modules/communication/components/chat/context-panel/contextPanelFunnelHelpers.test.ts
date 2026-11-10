@@ -50,6 +50,24 @@ describe("toFunnelRows", () => {
     expect(rows[0].stages.find((s) => s.key === "ganho")?.role).toBe("won");
   });
 
+  // "Ir para o negócio" leva ao board pelo UUID do funil — o slug muda quando o
+  // funil é renomeado. Funil de sistema: `pipelineDbId`; custom: `pipelineId`.
+  it("cada linha sabe o funil (pipelines.id) do negócio", () => {
+    expect(toFunnelRows([standard()])[0].pipelineId).toBe("pl-opp");
+    const custom = {
+      type: "custom",
+      pipelineId: "cp-1",
+      pipelineName: "Pós-venda",
+      pipelineColor: "#38bdf8",
+      pipelineIcon: "star",
+      entryId: "centry-9",
+      currentStageId: "s1",
+      currentStageName: "Ativo",
+      stages: [{ id: "s1", name: "Ativo", color: "#38bdf8", position: 0, role: "open" }],
+    } as PipelineStatus;
+    expect(toFunnelRows([custom])[0].pipelineId).toBe("cp-1");
+  });
+
   it("marca isLoss por role lost OU is_final_negative (etapa de perda só pela flag)", () => {
     const rows = toFunnelRows([
       standard({

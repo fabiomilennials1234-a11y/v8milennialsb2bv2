@@ -18,6 +18,7 @@ import { LeadCardChecklistPopover } from "./LeadCardChecklistPopover";
 import { LeadCardChecklistsPanel } from "./LeadCardChecklistsPanel";
 import { LeadCardQualificationPopover } from "./LeadCardQualificationPopover";
 import { CardOutcomeBurst } from "./CardOutcomeBurst";
+import { CardDestaque } from "./CardDestaque";
 // Mesma origem que o `LeadCardAvatar` usa: ele importa o tipo, não o reexporta.
 import type { QualificationTier } from "../../lead-detail/modal/types";
 
@@ -110,6 +111,8 @@ interface LeadCardCompactProps {
     metrics?: { commentsCount?: number; checklistsCompleted?: number; checklistsTotal?: number } | null;
     /** Negócio encerrado — pinta o card (verde/vermelho) e troca "parado" pelo selo. */
     outcome?: "won" | "lost" | null;
+    /** Negócio em foco ("Ir para o negócio"): faixa lateral em ouro. */
+    emFoco?: boolean;
   };
   config: {
     showContact: boolean; showValue: boolean; showDate: boolean;
@@ -290,6 +293,7 @@ export const LeadCardCompact = memo(function LeadCardCompact({
       <div
         ref={cardRef}
         data-lead-id={lead.id}
+        data-em-foco={lead.emFoco && !lead.outcome ? "" : undefined}
         onClick={onClick}
         className={cn(
           // `p-0` anula o `p-4` que `.kanban-card` aplica no CSS global.
@@ -299,7 +303,15 @@ export const LeadCardCompact = memo(function LeadCardCompact({
           // lateral do `.kanban-card` some no card aberto (o desfecho a devolve).
           "flex flex-col rounded-2xl border-card-border bg-card shadow-relevo before:opacity-0",
           "hover:shadow-relevo-alto motion-reduce:hover:translate-y-0",
+          // `isolate`: o card é o grupo de mistura do clarão do destaque — ele
+          // tinge o card como marca-texto, sem misturar com a coluna atrás.
+          "isolate",
           lead.outcome && OUTCOME_CARD_CLASSES[lead.outcome],
+          // O desfecho é informação e manda na faixa; aberto em foco, ela vira
+          // ouro (âmbar escuro no claro: o ouro puro some no cartão branco).
+          lead.emFoco &&
+            !lead.outcome &&
+            "before:opacity-100 [--card-accent:hsl(var(--gold-soft-foreground))] dark:[--card-accent:hsl(var(--primary))]",
           lead.isInactive && "opacity-60",
           selected && "ring-2 ring-primary/60",
         )}
@@ -626,6 +638,11 @@ export const LeadCardCompact = memo(function LeadCardCompact({
             </div>
           )}
         </div>
+        {/* A faixa em ouro é só cor: o leitor de tela ouve de onde o card veio. */}
+        {lead.emFoco && <span className="sr-only">Trazido pelo Ir para o negócio.</span>}
+        {/* "Ir para o negócio": a borda acende em ouro por 5 s. Último filho:
+            pinta por cima de todo o conteúdo do card, e o clarão mistura com ele. */}
+        <CardDestaque entryId={lead.id} />
       </div>
       {checklistsOpen && onChecklistsOpenChange && (
         <LeadCardChecklistsPanel

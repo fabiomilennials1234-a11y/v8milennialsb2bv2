@@ -1,4 +1,5 @@
 import type { QueryClient, QueryKey } from "@tanstack/react-query";
+import { ehFocoDoNegocio, type FocoDoNegocio } from "./foco-no-funil";
 
 /**
  * Optimistic drag-and-drop para os boards paginados — o legado
@@ -60,6 +61,29 @@ export function optimisticMovePipelineEntry(
   let moved: Record<string, unknown> | null = null;
   let fromStage: string | null = null;
 
+  // A query de foco do "Ir para o negócio" anda junto com o card: ele sai do
+  // topo da coluna de origem e chega no topo da de destino (o snapshot acima já
+  // a guardou; o rollback a devolve). Há uma variante por filtro (vivem 60 s):
+  // a FONTE do card é a que o board está mostrando (com observador) e, sem
+  // nenhuma, a mais recente — uma variante sem linha nunca apaga uma que tem.
+  let fonteDoFoco: { foco: FocoDoNegocio; ativa: boolean; em: number } | null = null;
+  for (const query of qc.getQueryCache().findAll({ queryKey: pageKey })) {
+    const data = query.state.data;
+    if (!ehFocoDoNegocio(data) || data.entryId !== id) continue;
+    if (data.linha) {
+      const candidata = { foco: data, ativa: query.getObserversCount() > 0, em: query.state.dataUpdatedAt };
+      const melhor =
+        !fonteDoFoco ||
+        (candidata.ativa !== fonteDoFoco.ativa ? candidata.ativa : candidata.em > fonteDoFoco.em);
+      if (melhor) fonteDoFoco = candidata;
+    }
+    qc.setQueryData(query.queryKey, {
+      ...data,
+      stageKey: toStage,
+      linha: data.linha ? { ...data.linha, stage_key: toStage, status: toStage } : null,
+    });
+  }
+
   for (const [key, data] of pageCaches) {
     if (!isInfinite(data)) continue;
     let hit = false;
@@ -75,6 +99,13 @@ export function optimisticMovePipelineEntry(
       return page;
     });
     if (hit) qc.setQueryData(key, { ...data, pages: newPages });
+  }
+
+  // Card que só existe no foco (fundo da coluna, página nunca carregada): é ele
+  // que se move, com a etapa que o foco leu do banco como origem.
+  if (!moved && fonteDoFoco) {
+    moved = fonteDoFoco.foco.linha;
+    fromStage = fonteDoFoco.foco.stageKey;
   }
 
   // Card não estava em cache (coluna nunca carregada): reconciliação resolve.

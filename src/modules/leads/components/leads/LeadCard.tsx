@@ -221,6 +221,12 @@ export interface LeadCardData extends DraggableItem {
    * da coluna por mês desta data (`cardClosedAt`, no módulo pipelines).
    */
   closedAt?: string | null;
+  /**
+   * O negócio que o "Ir para o negócio" do chat veio buscar: o board o fixa no
+   * topo da coluna durante a visita, e o card acende a faixa lateral em ouro
+   * para dizer por que ele está ali (fora da ordem da coluna).
+   */
+  emFoco?: boolean;
 }
 
 export interface LeadCardProps {

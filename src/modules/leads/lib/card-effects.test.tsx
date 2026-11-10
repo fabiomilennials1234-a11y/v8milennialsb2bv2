@@ -2,12 +2,21 @@ import { act, render, renderHook, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   __reiniciarEfeitosDoCard,
+  anteciparDestaque,
   cancelarEfeitoDeDesfecho,
+  concluirDestaque,
   concluirEfeito,
   definirPainelAberto,
+  destacarCard,
+  DESTAQUE_ANTECIPACAO_MS,
+  DESTAQUE_MS,
+  DESTAQUE_SAIDA_MS,
+  DESTAQUE_TOTAL_MS,
   dispararEfeitoDeDesfecho,
+  encerrarDestaque,
   opacidadeDaOnda,
   prepararDissolucao,
+  useDestaqueDoCard,
   useEfeitoDeDesfecho,
   useEntradasEmDesfecho,
   useFantasmas,
@@ -171,6 +180,132 @@ describe("a curva da onda", () => {
   });
 });
 
+describe("destaque do negócio (Ir para o negócio)", () => {
+  it("dura cinco segundos e acaba sozinho, mesmo sem card montado", () => {
+    expect(DESTAQUE_MS).toBe(5000);
+    const { result } = renderHook(() => useDestaqueDoCard("e-1"));
+    act(() => destacarCard("e-1"));
+    expect(result.current).not.toBeNull();
+
+    act(() => vi.advanceTimersByTime(DESTAQUE_MS - 1));
+    expect(result.current).not.toBeNull();
+    act(() => vi.advanceTimersByTime(1));
+    expect(result.current).toBeNull();
+  });
+
+  it("é informação, não celebração: movimento reduzido não o desliga", () => {
+    reduzido(true);
+    const { result } = renderHook(() => useDestaqueDoCard("e-1"));
+    act(() => destacarCard("e-1"));
+    expect(result.current).not.toBeNull();
+  });
+
+  it("o painel do negócio não o segura", () => {
+    const { result } = renderHook(() => useDestaqueDoCard("e-1"));
+    act(() => {
+      definirPainelAberto(true);
+      destacarCard("e-1");
+    });
+    expect(result.current).not.toBeNull();
+  });
+
+  it("o quadro 0 do CSS fica um instante antes de agora: a borda já começa a pousar", () => {
+    const antes = performance.now();
+    act(() => destacarCard("e-1"));
+    act(() => vi.advanceTimersByTime(1200));
+    // Remontou 1,2 s depois: o relógio é o do destaque, não o da montagem.
+    const { result } = renderHook(() => useDestaqueDoCard("e-1"));
+    expect(result.current!.inicio).toBe(antes - DESTAQUE_ANTECIPACAO_MS);
+    expect(performance.now() - result.current!.inicio).toBe(1200 + DESTAQUE_ANTECIPACAO_MS);
+  });
+
+  it("a câmera agenda o pouso para o fim do movimento: expira em inicio + linha do tempo", () => {
+    const { result } = renderHook(() => useDestaqueDoCard("e-1"));
+    const inicio = performance.now() + 700;
+    act(() => destacarCard("e-1", { inicio }));
+    expect(result.current!.inicio).toBe(inicio);
+    act(() => vi.advanceTimersByTime(700 + DESTAQUE_TOTAL_MS - 1));
+    expect(result.current).not.toBeNull();
+    act(() => vi.advanceTimersByTime(1));
+    expect(result.current).toBeNull();
+  });
+
+  it("um destaque por vez: destacar outro card apaga o anterior", () => {
+    const primeiro = renderHook(() => useDestaqueDoCard("e-1"));
+    const segundo = renderHook(() => useDestaqueDoCard("e-2"));
+    act(() => destacarCard("e-1"));
+    act(() => destacarCard("e-2"));
+    expect(primeiro.result.current).toBeNull();
+    expect(segundo.result.current).not.toBeNull();
+  });
+
+  it("tocar no card é o 'achei': sai em 240 ms", () => {
+    const { result } = renderHook(() => useDestaqueDoCard("e-1"));
+    act(() => destacarCard("e-1"));
+    act(() => encerrarDestaque("e-1"));
+    expect(result.current?.saindo).toBe(true);
+    act(() => vi.advanceTimersByTime(DESTAQUE_SAIDA_MS - 1));
+    expect(result.current).not.toBeNull();
+    act(() => vi.advanceTimersByTime(1));
+    expect(result.current).toBeNull();
+  });
+
+  it("câmera interrompida: o pouso agendado vem para agora — mas não ressuscita o que a pessoa encerrou", () => {
+    const { result } = renderHook(() => useDestaqueDoCard("e-1"));
+    act(() => destacarCard("e-1", { inicio: performance.now() + 700 }));
+    const agendado = result.current!.id;
+    act(() => anteciparDestaque("e-1"));
+    expect(result.current!.id).not.toBe(agendado);
+    expect(result.current!.inicio).toBe(performance.now() - DESTAQUE_ANTECIPACAO_MS);
+
+    // Já começou: não reinicia.
+    const emCurso = result.current!.id;
+    act(() => vi.advanceTimersByTime(500));
+    act(() => anteciparDestaque("e-1"));
+    expect(result.current!.id).toBe(emCurso);
+
+    // A pessoa tocou no card (saindo): nada volta.
+    act(() => destacarCard("e-1", { inicio: performance.now() + 700 }));
+    act(() => encerrarDestaque("e-1"));
+    act(() => anteciparDestaque("e-1"));
+    expect(result.current?.saindo).toBe(true);
+  });
+
+  it("encerrar outro card não mexe no destaque", () => {
+    const { result } = renderHook(() => useDestaqueDoCard("e-1"));
+    act(() => destacarCard("e-1"));
+    act(() => encerrarDestaque("e-2"));
+    expect(result.current?.saindo).toBe(false);
+  });
+
+  it("destacar de novo recomeça; o fim do destaque antigo não apaga o novo", () => {
+    const { result } = renderHook(() => useDestaqueDoCard("e-1"));
+    act(() => destacarCard("e-1"));
+    const antigo = result.current!.id;
+    act(() => vi.advanceTimersByTime(3000));
+    act(() => destacarCard("e-1"));
+    act(() => concluirDestaque("e-1", antigo));
+    expect(result.current).not.toBeNull();
+    // O relógio do novo vale cinco segundos inteiros.
+    act(() => vi.advanceTimersByTime(DESTAQUE_MS - 1));
+    expect(result.current).not.toBeNull();
+    act(() => vi.advanceTimersByTime(1));
+    expect(result.current).toBeNull();
+  });
+
+  it("só o card da entrada brilha", () => {
+    const { result } = renderHook(() => useDestaqueDoCard("e-2"));
+    act(() => destacarCard("e-1"));
+    expect(result.current).toBeNull();
+  });
+
+  it("não solta o card da pilha: é coisa do foco do board, não do efeito", () => {
+    const { result } = renderHook(() => useEntradasEmDesfecho());
+    act(() => destacarCard("e-1"));
+    expect(result.current.size).toBe(0);
+  });
+});
+
 describe("exclusão", () => {
   it("copia o card antes de excluir e o clone vira poeira só quando dá certo", () => {
     const original = cardNaTela("e-1");
@@ -189,6 +324,16 @@ describe("exclusão", () => {
     expect(fantasma.no.hasAttribute("inert")).toBe(true);
     // O card real some na hora — a poeira não sai de cima de um card inteiro.
     expect(original.style.visibility).toBe("hidden");
+  });
+
+  it("o brilho do 'Ir para o negócio' não vai junto para a poeira", () => {
+    const original = cardNaTela("e-1");
+    const camada = document.createElement("div");
+    camada.className = "card-destaque";
+    original.appendChild(camada);
+    const { result } = renderHook(() => useFantasmas());
+    act(() => prepararDissolucao(["e-1"]).dissolver());
+    expect(result.current[0].no.querySelector(".card-destaque")).toBeNull();
   });
 
   it("exclusão que falhou não deixa rastro", () => {
