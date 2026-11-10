@@ -37,6 +37,8 @@ function makeSupabase(opts: {
       is: () => chain,
       in: () => chain,
       not: () => chain,
+      // Vínculo anterior (regra 2c): whatsapp_messages ordenado, LIMIT 1.
+      order: () => chain,
       limit: () => chain,
       // Leitor de lead por número (lista de ids): leads e lead_phones.
       then: (resolve: (r: unknown) => unknown) => {

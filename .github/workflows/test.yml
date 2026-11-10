@@ -99,6 +99,8 @@ jobs:
         run: node --test tests/integration/copilot-reactivation-pause.test.mjs
       - name: Lead address authorization (real gate, permissions and detector)
         run: node --test tests/integration/lead-address-authorization.test.mjs
+      - name: Número em vários cadastros (escolha, vínculo anterior, RPC por caixa, backfill)
+        run: node --test tests/integration/numero-compartilhado-escolha.test.mjs
       - name: Tarefas do Comando (Postgres, atribuição e isolamento por organização)
         run: node --test tests/integration/task-playbook.test.mjs
       - name: Agenda reminders (Postgres, tenant isolation and rollback)

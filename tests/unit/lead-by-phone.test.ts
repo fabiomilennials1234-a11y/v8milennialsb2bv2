@@ -8,9 +8,14 @@ import { describe, it, expect } from "vitest";
 import "../helpers/deno-mock";
 import { fakeSupabaseTables, type FakeTables } from "../helpers/fake-supabase-tables";
 import {
-  pickLeadByOpenDeal,
+  pickLeadForNumber,
   resolveLeadByPhone,
+  type NumberLeadSignals,
 } from "../../supabase/functions/_shared/lead-by-phone.ts";
+import {
+  pickLeadForNumber as pickLeadForNumberFront,
+  resolveLeadByPhone as resolveLeadByPhoneFront,
+} from "../../src/modules/communication/lib/leadByPhone";
 
 const ORG = "org-1";
 const PHONE = "48999990000";
@@ -26,7 +31,16 @@ const base = {
     { organization_id: ORG, lead_id: "L-DEL", normalized_phone: PHONE, deleted_at: null },
   ],
   deals: [] as Record<string, unknown>[],
+  whatsapp_numero_lead_escolhido: [] as Record<string, unknown>[],
+  whatsapp_messages: [] as Record<string, unknown>[],
 };
+
+const escolha = (lead_id: string, over: Record<string, unknown> = {}) => ({
+  organization_id: ORG, normalized_phone: PHONE, lead_id, ...over,
+});
+const msg = (id: string, lead_id: string | null, timestamp: string, over: Record<string, unknown> = {}) => ({
+  id, organization_id: ORG, normalized_phone: PHONE, lead_id, timestamp, created_at: timestamp, deleted_at: null, ...over,
+});
 
 const deal = (id: string, lead: string, created_at: string, over: Record<string, unknown> = {}) => ({
   id, organization_id: ORG, source_lead_id: lead, created_at, closed_at: null, deleted_at: null, ...over,
@@ -39,8 +53,15 @@ async function resolveInAllOrders(tables: FakeTables, opts?: { preferredLeadId?:
   for (const leads of [tables.leads, rev(tables.leads)]) {
     for (const lead_phones of [tables.lead_phones, rev(tables.lead_phones)]) {
       for (const deals of [tables.deals, rev(tables.deals)]) {
-        const { supabase } = fakeSupabaseTables({ leads, lead_phones, deals });
-        results.add((await resolveLeadByPhone(supabase, ORG, PHONE, opts)).leadId);
+        for (const whatsapp_messages of [tables.whatsapp_messages ?? [], rev(tables.whatsapp_messages ?? [])]) {
+          const { supabase } = fakeSupabaseTables({
+            leads, lead_phones, deals, whatsapp_messages,
+            whatsapp_numero_lead_escolhido: tables.whatsapp_numero_lead_escolhido ?? [],
+          });
+          // Borda e front são espelhos: os dois têm que dar o MESMO lead.
+          results.add((await resolveLeadByPhone(supabase, ORG, PHONE, opts)).leadId);
+          results.add((await resolveLeadByPhoneFront(supabase, ORG, PHONE, opts)).leadId);
+        }
       }
     }
   }
@@ -111,14 +132,135 @@ describe("resolveLeadByPhone", () => {
   });
 });
 
-describe("pickLeadByOpenDeal", () => {
+describe("resolveLeadByPhone — escolha explícita e vínculo anterior (regressão de 19/10)", () => {
+  it("caso Cliente Exemplo: 2+ leads, negócio fechado, vínculo anterior ao A → A", async () => {
+    const t = {
+      ...base,
+      deals: [deal("D1", "L-B", "2026-09-01", { closed_at: "2026-10-19" })],
+      whatsapp_messages: [msg("M1", "L-A", "2026-10-18"), msg("M2", null, "2026-10-20"), msg("M3", null, "2026-11-01")],
+    };
+    expect(await resolveInAllOrders(t)).toBe("L-A");
+  });
+
+  it("vínculo anterior a lead fora dos candidatos é ignorado", async () => {
+    const t = { ...base, whatsapp_messages: [msg("M1", "L-DEL", "2026-10-18")] };
+    expect(await resolveInAllOrders(t)).toBeNull();
+  });
+
+  it("vale a mensagem vinculada MAIS RECENTE; apagada não conta; outra org não conta", async () => {
+    const t = {
+      ...base,
+      whatsapp_messages: [
+        msg("M1", "L-A", "2026-10-01"),
+        msg("M2", "L-B", "2026-10-10"),
+        msg("M3", "L-A", "2026-10-15", { deleted_at: "2026-10-16" }),
+        msg("M4", "L-A", "2026-10-20", { organization_id: "org-2" }),
+      ],
+    };
+    expect(await resolveInAllOrders(t)).toBe("L-B");
+  });
+
+  it("negócio aberto vence vínculo anterior", async () => {
+    const t = { ...base, deals: [deal("D1", "L-B", "2026-05-01")], whatsapp_messages: [msg("M1", "L-A", "2026-10-18")] };
+    expect(await resolveInAllOrders(t)).toBe("L-B");
+  });
+
+  it("escolha explícita vence negócio aberto e vínculo anterior", async () => {
+    const t = {
+      ...base,
+      deals: [deal("D1", "L-B", "2026-05-01")],
+      whatsapp_messages: [msg("M1", "L-B", "2026-10-18")],
+      whatsapp_numero_lead_escolhido: [escolha("L-A")],
+    };
+    expect(await resolveInAllOrders(t)).toBe("L-A");
+  });
+
+  it("escolha de lead que deixou de ser candidato é ignorada (cai no negócio)", async () => {
+    const t = {
+      ...base,
+      deals: [deal("D1", "L-B", "2026-05-01")],
+      whatsapp_numero_lead_escolhido: [escolha("L-DEL")],
+    };
+    expect(await resolveInAllOrders(t)).toBe("L-B");
+  });
+
+  it("escolha de OUTRO número ou OUTRA org não vale", async () => {
+    const t = {
+      ...base,
+      whatsapp_numero_lead_escolhido: [escolha("L-A", { normalized_phone: "48911110000" }), escolha("L-A", { organization_id: "org-2" })],
+    };
+    expect(await resolveInAllOrders(t)).toBeNull();
+  });
+
+  it("um lead: não consulta escolha nem mensagens", async () => {
+    const { supabase, queried } = fakeSupabaseTables({ ...base, lead_phones: [] });
+    expect((await resolveLeadByPhone(supabase, ORG, PHONE)).leadId).toBe("L-A");
+    expect(queried).not.toContain("whatsapp_numero_lead_escolhido");
+    expect(queried).not.toContain("whatsapp_messages");
+  });
+
+  it("escolha ou negócio decidem: não lê mensagens", async () => {
+    const { supabase, queried } = fakeSupabaseTables({ ...base, whatsapp_numero_lead_escolhido: [escolha("L-B")] });
+    expect((await resolveLeadByPhone(supabase, ORG, PHONE)).leadId).toBe("L-B");
+    expect(queried).not.toContain("whatsapp_messages");
+  });
+
+  it("tabela de escolha ausente (front antes da migration): segue a regra sem ela", async () => {
+    const { supabase: real } = fakeSupabaseTables({ ...base, whatsapp_messages: [msg("M1", "L-A", "2026-10-18")] });
+    const semTabela = {
+      from: (table: string) =>
+        table === "whatsapp_numero_lead_escolhido"
+          ? { select: () => ({ eq: () => ({ eq: () => ({ maybeSingle: async () => ({ data: null, error: { code: "PGRST205", message: "not found" } }) }) }) }) }
+          : real.from(table),
+    } as unknown as typeof real;
+    expect((await resolveLeadByPhone(semTabela, ORG, PHONE)).leadId).toBe("L-A");
+    expect((await resolveLeadByPhoneFront(semTabela, ORG, PHONE)).leadId).toBe("L-A");
+  });
+
+  it("outra falha ao ler a escolha vira erro (leadId null NÃO é 'sem lead')", async () => {
+    const { supabase: real } = fakeSupabaseTables(base);
+    const quebrado = {
+      from: (table: string) =>
+        table === "whatsapp_numero_lead_escolhido"
+          ? { select: () => ({ eq: () => ({ eq: () => ({ maybeSingle: async () => ({ data: null, error: { code: "57014", message: "timeout" } }) }) }) }) }
+          : real.from(table),
+    } as unknown as typeof real;
+    const r = await resolveLeadByPhone(quebrado, ORG, PHONE);
+    expect(r).toMatchObject({ leadId: null, error: "timeout" });
+    expect([...r.candidateIds].sort()).toEqual(["L-A", "L-B"]);
+  });
+});
+
+describe("pickLeadForNumber — paridade borda × front", () => {
+  const d = (lead_id: string, deal_id: string, created_at: string) => ({ lead_id, deal_id, created_at });
+  const casos: Array<[string, string[], NumberLeadSignals, string | null]> = [
+    ["1 candidato", ["a"], { chosenLeadId: "x", lastLinkedLeadId: "y" }, "a"],
+    ["2+ com escolha", ["a", "b"], { chosenLeadId: "b" }, "b"],
+    ["escolha de ex-candidato ignorada", ["a", "b"], { chosenLeadId: "x" }, null],
+    ["deal vence vínculo anterior", ["a", "b"], { openDeals: [d("b", "D", "2026-01-01")], lastLinkedLeadId: "a" }, "b"],
+    ["escolha vence deal", ["a", "b"], { chosenLeadId: "a", openDeals: [d("b", "D", "2026-01-01")] }, "a"],
+    ["vínculo anterior fora dos candidatos ignorado", ["a", "b"], { lastLinkedLeadId: "z" }, null],
+    ["vínculo anterior candidato", ["a", "b"], { lastLinkedLeadId: "a" }, "a"],
+    ["nada → null", ["a", "b"], {}, null],
+    ["0 candidatos", [], { chosenLeadId: "a" }, null],
+  ];
+  for (const [nome, cands, sinais, esperado] of casos) {
+    it(nome, () => {
+      expect(pickLeadForNumber(cands, sinais)).toBe(esperado);
+      expect(pickLeadForNumberFront(cands, sinais)).toBe(esperado);
+      expect(pickLeadForNumber([...cands].reverse(), sinais)).toBe(esperado);
+    });
+  }
+});
+
+describe("pickLeadForNumber — só negócio aberto", () => {
   it("1 candidato: ele, sem olhar negócio", () => {
-    expect(pickLeadByOpenDeal(["L-A"], [])).toBe("L-A");
+    expect(pickLeadForNumber(["L-A"], { openDeals: [] })).toBe("L-A");
   });
   it("0 candidatos: null", () => {
-    expect(pickLeadByOpenDeal([], [])).toBeNull();
+    expect(pickLeadForNumber([], { openDeals: [] })).toBeNull();
   });
   it("ignora negócio de lead que não é candidato", () => {
-    expect(pickLeadByOpenDeal(["L-A", "L-B"], [{ lead_id: "L-X", deal_id: "D", created_at: "2026-01-01" }])).toBeNull();
+    expect(pickLeadForNumber(["L-A", "L-B"], { openDeals: [{ lead_id: "L-X", deal_id: "D", created_at: "2026-01-01" }] })).toBeNull();
   });
 });
