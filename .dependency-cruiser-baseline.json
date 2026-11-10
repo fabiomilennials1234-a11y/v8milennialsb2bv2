@@ -195684,6 +195684,137 @@
             ]
           }
         ]
+      },
+      {
+        "type": "cycle",
+        "from": "src/modules/communication/components/chat/context-panel/ContextPanelTabInfo.tsx",
+        "to": "src/modules/communication/components/chat/context-panel/SemLeadVinculado.tsx",
+        "unresolvedTo": "./SemLeadVinculado",
+        "dependencyTypes": [
+          "local",
+          "import"
+        ],
+        "rule": {
+          "severity": "warn",
+          "name": "no-circular-dynamic"
+        },
+        "cycle": [
+          {
+            "name": "src/modules/communication/components/chat/context-panel/SemLeadVinculado.tsx",
+            "dependencyTypes": [
+              "local",
+              "import"
+            ]
+          },
+          {
+            "name": "src/modules/communication/components/chat/LeadContactModal.tsx",
+            "dependencyTypes": [
+              "aliased",
+              "aliased-tsconfig",
+              "aliased-tsconfig-paths",
+              "local",
+              "import"
+            ]
+          },
+          {
+            "name": "src/modules/communication/components/chat/LeadDetailContent.tsx",
+            "dependencyTypes": [
+              "local",
+              "import"
+            ]
+          },
+          {
+            "name": "src/modules/leads/index.ts",
+            "dependencyTypes": [
+              "aliased",
+              "aliased-tsconfig",
+              "aliased-tsconfig-paths",
+              "local",
+              "export"
+            ]
+          },
+          {
+            "name": "src/modules/leads/components/deal-card/DealCardPanel.tsx",
+            "dependencyTypes": [
+              "local",
+              "export"
+            ]
+          },
+          {
+            "name": "src/modules/leads/components/deal-card/TelefoneDoNegocio.tsx",
+            "dependencyTypes": [
+              "local",
+              "import"
+            ]
+          },
+          {
+            "name": "src/modules/communication/components/chat/AbrirConversaButton.tsx",
+            "dependencyTypes": [
+              "aliased",
+              "aliased-tsconfig",
+              "aliased-tsconfig-paths",
+              "local",
+              "import"
+            ]
+          },
+          {
+            "name": "src/modules/communication/lib/whatsapp.ts",
+            "dependencyTypes": [
+              "aliased",
+              "aliased-tsconfig",
+              "aliased-tsconfig-paths",
+              "local",
+              "import"
+            ]
+          },
+          {
+            "name": "src/modules/communication/lib/chatPrefetch.ts",
+            "dependencyTypes": [
+              "aliased",
+              "aliased-tsconfig",
+              "aliased-tsconfig-paths",
+              "local",
+              "import"
+            ]
+          },
+          {
+            "name": "src/modules/communication/pages/ChatWhatsApp.tsx",
+            "dependencyTypes": [
+              "aliased",
+              "aliased-tsconfig",
+              "aliased-tsconfig-paths",
+              "local",
+              "dynamic-import"
+            ]
+          },
+          {
+            "name": "src/modules/communication/components/chat/ChatShellWithContext.tsx",
+            "dependencyTypes": [
+              "aliased",
+              "aliased-tsconfig",
+              "aliased-tsconfig-paths",
+              "local",
+              "import"
+            ]
+          },
+          {
+            "name": "src/modules/communication/components/chat/context-panel/ContextPanel.tsx",
+            "dependencyTypes": [
+              "aliased",
+              "aliased-tsconfig",
+              "aliased-tsconfig-paths",
+              "local",
+              "import"
+            ]
+          },
+          {
+            "name": "src/modules/communication/components/chat/context-panel/ContextPanelTabInfo.tsx",
+            "dependencyTypes": [
+              "local",
+              "import"
+            ]
+          }
+        ]
       }
     ],
     "error": 6,
