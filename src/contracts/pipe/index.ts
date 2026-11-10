@@ -13,3 +13,4 @@ export * from "./kanban";
 export * from "./nome-do-funil";
 export * from "./funil-de-vendas";
 export * from "./perda";
+export * from "./negocio-no-funil";

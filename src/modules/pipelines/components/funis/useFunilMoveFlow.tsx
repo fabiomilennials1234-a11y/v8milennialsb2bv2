@@ -275,6 +275,7 @@ export function useFunilMoveFlow({
           await cancelarFetchDoMove(queryClient, {
             pipelineId: pipeline.id,
             stages: [entry?.stage_key, stage.stage_key],
+            entryId,
           });
           otimista = aplicarMoveOtimista(queryClient, {
             pipelineId: pipeline.id,

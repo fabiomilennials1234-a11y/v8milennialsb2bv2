@@ -311,10 +311,18 @@ export {
   ORIGIN_COLORS,
 } from "./components/leads/LeadCard";
 export type { LeadCardData, LeadCardVariant, LeadCardProps } from "./components/leads/LeadCard";
-// Efeitos do card: ganho/perda (anéis) e exclusão (poeira). O board monta o
-// host; quem exclui prepara a dissolução antes. Ver `lib/card-effects.ts`.
+// Efeitos do card: ganho/perda (anéis), exclusão (poeira) e destaque ("Ir para
+// o negócio": a borda acende em ouro por 5 s). O board monta o host; quem
+// exclui prepara a dissolução antes; a câmera do board agenda o destaque.
+// Ver `lib/card-effects.ts`.
 export { CardEffectsHost } from "./components/leads/card/CardEffectsHost";
-export { prepararDissolucao, useEntradasEmDesfecho } from "./lib/card-effects";
+export {
+  anteciparDestaque,
+  destacarCard,
+  DESTAQUE_ANTECIPACAO_MS,
+  prepararDissolucao,
+  useEntradasEmDesfecho,
+} from "./lib/card-effects";
 export type { Dissolucao } from "./lib/card-effects";
 export { LeadModal } from "./components/leads/LeadModal";
 export { LeadScoreBadge } from "./components/leads/LeadScoreBadge";

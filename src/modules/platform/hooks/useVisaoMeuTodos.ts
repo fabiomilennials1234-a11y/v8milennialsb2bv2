@@ -1,4 +1,4 @@
-import { useCallback } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useIdentity } from "@/modules/identity";
 import { usePersistedState } from "@/shared/hooks/usePersistedState";
 import { useFeatureFlag } from "./useFeatureFlag";
@@ -23,6 +23,12 @@ export interface VisaoMeuTodos {
   setVisao: (v: Visao) => void;
   /** `team_members.id` a forçar como dono/responsável, ou `null` (segue o filtro da tela). */
   donoForcado: string | null;
+  /**
+   * A visão é a DEFINITIVA desta abertura: identidade e flag carregadas e, com
+   * o controle disponível, a escolha salva já lida. Antes disso, `visao` pode
+   * ser a padrão no lugar da salva — quem decide algo com base nela espera.
+   */
+  pronto: boolean;
 }
 
 export function useVisaoMeuTodos(superficie: SuperficieDaVisao): VisaoMeuTodos {
@@ -38,5 +44,14 @@ export function useVisaoMeuTodos(superficie: SuperficieDaVisao): VisaoMeuTodos {
   const visao = disponivel ? normalizarVisao(salva, padrao) : padrao;
   const setVisao = useCallback((v: Visao) => setSalva(normalizarVisao(v, padrao)), [setSalva, padrao]);
 
-  return { disponivel, visao, setVisao, donoForcado: donoForcadoPelaVisao(disponivel, visao, teamMemberId) };
+  // O `usePersistedState` lê a escolha salva num effect do commit em que o
+  // controle fica disponível; este effect roda logo depois do dele, no mesmo
+  // commit, então o render seguinte já traz a escolha E o `pronto`.
+  const [lida, setLida] = useState(false);
+  useEffect(() => {
+    if (disponivel) setLida(true);
+  }, [disponivel]);
+  const pronto = !isLoading && !flagLoading && (!disponivel || lida);
+
+  return { disponivel, visao, setVisao, donoForcado: donoForcadoPelaVisao(disponivel, visao, teamMemberId), pronto };
 }

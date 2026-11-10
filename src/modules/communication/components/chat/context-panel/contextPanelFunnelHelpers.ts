@@ -26,6 +26,8 @@ export interface FunnelCardRow {
   key: string;
   /** pipeline_entries.id — alvo do move. */
   entryId: string;
+  /** pipelines.id — o board do negócio ("Ir para o negócio"). */
+  pipelineId: string;
   label: string;
   color: string;
   currentStageKey: string | null;
@@ -122,6 +124,7 @@ export function toFunnelRows(
       rows.push({
         key: p.pipeId,
         entryId: p.pipeId,
+        pipelineId: p.pipelineDbId,
         label: labelByType.get(p.pipeType) ?? p.label,
         color: p.color,
         currentStageKey: p.currentStage,
@@ -137,6 +140,7 @@ export function toFunnelRows(
       rows.push({
         key: p.entryId,
         entryId: p.entryId,
+        pipelineId: p.pipelineId,
         label: p.pipelineName,
         color: p.pipelineColor,
         currentStageKey: p.currentStageId,

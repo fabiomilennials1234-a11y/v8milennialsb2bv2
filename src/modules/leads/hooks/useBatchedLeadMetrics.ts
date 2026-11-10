@@ -10,7 +10,7 @@
  * `lead_comments` NÃO está na publication — a contagem de comentários é
  * invalidada pelas mutations do modal (useLeadComments) via ["lead-card-metrics"].
  */
-import { useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useRealtimeSubscription } from "@/shared/realtime/useRealtimeSubscription";
 
@@ -82,5 +82,9 @@ export function useBatchedLeadMetrics(leadIds: string[]) {
     },
     enabled: sortedIds.length > 0,
     staleTime: 30_000,
+    // A lista de ids muda a cada página carregada (e quando o "Ir para o
+    // negócio" fixa um card): sem isto, todos os badges sumiam e voltavam.
+    // O mapa é por lead, então manter o anterior até o novo chegar é inofensivo.
+    placeholderData: keepPreviousData,
   });
 }

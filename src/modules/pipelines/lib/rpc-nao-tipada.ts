@@ -22,7 +22,10 @@ import { supabase } from "@/integrations/supabase/client";
 type ChamadaRpc = (
   nome: string,
   args: Record<string, unknown>,
-) => Promise<{ data: unknown; error: { message: string } | null }>;
+) => Promise<{
+  data: unknown;
+  error: { message: string; code?: string; details?: string | null; hint?: string | null } | null;
+}>;
 
 export async function rpcNaoTipada<T>(
   nome: string,
@@ -31,6 +34,12 @@ export async function rpcNaoTipada<T>(
   const chamar = supabase.rpc as unknown as ChamadaRpc;
   // SupabaseClient.rpc acessa this.rest; preservar o cliente como receiver.
   const { data, error } = await chamar.call(supabase, nome, args);
-  if (error) throw new Error(error.message);
+  if (error) {
+    // Continua um `Error` com a mesma mensagem, mas com os campos do erro do
+    // PostgREST — como o resto do app o entrega ao `notifyError`: timeout
+    // (57014), sem permissão (42501) e sessão vencida (PGRST30x) são
+    // reconhecidos, em vez de virar "erro desconhecido" com convite ao suporte.
+    throw Object.assign(new Error(error.message), { code: error.code, details: error.details, hint: error.hint });
+  }
   return data as T;
 }

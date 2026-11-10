@@ -44,7 +44,9 @@ import {
 import { notifyError } from "@/shared/errors";
 import { useFeatureFlag } from "@/modules/platform/feature-flags";
 import { CHAT_GANHO_PERDA_FLAG } from "@/modules/communication/lib/fechar-negocio-chat";
+import { IR_PARA_NEGOCIO_FLAG } from "@/contracts/pipe/negocio-no-funil";
 import { GanhoPerdaDoNegocio } from "./GanhoPerdaDoNegocio";
+import { IrParaNegocio } from "./IrParaNegocio";
 
 interface ContextPanelFunnelsProps {
   leadId: string;
@@ -68,6 +70,8 @@ export function ContextPanelFunnels({ leadId }: ContextPanelFunnelsProps) {
   const canMove = gates.canMoveMeeting.allowed;
   // Ganho/Perda abaixo de cada negócio: piloto por org (Café Jurerê).
   const { enabled: comGanhoPerda } = useFeatureFlag(CHAT_GANHO_PERDA_FLAG);
+  // "Ir para o negócio" (leva ao card no board): piloto por org (Café Jurerê).
+  const { enabled: comIrParaNegocio } = useFeatureFlag(IR_PARA_NEGOCIO_FLAG);
   const canAdd = gates.canAddToPipe.allowed;
 
   const rows = useMemo(() => toFunnelRows(pipelines, displayConfig), [pipelines, displayConfig]);
@@ -247,7 +251,19 @@ export function ContextPanelFunnels({ leadId }: ContextPanelFunnelsProps) {
               <span className="h-8 w-[3px] shrink-0 rounded-full" style={{ background: row.color }} />
               <div className="min-w-0">
                 <div className="truncate text-[13px] font-bold text-foreground">{row.label}</div>
-                <div className="text-[10.5px] text-muted-foreground">Clique na etapa para mover</div>
+                {comIrParaNegocio ? (
+                  // O chip já diz que move (chevron + nome acessível); a 2ª
+                  // linha vira o caminho até o card no board.
+                  <IrParaNegocio
+                    pipelineId={row.pipelineId}
+                    entryId={row.entryId}
+                    funil={row.label}
+                    etapa={current?.label ?? null}
+                    movendo={isMoving}
+                  />
+                ) : (
+                  <div className="text-[10.5px] text-muted-foreground">Clique na etapa para mover</div>
+                )}
               </div>
             </div>
 

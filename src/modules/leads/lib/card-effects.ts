@@ -1,7 +1,7 @@
 import { useSyncExternalStore } from "react";
 
 /**
- * Efeitos do card do funil: ganho, perda e exclusão.
+ * Efeitos do card do funil: ganho, perda, exclusão e destaque.
  *
  * ── Por que um store, e não estado do card ─────────────────────────────────
  * Quem decide o desfecho quase nunca é o card. É o painel do negócio (um
@@ -28,6 +28,13 @@ import { useSyncExternalStore } from "react";
  * ── Movimento reduzido ─────────────────────────────────────────────────────
  * Com `prefers-reduced-motion`, nada anima: o card ganho já fica verde e o
  * excluído já some. O efeito é celebração, não informação.
+ *
+ * ── Destaque é informação ──────────────────────────────────────────────────
+ * O "Ir para o negócio" do chat leva ao board e o card brilha por 5 s: é ELE
+ * que a pessoa veio ver. Por isso o destaque não espera o painel nem some com
+ * movimento reduzido — quem decide como ele aparece sem movimento é o card
+ * (`CardDestaque`). E vive no store pelo mesmo motivo dos outros: o card pode
+ * remontar no meio (refetch da coluna) e o brilho continua de onde estava.
  */
 
 export type EfeitoDeDesfecho = "won" | "lost";
@@ -182,6 +189,96 @@ export function useEntradasEmDesfecho(): ReadonlySet<string> {
   return useSyncExternalStore(assinar, entradasEmDesfecho, () => NENHUMA_ENTRADA);
 }
 
+// ── Destaque ("Ir para o negócio") ───────────────────────────────────────
+
+/** Quanto o card brilha ao chegar no board — pedido do CTO: cinco segundos. */
+export const DESTAQUE_MS = 5000;
+/**
+ * O pouso do brilho começa um instante ANTES de a câmera parar (a curva da
+ * câmera passa os últimos ~18% do tempo cobrindo ~1% da distância): a borda
+ * acende enquanto ela assenta, sem tempo morto.
+ */
+export const DESTAQUE_ANTECIPACAO_MS = 120;
+/** Linha do tempo inteira do CSS (`destaque-*` em index.css): antecipação + 5 s. */
+export const DESTAQUE_TOTAL_MS = DESTAQUE_ANTECIPACAO_MS + DESTAQUE_MS;
+/** Tocar no card é o "achei": o brilho sai rápido. */
+export const DESTAQUE_SAIDA_MS = 240;
+
+export interface DestaqueAtivo {
+  readonly id: number;
+  /**
+   * Instante (`performance.now()`) do quadro 0 da linha do tempo do CSS. Pode
+   * estar no futuro: a câmera agenda o pouso para o fim do movimento dela. O
+   * card que remonta no meio continua de onde estava.
+   */
+  readonly inicio: number;
+  /** Saída antecipada em curso (`encerrarDestaque`). */
+  readonly saindo: boolean;
+}
+
+// Um destaque por vez: destacar outro card substitui o anterior.
+let destaque: { entryId: string; ativo: DestaqueAtivo } | null = null;
+let fimDoDestaque: ReturnType<typeof setTimeout> | null = null;
+
+function limparDestaque() {
+  if (fimDoDestaque) clearTimeout(fimDoDestaque);
+  fimDoDestaque = null;
+  destaque = null;
+}
+
+/**
+ * Faz o card desta entrada brilhar por `DESTAQUE_MS`. `inicio` agenda o pouso
+ * (padrão: agora, já com a antecipação). Destacar de novo recomeça.
+ */
+export function destacarCard(entryId: string, { inicio }: { inicio?: number } = {}) {
+  limparDestaque();
+  const ativo: DestaqueAtivo = { id: ++seq, inicio: inicio ?? agora() - DESTAQUE_ANTECIPACAO_MS, saindo: false };
+  destaque = { entryId, ativo };
+  // O store encerra sozinho: o fim não depende de o card estar montado.
+  fimDoDestaque = setTimeout(
+    () => concluirDestaque(entryId, ativo.id),
+    Math.max(0, ativo.inicio + DESTAQUE_TOTAL_MS - agora()),
+  );
+  avisar();
+}
+
+/**
+ * A câmera foi interrompida antes de chegar: o pouso agendado para o fim dela
+ * vem para AGORA. Não ressuscita destaque que a pessoa já encerrou (tocou no
+ * card) nem reinicia um que já começou.
+ */
+export function anteciparDestaque(entryId: string) {
+  if (!destaque || destaque.entryId !== entryId || destaque.ativo.saindo) return;
+  if (destaque.ativo.inicio <= agora() - DESTAQUE_ANTECIPACAO_MS) return;
+  destacarCard(entryId);
+}
+
+/** Saída antecipada (a pessoa tocou no card): apaga em `DESTAQUE_SAIDA_MS`. */
+export function encerrarDestaque(entryId: string) {
+  if (!destaque || destaque.entryId !== entryId || destaque.ativo.saindo) return;
+  const { id } = destaque.ativo;
+  destaque = { entryId, ativo: { ...destaque.ativo, saindo: true } };
+  if (fimDoDestaque) clearTimeout(fimDoDestaque);
+  fimDoDestaque = setTimeout(() => concluirDestaque(entryId, id), DESTAQUE_SAIDA_MS);
+  avisar();
+}
+
+/** `id` evita que o fim de um destaque antigo apague um mais novo do mesmo card. */
+export function concluirDestaque(entryId: string, id: number) {
+  if (destaque?.entryId !== entryId || destaque.ativo.id !== id) return;
+  limparDestaque();
+  avisar();
+}
+
+/** O destaque que ESTE card deve mostrar agora. Não é segurado pelo painel. */
+export function useDestaqueDoCard(entryId: string): DestaqueAtivo | null {
+  return useSyncExternalStore(
+    assinar,
+    () => (destaque?.entryId === entryId ? destaque.ativo : null),
+    () => null,
+  );
+}
+
 /** Opacidade da onda: entra rápido, segura, sai devagar. `p` é o progresso 0–1. */
 export function opacidadeDaOnda(p: number): number {
   if (p <= 0 || p >= 1) return 0;
@@ -223,6 +320,8 @@ export function prepararDissolucao(entryIds: readonly string[]): Dissolucao {
     // O clone é imagem, não interface: sem ids duplicados, sem foco, sem leitor.
     no.removeAttribute("data-lead-id");
     no.querySelectorAll("[id]").forEach((n) => n.removeAttribute("id"));
+    // O brilho do "Ir para o negócio" é do card vivo, não da poeira.
+    no.querySelectorAll(".card-destaque").forEach((n) => n.remove());
     no.setAttribute("inert", "");
     no.setAttribute("aria-hidden", "true");
     no.style.margin = "0";
@@ -271,6 +370,7 @@ export function useFantasmas(): readonly Fantasma[] {
 export function __reiniciarEfeitosDoCard() {
   if (liberando) clearTimeout(liberando);
   for (const t of validade.values()) clearTimeout(t);
+  limparDestaque();
   liberando = null;
   painelAberto = false;
   desfechos.clear();

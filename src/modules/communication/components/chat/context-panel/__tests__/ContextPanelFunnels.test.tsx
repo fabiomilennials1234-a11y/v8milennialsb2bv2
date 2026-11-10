@@ -11,6 +11,7 @@ const state = vi.hoisted(() => ({
   move: vi.fn(),
   capturar: vi.fn(),
   ganhoPerda: false,
+  irParaNegocio: false,
 }));
 
 vi.mock("@/integrations/supabase/client", () => ({ supabase: { from: () => ({}) } }));
@@ -40,11 +41,21 @@ vi.mock("@/modules/pipelines", () => ({
 }));
 vi.mock("@/shared/errors", () => ({ notifyError: vi.fn() }));
 vi.mock("@/modules/platform/feature-flags", () => ({
-  useFeatureFlag: (key: string) => ({ enabled: key === "chat_ganho_perda_negocio" && state.ganhoPerda, isLoading: false }),
+  useFeatureFlag: (key: string) => ({
+    enabled:
+      (key === "chat_ganho_perda_negocio" && state.ganhoPerda) ||
+      (key === "chat_ir_para_negocio" && state.irParaNegocio),
+    isLoading: false,
+  }),
 }));
 vi.mock("../GanhoPerdaDoNegocio", () => ({
   GanhoPerdaDoNegocio: (p: { entryId: string; funil: string; etapaAtualKey: string | null }) => (
     <div data-testid="ganho-perda-stub">{`${p.entryId}|${p.funil}|${p.etapaAtualKey}`}</div>
+  ),
+}));
+vi.mock("../IrParaNegocio", () => ({
+  IrParaNegocio: (p: { entryId: string; pipelineId: string; funil: string }) => (
+    <div data-testid="ir-para-negocio-stub">{`${p.entryId}|${p.pipelineId}|${p.funil}`}</div>
   ),
 }));
 
@@ -85,6 +96,39 @@ beforeEach(() => {
   state.move.mockReset();
   state.capturar.mockReset();
   state.ganhoPerda = false;
+  state.irParaNegocio = false;
+});
+
+describe("ContextPanelFunnels — Ir para o negócio (flag por org)", () => {
+  it("flag desligada: nenhum botão novo, a dica de sempre na 2ª linha", () => {
+    state.pipelines = COM_NEGOCIO;
+    renderCard();
+    expect(screen.queryByTestId("ir-para-negocio-stub")).not.toBeInTheDocument();
+    expect(screen.getByText("Clique na etapa para mover")).toBeInTheDocument();
+  });
+
+  it("flag ligada: um por negócio, na 2ª linha, no lugar da dica", () => {
+    state.irParaNegocio = true;
+    state.pipelines = COM_NEGOCIO;
+    renderCard();
+    const botoes = screen.getAllByTestId("ir-para-negocio-stub");
+    expect(botoes).toHaveLength(1); // Cafeteria não tem negócio: só "adicionar"
+    expect(botoes[0]).toHaveTextContent("entry-1|pipe-envase|Envase");
+    expect(screen.queryByText("Clique na etapa para mover")).not.toBeInTheDocument();
+  });
+
+  it("lead com dois negócios: cada linha leva ao SEU negócio (sem adivinhar)", () => {
+    state.irParaNegocio = true;
+    state.pipelines = [
+      COM_NEGOCIO[0],
+      { ...COM_NEGOCIO[0], entryId: "entry-2", closedAt: "2026-09-01T00:00:00Z", currentStageId: "stage-2", currentStageName: "Vendido" },
+    ] as PipelineStatus[];
+    renderCard();
+    expect(screen.getAllByTestId("ir-para-negocio-stub").map((b) => b.textContent)).toEqual([
+      "entry-1|pipe-envase|Envase",
+      "entry-2|pipe-envase|Envase",
+    ]);
+  });
 });
 
 describe("ContextPanelFunnels — Ganho/Perda abaixo do negócio (flag por org)", () => {

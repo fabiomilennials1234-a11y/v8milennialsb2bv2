@@ -28,16 +28,39 @@ const grouping = {
   amountOf: (c: Card) => c.value,
 };
 
-function mount(column: Partial<KanbanColumn<Card>> & { items: Card[] }) {
+function mount(column: Partial<KanbanColumn<Card>> & { items: Card[] }, revelarId?: string | null) {
   return render(
     <DraggableKanbanBoard<Card>
       columns={[{ id: "vendido", title: "Vendido", color: "green", ...column }]}
       onStatusChange={vi.fn()}
       renderCard={(card) => <div data-testid="card">{card.id}</div>}
       closedGrouping={grouping}
+      revelarId={revelarId}
     />,
   );
 }
+
+describe("Ir para o negócio: card encerrado à vista", () => {
+  it("abre o grupo e SÓ o mês do negócio pedido — o card aparece no lugar dele", () => {
+    mount({ items: ITEMS }, "ago-a");
+    expect(cards()).toEqual(["ago-a", "aberto-1"]);
+    expect(screen.getByTestId("closed-group-won")).toBeInTheDocument();
+    expect(screen.getByTestId("closed-month-won-2026-08")).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByTestId("closed-month-won-2026-09")).toHaveAttribute("aria-expanded", "false");
+  });
+
+  it("negócio aberto não mexe nas pilhas", () => {
+    mount({ items: ITEMS }, "aberto-1");
+    expect(cards()).toEqual(["aberto-1"]);
+    expect(screen.queryByTestId("closed-group-won")).toBeNull();
+  });
+
+  it("revela uma vez: quem agrupa de novo, agrupa (o board não reabre)", () => {
+    mount({ items: ITEMS }, "ago-a");
+    fireEvent.click(screen.getByRole("button", { name: /Agrupar/ }));
+    expect(screen.queryByTestId("closed-group-won")).toBeNull();
+  });
+});
 
 const cards = () => screen.queryAllByTestId("card").map((el) => el.textContent);
 
