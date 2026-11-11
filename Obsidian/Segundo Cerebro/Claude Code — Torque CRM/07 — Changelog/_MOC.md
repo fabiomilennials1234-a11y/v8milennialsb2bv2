@@ -186,3 +186,5 @@ owner: claude-agent
 - [[2026-10-20-chave-canonica-whatsapp-oficial|Canal oficial — chave canônica do contato (nono dígito) une a conversa partida]] 🔵 wip
 - [[2026-11-04-lp-agenda-service-worker|Agenda das LPs presa em Carregando para quem já abriu o CRM]]
 - [[2026-11-04-lps-v5-gestao-comercial-crm-b2b|LPs no padrão V5 e rotas antigas aposentadas]]
+- [[2026-11-09-mencao-em-grupo-uazapi|Menção (@) ao enviar para grupo do WhatsApp (Uazapi)]]
+- [[2026-11-09-numero-em-varios-cadastros|Número em vários cadastros volta a vincular a conversa]]
