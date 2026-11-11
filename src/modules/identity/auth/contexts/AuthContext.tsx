@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useRef, useState, ReactNode } from 'react';
 import { User, Session } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
+import { registrarTokenNovo } from '../lib/sessao-runtime';
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string | undefined;
 
@@ -47,6 +48,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setSession(session);
         setUser(session?.user ?? null);
         setLoading(false);
+        // Relógio do computador: só token RECÉM-emitido serve de régua (o `iat`
+        // é a hora do servidor). INITIAL_SESSION/SIGNED_IN podem trazer o token
+        // antigo do storage, e o `iat` velho pareceria relógio errado.
+        if (event === 'TOKEN_REFRESHED') registrarTokenNovo(session);
+        if (event === 'SIGNED_OUT') registrarTokenNovo(null);
         if ((event === 'SIGNED_IN' || event === 'INITIAL_SESSION') && session?.access_token && session?.user?.id) {
           const key = `${session.user.id}:${session.access_token.slice(0, 20)}`;
           if (attachCalledForSession.current !== key) {
@@ -74,10 +80,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const signIn = async (email: string, password: string) => {
-    const { error } = await supabase.auth.signInWithPassword({
+    const { data, error } = await supabase.auth.signInWithPassword({
       email,
       password,
     });
+    if (!error) registrarTokenNovo(data.session);
     return { error: error as Error | null };
   };
 
