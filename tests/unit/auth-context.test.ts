@@ -86,7 +86,10 @@ describe('AuthContext', () => {
 
   // ── 3 ──────────────────────────────────────────────────
   it('signIn calls supabase.auth.signInWithPassword with email and password', async () => {
-    mockSignInWithPassword.mockResolvedValue({ error: null });
+    // Formato real do supabase-js: `data` vem sempre, com a sessão no sucesso —
+    // o signIn a entrega a registrarTokenNovo (#2489).
+    const session = makeSession();
+    mockSignInWithPassword.mockResolvedValue({ data: { user: session.user, session }, error: null });
 
     const { result } = renderHook(() => useAuth(), { wrapper: createWrapper() });
 
@@ -103,7 +106,7 @@ describe('AuthContext', () => {
   // ── 4 ──────────────────────────────────────────────────
   it('signIn returns error when auth fails', async () => {
     const authError = new Error('Invalid credentials');
-    mockSignInWithPassword.mockResolvedValue({ error: authError });
+    mockSignInWithPassword.mockResolvedValue({ data: { user: null, session: null }, error: authError });
 
     const { result } = renderHook(() => useAuth(), { wrapper: createWrapper() });
 
