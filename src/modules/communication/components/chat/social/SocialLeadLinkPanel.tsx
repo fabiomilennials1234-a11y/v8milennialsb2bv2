@@ -31,7 +31,7 @@ import {
   useLinkSocialConversationToLead,
   useUnlinkSocialConversation,
 } from "@/modules/communication/hooks/chat/useSocialLeadLink";
-import { useCanDo } from "@/modules/identity";
+import { useCanDo, useChatLeadCreation } from "@/modules/identity";
 import { SocialLeadPicker } from "./SocialLeadPicker";
 import { SocialCreateLeadDialog } from "./SocialCreateLeadDialog";
 import { notifyError } from "@/shared/errors";
@@ -60,7 +60,9 @@ export function SocialLeadLinkPanel({ contact }: SocialLeadLinkPanelProps) {
   const [pendingLeadId, setPendingLeadId] = useState<string | null>(null);
   const [orphanIdentity, setOrphanIdentity] = useState(false);
 
-  const canCreateLead = useCanDo("create_lead");
+  const generalCreation = useCanDo("create_lead");
+  const chatCreation = useChatLeadCreation();
+  const canCreateLead = { allowed: generalCreation.allowed && chatCreation.allowed };
   const linkMutation = useLinkSocialConversationToLead(contact.messaging_channel_id);
   const createMutation = useCreateLeadFromSocial(contact.messaging_channel_id);
   const unlinkMutation = useUnlinkSocialConversation(contact.messaging_channel_id);

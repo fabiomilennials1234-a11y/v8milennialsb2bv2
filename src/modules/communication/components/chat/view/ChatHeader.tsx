@@ -19,6 +19,7 @@
  * de resolver, e recortava o anel de foco.
  */
 import React, { useState } from "react";
+import { useChatLeadCreation } from "@/modules/identity";
 import {
   ArrowLeft,
   UserCircle,
@@ -193,6 +194,7 @@ export function ChatHeader({
     ? Math.round((limits.current / limits.limit) * 100) : null;
   const newChatsRestricted = limits?.can_send_new_messages === false;
   const limitsWarning = newChatsRestricted || (limitsPercent !== null && limitsPercent >= 80);
+  const chatCreation = useChatLeadCreation();
   const chatJid = phoneNumber ? `${phoneNumber.replace(/\D/g, "")}@s.whatsapp.net` : null;
   const avatarGradient = getAvatarGradient(phoneNumber || contactName);
   const [syncOpen, setSyncOpen] = useState(false);
@@ -269,7 +271,7 @@ export function ChatHeader({
           densidade · ⋯. Abaixo de `lg` os rótulos viram ícone com tooltip. */}
       <div className="flex items-center gap-1.5 shrink-0">
         {/* Botão ver / criar lead */}
-        {onOpenLeadModal && !daCobranca && <Button
+        {onOpenLeadModal && !daCobranca && (hasLead || chatCreation.allowed) && <Button
           type="button"
           variant={hasLead ? "outline" : "ink"}
           size="sm"

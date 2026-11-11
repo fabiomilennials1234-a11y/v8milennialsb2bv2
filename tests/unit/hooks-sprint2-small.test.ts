@@ -323,6 +323,17 @@ describe("useWhatsAppLeadIntegration", () => {
   });
 
   describe("useCreateLeadFromWhatsApp", () => {
+    it("blocks a non-allowlisted admin before any lead write", async () => {
+      const chain = createChainMock([], { feature_flags: { chat_lead_creation_user_ids: ["karine"] } });
+      mockFrom.mockReturnValue(chain);
+      const { result } = renderHook(() => useCreateLeadFromWhatsApp(), { wrapper: createWrapper() });
+      await act(async () => {
+        await expect(result.current.mutateAsync({ phone: "5511999990000", pushName: "Test" })).rejects.toThrow("permissão");
+      });
+      expect(chain.insert).not.toHaveBeenCalled();
+      expect(chain.update).not.toHaveBeenCalled();
+      expect(mockFrom).not.toHaveBeenCalledWith("leads");
+    });
     it("creates new lead when none exists", async () => {
       // maybeSingle returns null (no existing lead), then insert succeeds
       const chain = createChainMock([], null);
