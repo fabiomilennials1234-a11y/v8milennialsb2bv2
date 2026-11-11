@@ -45,7 +45,7 @@ function ehRecusa(error: unknown): boolean {
 const fmt = (n: number) => n.toLocaleString("pt-BR");
 
 /**
- * Aba Mapa — choropleth do Brasil (base inteira da org, independente do mês).
+ * Aba Mapa — choropleth do Brasil (a base que quem olha vê, independente do mês).
  * Clique num estado abre o drawer com leads/clientes/vendido daquele UF.
  */
 function TabMapaBase() {
@@ -161,7 +161,7 @@ function TabMapaBase() {
       <div className="flex min-h-0 min-w-0 flex-col">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <p className="text-xs text-muted-foreground">
-            base completa, independente do mês · cor por {porReceita ? "receita" : "leads"} · clique num estado pra ver os leads
+            toda a base que você vê, independente do mês · cor por {porReceita ? "receita" : "leads"} · clique num estado pra ver os leads
           </p>
           <span className="rounded-full bg-primary-soft px-2.5 py-0.5 text-[11px] font-bold tabular-nums text-primary-soft-foreground">
             {totalMapped.toLocaleString("pt-BR")} leads mapeados
@@ -188,7 +188,7 @@ function TabMapaBase() {
 
         {vazio && (
           <p role="status" className="mt-3 rounded-xl bg-sunken px-3 py-2 text-[12px] text-muted-foreground">
-            Nenhum lead com estado identificado ainda. O estado vem do cadastro, das integrações ou do DDD do telefone.
+            Nenhum lead com estado identificado entre os que você vê. O estado vem do cadastro, das integrações ou do DDD do telefone.
           </p>
         )}
 
@@ -313,14 +313,19 @@ function TabMapaBase() {
                     Cliente{Number(lead.sold_value) > 0 ? ` · ${formatK(Number(lead.sold_value))}` : ""}
                   </span>
                 ) : (
-                  <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-bold uppercase tracking-[.03em] text-muted-foreground">Lead</span>
+                  // Quem comprou pelo CRM sem ser cliente pela regra da org (na Café
+                  // Jurerê, cliente é o cadastro do ERP) soma no Vendido do estado:
+                  // o selo mostra o valor para a soma bater com a lista.
+                  <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-bold uppercase tracking-[.03em] text-muted-foreground">
+                    Lead{Number(lead.sold_value) > 0 ? ` · ${formatK(Number(lead.sold_value))}` : ""}
+                  </span>
                 )}
               </button>
             ))}
           </div>
 
-          {/* Sem número: o mapa conta a base inteira, e a lista mostra o recorte
-              de quem olha (cadastros ocultos, filtros salvos, permissão). */}
+          {/* Sem número: o mapa conta o que quem olha vê, mas a /leads ainda
+              aplica cadastros ocultos e filtros salvos. */}
           <div className="border-t border-border/60 p-3">
             <Button className="w-full" onClick={() => navigate(`/leads?uf=${selectedUf}`)}>
               Ver em Leads →
