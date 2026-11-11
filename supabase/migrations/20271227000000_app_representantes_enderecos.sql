@@ -417,7 +417,7 @@ BEGIN
     IF v_cur.deleted_at IS NOT NULL AND NOT p_restore THEN
       RAISE EXCEPTION 'endereço excluído' USING ERRCODE = 'PT409';
     END IF;
-    IF p_expected_updated_at IS NOT NULL AND v_cur.updated_at <> p_expected_updated_at THEN
+    IF p_expected_updated_at IS NOT NULL AND v_cur.updated_at <> p_expected_updated_at THEN  -- metric-lint-allow: token de concorrência otimista, não âncora de métrica
       RAISE EXCEPTION 'conflito de versão' USING ERRCODE = 'PT409', DETAIL = v_cur.updated_at::text;
     END IF;
     v_action := CASE WHEN v_cur.deleted_at IS NOT NULL THEN 'restored' ELSE 'updated' END;
@@ -638,7 +638,7 @@ BEGIN
        AND a.geocode_attempts < 5
        AND a.geocode_next_attempt_at <= now()
        AND (a.geocode_claimed_until IS NULL OR a.geocode_claimed_until < now())
-       AND a.updated_at < now() - p_debounce
+       AND a.updated_at < now() - p_debounce  -- metric-lint-allow: debounce do geocode (última edição), não âncora de métrica
      ORDER BY a.geocode_next_attempt_at
      LIMIT greatest(1, least(p_limit, 200))
      FOR UPDATE SKIP LOCKED
