@@ -119,13 +119,28 @@ export interface LeadPhonesSyncResult {
   errors: string[];
 }
 
+/**
+ * Um item por lead. O mesmo lead pode chegar duas vezes numa execução (cliente
+ * do recorte e cliente de fora casando pelo mesmo CNPJ): planejado duas vezes
+ * contra o mesmo estado lido, o mesmo número sairia como dois INSERT. Juntando
+ * os telefones antes, `planLeadPhoneOps` deduplica pelo número.
+ */
+export function mergeByLead(items: LeadPhonesSyncItem[]): LeadPhonesSyncItem[] {
+  const byLead = new Map<string, CanonicalPhone[]>();
+  for (const i of items) {
+    if (!i.leadId || i.phones.length === 0) continue;
+    byLead.set(i.leadId, [...(byLead.get(i.leadId) ?? []), ...i.phones]);
+  }
+  return [...byLead].map(([leadId, phones]) => ({ leadId, phones }));
+}
+
 export async function syncLeadPhonesFromErp(
   admin: SupabaseClient,
   organizationId: string,
   items: LeadPhonesSyncItem[],
 ): Promise<LeadPhonesSyncResult> {
   const result: LeadPhonesSyncResult = { inserted: 0, updated: 0, errors: [] };
-  const relevant = items.filter((i) => i.leadId && i.phones.length > 0);
+  const relevant = mergeByLead(items);
 
   for (let i = 0; i < relevant.length; i += LEADS_PER_READ) {
     const slice = relevant.slice(i, i + LEADS_PER_READ);

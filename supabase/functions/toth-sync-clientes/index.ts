@@ -52,6 +52,7 @@ import {
   syncLeadPhonesFromErp,
   type LeadPhonesSyncItem,
 } from "../_shared/erp/sync/lead-phones-sync.ts";
+import { telefonesDeClienteForaDoRecorte } from "../_shared/erp/sync/telefones-fora-do-recorte.ts";
 import { loadOwnerMap } from "../_shared/erp/sync/owner-map.ts";
 import type { CanonicalClient } from "../_shared/erp/types.ts";
 import { CAFE_JURERE_ORG_ID, cafeJurereScopeEnabled, cafeJurereClientExclusion } from "../_shared/erp/cafe-jurere-client-scope.ts";
@@ -268,12 +269,22 @@ Deno.serve(
      */
     const ownerMap = await loadOwnerMap(admin, organizationId, TOTH_PROVIDER_ID);
     let cafeJurereScope = false;
+    /**
+     * Telefones de quem ficou FORA do recorte (flag `erp_telefones_todos_clientes`).
+     * O recorte decide quem a sincronização enriquece e atribui; não deveria
+     * decidir se o telefone do cliente chega ao CRM. Sem isto, ~9.400 clientes
+     * com lead nunca recebiam telefone novo ou trocado no ERP, e a conversa
+     * desse número ficava sem lead.
+     */
+    let telefonesForaDoRecorte = false;
     const registeredMembers = new Set<string>();
     if (organizationId === CAFE_JURERE_ORG_ID) {
       const { data: org, error: orgError } = await admin.from("organizations")
         .select("feature_flags").eq("id", organizationId).single();
       if (orgError) throw new Error(`Falha ao consultar recorte ERP: ${orgError.message}`);
       cafeJurereScope = cafeJurereScopeEnabled(organizationId, org.feature_flags);
+      const flags = (org.feature_flags ?? {}) as Record<string, unknown>;
+      telefonesForaDoRecorte = cafeJurereScope && flags.erp_telefones_todos_clientes === true;
       if (cafeJurereScope) {
         const ids = [...new Set([...ownerMap.values()].filter((id): id is string => !!id))];
         for (let offset = 0; offset < ids.length; offset += 100) {
@@ -384,7 +395,17 @@ Deno.serve(
 
     const seenIds = new Set<string>();
     const stats = { pages: 0, rows: 0, created: 0, adopted: 0, enriched: 0, skipped: 0, failed: 0 };
-    const recorte = { ativo: cafeJurereScope, situacao: 0, representante: 0, elegiveis: 0, por_situacao: {} as Record<string, number> };
+    const recorte = {
+      ativo: cafeJurereScope,
+      situacao: 0,
+      representante: 0,
+      elegiveis: 0,
+      por_situacao: {} as Record<string, number>,
+      /** Fora do recorte, mas com lead: só os telefones foram para a reconciliação. */
+      telefones_fora_do_recorte: 0,
+    };
+    /** Um cliente fora do recorte vai uma vez só para a fila de telefones. */
+    const telefonesForaVistos = new Set<string>();
     /** Quantos o filtro de empresa deixou de fora, e de quem eram. */
     const foraDoFiltro = { total: 0, sem_empresa: 0, por_empresa: {} as Record<string, number> };
     /**
@@ -484,6 +505,22 @@ Deno.serve(
             if (exclusion) {
               recorte[exclusion]++;
               filteredInThisPage++;
+              // Fora do recorte: nada de enriquecer, criar ou trocar dono —
+              // só o telefone, e só de quem JÁ tem lead. A busca é em memória
+              // (carteira pré-carregada); a reconciliação nunca apaga nem mexe
+              // no telefone principal.
+              const itemFora = await telefonesDeClienteForaDoRecorte({
+                ligado: telefonesForaDoRecorte,
+                dryRun,
+                organizationId,
+                cliente: canonical,
+                store,
+                vistos: telefonesForaVistos,
+              });
+              if (itemFora) {
+                phoneQueue.push(itemFora);
+                recorte.telefones_fora_do_recorte++;
+              }
               continue;
             }
           }
