@@ -197,20 +197,10 @@ export default function Equipe() {
         ...sanitizedData,
         role: sanitizedData.role as any,
       });
-      // Sincronizar user_roles para que RLS e UI vejam a role correta (admin/member)
-      // GUARD: só sincroniza se o membro editado tem user_id e a role mudou
+      // user_roles é espelho de team_members.role, mantido pelo trigger
+      // trg_sync_user_roles; o front não escreve nele (sem policy desde
+      // 20271215000001). Só invalida o cache da role exibida.
       if (editingMember.user_id && formData.role !== editingMember.role) {
-        const { error: delErr } = await supabase.from("user_roles").delete().eq("user_id", editingMember.user_id);
-        if (delErr) {
-          console.warn("[Equipe] Erro ao remover user_roles:", delErr.message);
-        }
-        const { error: insertErr } = await supabase.from("user_roles").insert({
-          user_id: editingMember.user_id,
-          role: formData.role as any,
-        });
-        if (insertErr && !String(insertErr.message).toLowerCase().includes("duplicate")) {
-          console.warn("[Equipe] Sync user_roles:", insertErr.message);
-        }
         queryClient.invalidateQueries({ queryKey: ["user_role"] });
       }
       toast.success("Membro atualizado com sucesso!");

@@ -27,7 +27,9 @@ export async function triggerFollowUpAutomation({
       .select("*")
       .eq("pipe_type", pipeType)
       .eq("stage", stage)
-      .eq("is_active", true);
+      .eq("is_active", true)
+      // Só as da org do lead + o template global (org NULL).
+      .or(`organization_id.eq.${organizationId},organization_id.is.null`);
 
     if (automationsError) {
       console.error("Error fetching automations:", automationsError);
