@@ -11,11 +11,10 @@
 --     mostra Clientes 0 e Vendido R$ 0 nos 26 estados. Para os leads com UF,
 --     a Carteira dela lista 3.691 clientes e o caderno tem R$ 886.364,65;
 --   • o mapa lê a POSIÇÃO do card, e não o fato: card parado em 'vendido'
---     com o negócio aberto segue "cliente". Sampaio e Moraes: 27 "clientes",
---     20 deles com negócio aberto (2 com a venda estornada).
--- Goletric Pinheiros (R$ 44.549 → R$ 9.000) e Distetica (R$ 1.196,28 → R$ 0)
--- caem por outro motivo: venda gravada no caderno com sale_value NULL, que o
--- Comando também não soma. A correção dessas é no caderno, não no mapa.
+--     com o negócio aberto segue "cliente" (numa org medida, 20 de 27).
+-- Org com venda gravada no caderno com sale_value NULL vê o Vendido cair por
+-- outro motivo: o Comando também não soma esse valor. A correção dessa é no
+-- caderno, não no mapa.
 --
 -- ── A regra ──────────────────────────────────────────────────────────────
 -- Vendido = caderno sale_events: venda líquida de estorno, de qualquer

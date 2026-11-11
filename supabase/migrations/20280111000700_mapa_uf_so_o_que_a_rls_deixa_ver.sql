@@ -8,12 +8,9 @@
 -- As duas são SECURITY DEFINER e leem os leads como postgres, que tem
 -- BYPASSRLS: a policy de SELECT de leads (leads_select_by_responsibility_and_
 -- permissions) não vale aqui dentro. Em prod, private.leads aplica só o regime
--- dono estrito. Qualquer membro ATIVO, mesmo sem leads.view_all, recebia nome,
--- empresa e telefone de todos os leads da UF, e p_limit não tinha teto (NULL
--- vira LIMIT ALL). Medido em prod em 11/11: 10 membros sem view_all em 5 orgs
--- não estritas alcançavam 6.493 leads que a RLS esconde deles — 1.378 só
--- clicando nos estados, com o padrão de 60. Na Alamaster, a RLS mostra 0 leads
--- a um membro; o drawer mostrava 167.
+-- dono estrito. Qualquer membro ATIVO, mesmo sem leads.view_all, recebia os
+-- leads da UF que a RLS esconde dele, e p_limit não tinha teto (NULL vira
+-- LIMIT ALL). Confirmado em prod em 11/11.
 --
 -- ── A correção ───────────────────────────────────────────────────────────
 -- 1. O WHERE das duas ganha o espelho das policies PERMISSIVAS de SELECT de
@@ -23,12 +20,11 @@
 --    assert_org_access). Onde existe (prod), entra também o ramo do balcão da
 --    RioFix (riofix_balcao_shared_read). A RESTRICTIVE do regime dono estrito
 --    continua vindo de private.leads — e o $verify$ confere isso.
---    Prova em prod (11/11, só leitura): para 57 atores — os 37 membros sem
+--    Prova em prod (11/11, só leitura): para cada ator medido — membros sem
 --    view_all, admins, gestores, master, balcão da RioFix e service_role — o
 --    predicado devolve, UF a UF, os mesmos ids que a RLS de public.leads
---    entrega ao papel do ator (mesma contagem, mesmo md5 dos ids). Uma segunda
---    varredura, com 556 atores (todos os pares de team_members, gestores e
---    masters), deu 0 divergências.
+--    entrega ao papel do ator (mesma contagem, mesmo md5 dos ids): 0
+--    divergências.
 -- 2. Teto do drawer: LIMIT LEAST(COALESCE(p_limit, 60), 60). O front mostra
 --    tudo o que recebe e nunca passa p_limit (useUfMap.ts): nada muda na tela.
 -- 3. EXECUTE sai de PUBLIC e anon. O corpo já recusa anon (assert_org_access),
