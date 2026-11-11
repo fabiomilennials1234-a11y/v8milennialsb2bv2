@@ -1,0 +1,2860 @@
+[
+ {
+  "id": "evt_1UY559EiDtxeEDH1eT8g6hE3",
+  "object": "event",
+  "api_version": "2026-10-28.endive",
+  "created": 1793802151,
+  "data": {
+   "object": {
+    "id": "sub_1UY558EiDtxeEDH11BGPACQI",
+    "object": "subscription",
+    "application": null,
+    "application_fee_percent": null,
+    "automatic_tax": {
+     "disabled_reason": null,
+     "enabled": false,
+     "liability": null
+    },
+    "billing_cycle_anchor": 1793802149,
+    "billing_cycle_anchor_config": null,
+    "billing_mode": {
+     "flexible": {
+      "proration_discounts": "included"
+     },
+     "type": "flexible",
+     "updated_at": 1793802149
+    },
+    "billing_schedules": [],
+    "billing_thresholds": null,
+    "cancel_at": null,
+    "cancel_at_period_end": false,
+    "canceled_at": null,
+    "cancellation_details": {
+     "comment": null,
+     "feedback": null,
+     "feedback_option": null,
+     "reason": null
+    },
+    "collection_method": "charge_automatically",
+    "created": 1793802149,
+    "currency": "brl",
+    "customer": "cus_VZDWgpJN1QPc8p",
+    "customer_account": null,
+    "days_until_due": null,
+    "default_payment_method": null,
+    "default_source": null,
+    "default_tax_rates": [],
+    "discounts": [],
+    "ended_at": null,
+    "invoice_settings": {
+     "custom_fields": null,
+     "footer": null,
+     "issuer": {
+      "type": "self"
+     }
+    },
+    "items": {
+     "object": "list",
+     "data": [
+      {
+       "id": "si_VZDWFZ02avucFe",
+       "object": "subscription_item",
+       "billing_thresholds": null,
+       "created": 1793802149,
+       "current_period_end": 1796394149,
+       "current_period_start": 1793802149,
+       "current_trial": null,
+       "discounts": [],
+       "metadata": {},
+       "plan": {
+        "id": "price_1UY557EiDtxeEDH1FVNUnTaa",
+        "object": "plan",
+        "active": true,
+        "amount": 199700,
+        "amount_decimal": "199700",
+        "billing_scheme": "per_unit",
+        "created": 1793802149,
+        "currency": "brl",
+        "interval": "month",
+        "interval_count": 1,
+        "livemode": false,
+        "metadata": {},
+        "meter": null,
+        "nickname": null,
+        "product": "torque_f0_mw27hfpc",
+        "tiers_mode": null,
+        "transform_usage": null,
+        "trial_period_days": null,
+        "usage_type": "licensed"
+       },
+       "price": {
+        "id": "price_1UY557EiDtxeEDH1FVNUnTaa",
+        "object": "price",
+        "active": true,
+        "billing_scheme": "per_unit",
+        "created": 1793802149,
+        "currency": "brl",
+        "custom_unit_amount": null,
+        "livemode": false,
+        "lookup_key": "torque_f0_mw27hfpc_plan_monthly",
+        "metadata": {},
+        "nickname": null,
+        "product": "torque_f0_mw27hfpc",
+        "recurring": {
+         "interval": "month",
+         "interval_count": 1,
+         "meter": null,
+         "trial_period_days": null,
+         "usage_type": "licensed"
+        },
+        "tax_behavior": "inclusive",
+        "tiers_mode": null,
+        "transform_quantity": null,
+        "type": "recurring",
+        "unit_amount": 199700,
+        "unit_amount_decimal": "199700"
+       },
+       "quantity": 1,
+       "subscription": "sub_1UY558EiDtxeEDH11BGPACQI",
+       "tax_rates": []
+      }
+     ],
+     "has_more": false,
+     "total_count": 1,
+     "url": "/v1/subscription_items?subscription=sub_1UY558EiDtxeEDH11BGPACQI"
+    },
+    "latest_invoice": "in_1UY558EiDtxeEDH1hGadtedm",
+    "livemode": false,
+    "managed_payments": {
+     "enabled": false
+    },
+    "metadata": {
+     "torque_env": "test",
+     "torque_link_id": "f0"
+    },
+    "next_pending_invoice_item_invoice": null,
+    "on_behalf_of": null,
+    "pause_collection": null,
+    "payment_settings": {
+     "payment_method_options": null,
+     "payment_method_types": [
+      "card"
+     ],
+     "save_default_payment_method": "on_subscription"
+    },
+    "pending_invoice_item_interval": null,
+    "pending_setup_intent": null,
+    "pending_update": null,
+    "plan": {
+     "id": "price_1UY557EiDtxeEDH1FVNUnTaa",
+     "object": "plan",
+     "active": true,
+     "amount": 199700,
+     "amount_decimal": "199700",
+     "billing_scheme": "per_unit",
+     "created": 1793802149,
+     "currency": "brl",
+     "interval": "month",
+     "interval_count": 1,
+     "livemode": false,
+     "metadata": {},
+     "meter": null,
+     "nickname": null,
+     "product": "torque_f0_mw27hfpc",
+     "tiers_mode": null,
+     "transform_usage": null,
+     "trial_period_days": null,
+     "usage_type": "licensed"
+    },
+    "quantity": 1,
+    "schedule": null,
+    "start_date": 1793802149,
+    "status": "incomplete",
+    "test_clock": "clock_1UY557EiDtxeEDH1fY9CZVfl",
+    "transfer_data": null,
+    "trial_end": null,
+    "trial_settings": {
+     "end_behavior": {
+      "billing_cycle_anchor": "now",
+      "missing_payment_method": "create_invoice"
+     }
+    },
+    "trial_start": null
+   }
+  },
+  "livemode": false,
+  "pending_webhooks": 0,
+  "type": "customer.subscription.created"
+ },
+ {
+  "id": "evt_3UY559EiDtxeEDH11qjiSaJF",
+  "object": "event",
+  "api_version": "2026-10-28.endive",
+  "created": 1793802153,
+  "data": {
+   "object": {
+    "id": "pi_3UY559EiDtxeEDH11tKu6khi",
+    "object": "payment_intent",
+    "allowed_payment_method_types": [
+     "card"
+    ],
+    "amount": 199700,
+    "amount_capturable": 0,
+    "amount_details": {
+     "tip": {}
+    },
+    "amount_received": 199700,
+    "application": null,
+    "application_fee_amount": null,
+    "automatic_payment_methods": null,
+    "canceled_at": null,
+    "cancellation_reason": null,
+    "capture_method": "automatic",
+    "confirmation_method": "automatic",
+    "created": 1793802151,
+    "currency": "brl",
+    "customer": "cus_VZDWgpJN1QPc8p",
+    "customer_account": null,
+    "excluded_payment_method_types": null,
+    "last_payment_error": null,
+    "latest_charge": "ch_3UY559EiDtxeEDH11KizyUvb",
+    "livemode": false,
+    "managed_payments": {
+     "enabled": false
+    },
+    "metadata": {},
+    "next_action": null,
+    "on_behalf_of": null,
+    "payment_details": {
+     "customer_reference": null,
+     "order_reference": "in_1UY558EiDtxeEDH1hGadtedm"
+    },
+    "payment_method": "pm_1UY55AEiDtxeEDH1myUDqJ7q",
+    "payment_method_configuration_details": null,
+    "payment_method_options": {
+     "card": {
+      "installments": null,
+      "mandate_options": null,
+      "network": null,
+      "request_three_d_secure": "automatic"
+     }
+    },
+    "payment_method_types": [
+     "card"
+    ],
+    "payment_record": null,
+    "processing": null,
+    "review": null,
+    "setup_future_usage": "off_session",
+    "shared_payment_granted_token": null,
+    "source": null,
+    "status": "succeeded",
+    "transfer_data": null,
+    "transfer_group": null
+   }
+  },
+  "livemode": false,
+  "pending_webhooks": 0,
+  "type": "payment_intent.succeeded"
+ },
+ {
+  "id": "evt_1UY55CEiDtxeEDH1itGOnyZo",
+  "object": "event",
+  "api_version": "2026-10-28.endive",
+  "created": 1793802153,
+  "data": {
+   "object": {
+    "id": "in_1UY558EiDtxeEDH1hGadtedm",
+    "object": "invoice",
+    "account_country": "BR",
+    "amount_due": 199700,
+    "amount_overpaid": 0,
+    "amount_paid": 199700,
+    "amount_remaining": 0,
+    "amount_shipping": 0,
+    "application": null,
+    "attempt_count": 1,
+    "attempted": true,
+    "auto_advance": false,
+    "automatic_tax": {
+     "disabled_reason": null,
+     "enabled": false,
+     "liability": null,
+     "provider": null,
+     "status": null
+    },
+    "automatically_finalizes_at": null,
+    "billing_reason": "subscription_create",
+    "collection_method": "charge_automatically",
+    "created": 1793802149,
+    "currency": "brl",
+    "custom_fields": null,
+    "customer": "cus_VZDWgpJN1QPc8p",
+    "customer_account": null,
+    "customer_tax_exempt": "none",
+    "default_payment_method": null,
+    "default_source": null,
+    "default_tax_rates": [],
+    "discounts": [],
+    "due_date": null,
+    "effective_at": 1793802149,
+    "ending_balance": 0,
+    "footer": null,
+    "from_invoice": null,
+    "issuer": {
+     "type": "self"
+    },
+    "last_finalization_error": null,
+    "latest_revision": null,
+    "lines": {
+     "object": "list",
+     "data": [
+      {
+       "id": "il_1UY557EiDtxeEDH1ewA2Aay2",
+       "object": "line_item",
+       "amount": 199700,
+       "currency": "brl",
+       "discount_amounts": [],
+       "discountable": true,
+       "discounts": [],
+       "invoice": "in_1UY558EiDtxeEDH1hGadtedm",
+       "livemode": false,
+       "metadata": {
+        "torque_env": "test",
+        "torque_link_id": "f0"
+       },
+       "parent": {
+        "invoice_item_details": null,
+        "subscription_item_details": {
+         "invoice_item": null,
+         "proration": false,
+         "proration_details": {
+          "credited_items": null
+         },
+         "subscription": "sub_1UY558EiDtxeEDH11BGPACQI",
+         "subscription_item": "si_VZDWFZ02avucFe"
+        },
+        "type": "subscription_item_details"
+       },
+       "period": {
+        "end": 1796394149,
+        "start": 1793802149
+       },
+       "pretax_credit_amounts": [],
+       "pricing": {
+        "price_details": {
+         "price": "price_1UY557EiDtxeEDH1FVNUnTaa",
+         "product": "torque_f0_mw27hfpc"
+        },
+        "type": "price_details",
+        "unit_amount_decimal": "199700"
+       },
+       "quantity": 1,
+       "quantity_decimal": "1",
+       "subtotal": 199700,
+       "taxes": []
+      }
+     ],
+     "has_more": false,
+     "total_count": 1,
+     "url": "/v1/invoices/in_1UY558EiDtxeEDH1hGadtedm/lines"
+    },
+    "livemode": false,
+    "metadata": {},
+    "next_payment_attempt": null,
+    "on_behalf_of": null,
+    "parent": {
+     "quote_details": null,
+     "subscription_details": {
+      "metadata": {
+       "torque_env": "test",
+       "torque_link_id": "f0"
+      },
+      "subscription": "sub_1UY558EiDtxeEDH11BGPACQI"
+     },
+     "type": "subscription_details"
+    },
+    "payment_settings": {
+     "default_mandate": null,
+     "payment_method_options": null,
+     "payment_method_types": [
+      "card"
+     ]
+    },
+    "period_end": 1793802149,
+    "period_start": 1793802149,
+    "post_payment_credit_notes_amount": 0,
+    "pre_payment_credit_notes_amount": 0,
+    "rendering": null,
+    "shipping_cost": null,
+    "starting_balance": 0,
+    "status": "paid",
+    "status_transitions": {
+     "finalized_at": 1793802149,
+     "marked_uncollectible_at": null,
+     "paid_at": 1793802149,
+     "voided_at": null
+    },
+    "subtotal": 199700,
+    "subtotal_excluding_tax": 199700,
+    "test_clock": "clock_1UY557EiDtxeEDH1fY9CZVfl",
+    "total": 199700,
+    "total_discount_amounts": [],
+    "total_excluding_tax": 199700,
+    "total_pretax_credit_amounts": [],
+    "total_taxes": [],
+    "webhooks_delivered_at": 1793802149
+   }
+  },
+  "livemode": false,
+  "pending_webhooks": 0,
+  "type": "invoice.paid"
+ },
+ {
+  "id": "evt_1UY55CEiDtxeEDH1hULGgao2",
+  "object": "event",
+  "api_version": "2026-10-28.endive",
+  "created": 1793802153,
+  "data": {
+   "object": {
+    "id": "sub_1UY558EiDtxeEDH11BGPACQI",
+    "object": "subscription",
+    "application": null,
+    "application_fee_percent": null,
+    "automatic_tax": {
+     "disabled_reason": null,
+     "enabled": false,
+     "liability": null
+    },
+    "billing_cycle_anchor": 1793802149,
+    "billing_cycle_anchor_config": null,
+    "billing_mode": {
+     "flexible": {
+      "proration_discounts": "included"
+     },
+     "type": "flexible",
+     "updated_at": 1793802149
+    },
+    "billing_schedules": [],
+    "billing_thresholds": null,
+    "cancel_at": null,
+    "cancel_at_period_end": false,
+    "canceled_at": null,
+    "cancellation_details": {
+     "comment": null,
+     "feedback": null,
+     "feedback_option": null,
+     "reason": null
+    },
+    "collection_method": "charge_automatically",
+    "created": 1793802149,
+    "currency": "brl",
+    "customer": "cus_VZDWgpJN1QPc8p",
+    "customer_account": null,
+    "days_until_due": null,
+    "default_payment_method": "pm_1UY55AEiDtxeEDH1myUDqJ7q",
+    "default_source": null,
+    "default_tax_rates": [],
+    "discounts": [],
+    "ended_at": null,
+    "invoice_settings": {
+     "custom_fields": null,
+     "footer": null,
+     "issuer": {
+      "type": "self"
+     }
+    },
+    "items": {
+     "object": "list",
+     "data": [
+      {
+       "id": "si_VZDWFZ02avucFe",
+       "object": "subscription_item",
+       "billing_thresholds": null,
+       "created": 1793802149,
+       "current_period_end": 1796394149,
+       "current_period_start": 1793802149,
+       "current_trial": null,
+       "discounts": [],
+       "metadata": {},
+       "plan": {
+        "id": "price_1UY557EiDtxeEDH1FVNUnTaa",
+        "object": "plan",
+        "active": true,
+        "amount": 199700,
+        "amount_decimal": "199700",
+        "billing_scheme": "per_unit",
+        "created": 1793802149,
+        "currency": "brl",
+        "interval": "month",
+        "interval_count": 1,
+        "livemode": false,
+        "metadata": {},
+        "meter": null,
+        "nickname": null,
+        "product": "torque_f0_mw27hfpc",
+        "tiers_mode": null,
+        "transform_usage": null,
+        "trial_period_days": null,
+        "usage_type": "licensed"
+       },
+       "price": {
+        "id": "price_1UY557EiDtxeEDH1FVNUnTaa",
+        "object": "price",
+        "active": true,
+        "billing_scheme": "per_unit",
+        "created": 1793802149,
+        "currency": "brl",
+        "custom_unit_amount": null,
+        "livemode": false,
+        "lookup_key": "torque_f0_mw27hfpc_plan_monthly",
+        "metadata": {},
+        "nickname": null,
+        "product": "torque_f0_mw27hfpc",
+        "recurring": {
+         "interval": "month",
+         "interval_count": 1,
+         "meter": null,
+         "trial_period_days": null,
+         "usage_type": "licensed"
+        },
+        "tax_behavior": "inclusive",
+        "tiers_mode": null,
+        "transform_quantity": null,
+        "type": "recurring",
+        "unit_amount": 199700,
+        "unit_amount_decimal": "199700"
+       },
+       "quantity": 1,
+       "subscription": "sub_1UY558EiDtxeEDH11BGPACQI",
+       "tax_rates": []
+      }
+     ],
+     "has_more": false,
+     "total_count": 1,
+     "url": "/v1/subscription_items?subscription=sub_1UY558EiDtxeEDH11BGPACQI"
+    },
+    "latest_invoice": "in_1UY558EiDtxeEDH1hGadtedm",
+    "livemode": false,
+    "managed_payments": {
+     "enabled": false
+    },
+    "metadata": {
+     "torque_env": "test",
+     "torque_link_id": "f0"
+    },
+    "next_pending_invoice_item_invoice": null,
+    "on_behalf_of": null,
+    "pause_collection": null,
+    "payment_settings": {
+     "payment_method_options": null,
+     "payment_method_types": [
+      "card"
+     ],
+     "save_default_payment_method": "on_subscription"
+    },
+    "pending_invoice_item_interval": null,
+    "pending_setup_intent": null,
+    "pending_update": null,
+    "plan": {
+     "id": "price_1UY557EiDtxeEDH1FVNUnTaa",
+     "object": "plan",
+     "active": true,
+     "amount": 199700,
+     "amount_decimal": "199700",
+     "billing_scheme": "per_unit",
+     "created": 1793802149,
+     "currency": "brl",
+     "interval": "month",
+     "interval_count": 1,
+     "livemode": false,
+     "metadata": {},
+     "meter": null,
+     "nickname": null,
+     "product": "torque_f0_mw27hfpc",
+     "tiers_mode": null,
+     "transform_usage": null,
+     "trial_period_days": null,
+     "usage_type": "licensed"
+    },
+    "quantity": 1,
+    "schedule": null,
+    "start_date": 1793802149,
+    "status": "active",
+    "test_clock": "clock_1UY557EiDtxeEDH1fY9CZVfl",
+    "transfer_data": null,
+    "trial_end": null,
+    "trial_settings": {
+     "end_behavior": {
+      "billing_cycle_anchor": "now",
+      "missing_payment_method": "create_invoice"
+     }
+    },
+    "trial_start": null
+   },
+   "previous_attributes": {
+    "default_payment_method": null,
+    "status": "incomplete"
+   }
+  },
+  "livemode": false,
+  "pending_webhooks": 0,
+  "type": "customer.subscription.updated"
+ },
+ {
+  "id": "evt_1UY55LEiDtxeEDH11GkGNCnv",
+  "object": "event",
+  "api_version": "2026-10-28.endive",
+  "created": 1793802163,
+  "data": {
+   "object": {
+    "id": "sub_1UY558EiDtxeEDH11BGPACQI",
+    "object": "subscription",
+    "application": null,
+    "application_fee_percent": null,
+    "automatic_tax": {
+     "disabled_reason": null,
+     "enabled": false,
+     "liability": null
+    },
+    "billing_cycle_anchor": 1793802149,
+    "billing_cycle_anchor_config": null,
+    "billing_mode": {
+     "flexible": {
+      "proration_discounts": "included"
+     },
+     "type": "flexible",
+     "updated_at": 1793802149
+    },
+    "billing_schedules": [],
+    "billing_thresholds": null,
+    "cancel_at": null,
+    "cancel_at_period_end": false,
+    "canceled_at": null,
+    "cancellation_details": {
+     "comment": null,
+     "feedback": null,
+     "feedback_option": null,
+     "reason": null
+    },
+    "collection_method": "charge_automatically",
+    "created": 1793802149,
+    "currency": "brl",
+    "customer": "cus_VZDWgpJN1QPc8p",
+    "customer_account": null,
+    "days_until_due": null,
+    "default_payment_method": "pm_1UY55AEiDtxeEDH1myUDqJ7q",
+    "default_source": null,
+    "default_tax_rates": [],
+    "discounts": [],
+    "ended_at": null,
+    "invoice_settings": {
+     "custom_fields": null,
+     "footer": null,
+     "issuer": {
+      "type": "self"
+     }
+    },
+    "items": {
+     "object": "list",
+     "data": [
+      {
+       "id": "si_VZDWFZ02avucFe",
+       "object": "subscription_item",
+       "billing_thresholds": null,
+       "created": 1793802149,
+       "current_period_end": 1799072549,
+       "current_period_start": 1796394149,
+       "current_trial": null,
+       "discounts": [],
+       "metadata": {},
+       "plan": {
+        "id": "price_1UY557EiDtxeEDH1FVNUnTaa",
+        "object": "plan",
+        "active": true,
+        "amount": 199700,
+        "amount_decimal": "199700",
+        "billing_scheme": "per_unit",
+        "created": 1793802149,
+        "currency": "brl",
+        "interval": "month",
+        "interval_count": 1,
+        "livemode": false,
+        "metadata": {},
+        "meter": null,
+        "nickname": null,
+        "product": "torque_f0_mw27hfpc",
+        "tiers_mode": null,
+        "transform_usage": null,
+        "trial_period_days": null,
+        "usage_type": "licensed"
+       },
+       "price": {
+        "id": "price_1UY557EiDtxeEDH1FVNUnTaa",
+        "object": "price",
+        "active": true,
+        "billing_scheme": "per_unit",
+        "created": 1793802149,
+        "currency": "brl",
+        "custom_unit_amount": null,
+        "livemode": false,
+        "lookup_key": "torque_f0_mw27hfpc_plan_monthly",
+        "metadata": {},
+        "nickname": null,
+        "product": "torque_f0_mw27hfpc",
+        "recurring": {
+         "interval": "month",
+         "interval_count": 1,
+         "meter": null,
+         "trial_period_days": null,
+         "usage_type": "licensed"
+        },
+        "tax_behavior": "inclusive",
+        "tiers_mode": null,
+        "transform_quantity": null,
+        "type": "recurring",
+        "unit_amount": 199700,
+        "unit_amount_decimal": "199700"
+       },
+       "quantity": 1,
+       "subscription": "sub_1UY558EiDtxeEDH11BGPACQI",
+       "tax_rates": []
+      }
+     ],
+     "has_more": false,
+     "total_count": 1,
+     "url": "/v1/subscription_items?subscription=sub_1UY558EiDtxeEDH11BGPACQI"
+    },
+    "latest_invoice": "in_1UY55LEiDtxeEDH1OOo2GBE1",
+    "livemode": false,
+    "managed_payments": {
+     "enabled": false
+    },
+    "metadata": {
+     "torque_env": "test",
+     "torque_link_id": "f0"
+    },
+    "next_pending_invoice_item_invoice": null,
+    "on_behalf_of": null,
+    "pause_collection": null,
+    "payment_settings": {
+     "payment_method_options": null,
+     "payment_method_types": [
+      "card"
+     ],
+     "save_default_payment_method": "on_subscription"
+    },
+    "pending_invoice_item_interval": null,
+    "pending_setup_intent": null,
+    "pending_update": null,
+    "plan": {
+     "id": "price_1UY557EiDtxeEDH1FVNUnTaa",
+     "object": "plan",
+     "active": true,
+     "amount": 199700,
+     "amount_decimal": "199700",
+     "billing_scheme": "per_unit",
+     "created": 1793802149,
+     "currency": "brl",
+     "interval": "month",
+     "interval_count": 1,
+     "livemode": false,
+     "metadata": {},
+     "meter": null,
+     "nickname": null,
+     "product": "torque_f0_mw27hfpc",
+     "tiers_mode": null,
+     "transform_usage": null,
+     "trial_period_days": null,
+     "usage_type": "licensed"
+    },
+    "quantity": 1,
+    "schedule": null,
+    "start_date": 1793802149,
+    "status": "active",
+    "test_clock": "clock_1UY557EiDtxeEDH1fY9CZVfl",
+    "transfer_data": null,
+    "trial_end": null,
+    "trial_settings": {
+     "end_behavior": {
+      "billing_cycle_anchor": "now",
+      "missing_payment_method": "create_invoice"
+     }
+    },
+    "trial_start": null
+   },
+   "previous_attributes": {
+    "items": {
+     "data": [
+      {
+       "id": "si_VZDWFZ02avucFe",
+       "object": "subscription_item",
+       "billing_thresholds": null,
+       "created": 1793802149,
+       "current_period_end": 1796394149,
+       "current_period_start": 1793802149,
+       "current_trial": null,
+       "discounts": [],
+       "metadata": {},
+       "plan": {
+        "id": "price_1UY557EiDtxeEDH1FVNUnTaa",
+        "object": "plan",
+        "active": true,
+        "amount": 199700,
+        "amount_decimal": "199700",
+        "billing_scheme": "per_unit",
+        "created": 1793802149,
+        "currency": "brl",
+        "interval": "month",
+        "interval_count": 1,
+        "livemode": false,
+        "metadata": {},
+        "meter": null,
+        "nickname": null,
+        "product": "torque_f0_mw27hfpc",
+        "tiers_mode": null,
+        "transform_usage": null,
+        "trial_period_days": null,
+        "usage_type": "licensed"
+       },
+       "price": {
+        "id": "price_1UY557EiDtxeEDH1FVNUnTaa",
+        "object": "price",
+        "active": true,
+        "billing_scheme": "per_unit",
+        "created": 1793802149,
+        "currency": "brl",
+        "custom_unit_amount": null,
+        "livemode": false,
+        "lookup_key": "torque_f0_mw27hfpc_plan_monthly",
+        "metadata": {},
+        "nickname": null,
+        "product": "torque_f0_mw27hfpc",
+        "recurring": {
+         "interval": "month",
+         "interval_count": 1,
+         "meter": null,
+         "trial_period_days": null,
+         "usage_type": "licensed"
+        },
+        "tax_behavior": "inclusive",
+        "tiers_mode": null,
+        "transform_quantity": null,
+        "type": "recurring",
+        "unit_amount": 199700,
+        "unit_amount_decimal": "199700"
+       },
+       "quantity": 1,
+       "subscription": "sub_1UY558EiDtxeEDH11BGPACQI",
+       "tax_rates": []
+      }
+     ]
+    },
+    "latest_invoice": "in_1UY558EiDtxeEDH1hGadtedm"
+   }
+  },
+  "livemode": false,
+  "pending_webhooks": 0,
+  "type": "customer.subscription.updated"
+ },
+ {
+  "id": "evt_1UY55QEiDtxeEDH14Ow8p1TP",
+  "object": "event",
+  "api_version": "2026-10-28.endive",
+  "created": 1793802168,
+  "data": {
+   "object": {
+    "id": "in_1UY55LEiDtxeEDH1OOo2GBE1",
+    "object": "invoice",
+    "account_country": "BR",
+    "amount_due": 199700,
+    "amount_overpaid": 0,
+    "amount_paid": 199700,
+    "amount_remaining": 0,
+    "amount_shipping": 0,
+    "application": null,
+    "attempt_count": 1,
+    "attempted": true,
+    "auto_advance": false,
+    "automatic_tax": {
+     "disabled_reason": null,
+     "enabled": false,
+     "liability": null,
+     "provider": null,
+     "status": null
+    },
+    "automatically_finalizes_at": null,
+    "billing_reason": "subscription_cycle",
+    "collection_method": "charge_automatically",
+    "created": 1796394149,
+    "currency": "brl",
+    "custom_fields": null,
+    "customer": "cus_VZDWgpJN1QPc8p",
+    "customer_account": null,
+    "customer_tax_exempt": "none",
+    "default_payment_method": null,
+    "default_source": null,
+    "default_tax_rates": [],
+    "discounts": [],
+    "due_date": null,
+    "effective_at": 1796397749,
+    "ending_balance": 0,
+    "footer": null,
+    "from_invoice": null,
+    "issuer": {
+     "type": "self"
+    },
+    "last_finalization_error": null,
+    "latest_revision": null,
+    "lines": {
+     "object": "list",
+     "data": [
+      {
+       "id": "il_1UixNZEiDtxeEDH1vrtSQrZ3",
+       "object": "line_item",
+       "amount": 199700,
+       "currency": "brl",
+       "discount_amounts": [],
+       "discountable": true,
+       "discounts": [],
+       "invoice": "in_1UY55LEiDtxeEDH1OOo2GBE1",
+       "livemode": false,
+       "metadata": {
+        "torque_env": "test",
+        "torque_link_id": "f0"
+       },
+       "parent": {
+        "invoice_item_details": null,
+        "subscription_item_details": {
+         "invoice_item": null,
+         "proration": false,
+         "proration_details": {
+          "credited_items": null
+         },
+         "subscription": "sub_1UY558EiDtxeEDH11BGPACQI",
+         "subscription_item": "si_VZDWFZ02avucFe"
+        },
+        "type": "subscription_item_details"
+       },
+       "period": {
+        "end": 1799072549,
+        "start": 1796394149
+       },
+       "pretax_credit_amounts": [],
+       "pricing": {
+        "price_details": {
+         "price": "price_1UY557EiDtxeEDH1FVNUnTaa",
+         "product": "torque_f0_mw27hfpc"
+        },
+        "type": "price_details",
+        "unit_amount_decimal": "199700"
+       },
+       "quantity": 1,
+       "quantity_decimal": "1",
+       "subtotal": 199700,
+       "taxes": []
+      }
+     ],
+     "has_more": false,
+     "total_count": 1,
+     "url": "/v1/invoices/in_1UY55LEiDtxeEDH1OOo2GBE1/lines"
+    },
+    "livemode": false,
+    "metadata": {},
+    "next_payment_attempt": null,
+    "on_behalf_of": null,
+    "parent": {
+     "quote_details": null,
+     "subscription_details": {
+      "metadata": {
+       "torque_env": "test",
+       "torque_link_id": "f0"
+      },
+      "subscription": "sub_1UY558EiDtxeEDH11BGPACQI"
+     },
+     "type": "subscription_details"
+    },
+    "payment_settings": {
+     "default_mandate": null,
+     "payment_method_options": null,
+     "payment_method_types": [
+      "card"
+     ]
+    },
+    "period_end": 1796394149,
+    "period_start": 1793802149,
+    "post_payment_credit_notes_amount": 0,
+    "pre_payment_credit_notes_amount": 0,
+    "rendering": null,
+    "shipping_cost": null,
+    "starting_balance": 0,
+    "status": "paid",
+    "status_transitions": {
+     "finalized_at": 1796397749,
+     "marked_uncollectible_at": null,
+     "paid_at": 1796397749,
+     "voided_at": null
+    },
+    "subtotal": 199700,
+    "subtotal_excluding_tax": 199700,
+    "test_clock": "clock_1UY557EiDtxeEDH1fY9CZVfl",
+    "total": 199700,
+    "total_discount_amounts": [],
+    "total_excluding_tax": 199700,
+    "total_pretax_credit_amounts": [],
+    "total_taxes": [],
+    "webhooks_delivered_at": 1796394149
+   }
+  },
+  "livemode": false,
+  "pending_webhooks": 0,
+  "type": "invoice.paid"
+ },
+ {
+  "id": "evt_1UY55WEiDtxeEDH1BHt1oUbG",
+  "object": "event",
+  "api_version": "2026-10-28.endive",
+  "created": 1793802174,
+  "data": {
+   "object": {
+    "id": "sub_1UY558EiDtxeEDH11BGPACQI",
+    "object": "subscription",
+    "application": null,
+    "application_fee_percent": null,
+    "automatic_tax": {
+     "disabled_reason": null,
+     "enabled": false,
+     "liability": null
+    },
+    "billing_cycle_anchor": 1793802149,
+    "billing_cycle_anchor_config": null,
+    "billing_mode": {
+     "flexible": {
+      "proration_discounts": "included"
+     },
+     "type": "flexible",
+     "updated_at": 1793802149
+    },
+    "billing_schedules": [],
+    "billing_thresholds": null,
+    "cancel_at": null,
+    "cancel_at_period_end": false,
+    "canceled_at": null,
+    "cancellation_details": {
+     "comment": null,
+     "feedback": null,
+     "feedback_option": null,
+     "reason": null
+    },
+    "collection_method": "charge_automatically",
+    "created": 1793802149,
+    "currency": "brl",
+    "customer": "cus_VZDWgpJN1QPc8p",
+    "customer_account": null,
+    "days_until_due": null,
+    "default_payment_method": "pm_1UY55UEiDtxeEDH11ItuMTEq",
+    "default_source": null,
+    "default_tax_rates": [],
+    "discounts": [],
+    "ended_at": null,
+    "invoice_settings": {
+     "custom_fields": null,
+     "footer": null,
+     "issuer": {
+      "type": "self"
+     }
+    },
+    "items": {
+     "object": "list",
+     "data": [
+      {
+       "id": "si_VZDWFZ02avucFe",
+       "object": "subscription_item",
+       "billing_thresholds": null,
+       "created": 1793802149,
+       "current_period_end": 1799072549,
+       "current_period_start": 1796394149,
+       "current_trial": null,
+       "discounts": [],
+       "metadata": {},
+       "plan": {
+        "id": "price_1UY557EiDtxeEDH1FVNUnTaa",
+        "object": "plan",
+        "active": true,
+        "amount": 199700,
+        "amount_decimal": "199700",
+        "billing_scheme": "per_unit",
+        "created": 1793802149,
+        "currency": "brl",
+        "interval": "month",
+        "interval_count": 1,
+        "livemode": false,
+        "metadata": {},
+        "meter": null,
+        "nickname": null,
+        "product": "torque_f0_mw27hfpc",
+        "tiers_mode": null,
+        "transform_usage": null,
+        "trial_period_days": null,
+        "usage_type": "licensed"
+       },
+       "price": {
+        "id": "price_1UY557EiDtxeEDH1FVNUnTaa",
+        "object": "price",
+        "active": true,
+        "billing_scheme": "per_unit",
+        "created": 1793802149,
+        "currency": "brl",
+        "custom_unit_amount": null,
+        "livemode": false,
+        "lookup_key": "torque_f0_mw27hfpc_plan_monthly",
+        "metadata": {},
+        "nickname": null,
+        "product": "torque_f0_mw27hfpc",
+        "recurring": {
+         "interval": "month",
+         "interval_count": 1,
+         "meter": null,
+         "trial_period_days": null,
+         "usage_type": "licensed"
+        },
+        "tax_behavior": "inclusive",
+        "tiers_mode": null,
+        "transform_quantity": null,
+        "type": "recurring",
+        "unit_amount": 199700,
+        "unit_amount_decimal": "199700"
+       },
+       "quantity": 1,
+       "subscription": "sub_1UY558EiDtxeEDH11BGPACQI",
+       "tax_rates": []
+      }
+     ],
+     "has_more": false,
+     "total_count": 1,
+     "url": "/v1/subscription_items?subscription=sub_1UY558EiDtxeEDH11BGPACQI"
+    },
+    "latest_invoice": "in_1UY55LEiDtxeEDH1OOo2GBE1",
+    "livemode": false,
+    "managed_payments": {
+     "enabled": false
+    },
+    "metadata": {
+     "torque_env": "test",
+     "torque_link_id": "f0"
+    },
+    "next_pending_invoice_item_invoice": null,
+    "on_behalf_of": null,
+    "pause_collection": null,
+    "payment_settings": {
+     "payment_method_options": null,
+     "payment_method_types": [
+      "card"
+     ],
+     "save_default_payment_method": "on_subscription"
+    },
+    "pending_invoice_item_interval": null,
+    "pending_setup_intent": null,
+    "pending_update": null,
+    "plan": {
+     "id": "price_1UY557EiDtxeEDH1FVNUnTaa",
+     "object": "plan",
+     "active": true,
+     "amount": 199700,
+     "amount_decimal": "199700",
+     "billing_scheme": "per_unit",
+     "created": 1793802149,
+     "currency": "brl",
+     "interval": "month",
+     "interval_count": 1,
+     "livemode": false,
+     "metadata": {},
+     "meter": null,
+     "nickname": null,
+     "product": "torque_f0_mw27hfpc",
+     "tiers_mode": null,
+     "transform_usage": null,
+     "trial_period_days": null,
+     "usage_type": "licensed"
+    },
+    "quantity": 1,
+    "schedule": null,
+    "start_date": 1793802149,
+    "status": "active",
+    "test_clock": "clock_1UY557EiDtxeEDH1fY9CZVfl",
+    "transfer_data": null,
+    "trial_end": null,
+    "trial_settings": {
+     "end_behavior": {
+      "billing_cycle_anchor": "now",
+      "missing_payment_method": "create_invoice"
+     }
+    },
+    "trial_start": null
+   },
+   "previous_attributes": {
+    "default_payment_method": "pm_1UY55AEiDtxeEDH1myUDqJ7q"
+   }
+  },
+  "livemode": false,
+  "pending_webhooks": 0,
+  "type": "customer.subscription.updated"
+ },
+ {
+  "id": "evt_1UY55aEiDtxeEDH1bsyfcrN6",
+  "object": "event",
+  "api_version": "2026-10-28.endive",
+  "created": 1793802178,
+  "data": {
+   "object": {
+    "id": "sub_1UY558EiDtxeEDH11BGPACQI",
+    "object": "subscription",
+    "application": null,
+    "application_fee_percent": null,
+    "automatic_tax": {
+     "disabled_reason": null,
+     "enabled": false,
+     "liability": null
+    },
+    "billing_cycle_anchor": 1793802149,
+    "billing_cycle_anchor_config": null,
+    "billing_mode": {
+     "flexible": {
+      "proration_discounts": "included"
+     },
+     "type": "flexible",
+     "updated_at": 1793802149
+    },
+    "billing_schedules": [],
+    "billing_thresholds": null,
+    "cancel_at": null,
+    "cancel_at_period_end": false,
+    "canceled_at": null,
+    "cancellation_details": {
+     "comment": null,
+     "feedback": null,
+     "feedback_option": null,
+     "reason": null
+    },
+    "collection_method": "charge_automatically",
+    "created": 1793802149,
+    "currency": "brl",
+    "customer": "cus_VZDWgpJN1QPc8p",
+    "customer_account": null,
+    "days_until_due": null,
+    "default_payment_method": "pm_1UY55UEiDtxeEDH11ItuMTEq",
+    "default_source": null,
+    "default_tax_rates": [],
+    "discounts": [],
+    "ended_at": null,
+    "invoice_settings": {
+     "custom_fields": null,
+     "footer": null,
+     "issuer": {
+      "type": "self"
+     }
+    },
+    "items": {
+     "object": "list",
+     "data": [
+      {
+       "id": "si_VZDWFZ02avucFe",
+       "object": "subscription_item",
+       "billing_thresholds": null,
+       "created": 1793802149,
+       "current_period_end": 1801750949,
+       "current_period_start": 1799072549,
+       "current_trial": null,
+       "discounts": [],
+       "metadata": {},
+       "plan": {
+        "id": "price_1UY557EiDtxeEDH1FVNUnTaa",
+        "object": "plan",
+        "active": true,
+        "amount": 199700,
+        "amount_decimal": "199700",
+        "billing_scheme": "per_unit",
+        "created": 1793802149,
+        "currency": "brl",
+        "interval": "month",
+        "interval_count": 1,
+        "livemode": false,
+        "metadata": {},
+        "meter": null,
+        "nickname": null,
+        "product": "torque_f0_mw27hfpc",
+        "tiers_mode": null,
+        "transform_usage": null,
+        "trial_period_days": null,
+        "usage_type": "licensed"
+       },
+       "price": {
+        "id": "price_1UY557EiDtxeEDH1FVNUnTaa",
+        "object": "price",
+        "active": true,
+        "billing_scheme": "per_unit",
+        "created": 1793802149,
+        "currency": "brl",
+        "custom_unit_amount": null,
+        "livemode": false,
+        "lookup_key": "torque_f0_mw27hfpc_plan_monthly",
+        "metadata": {},
+        "nickname": null,
+        "product": "torque_f0_mw27hfpc",
+        "recurring": {
+         "interval": "month",
+         "interval_count": 1,
+         "meter": null,
+         "trial_period_days": null,
+         "usage_type": "licensed"
+        },
+        "tax_behavior": "inclusive",
+        "tiers_mode": null,
+        "transform_quantity": null,
+        "type": "recurring",
+        "unit_amount": 199700,
+        "unit_amount_decimal": "199700"
+       },
+       "quantity": 1,
+       "subscription": "sub_1UY558EiDtxeEDH11BGPACQI",
+       "tax_rates": []
+      }
+     ],
+     "has_more": false,
+     "total_count": 1,
+     "url": "/v1/subscription_items?subscription=sub_1UY558EiDtxeEDH11BGPACQI"
+    },
+    "latest_invoice": "in_1UY55ZEiDtxeEDH1pIFo73Ka",
+    "livemode": false,
+    "managed_payments": {
+     "enabled": false
+    },
+    "metadata": {
+     "torque_env": "test",
+     "torque_link_id": "f0"
+    },
+    "next_pending_invoice_item_invoice": null,
+    "on_behalf_of": null,
+    "pause_collection": null,
+    "payment_settings": {
+     "payment_method_options": null,
+     "payment_method_types": [
+      "card"
+     ],
+     "save_default_payment_method": "on_subscription"
+    },
+    "pending_invoice_item_interval": null,
+    "pending_setup_intent": null,
+    "pending_update": null,
+    "plan": {
+     "id": "price_1UY557EiDtxeEDH1FVNUnTaa",
+     "object": "plan",
+     "active": true,
+     "amount": 199700,
+     "amount_decimal": "199700",
+     "billing_scheme": "per_unit",
+     "created": 1793802149,
+     "currency": "brl",
+     "interval": "month",
+     "interval_count": 1,
+     "livemode": false,
+     "metadata": {},
+     "meter": null,
+     "nickname": null,
+     "product": "torque_f0_mw27hfpc",
+     "tiers_mode": null,
+     "transform_usage": null,
+     "trial_period_days": null,
+     "usage_type": "licensed"
+    },
+    "quantity": 1,
+    "schedule": null,
+    "start_date": 1793802149,
+    "status": "active",
+    "test_clock": "clock_1UY557EiDtxeEDH1fY9CZVfl",
+    "transfer_data": null,
+    "trial_end": null,
+    "trial_settings": {
+     "end_behavior": {
+      "billing_cycle_anchor": "now",
+      "missing_payment_method": "create_invoice"
+     }
+    },
+    "trial_start": null
+   },
+   "previous_attributes": {
+    "items": {
+     "data": [
+      {
+       "id": "si_VZDWFZ02avucFe",
+       "object": "subscription_item",
+       "billing_thresholds": null,
+       "created": 1793802149,
+       "current_period_end": 1799072549,
+       "current_period_start": 1796394149,
+       "current_trial": null,
+       "discounts": [],
+       "metadata": {},
+       "plan": {
+        "id": "price_1UY557EiDtxeEDH1FVNUnTaa",
+        "object": "plan",
+        "active": true,
+        "amount": 199700,
+        "amount_decimal": "199700",
+        "billing_scheme": "per_unit",
+        "created": 1793802149,
+        "currency": "brl",
+        "interval": "month",
+        "interval_count": 1,
+        "livemode": false,
+        "metadata": {},
+        "meter": null,
+        "nickname": null,
+        "product": "torque_f0_mw27hfpc",
+        "tiers_mode": null,
+        "transform_usage": null,
+        "trial_period_days": null,
+        "usage_type": "licensed"
+       },
+       "price": {
+        "id": "price_1UY557EiDtxeEDH1FVNUnTaa",
+        "object": "price",
+        "active": true,
+        "billing_scheme": "per_unit",
+        "created": 1793802149,
+        "currency": "brl",
+        "custom_unit_amount": null,
+        "livemode": false,
+        "lookup_key": "torque_f0_mw27hfpc_plan_monthly",
+        "metadata": {},
+        "nickname": null,
+        "product": "torque_f0_mw27hfpc",
+        "recurring": {
+         "interval": "month",
+         "interval_count": 1,
+         "meter": null,
+         "trial_period_days": null,
+         "usage_type": "licensed"
+        },
+        "tax_behavior": "inclusive",
+        "tiers_mode": null,
+        "transform_quantity": null,
+        "type": "recurring",
+        "unit_amount": 199700,
+        "unit_amount_decimal": "199700"
+       },
+       "quantity": 1,
+       "subscription": "sub_1UY558EiDtxeEDH11BGPACQI",
+       "tax_rates": []
+      }
+     ]
+    },
+    "latest_invoice": "in_1UY55LEiDtxeEDH1OOo2GBE1"
+   }
+  },
+  "livemode": false,
+  "pending_webhooks": 0,
+  "type": "customer.subscription.updated"
+ },
+ {
+  "id": "evt_1UY55eEiDtxeEDH1JTC3xLTT",
+  "object": "event",
+  "api_version": "2026-10-28.endive",
+  "created": 1793802182,
+  "data": {
+   "object": {
+    "id": "sub_1UY558EiDtxeEDH11BGPACQI",
+    "object": "subscription",
+    "application": null,
+    "application_fee_percent": null,
+    "automatic_tax": {
+     "disabled_reason": null,
+     "enabled": false,
+     "liability": null
+    },
+    "billing_cycle_anchor": 1793802149,
+    "billing_cycle_anchor_config": null,
+    "billing_mode": {
+     "flexible": {
+      "proration_discounts": "included"
+     },
+     "type": "flexible",
+     "updated_at": 1793802149
+    },
+    "billing_schedules": [],
+    "billing_thresholds": null,
+    "cancel_at": null,
+    "cancel_at_period_end": false,
+    "canceled_at": null,
+    "cancellation_details": {
+     "comment": null,
+     "feedback": null,
+     "feedback_option": null,
+     "reason": null
+    },
+    "collection_method": "charge_automatically",
+    "created": 1793802149,
+    "currency": "brl",
+    "customer": "cus_VZDWgpJN1QPc8p",
+    "customer_account": null,
+    "days_until_due": null,
+    "default_payment_method": "pm_1UY55UEiDtxeEDH11ItuMTEq",
+    "default_source": null,
+    "default_tax_rates": [],
+    "discounts": [],
+    "ended_at": null,
+    "invoice_settings": {
+     "custom_fields": null,
+     "footer": null,
+     "issuer": {
+      "type": "self"
+     }
+    },
+    "items": {
+     "object": "list",
+     "data": [
+      {
+       "id": "si_VZDWFZ02avucFe",
+       "object": "subscription_item",
+       "billing_thresholds": null,
+       "created": 1793802149,
+       "current_period_end": 1801750949,
+       "current_period_start": 1799072549,
+       "current_trial": null,
+       "discounts": [],
+       "metadata": {},
+       "plan": {
+        "id": "price_1UY557EiDtxeEDH1FVNUnTaa",
+        "object": "plan",
+        "active": true,
+        "amount": 199700,
+        "amount_decimal": "199700",
+        "billing_scheme": "per_unit",
+        "created": 1793802149,
+        "currency": "brl",
+        "interval": "month",
+        "interval_count": 1,
+        "livemode": false,
+        "metadata": {},
+        "meter": null,
+        "nickname": null,
+        "product": "torque_f0_mw27hfpc",
+        "tiers_mode": null,
+        "transform_usage": null,
+        "trial_period_days": null,
+        "usage_type": "licensed"
+       },
+       "price": {
+        "id": "price_1UY557EiDtxeEDH1FVNUnTaa",
+        "object": "price",
+        "active": true,
+        "billing_scheme": "per_unit",
+        "created": 1793802149,
+        "currency": "brl",
+        "custom_unit_amount": null,
+        "livemode": false,
+        "lookup_key": "torque_f0_mw27hfpc_plan_monthly",
+        "metadata": {},
+        "nickname": null,
+        "product": "torque_f0_mw27hfpc",
+        "recurring": {
+         "interval": "month",
+         "interval_count": 1,
+         "meter": null,
+         "trial_period_days": null,
+         "usage_type": "licensed"
+        },
+        "tax_behavior": "inclusive",
+        "tiers_mode": null,
+        "transform_quantity": null,
+        "type": "recurring",
+        "unit_amount": 199700,
+        "unit_amount_decimal": "199700"
+       },
+       "quantity": 1,
+       "subscription": "sub_1UY558EiDtxeEDH11BGPACQI",
+       "tax_rates": []
+      }
+     ],
+     "has_more": false,
+     "total_count": 1,
+     "url": "/v1/subscription_items?subscription=sub_1UY558EiDtxeEDH11BGPACQI"
+    },
+    "latest_invoice": "in_1UY55ZEiDtxeEDH1pIFo73Ka",
+    "livemode": false,
+    "managed_payments": {
+     "enabled": false
+    },
+    "metadata": {
+     "torque_env": "test",
+     "torque_link_id": "f0"
+    },
+    "next_pending_invoice_item_invoice": null,
+    "on_behalf_of": null,
+    "pause_collection": null,
+    "payment_settings": {
+     "payment_method_options": null,
+     "payment_method_types": [
+      "card"
+     ],
+     "save_default_payment_method": "on_subscription"
+    },
+    "pending_invoice_item_interval": null,
+    "pending_setup_intent": null,
+    "pending_update": null,
+    "plan": {
+     "id": "price_1UY557EiDtxeEDH1FVNUnTaa",
+     "object": "plan",
+     "active": true,
+     "amount": 199700,
+     "amount_decimal": "199700",
+     "billing_scheme": "per_unit",
+     "created": 1793802149,
+     "currency": "brl",
+     "interval": "month",
+     "interval_count": 1,
+     "livemode": false,
+     "metadata": {},
+     "meter": null,
+     "nickname": null,
+     "product": "torque_f0_mw27hfpc",
+     "tiers_mode": null,
+     "transform_usage": null,
+     "trial_period_days": null,
+     "usage_type": "licensed"
+    },
+    "quantity": 1,
+    "schedule": null,
+    "start_date": 1793802149,
+    "status": "past_due",
+    "test_clock": "clock_1UY557EiDtxeEDH1fY9CZVfl",
+    "transfer_data": null,
+    "trial_end": null,
+    "trial_settings": {
+     "end_behavior": {
+      "billing_cycle_anchor": "now",
+      "missing_payment_method": "create_invoice"
+     }
+    },
+    "trial_start": null
+   },
+   "previous_attributes": {
+    "status": "active"
+   }
+  },
+  "livemode": false,
+  "pending_webhooks": 0,
+  "type": "customer.subscription.updated"
+ },
+ {
+  "id": "evt_1UY55fEiDtxeEDH1KftxI1hL",
+  "object": "event",
+  "api_version": "2026-10-28.endive",
+  "created": 1793802182,
+  "data": {
+   "object": {
+    "id": "in_1UY55ZEiDtxeEDH1pIFo73Ka",
+    "object": "invoice",
+    "account_country": "BR",
+    "amount_due": 199700,
+    "amount_overpaid": 0,
+    "amount_paid": 0,
+    "amount_remaining": 199700,
+    "amount_shipping": 0,
+    "application": null,
+    "attempt_count": 1,
+    "attempted": true,
+    "auto_advance": true,
+    "automatic_tax": {
+     "disabled_reason": null,
+     "enabled": false,
+     "liability": null,
+     "provider": null,
+     "status": null
+    },
+    "automatically_finalizes_at": null,
+    "billing_reason": "subscription_cycle",
+    "collection_method": "charge_automatically",
+    "created": 1799072549,
+    "currency": "brl",
+    "custom_fields": null,
+    "customer": "cus_VZDWgpJN1QPc8p",
+    "customer_account": null,
+    "customer_tax_exempt": "none",
+    "default_payment_method": null,
+    "default_source": null,
+    "default_tax_rates": [],
+    "discounts": [],
+    "due_date": null,
+    "effective_at": 1799076149,
+    "ending_balance": 0,
+    "footer": null,
+    "from_invoice": null,
+    "issuer": {
+     "type": "self"
+    },
+    "last_finalization_error": null,
+    "latest_revision": null,
+    "lines": {
+     "object": "list",
+     "data": [
+      {
+       "id": "il_1UuC9ZEiDtxeEDH1VLMPmtas",
+       "object": "line_item",
+       "amount": 199700,
+       "currency": "brl",
+       "discount_amounts": [],
+       "discountable": true,
+       "discounts": [],
+       "invoice": "in_1UY55ZEiDtxeEDH1pIFo73Ka",
+       "livemode": false,
+       "metadata": {
+        "torque_env": "test",
+        "torque_link_id": "f0"
+       },
+       "parent": {
+        "invoice_item_details": null,
+        "subscription_item_details": {
+         "invoice_item": null,
+         "proration": false,
+         "proration_details": {
+          "credited_items": null
+         },
+         "subscription": "sub_1UY558EiDtxeEDH11BGPACQI",
+         "subscription_item": "si_VZDWFZ02avucFe"
+        },
+        "type": "subscription_item_details"
+       },
+       "period": {
+        "end": 1801750949,
+        "start": 1799072549
+       },
+       "pretax_credit_amounts": [],
+       "pricing": {
+        "price_details": {
+         "price": "price_1UY557EiDtxeEDH1FVNUnTaa",
+         "product": "torque_f0_mw27hfpc"
+        },
+        "type": "price_details",
+        "unit_amount_decimal": "199700"
+       },
+       "quantity": 1,
+       "quantity_decimal": "1",
+       "subtotal": 199700,
+       "taxes": []
+      }
+     ],
+     "has_more": false,
+     "total_count": 1,
+     "url": "/v1/invoices/in_1UY55ZEiDtxeEDH1pIFo73Ka/lines"
+    },
+    "livemode": false,
+    "metadata": {},
+    "next_payment_attempt": 1799234526,
+    "on_behalf_of": null,
+    "parent": {
+     "quote_details": null,
+     "subscription_details": {
+      "metadata": {
+       "torque_env": "test",
+       "torque_link_id": "f0"
+      },
+      "subscription": "sub_1UY558EiDtxeEDH11BGPACQI"
+     },
+     "type": "subscription_details"
+    },
+    "payment_settings": {
+     "default_mandate": null,
+     "payment_method_options": null,
+     "payment_method_types": [
+      "card"
+     ]
+    },
+    "period_end": 1799072549,
+    "period_start": 1796394149,
+    "post_payment_credit_notes_amount": 0,
+    "pre_payment_credit_notes_amount": 0,
+    "rendering": null,
+    "shipping_cost": null,
+    "starting_balance": 0,
+    "status": "open",
+    "status_transitions": {
+     "finalized_at": 1799076149,
+     "marked_uncollectible_at": null,
+     "paid_at": null,
+     "voided_at": null
+    },
+    "subtotal": 199700,
+    "subtotal_excluding_tax": 199700,
+    "test_clock": "clock_1UY557EiDtxeEDH1fY9CZVfl",
+    "total": 199700,
+    "total_discount_amounts": [],
+    "total_excluding_tax": 199700,
+    "total_pretax_credit_amounts": [],
+    "total_taxes": [],
+    "webhooks_delivered_at": 1799072549
+   }
+  },
+  "livemode": false,
+  "pending_webhooks": 0,
+  "type": "invoice.payment_failed"
+ },
+ {
+  "id": "evt_1UY55hEiDtxeEDH1ZCiEl4pD",
+  "object": "event",
+  "api_version": "2026-10-28.endive",
+  "created": 1793802185,
+  "data": {
+   "object": {
+    "id": "sub_1UY558EiDtxeEDH11BGPACQI",
+    "object": "subscription",
+    "application": null,
+    "application_fee_percent": null,
+    "automatic_tax": {
+     "disabled_reason": null,
+     "enabled": false,
+     "liability": null
+    },
+    "billing_cycle_anchor": 1793802149,
+    "billing_cycle_anchor_config": null,
+    "billing_mode": {
+     "flexible": {
+      "proration_discounts": "included"
+     },
+     "type": "flexible",
+     "updated_at": 1793802149
+    },
+    "billing_schedules": [],
+    "billing_thresholds": null,
+    "cancel_at": null,
+    "cancel_at_period_end": false,
+    "canceled_at": 1799079749,
+    "cancellation_details": {
+     "comment": null,
+     "feedback": null,
+     "feedback_option": null,
+     "reason": "cancellation_requested"
+    },
+    "collection_method": "charge_automatically",
+    "created": 1793802149,
+    "currency": "brl",
+    "customer": "cus_VZDWgpJN1QPc8p",
+    "customer_account": null,
+    "days_until_due": null,
+    "default_payment_method": "pm_1UY55UEiDtxeEDH11ItuMTEq",
+    "default_source": null,
+    "default_tax_rates": [],
+    "discounts": [],
+    "ended_at": 1799079749,
+    "invoice_settings": {
+     "custom_fields": null,
+     "footer": null,
+     "issuer": {
+      "type": "self"
+     }
+    },
+    "items": {
+     "object": "list",
+     "data": [
+      {
+       "id": "si_VZDWFZ02avucFe",
+       "object": "subscription_item",
+       "billing_thresholds": null,
+       "created": 1793802149,
+       "current_period_end": 1801750949,
+       "current_period_start": 1799072549,
+       "current_trial": null,
+       "discounts": [],
+       "metadata": {},
+       "plan": {
+        "id": "price_1UY557EiDtxeEDH1FVNUnTaa",
+        "object": "plan",
+        "active": true,
+        "amount": 199700,
+        "amount_decimal": "199700",
+        "billing_scheme": "per_unit",
+        "created": 1793802149,
+        "currency": "brl",
+        "interval": "month",
+        "interval_count": 1,
+        "livemode": false,
+        "metadata": {},
+        "meter": null,
+        "nickname": null,
+        "product": "torque_f0_mw27hfpc",
+        "tiers_mode": null,
+        "transform_usage": null,
+        "trial_period_days": null,
+        "usage_type": "licensed"
+       },
+       "price": {
+        "id": "price_1UY557EiDtxeEDH1FVNUnTaa",
+        "object": "price",
+        "active": true,
+        "billing_scheme": "per_unit",
+        "created": 1793802149,
+        "currency": "brl",
+        "custom_unit_amount": null,
+        "livemode": false,
+        "lookup_key": "torque_f0_mw27hfpc_plan_monthly",
+        "metadata": {},
+        "nickname": null,
+        "product": "torque_f0_mw27hfpc",
+        "recurring": {
+         "interval": "month",
+         "interval_count": 1,
+         "meter": null,
+         "trial_period_days": null,
+         "usage_type": "licensed"
+        },
+        "tax_behavior": "inclusive",
+        "tiers_mode": null,
+        "transform_quantity": null,
+        "type": "recurring",
+        "unit_amount": 199700,
+        "unit_amount_decimal": "199700"
+       },
+       "quantity": 1,
+       "subscription": "sub_1UY558EiDtxeEDH11BGPACQI",
+       "tax_rates": []
+      }
+     ],
+     "has_more": false,
+     "total_count": 1,
+     "url": "/v1/subscription_items?subscription=sub_1UY558EiDtxeEDH11BGPACQI"
+    },
+    "latest_invoice": "in_1UY55ZEiDtxeEDH1pIFo73Ka",
+    "livemode": false,
+    "managed_payments": {
+     "enabled": false
+    },
+    "metadata": {
+     "torque_env": "test",
+     "torque_link_id": "f0"
+    },
+    "next_pending_invoice_item_invoice": null,
+    "on_behalf_of": null,
+    "pause_collection": null,
+    "payment_settings": {
+     "payment_method_options": null,
+     "payment_method_types": [
+      "card"
+     ],
+     "save_default_payment_method": "on_subscription"
+    },
+    "pending_invoice_item_interval": null,
+    "pending_setup_intent": null,
+    "pending_update": null,
+    "plan": {
+     "id": "price_1UY557EiDtxeEDH1FVNUnTaa",
+     "object": "plan",
+     "active": true,
+     "amount": 199700,
+     "amount_decimal": "199700",
+     "billing_scheme": "per_unit",
+     "created": 1793802149,
+     "currency": "brl",
+     "interval": "month",
+     "interval_count": 1,
+     "livemode": false,
+     "metadata": {},
+     "meter": null,
+     "nickname": null,
+     "product": "torque_f0_mw27hfpc",
+     "tiers_mode": null,
+     "transform_usage": null,
+     "trial_period_days": null,
+     "usage_type": "licensed"
+    },
+    "quantity": 1,
+    "schedule": null,
+    "start_date": 1793802149,
+    "status": "canceled",
+    "test_clock": "clock_1UY557EiDtxeEDH1fY9CZVfl",
+    "transfer_data": null,
+    "trial_end": null,
+    "trial_settings": {
+     "end_behavior": {
+      "billing_cycle_anchor": "now",
+      "missing_payment_method": "create_invoice"
+     }
+    },
+    "trial_start": null
+   }
+  },
+  "livemode": false,
+  "pending_webhooks": 0,
+  "type": "customer.subscription.deleted"
+ },
+ {
+  "id": "evt_1UY55iEiDtxeEDH1pSyii3kY",
+  "object": "event",
+  "api_version": "2026-10-28.endive",
+  "created": 1793802186,
+  "data": {
+   "object": {
+    "id": "sub_1UY55hEiDtxeEDH1umtJs6xg",
+    "object": "subscription",
+    "application": null,
+    "application_fee_percent": null,
+    "automatic_tax": {
+     "disabled_reason": null,
+     "enabled": false,
+     "liability": null
+    },
+    "billing_cycle_anchor": 1793802185,
+    "billing_cycle_anchor_config": null,
+    "billing_mode": {
+     "flexible": {
+      "proration_discounts": "included"
+     },
+     "type": "flexible",
+     "updated_at": 1793802185
+    },
+    "billing_schedules": [],
+    "billing_thresholds": null,
+    "cancel_at": null,
+    "cancel_at_period_end": false,
+    "canceled_at": null,
+    "cancellation_details": {
+     "comment": null,
+     "feedback": null,
+     "feedback_option": null,
+     "reason": null
+    },
+    "collection_method": "charge_automatically",
+    "created": 1793802185,
+    "currency": "brl",
+    "customer": "cus_VZDWTFF9e9xfVL",
+    "customer_account": null,
+    "days_until_due": null,
+    "default_payment_method": null,
+    "default_source": null,
+    "default_tax_rates": [],
+    "discounts": [],
+    "ended_at": null,
+    "invoice_settings": {
+     "custom_fields": null,
+     "footer": null,
+     "issuer": {
+      "type": "self"
+     }
+    },
+    "items": {
+     "object": "list",
+     "data": [
+      {
+       "id": "si_VZDWmKB6qQPZCG",
+       "object": "subscription_item",
+       "billing_thresholds": null,
+       "created": 1793802186,
+       "current_period_end": 1796394185,
+       "current_period_start": 1793802185,
+       "current_trial": null,
+       "discounts": [],
+       "metadata": {},
+       "plan": {
+        "id": "price_1UY557EiDtxeEDH1FVNUnTaa",
+        "object": "plan",
+        "active": true,
+        "amount": 199700,
+        "amount_decimal": "199700",
+        "billing_scheme": "per_unit",
+        "created": 1793802149,
+        "currency": "brl",
+        "interval": "month",
+        "interval_count": 1,
+        "livemode": false,
+        "metadata": {},
+        "meter": null,
+        "nickname": null,
+        "product": "torque_f0_mw27hfpc",
+        "tiers_mode": null,
+        "transform_usage": null,
+        "trial_period_days": null,
+        "usage_type": "licensed"
+       },
+       "price": {
+        "id": "price_1UY557EiDtxeEDH1FVNUnTaa",
+        "object": "price",
+        "active": true,
+        "billing_scheme": "per_unit",
+        "created": 1793802149,
+        "currency": "brl",
+        "custom_unit_amount": null,
+        "livemode": false,
+        "lookup_key": "torque_f0_mw27hfpc_plan_monthly",
+        "metadata": {},
+        "nickname": null,
+        "product": "torque_f0_mw27hfpc",
+        "recurring": {
+         "interval": "month",
+         "interval_count": 1,
+         "meter": null,
+         "trial_period_days": null,
+         "usage_type": "licensed"
+        },
+        "tax_behavior": "inclusive",
+        "tiers_mode": null,
+        "transform_quantity": null,
+        "type": "recurring",
+        "unit_amount": 199700,
+        "unit_amount_decimal": "199700"
+       },
+       "quantity": 1,
+       "subscription": "sub_1UY55hEiDtxeEDH1umtJs6xg",
+       "tax_rates": []
+      }
+     ],
+     "has_more": false,
+     "total_count": 1,
+     "url": "/v1/subscription_items?subscription=sub_1UY55hEiDtxeEDH1umtJs6xg"
+    },
+    "latest_invoice": "in_1UY55hEiDtxeEDH15WpIE9uw",
+    "livemode": false,
+    "managed_payments": {
+     "enabled": false
+    },
+    "metadata": {
+     "torque_env": "test",
+     "torque_link_id": "f0b"
+    },
+    "next_pending_invoice_item_invoice": null,
+    "on_behalf_of": null,
+    "pause_collection": null,
+    "payment_settings": {
+     "payment_method_options": null,
+     "payment_method_types": [
+      "card"
+     ],
+     "save_default_payment_method": "on_subscription"
+    },
+    "pending_invoice_item_interval": null,
+    "pending_setup_intent": null,
+    "pending_update": null,
+    "plan": {
+     "id": "price_1UY557EiDtxeEDH1FVNUnTaa",
+     "object": "plan",
+     "active": true,
+     "amount": 199700,
+     "amount_decimal": "199700",
+     "billing_scheme": "per_unit",
+     "created": 1793802149,
+     "currency": "brl",
+     "interval": "month",
+     "interval_count": 1,
+     "livemode": false,
+     "metadata": {},
+     "meter": null,
+     "nickname": null,
+     "product": "torque_f0_mw27hfpc",
+     "tiers_mode": null,
+     "transform_usage": null,
+     "trial_period_days": null,
+     "usage_type": "licensed"
+    },
+    "quantity": 1,
+    "schedule": null,
+    "start_date": 1793802185,
+    "status": "incomplete",
+    "test_clock": null,
+    "transfer_data": null,
+    "trial_end": null,
+    "trial_settings": {
+     "end_behavior": {
+      "billing_cycle_anchor": "now",
+      "missing_payment_method": "create_invoice"
+     }
+    },
+    "trial_start": null
+   }
+  },
+  "livemode": false,
+  "pending_webhooks": 0,
+  "type": "customer.subscription.created"
+ },
+ {
+  "id": "evt_1UY55kEiDtxeEDH1H6U9e9BI",
+  "object": "event",
+  "api_version": "2026-10-28.endive",
+  "created": 1793802187,
+  "data": {
+   "object": {
+    "id": "in_1UY55hEiDtxeEDH15WpIE9uw",
+    "object": "invoice",
+    "account_country": "BR",
+    "amount_due": 199700,
+    "amount_overpaid": 0,
+    "amount_paid": 0,
+    "amount_remaining": 199700,
+    "amount_shipping": 0,
+    "application": null,
+    "attempt_count": 1,
+    "attempted": true,
+    "auto_advance": false,
+    "automatic_tax": {
+     "disabled_reason": null,
+     "enabled": false,
+     "liability": null,
+     "provider": null,
+     "status": null
+    },
+    "automatically_finalizes_at": null,
+    "billing_reason": "subscription_create",
+    "collection_method": "charge_automatically",
+    "created": 1793802185,
+    "currency": "brl",
+    "custom_fields": null,
+    "customer": "cus_VZDWTFF9e9xfVL",
+    "customer_account": null,
+    "customer_tax_exempt": "none",
+    "default_payment_method": null,
+    "default_source": null,
+    "default_tax_rates": [],
+    "discounts": [],
+    "due_date": null,
+    "effective_at": 1793802185,
+    "ending_balance": 0,
+    "footer": null,
+    "from_invoice": null,
+    "issuer": {
+     "type": "self"
+    },
+    "last_finalization_error": null,
+    "latest_revision": null,
+    "lines": {
+     "object": "list",
+     "data": [
+      {
+       "id": "il_1UY55hEiDtxeEDH1ZyXQ9UaS",
+       "object": "line_item",
+       "amount": 199700,
+       "currency": "brl",
+       "discount_amounts": [],
+       "discountable": true,
+       "discounts": [],
+       "invoice": "in_1UY55hEiDtxeEDH15WpIE9uw",
+       "livemode": false,
+       "metadata": {
+        "torque_env": "test",
+        "torque_link_id": "f0b"
+       },
+       "parent": {
+        "invoice_item_details": null,
+        "subscription_item_details": {
+         "invoice_item": null,
+         "proration": false,
+         "proration_details": {
+          "credited_items": null
+         },
+         "subscription": "sub_1UY55hEiDtxeEDH1umtJs6xg",
+         "subscription_item": "si_VZDWmKB6qQPZCG"
+        },
+        "type": "subscription_item_details"
+       },
+       "period": {
+        "end": 1796394185,
+        "start": 1793802185
+       },
+       "pretax_credit_amounts": [],
+       "pricing": {
+        "price_details": {
+         "price": "price_1UY557EiDtxeEDH1FVNUnTaa",
+         "product": "torque_f0_mw27hfpc"
+        },
+        "type": "price_details",
+        "unit_amount_decimal": "199700"
+       },
+       "quantity": 1,
+       "quantity_decimal": "1",
+       "subtotal": 199700,
+       "taxes": []
+      }
+     ],
+     "has_more": false,
+     "total_count": 1,
+     "url": "/v1/invoices/in_1UY55hEiDtxeEDH15WpIE9uw/lines"
+    },
+    "livemode": false,
+    "metadata": {},
+    "next_payment_attempt": null,
+    "on_behalf_of": null,
+    "parent": {
+     "quote_details": null,
+     "subscription_details": {
+      "metadata": {
+       "torque_env": "test",
+       "torque_link_id": "f0b"
+      },
+      "subscription": "sub_1UY55hEiDtxeEDH1umtJs6xg"
+     },
+     "type": "subscription_details"
+    },
+    "payment_settings": {
+     "default_mandate": null,
+     "payment_method_options": null,
+     "payment_method_types": [
+      "card"
+     ]
+    },
+    "period_end": 1793802185,
+    "period_start": 1793802185,
+    "post_payment_credit_notes_amount": 0,
+    "pre_payment_credit_notes_amount": 0,
+    "rendering": null,
+    "shipping_cost": null,
+    "starting_balance": 0,
+    "status": "open",
+    "status_transitions": {
+     "finalized_at": 1793802185,
+     "marked_uncollectible_at": null,
+     "paid_at": null,
+     "voided_at": null
+    },
+    "subtotal": 199700,
+    "subtotal_excluding_tax": 199700,
+    "test_clock": null,
+    "total": 199700,
+    "total_discount_amounts": [],
+    "total_excluding_tax": 199700,
+    "total_pretax_credit_amounts": [],
+    "total_taxes": [],
+    "webhooks_delivered_at": 1793802185
+   }
+  },
+  "livemode": false,
+  "pending_webhooks": 0,
+  "type": "invoice.payment_failed"
+ },
+ {
+  "id": "evt_1UY55nEiDtxeEDH1jcJGyNns",
+  "object": "event",
+  "api_version": "2026-10-28.endive",
+  "created": 1793802190,
+  "data": {
+   "object": {
+    "id": "in_1UY55hEiDtxeEDH15WpIE9uw",
+    "object": "invoice",
+    "account_country": "BR",
+    "amount_due": 199700,
+    "amount_overpaid": 0,
+    "amount_paid": 199700,
+    "amount_remaining": 0,
+    "amount_shipping": 0,
+    "application": null,
+    "attempt_count": 1,
+    "attempted": true,
+    "auto_advance": false,
+    "automatic_tax": {
+     "disabled_reason": null,
+     "enabled": false,
+     "liability": null,
+     "provider": null,
+     "status": null
+    },
+    "automatically_finalizes_at": null,
+    "billing_reason": "subscription_create",
+    "collection_method": "charge_automatically",
+    "created": 1793802185,
+    "currency": "brl",
+    "custom_fields": null,
+    "customer": "cus_VZDWTFF9e9xfVL",
+    "customer_account": null,
+    "customer_tax_exempt": "none",
+    "default_payment_method": null,
+    "default_source": null,
+    "default_tax_rates": [],
+    "discounts": [],
+    "due_date": null,
+    "effective_at": 1793802185,
+    "ending_balance": 0,
+    "footer": null,
+    "from_invoice": null,
+    "issuer": {
+     "type": "self"
+    },
+    "last_finalization_error": null,
+    "latest_revision": null,
+    "lines": {
+     "object": "list",
+     "data": [
+      {
+       "id": "il_1UY55hEiDtxeEDH1ZyXQ9UaS",
+       "object": "line_item",
+       "amount": 199700,
+       "currency": "brl",
+       "discount_amounts": [],
+       "discountable": true,
+       "discounts": [],
+       "invoice": "in_1UY55hEiDtxeEDH15WpIE9uw",
+       "livemode": false,
+       "metadata": {
+        "torque_env": "test",
+        "torque_link_id": "f0b"
+       },
+       "parent": {
+        "invoice_item_details": null,
+        "subscription_item_details": {
+         "invoice_item": null,
+         "proration": false,
+         "proration_details": {
+          "credited_items": null
+         },
+         "subscription": "sub_1UY55hEiDtxeEDH1umtJs6xg",
+         "subscription_item": "si_VZDWmKB6qQPZCG"
+        },
+        "type": "subscription_item_details"
+       },
+       "period": {
+        "end": 1796394185,
+        "start": 1793802185
+       },
+       "pretax_credit_amounts": [],
+       "pricing": {
+        "price_details": {
+         "price": "price_1UY557EiDtxeEDH1FVNUnTaa",
+         "product": "torque_f0_mw27hfpc"
+        },
+        "type": "price_details",
+        "unit_amount_decimal": "199700"
+       },
+       "quantity": 1,
+       "quantity_decimal": "1",
+       "subtotal": 199700,
+       "taxes": []
+      }
+     ],
+     "has_more": false,
+     "total_count": 1,
+     "url": "/v1/invoices/in_1UY55hEiDtxeEDH15WpIE9uw/lines"
+    },
+    "livemode": false,
+    "metadata": {},
+    "next_payment_attempt": null,
+    "on_behalf_of": null,
+    "parent": {
+     "quote_details": null,
+     "subscription_details": {
+      "metadata": {
+       "torque_env": "test",
+       "torque_link_id": "f0b"
+      },
+      "subscription": "sub_1UY55hEiDtxeEDH1umtJs6xg"
+     },
+     "type": "subscription_details"
+    },
+    "payment_settings": {
+     "default_mandate": null,
+     "payment_method_options": null,
+     "payment_method_types": [
+      "card"
+     ]
+    },
+    "period_end": 1793802185,
+    "period_start": 1793802185,
+    "post_payment_credit_notes_amount": 0,
+    "pre_payment_credit_notes_amount": 0,
+    "rendering": null,
+    "shipping_cost": null,
+    "starting_balance": 0,
+    "status": "paid",
+    "status_transitions": {
+     "finalized_at": 1793802185,
+     "marked_uncollectible_at": null,
+     "paid_at": 1793802190,
+     "voided_at": null
+    },
+    "subtotal": 199700,
+    "subtotal_excluding_tax": 199700,
+    "test_clock": null,
+    "total": 199700,
+    "total_discount_amounts": [],
+    "total_excluding_tax": 199700,
+    "total_pretax_credit_amounts": [],
+    "total_taxes": [],
+    "webhooks_delivered_at": 1793802185
+   }
+  },
+  "livemode": false,
+  "pending_webhooks": 0,
+  "type": "invoice.paid"
+ },
+ {
+  "id": "evt_1UY55nEiDtxeEDH14pTbFXyz",
+  "object": "event",
+  "api_version": "2026-10-28.endive",
+  "created": 1793802190,
+  "data": {
+   "object": {
+    "id": "sub_1UY55hEiDtxeEDH1umtJs6xg",
+    "object": "subscription",
+    "application": null,
+    "application_fee_percent": null,
+    "automatic_tax": {
+     "disabled_reason": null,
+     "enabled": false,
+     "liability": null
+    },
+    "billing_cycle_anchor": 1793802185,
+    "billing_cycle_anchor_config": null,
+    "billing_mode": {
+     "flexible": {
+      "proration_discounts": "included"
+     },
+     "type": "flexible",
+     "updated_at": 1793802185
+    },
+    "billing_schedules": [],
+    "billing_thresholds": null,
+    "cancel_at": null,
+    "cancel_at_period_end": false,
+    "canceled_at": null,
+    "cancellation_details": {
+     "comment": null,
+     "feedback": null,
+     "feedback_option": null,
+     "reason": null
+    },
+    "collection_method": "charge_automatically",
+    "created": 1793802185,
+    "currency": "brl",
+    "customer": "cus_VZDWTFF9e9xfVL",
+    "customer_account": null,
+    "days_until_due": null,
+    "default_payment_method": "pm_1UY55kEiDtxeEDH18gJun7m5",
+    "default_source": null,
+    "default_tax_rates": [],
+    "discounts": [],
+    "ended_at": null,
+    "invoice_settings": {
+     "custom_fields": null,
+     "footer": null,
+     "issuer": {
+      "type": "self"
+     }
+    },
+    "items": {
+     "object": "list",
+     "data": [
+      {
+       "id": "si_VZDWmKB6qQPZCG",
+       "object": "subscription_item",
+       "billing_thresholds": null,
+       "created": 1793802186,
+       "current_period_end": 1796394185,
+       "current_period_start": 1793802185,
+       "current_trial": null,
+       "discounts": [],
+       "metadata": {},
+       "plan": {
+        "id": "price_1UY557EiDtxeEDH1FVNUnTaa",
+        "object": "plan",
+        "active": true,
+        "amount": 199700,
+        "amount_decimal": "199700",
+        "billing_scheme": "per_unit",
+        "created": 1793802149,
+        "currency": "brl",
+        "interval": "month",
+        "interval_count": 1,
+        "livemode": false,
+        "metadata": {},
+        "meter": null,
+        "nickname": null,
+        "product": "torque_f0_mw27hfpc",
+        "tiers_mode": null,
+        "transform_usage": null,
+        "trial_period_days": null,
+        "usage_type": "licensed"
+       },
+       "price": {
+        "id": "price_1UY557EiDtxeEDH1FVNUnTaa",
+        "object": "price",
+        "active": true,
+        "billing_scheme": "per_unit",
+        "created": 1793802149,
+        "currency": "brl",
+        "custom_unit_amount": null,
+        "livemode": false,
+        "lookup_key": "torque_f0_mw27hfpc_plan_monthly",
+        "metadata": {},
+        "nickname": null,
+        "product": "torque_f0_mw27hfpc",
+        "recurring": {
+         "interval": "month",
+         "interval_count": 1,
+         "meter": null,
+         "trial_period_days": null,
+         "usage_type": "licensed"
+        },
+        "tax_behavior": "inclusive",
+        "tiers_mode": null,
+        "transform_quantity": null,
+        "type": "recurring",
+        "unit_amount": 199700,
+        "unit_amount_decimal": "199700"
+       },
+       "quantity": 1,
+       "subscription": "sub_1UY55hEiDtxeEDH1umtJs6xg",
+       "tax_rates": []
+      }
+     ],
+     "has_more": false,
+     "total_count": 1,
+     "url": "/v1/subscription_items?subscription=sub_1UY55hEiDtxeEDH1umtJs6xg"
+    },
+    "latest_invoice": "in_1UY55hEiDtxeEDH15WpIE9uw",
+    "livemode": false,
+    "managed_payments": {
+     "enabled": false
+    },
+    "metadata": {
+     "torque_env": "test",
+     "torque_link_id": "f0b"
+    },
+    "next_pending_invoice_item_invoice": null,
+    "on_behalf_of": null,
+    "pause_collection": null,
+    "payment_settings": {
+     "payment_method_options": null,
+     "payment_method_types": [
+      "card"
+     ],
+     "save_default_payment_method": "on_subscription"
+    },
+    "pending_invoice_item_interval": null,
+    "pending_setup_intent": null,
+    "pending_update": null,
+    "plan": {
+     "id": "price_1UY557EiDtxeEDH1FVNUnTaa",
+     "object": "plan",
+     "active": true,
+     "amount": 199700,
+     "amount_decimal": "199700",
+     "billing_scheme": "per_unit",
+     "created": 1793802149,
+     "currency": "brl",
+     "interval": "month",
+     "interval_count": 1,
+     "livemode": false,
+     "metadata": {},
+     "meter": null,
+     "nickname": null,
+     "product": "torque_f0_mw27hfpc",
+     "tiers_mode": null,
+     "transform_usage": null,
+     "trial_period_days": null,
+     "usage_type": "licensed"
+    },
+    "quantity": 1,
+    "schedule": null,
+    "start_date": 1793802185,
+    "status": "active",
+    "test_clock": null,
+    "transfer_data": null,
+    "trial_end": null,
+    "trial_settings": {
+     "end_behavior": {
+      "billing_cycle_anchor": "now",
+      "missing_payment_method": "create_invoice"
+     }
+    },
+    "trial_start": null
+   },
+   "previous_attributes": {
+    "default_payment_method": null,
+    "status": "incomplete"
+   }
+  },
+  "livemode": false,
+  "pending_webhooks": 0,
+  "type": "customer.subscription.updated"
+ },
+ {
+  "id": "evt_1UY55sEiDtxeEDH1cRzxCLan",
+  "object": "event",
+  "api_version": "2026-10-28.endive",
+  "created": 1793802196,
+  "data": {
+   "object": {
+    "id": "sub_1UY55hEiDtxeEDH1umtJs6xg",
+    "object": "subscription",
+    "application": null,
+    "application_fee_percent": null,
+    "automatic_tax": {
+     "disabled_reason": null,
+     "enabled": false,
+     "liability": null
+    },
+    "billing_cycle_anchor": 1793802185,
+    "billing_cycle_anchor_config": null,
+    "billing_mode": {
+     "flexible": {
+      "proration_discounts": "included"
+     },
+     "type": "flexible",
+     "updated_at": 1793802185
+    },
+    "billing_schedules": [],
+    "billing_thresholds": null,
+    "cancel_at": null,
+    "cancel_at_period_end": false,
+    "canceled_at": 1793802196,
+    "cancellation_details": {
+     "comment": null,
+     "feedback": null,
+     "feedback_option": null,
+     "reason": "cancellation_requested"
+    },
+    "collection_method": "charge_automatically",
+    "created": 1793802185,
+    "currency": "brl",
+    "customer": "cus_VZDWTFF9e9xfVL",
+    "customer_account": null,
+    "days_until_due": null,
+    "default_payment_method": "pm_1UY55kEiDtxeEDH18gJun7m5",
+    "default_source": null,
+    "default_tax_rates": [],
+    "discounts": [],
+    "ended_at": 1793802196,
+    "invoice_settings": {
+     "custom_fields": null,
+     "footer": null,
+     "issuer": {
+      "type": "self"
+     }
+    },
+    "items": {
+     "object": "list",
+     "data": [
+      {
+       "id": "si_VZDWmKB6qQPZCG",
+       "object": "subscription_item",
+       "billing_thresholds": null,
+       "created": 1793802186,
+       "current_period_end": 1796394185,
+       "current_period_start": 1793802185,
+       "current_trial": null,
+       "discounts": [],
+       "metadata": {},
+       "plan": {
+        "id": "price_1UY557EiDtxeEDH1FVNUnTaa",
+        "object": "plan",
+        "active": true,
+        "amount": 199700,
+        "amount_decimal": "199700",
+        "billing_scheme": "per_unit",
+        "created": 1793802149,
+        "currency": "brl",
+        "interval": "month",
+        "interval_count": 1,
+        "livemode": false,
+        "metadata": {},
+        "meter": null,
+        "nickname": null,
+        "product": "torque_f0_mw27hfpc",
+        "tiers_mode": null,
+        "transform_usage": null,
+        "trial_period_days": null,
+        "usage_type": "licensed"
+       },
+       "price": {
+        "id": "price_1UY557EiDtxeEDH1FVNUnTaa",
+        "object": "price",
+        "active": true,
+        "billing_scheme": "per_unit",
+        "created": 1793802149,
+        "currency": "brl",
+        "custom_unit_amount": null,
+        "livemode": false,
+        "lookup_key": "torque_f0_mw27hfpc_plan_monthly",
+        "metadata": {},
+        "nickname": null,
+        "product": "torque_f0_mw27hfpc",
+        "recurring": {
+         "interval": "month",
+         "interval_count": 1,
+         "meter": null,
+         "trial_period_days": null,
+         "usage_type": "licensed"
+        },
+        "tax_behavior": "inclusive",
+        "tiers_mode": null,
+        "transform_quantity": null,
+        "type": "recurring",
+        "unit_amount": 199700,
+        "unit_amount_decimal": "199700"
+       },
+       "quantity": 1,
+       "subscription": "sub_1UY55hEiDtxeEDH1umtJs6xg",
+       "tax_rates": []
+      }
+     ],
+     "has_more": false,
+     "total_count": 1,
+     "url": "/v1/subscription_items?subscription=sub_1UY55hEiDtxeEDH1umtJs6xg"
+    },
+    "latest_invoice": "in_1UY55hEiDtxeEDH15WpIE9uw",
+    "livemode": false,
+    "managed_payments": {
+     "enabled": false
+    },
+    "metadata": {
+     "torque_env": "test",
+     "torque_link_id": "f0b"
+    },
+    "next_pending_invoice_item_invoice": null,
+    "on_behalf_of": null,
+    "pause_collection": null,
+    "payment_settings": {
+     "payment_method_options": null,
+     "payment_method_types": [
+      "card"
+     ],
+     "save_default_payment_method": "on_subscription"
+    },
+    "pending_invoice_item_interval": null,
+    "pending_setup_intent": null,
+    "pending_update": null,
+    "plan": {
+     "id": "price_1UY557EiDtxeEDH1FVNUnTaa",
+     "object": "plan",
+     "active": true,
+     "amount": 199700,
+     "amount_decimal": "199700",
+     "billing_scheme": "per_unit",
+     "created": 1793802149,
+     "currency": "brl",
+     "interval": "month",
+     "interval_count": 1,
+     "livemode": false,
+     "metadata": {},
+     "meter": null,
+     "nickname": null,
+     "product": "torque_f0_mw27hfpc",
+     "tiers_mode": null,
+     "transform_usage": null,
+     "trial_period_days": null,
+     "usage_type": "licensed"
+    },
+    "quantity": 1,
+    "schedule": null,
+    "start_date": 1793802185,
+    "status": "canceled",
+    "test_clock": null,
+    "transfer_data": null,
+    "trial_end": null,
+    "trial_settings": {
+     "end_behavior": {
+      "billing_cycle_anchor": "now",
+      "missing_payment_method": "create_invoice"
+     }
+    },
+    "trial_start": null
+   }
+  },
+  "livemode": false,
+  "pending_webhooks": 0,
+  "type": "customer.subscription.deleted"
+ }
+]

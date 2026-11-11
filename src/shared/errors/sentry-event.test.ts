@@ -12,6 +12,8 @@ import {
   scrubRecordingEvent,
   scrubReplayEvent,
   scrubText,
+  entersReplayForbiddenPath,
+  isReplayForbiddenPath,
   scrubUrl,
   stripQuery,
   tagsFor,
@@ -50,6 +52,44 @@ describe("scrubUrl", () => {
     expect(scrubUrl("https://x.supabase.co/storage/v1/object/public/avatars/u1/foto.png")).toBe(
       "https://x.supabase.co/storage/v1/object/public/avatars/:path",
     );
+  });
+});
+
+describe("replay em rota com credencial na URL", () => {
+  it.each(["/checkout", "/checkout/", "/checkout/tq_pay_x", "/reset-password/abc"])("%s não grava", (path) => {
+    expect(isReplayForbiddenPath(path)).toBe(true);
+  });
+  it.each(["/checkouts", "/leads", "/"])("%s grava", (path) => {
+    expect(isReplayForbiddenPath(path)).toBe(false);
+  });
+  it("navegação para a rota para a gravação; o resto não", () => {
+    expect(entersReplayForbiddenPath({ category: "navigation", data: { from: "/leads", to: "/checkout/tq_pay_x?a=1" } })).toBe(true);
+    expect(entersReplayForbiddenPath({ category: "navigation", data: { from: "/checkout/x", to: "/auth" } })).toBe(false);
+    expect(entersReplayForbiddenPath({ category: "ui.click", data: { to: "/checkout/x" } })).toBe(false);
+    expect(entersReplayForbiddenPath({ category: "navigation", data: {} })).toBe(false);
+  });
+});
+
+describe("credencial do checkout", () => {
+  const token = "tq_pay_0123456789abcdef0123456789abcdef";
+  const secret = "pi_3Abc123_secret_Zyx987";
+
+  it("token no path sai, inclusive com a query de volta do 3DS", () => {
+    expect(scrubUrl(`https://torquecrm.com.br/checkout/${token}?payment_intent_client_secret=${secret}&redirect_status=succeeded`)).toBe(
+      "https://torquecrm.com.br/checkout/:token",
+    );
+  });
+
+  it("rastro de navegação fica parametrizado", () => {
+    const crumb = scrubBreadcrumb({ category: "navigation", data: { from: `/checkout/${token}`, to: "/auth" } });
+    expect(crumb?.data).toEqual({ from: "/checkout/:token", to: "/auth" });
+  });
+
+  it("texto livre perde token e client_secret, com ou sem URL", () => {
+    const out = scrubText(`falhou em /checkout/${token} com ${secret} e ${token} para financeiro@riofix.com.br`);
+    expect(out).not.toContain(token);
+    expect(out).not.toContain(secret);
+    expect(out).not.toContain("financeiro@");
   });
 });
 
@@ -204,9 +244,9 @@ describe("scrubRecordingEvent", () => {
     expect(out?.data.payload.description).toBe("https://x/rest/v1/leads");
   });
 
-  it("evento Meta leva o href da página — sem query nem segredo de path", () => {
-    const out = scrubRecordingEvent({ type: 4, timestamp: 1, data: { href: "https://app/reset-password/abc?x=1", width: 1, height: 1 } });
-    expect(out?.data).toEqual({ href: "https://app/reset-password/:token", width: 1, height: 1 });
+  it("evento Meta passa intocado: o SDK nunca o entrega a este filtro, e fingir o contrário esconderia o vazamento", () => {
+    const meta = { type: 4, timestamp: 1, data: { href: "https://app/x?y=1", width: 1, height: 1 } };
+    expect(scrubRecordingEvent(meta)).toBe(meta);
   });
 
   it("clique gravado pelo próprio replay perde o rótulo visível — não passa pelo beforeBreadcrumb", () => {

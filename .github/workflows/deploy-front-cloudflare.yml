@@ -68,6 +68,7 @@ jobs:
       VITE_INVITE_API_URL: ${{ vars.VITE_INVITE_API_URL }}
       VITE_META_APP_ID: ${{ vars.VITE_META_APP_ID }}
       VITE_META_WA_CONFIG_ID: ${{ vars.VITE_META_WA_CONFIG_ID }}
+      VITE_STRIPE_PUBLISHABLE_KEY: ${{ vars.VITE_STRIPE_PUBLISHABLE_KEY }}
       # Fase de prova: sem valor, como no EasyPanel (prod mostra "0.0.0"), para a
       # paridade bater byte a byte. Passa a `sha-<sha>` num PR separado.
       VITE_APP_VERSION: ''

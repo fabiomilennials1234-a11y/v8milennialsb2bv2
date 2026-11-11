@@ -28,6 +28,7 @@ import { getCorsHeaders } from "../_shared/cors.ts";
 import { withSecurityHeaders } from "../_shared/security-headers.ts";
 import { logRuntime } from "../_shared/logger.ts";
 import { requireCronAuth } from "../_shared/auth.ts";
+import { provisionExistingOrgs } from "./existing-org.ts";
 
 /** Teto por passada. Fila grande não vira uma requisição de dez minutos. */
 const LOTE = 50;
@@ -48,40 +49,18 @@ Deno.serve(
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
     );
 
-    // Pendente = assinatura viva, com cobrança, que ainda não tem linha no livro.
-    // A verdade de "já provisionei" mora no livro, não numa coluna de estado —
-    // coluna de estado diz AGORA, o livro diz por qual pagamento e quando.
-    const { data: jaFeitos, error: erroLivro } = await supabase
-      .from("subscription_provisionings")
-      .select("provider_payment_id");
+    // Pendente = assinatura viva, com cobrança, que ainda não tem linha no livro. A
+    // verdade de "já provisionei" mora no livro; o anti-join roda no banco, antes do
+    // limite (billing_pending_provisionings).
+    const existentes = await provisionExistingOrgs(LOTE, {
+      rpc: async (name, args) => {
+        const { data, error } = await supabase.rpc(name, args);
+        return { data, error };
+      },
+      log: (entry) => logRuntime({ module: "billing", ...entry }),
+    });
 
-    if (erroLivro) {
-      await logRuntime({
-        module: "billing",
-        action: "provision_worker_falhou",
-        status: "error",
-        errorMessage: erroLivro.message,
-      });
-      return new Response(JSON.stringify({ error: "ledger_unreadable" }), { status: 500, headers });
-    }
-
-    const feitos = new Set((jaFeitos ?? []).map(r => r.provider_payment_id as string));
-
-    const { data: assinaturas, error: erroSub } = await supabase
-      .from("org_subscriptions")
-      .select("provider_payment_id, organization_id")
-      .not("provider_payment_id", "is", null)
-      .is("cancelled_at", null)
-      .order("updated_at", { ascending: true })
-      .limit(LOTE * 4);
-
-    if (erroSub) {
-      await logRuntime({
-        module: "billing",
-        action: "provision_worker_falhou",
-        status: "error",
-        errorMessage: erroSub.message,
-      });
+    if (existentes.leituraFalhou) {
       return new Response(JSON.stringify({ error: "subscriptions_unreadable" }), { status: 500, headers });
     }
 
@@ -98,64 +77,34 @@ Deno.serve(
       .not("paid_at", "is", null)
       .limit(LOTE * 2);
 
-    const pendentesNovas = (linksPagos ?? [])
+    const cobrancasNovas = (linksPagos ?? [])
       .flatMap(l => ((l as Record<string, unknown>).payment_link_charges as
         { provider_charge_id: string }[] ?? []))
-      .map(c => c.provider_charge_id)
-      .filter(id => !feitos.has(id));
+      .map(c => c.provider_charge_id);
 
-    const pendentes = (assinaturas ?? [])
-      .filter(s => !feitos.has(s.provider_payment_id as string))
-      .slice(0, LOTE);
+    const { data: jaFeitos, error: erroLivro } = cobrancasNovas.length
+      ? await supabase
+          .from("subscription_provisionings")
+          .select("provider_payment_id")
+          .in("provider_payment_id", cobrancasNovas)
+      : { data: [], error: null };
 
-    const feito: string[] = [];
-    const recusado: string[] = [];
-    const falhou: string[] = [];
-
-    for (const s of pendentes) {
-      const pagamento = s.provider_payment_id as string;
-      const { data, error } = await supabase.rpc("billing_provision_existing_org", {
-        p_provider_payment_id: pagamento,
+    if (erroLivro) {
+      await logRuntime({
+        module: "billing",
+        action: "provision_worker_falhou",
+        status: "error",
+        errorMessage: erroLivro.message,
       });
-
-      if (error) {
-        falhou.push(pagamento);
-        // Vermelho VISÍVEL. É a diferença entre este worker e o webhook: aqui
-        // ninguém precisa fingir sucesso para não pausar fila de terceiro.
-        await logRuntime({
-          module: "billing",
-          organizationId: (s.organization_id as string) ?? undefined,
-          action: "provision_falhou",
-          status: "error",
-          errorMessage: error.message,
-          payloadSnapshot: { payment_id: pagamento },
-        });
-        continue;
-      }
-
-      const resultado = (data ?? {}) as { ok?: boolean; code?: string };
-      if (resultado.ok) {
-        feito.push(pagamento);
-        await logRuntime({
-          module: "billing",
-          organizationId: (s.organization_id as string) ?? undefined,
-          action: "provisionado",
-          status: "success",
-          payloadSnapshot: { payment_id: pagamento, code: resultado.code },
-        });
-      } else {
-        // Recusa esperada (assinatura ainda não gravada, plano ausente) não é
-        // incidente: fica como `skipped` para não afogar o sinal de erro real.
-        recusado.push(pagamento);
-        await logRuntime({
-          module: "billing",
-          organizationId: (s.organization_id as string) ?? undefined,
-          action: "provision_recusado",
-          status: "skipped",
-          payloadSnapshot: { payment_id: pagamento, code: resultado.code },
-        });
-      }
+      return new Response(JSON.stringify({ error: "ledger_unreadable" }), { status: 500, headers });
     }
+
+    const feitos = new Set((jaFeitos ?? []).map(r => r.provider_payment_id as string));
+    const pendentesNovas = cobrancasNovas.filter(id => !feitos.has(id));
+
+    const feito: string[] = [...existentes.feito];
+    const recusado: string[] = [...existentes.recusado];
+    const falhou: string[] = [...existentes.falhou];
 
     // ── ORGANIZAÇÃO NOVA ──────────────────────────────────────────────────
     for (const pagamento of pendentesNovas.slice(0, LOTE)) {
@@ -235,7 +184,7 @@ Deno.serve(
     return new Response(
       JSON.stringify({
         ok: true,
-        pendentes: pendentes.length + pendentesNovas.length,
+        pendentes: existentes.pendentes + pendentesNovas.length,
         provisionados: feito.length,
         recusados: recusado.length,
         falhas: falhou.length,

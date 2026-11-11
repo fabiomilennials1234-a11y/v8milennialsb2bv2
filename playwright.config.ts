@@ -31,7 +31,7 @@ export default defineConfig({
       dependencies: ['setup'],
       // O harness de pixel é SEM-AUTH de propósito (roda no projeto 'pixel');
       // não pode passar pelo setup/storageState do chromium.
-      testIgnore: ['**/auth.setup.ts', '**/tv-wall-pixel.spec.ts', '**/portfolio/**'],
+      testIgnore: ['**/auth.setup.ts', '**/tv-wall-pixel.spec.ts', '**/portfolio/**', '**/checkout/**'],
     },
     {
       name: 'portfolio-preview',

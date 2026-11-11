@@ -22,6 +22,7 @@ ARG VITE_CALENDAR_SERVICE_URL
 ARG VITE_INVITE_API_URL
 ARG VITE_META_APP_ID
 ARG VITE_META_WA_CONFIG_ID
+ARG VITE_STRIPE_PUBLISHABLE_KEY
 ARG VITE_APP_VERSION
 # Sentry (ADR-0038, S6). O DSN é público por desenho (vai no bundle de qualquer
 # jeito), então o do projeto `torque-web` (org EU) é o padrão: a imagem de
@@ -53,6 +54,7 @@ ENV VITE_SUPABASE_URL=${VITE_SUPABASE_URL} \
     VITE_INVITE_API_URL=${VITE_INVITE_API_URL} \
     VITE_META_APP_ID=${VITE_META_APP_ID} \
     VITE_META_WA_CONFIG_ID=${VITE_META_WA_CONFIG_ID} \
+    VITE_STRIPE_PUBLISHABLE_KEY=${VITE_STRIPE_PUBLISHABLE_KEY} \
     VITE_APP_VERSION=${VITE_APP_VERSION} \
     VITE_SENTRY_DSN=${VITE_SENTRY_DSN} \
     VITE_SENTRY_ENVIRONMENT=${VITE_SENTRY_ENVIRONMENT} \
@@ -90,7 +92,7 @@ RUN printf '%s\n' \
   'add_header Referrer-Policy "strict-origin-when-cross-origin" always;' \
   'add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;' \
   'add_header Permissions-Policy "geolocation=(self), payment=()" always;' \
-  "add_header Content-Security-Policy \"default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://*.supabase.co https://connect.facebook.net; connect-src 'self' https://*.supabase.co wss://*.supabase.co https://*.supabase.in https://generativelanguage.googleapis.com https://*.sentry.io https://openrouter.ai https://graph.facebook.com https://www.facebook.com https://fonts.googleapis.com https://calls.torquecrm.com.br; img-src 'self' data: https: blob:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdnjs.cloudflare.com; font-src 'self' data: https://fonts.gstatic.com https://cdnjs.cloudflare.com; media-src 'self' blob: https:; frame-src 'self' https://www.facebook.com https://web.facebook.com https://staticxx.facebook.com https://connect.facebook.net; worker-src 'self' blob:; frame-ancestors 'none'; base-uri 'self'; form-action 'self';\" always;" \
+  "add_header Content-Security-Policy \"default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://*.supabase.co https://connect.facebook.net https://js.stripe.com https://*.js.stripe.com; connect-src 'self' https://*.supabase.co wss://*.supabase.co https://*.supabase.in https://generativelanguage.googleapis.com https://*.sentry.io https://openrouter.ai https://graph.facebook.com https://www.facebook.com https://fonts.googleapis.com https://calls.torquecrm.com.br https://api.stripe.com; img-src 'self' data: https: blob:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdnjs.cloudflare.com; font-src 'self' data: https://fonts.gstatic.com https://cdnjs.cloudflare.com; media-src 'self' blob: https:; frame-src 'self' https://www.facebook.com https://web.facebook.com https://staticxx.facebook.com https://connect.facebook.net https://js.stripe.com https://*.js.stripe.com https://hooks.stripe.com; worker-src 'self' blob:; frame-ancestors 'none'; base-uri 'self'; form-action 'self';\" always;" \
   > /etc/nginx/security-headers.conf && \
 printf '%s\n' \
   '# Landing pages estáticas em /lp/ (public/lp/gestao-comercial, crm-b2b): CSP própria,' \

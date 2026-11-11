@@ -27,6 +27,7 @@ import { withErrorBoundary } from "../_shared/error-boundary.ts";
 import { getCorsHeaders } from "../_shared/cors.ts";
 import { withSecurityHeaders } from "../_shared/security-headers.ts";
 import { logRuntime } from "../_shared/logger.ts";
+import { isPlausibleLinkToken } from "../_shared/payment-link-token.ts";
 import { shapePublicLink, type PlanLabels, type ResolveResult } from "./shape.ts";
 
 /**
@@ -115,6 +116,11 @@ Deno.serve(
         status: 429,
         headers: { ...headers, "Retry-After": "300" },
       });
+    }
+
+    // Caractere que o Postgres recusa viraria 500 numa porta pública: é "não encontrado".
+    if (!isPlausibleLinkToken(token)) {
+      return new Response(JSON.stringify({ state: "not_found" }), { status: 200, headers });
     }
 
     const { data, error } = await supabase.rpc("billing_resolve_payment_link", { p_token: token });

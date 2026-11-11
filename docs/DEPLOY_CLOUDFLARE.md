@@ -220,6 +220,7 @@ Os dois environments já existem no GitHub, os dois restritos à branch `main`. 
 |---|---|---|---|
 | `front-build` | `VITE_SUPABASE_URL`, `VITE_SUPABASE_PUBLISHABLE_KEY`, `VITE_SUPABASE_PROJECT_ID`, `VITE_META_APP_ID`, `VITE_META_WA_CONFIG_ID` | variável | Obrigatórias: são as que o bundle no ar usa. Sem elas, o `check-build-env` para a build. |
 | `front-build` | `VITE_CALENDAR_SERVICE_URL` | variável | Opcional. Nenhum código lê. |
+| `front-build` | `VITE_STRIPE_PUBLISHABLE_KEY` | variável | Opcional até ativar o Stripe em produção. Vazia, todo link de pagamento mostra "indisponível". |
 | `front-build` | `SENTRY_AUTH_TOKEN` | **secret** (já existe) | Token de **organização** (`sntrys_`, escopo `org:ci`). Ver [Sentry](#sentry-na-build). |
 | `front-production` | `CLOUDFLARE_API_TOKEN` | **secret** (já existe) | Token da conta, **Workers → Editor**, só no Worker `torque-front`. |
 | `front-production` | `CLOUDFLARE_ACCOUNT_ID` | variável | id da conta (32 hex) |

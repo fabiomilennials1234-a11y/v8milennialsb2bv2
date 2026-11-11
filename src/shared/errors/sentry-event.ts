@@ -41,11 +41,13 @@ export function stripQuery(url: string): string {
 /**
  * Segredo que mora no PATH, não na query — cortar a query não basta:
  * - o token de redefinição de senha é segmento de rota (`/reset-password/:token`);
+ * - o token do link de pagamento idem (`/checkout/:token`): é a credencial da proposta;
  * - o caminho de objeto do Storage carrega org, lead e nome de arquivo do
  *   cliente. Fica o bucket.
  */
 const SECRET_PATH_SEGMENTS: ReadonlyArray<readonly [RegExp, string]> = [
   [/\/reset-password\/[^/?#]+/g, "/reset-password/:token"],
+  [/\/checkout\/[^/?#]+/g, "/checkout/:token"],
   [/(\/storage\/v1\/object\/(?:public\/|sign\/|authenticated\/)?[^/?#]+)\/[^?#]+/g, "$1/:path"],
 ];
 
@@ -58,9 +60,21 @@ export function scrubUrl(url: string): string {
 /** URL dentro de texto livre: "error sending request for url (https://…?access_token=…)". */
 const URL_IN_TEXT = /https?:\/\/[^\s"'<>()]+/g;
 
+/**
+ * Credencial de pagamento solta em texto, fora de URL: o token do link e o `client_secret`
+ * da Stripe. Nenhuma tela os escreve em erro; isto é para o dia em que uma lib escrever.
+ */
+const PAYMENT_SECRETS_IN_TEXT: ReadonlyArray<readonly [RegExp, string]> = [
+  [/\/checkout\/[^\s/?#"'<>()]+/g, "/checkout/:token"],
+  [/\btq_pay_[A-Za-z0-9]+/g, "tq_pay_:token"],
+  [/\b(pi|seti)_[A-Za-z0-9]+_secret_[A-Za-z0-9]+/g, "$1_:secret"],
+];
+
 /** Texto livre (mensagem de exceção, rastro): URLs limpas e PII mascarada. */
 export function scrubText(text: string): string {
-  return scrubPii(text.replace(URL_IN_TEXT, (url) => scrubUrl(url)));
+  let out = text.replace(URL_IN_TEXT, (url) => scrubUrl(url));
+  for (const [pattern, replacement] of PAYMENT_SECRETS_IN_TEXT) out = out.replace(pattern, replacement);
+  return scrubPii(out);
 }
 
 function scrubValue(key: string, value: unknown, depth: number): unknown {
@@ -271,24 +285,19 @@ export function prepareEvent(event: ErrorEvent, hint: EventHint): ErrorEvent | n
   return event;
 }
 
-/** `EventType` do rrweb: Meta leva o `href` da página; Custom, rastros e spans de rede. */
-const RRWEB_META_EVENT = 4;
+/** `EventType` do rrweb para eventos custom: rastros e spans de rede. */
 const RRWEB_CUSTOM_EVENT = 5;
 
 /**
- * Evento da gravação de sessão (replay). O texto da tela já sai mascarado pelo
- * próprio replay (e `title`/`placeholder`/`aria-label` também, por padrão), e o
- * snapshot de DOM não é varrido aqui (é grande, e varrer a cada mutação custaria
- * caro). O que sobra com dado: o `href` da página e os eventos custom.
+ * Filtro de evento custom da gravação. É o único tipo que o SDK entrega a
+ * `beforeAddRecordingEvent` (`@sentry/replay`, index.js:5800, `isCustomEvent`): Meta e snapshot
+ * nunca passam por aqui, e por isso não há ramo para o `href`. Quem protege a URL com credencial é
+ * `isReplayForbiddenPath`, que não deixa gravar.
  */
 export function scrubRecordingEvent<T>(event: T): T | null {
   if (typeof event !== "object" || event === null) return event;
   const { type, data } = event as { type?: unknown; data?: unknown };
   if (typeof data !== "object" || data === null) return event;
-  if (type === RRWEB_META_EVENT) {
-    const { href } = data as { href?: unknown };
-    return typeof href === "string" ? { ...event, data: { ...data, href: scrubUrl(href) } } : event;
-  }
   if (type !== RRWEB_CUSTOM_EVENT) return event;
 
   // O replay monta os PRÓPRIOS rastros de clique a partir do DOM — não passam
@@ -301,6 +310,27 @@ export function scrubRecordingEvent<T>(event: T): T | null {
     return crumb ? { ...event, data: { ...data, payload: crumb } } : null;
   }
   return { ...event, data: scrubRecord(data as Record<string, unknown>) };
+}
+
+/**
+ * Rota com credencial na URL não é gravada. O snapshot repete a URL em lugares que ninguém varre
+ * (`href` do meta, `rr_src` e `referrer` dos iframes), e `beforeAddRecordingEvent` não os alcança.
+ * Por isso a gravação nem começa nessas rotas e para ao entrar nelas navegando. O erro continua
+ * indo ao Sentry, sem o vídeo.
+ */
+export function isReplayForbiddenPath(pathname: string): boolean {
+  return /^\/(checkout|reset-password)(\/|$)/.test(pathname);
+}
+
+/** O rastro de navegação é o único aviso síncrono de troca de rota, inclusive voltar do navegador. */
+export function entersReplayForbiddenPath(crumb: Breadcrumb): boolean {
+  const to = crumb.category === "navigation" ? crumb.data?.to : undefined;
+  if (typeof to !== "string") return false;
+  try {
+    return isReplayForbiddenPath(new URL(to, "http://x").pathname);
+  } catch {
+    return false;
+  }
 }
 
 /**

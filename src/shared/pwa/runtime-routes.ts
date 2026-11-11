@@ -14,3 +14,10 @@ export const isLandingPath = (pathname: string): boolean =>
 
 export const isAppOwnedRequest = (url: URL, workerOrigin: string): boolean =>
   url.origin === workerOrigin && !isLandingPath(url.pathname);
+
+/**
+ * Sonda do checkout. Quem não responde é um SW anterior a esta regra, que intercepta o Stripe.js e
+ * o bloqueia (a Stripe fica fora do `connect-src` do `/sw.js` de propósito: código de pagamento não
+ * entra em cache nosso).
+ */
+export const STRIPE_BYPASS_PROBE = "TORQUE_SW_STRIPE_BYPASS";
