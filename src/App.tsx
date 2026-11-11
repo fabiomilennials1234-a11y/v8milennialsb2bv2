@@ -152,6 +152,8 @@ import { FloatingDockProvider } from "@/modules/platform/components/dock/Floatin
 import { SupportPanel } from "@/modules/platform/components/support/SupportPanel";
 import { SupportAccess } from "@/modules/platform/components/support/SupportAccess";
 import { SupportAnnouncement } from "@/modules/platform/components/support/SupportAnnouncement";
+import { instalarRecuperacaoDeSessao } from "@/modules/identity/auth/lib/sessao-runtime";
+import { AvisoRelogioDescompassado } from "@/modules/identity/auth/components/AvisoRelogioDescompassado";
 
 // ADR-0038: nenhum erro de query ou mutation some em silêncio. Os caches só
 // relatam; o toast continua com a tela (ver `createQueryErrorHandlers`).
@@ -167,6 +169,10 @@ const queryClient = new QueryClient({
     },
   },
 });
+
+// Token de acesso vencido (relógio do computador errado, aba que dormiu) não é
+// sessão perdida: renova uma vez e refaz as consultas que falharam.
+instalarRecuperacaoDeSessao(queryClient);
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
@@ -1097,6 +1103,7 @@ const App = () => {
                                       <SupportPanel />
                                       <SupportAnnouncement />
                                     </SupportAccess>
+                                    <AvisoRelogioDescompassado />
                                   </LeadCallActionProvider>
                                 </VoiceCallProvider>
                               </GlobalShortcutsProvider>

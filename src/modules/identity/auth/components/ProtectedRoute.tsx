@@ -11,6 +11,7 @@ import { TorqueLoader } from '@/components/ui/branding/TorqueLoader';
 import { Button } from '@/components/ui/button';
 import { IS_DEMO_MODE } from '@/core/demo-mode';
 import { LoadFailedScreen } from '../../components/LoadFailedScreen';
+import { useRecuperacaoDeSessao } from '../hooks/useRecuperacaoDeSessao';
 
 interface ProtectedRouteProps {
   children: ReactNode;
@@ -40,6 +41,15 @@ export function ProtectedRoute({ children, requireOrganization = true }: Protect
     error: desativadoError,
     refetch: refetchDesativado,
   } = useDeactivatedMembership(semVinculoAtivo && !isMaster && !isGestor);
+
+  // Token de ACESSO vencido (relógio do computador errado, aba que dormiu) não é
+  // sessão perdida: renova e refaz antes de mostrar "Sua sessão expirou".
+  // Hook aqui em cima, antes de qualquer return condicional.
+  const erroDeCarga = (!teamMember && teamMemberError) || (!isGestor && desativadoError) || null;
+  const recuperacao = useRecuperacaoDeSessao(erroDeCarga, () => {
+    void refetchTeamMember();
+    void refetchDesativado();
+  });
 
   // Modo demonstração (build de dev + VITE_DEMO_MODE=1). Em produção
   // `IS_DEMO_MODE` é a constante `false` e este bloco não chega ao bundle.
@@ -78,7 +88,10 @@ export function ProtectedRoute({ children, requireOrganization = true }: Protect
     // "Aguardando Ativação — sua conta está sendo configurada": uma mentira
     // sobre a conta do cliente (ADR-0038, achado na validação ponta a ponta).
     // O acesso continua fechado; a tela só para de inventar o motivo.
-    const loadError = (!teamMember && teamMemberError) || (!isGestor && desativadoError) || null;
+    const loadError = erroDeCarga;
+    if (loadError && recuperacao === "renovando") {
+      return <TorqueLoader variant="full" />;
+    }
     if (loadError) {
       return (
         <LoadFailedScreen
