@@ -4,7 +4,10 @@
  * 🔴 A fonte é o banco. O CHECK `leads_uf_check` só aceita estas 27, e
  * `public.uf_brasileira(text)` (migration 20280111000600) é a mesma regra em
  * forma de função: `upper(btrim(valor))` dentro das 27, ou NULL. Este arquivo
- * espelha essa função. Se ela mudar, este arquivo muda junto. Os casos do pgTAP
+ * aceita tudo o que ela aceita e um pouco mais: o `trim()` do JS tira também
+ * tab, quebra de linha, NBSP e BOM, que o `btrim` do banco deixa — a saída é
+ * sempre uma das 27 ou null, então o lead nunca recebe o que o CHECK recusa. Se
+ * a função mudar, este arquivo muda junto. Os casos do pgTAP
  * (`supabase/tests/uf_do_erp_chega_ao_lead_test.sql`, U1–U3) se repetem em
  * `br-uf.test.ts`.
  *
