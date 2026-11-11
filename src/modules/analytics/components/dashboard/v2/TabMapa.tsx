@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useUfHeatmap, useLeadsByUf, type UfHeatmapRow } from "@/modules/analytics/hooks/useUfMap";
 import { UF_NAMES } from "@/shared/format/br-uf";
-import { userMessageOf } from "@/shared/errors";
+import { toAppError, userMessageOf } from "@/shared/errors";
 import brazilSvg from "@/assets/brazil-states.svg?raw";
 
 function formatK(value: number): string {
@@ -34,6 +34,17 @@ interface TooltipState {
 }
 
 /**
+ * Recusa deliberada (trava da JRTex, membro sem acesso): tentar de novo dá o
+ * mesmo resultado, então não se oferece. Todo o resto — inclusive o erro que o
+ * catálogo não reconhece — pode ser passageiro e mantém o botão.
+ */
+function ehRecusa(error: unknown): boolean {
+  return toAppError(error).code === "permission.denied";
+}
+
+const fmt = (n: number) => n.toLocaleString("pt-BR");
+
+/**
  * Aba Mapa — choropleth do Brasil (base inteira da org, independente do mês).
  * Clique num estado abre o drawer com leads/clientes/vendido daquele UF.
  */
@@ -41,7 +52,13 @@ function TabMapaBase() {
   const navigate = useNavigate();
   const { data: heatmap, isLoading, isError, error, refetch, isFetching } = useUfHeatmap();
   const [selectedUf, setSelectedUf] = useState<string | null>(null);
-  const { data: ufLeads, isLoading: leadsLoading } = useLeadsByUf(selectedUf);
+  const {
+    data: ufLeads,
+    isLoading: leadsLoading,
+    isError: leadsIsError,
+    error: leadsError,
+    refetch: refetchLeads,
+  } = useLeadsByUf(selectedUf);
   const [tooltip, setTooltip] = useState<TooltipState | null>(null);
   const mapRef = useRef<HTMLDivElement>(null);
 
@@ -108,16 +125,23 @@ function TabMapaBase() {
     return <Skeleton className="h-full min-h-[320px] rounded-2xl" />;
   }
 
-  // Erro nunca vira mapa cinza mudo: diz o que houve e oferece de novo.
-  if (isError) {
+  const recusa = isError && ehRecusa(error);
+
+  // Erro sem nada para mostrar: diz o que houve, em vez de um mapa cinza mudo.
+  // Com a última carga em cache, o mapa FICA — um refetch que falha (504 num
+  // apagão, reconexão) não pode trocar um mapa bom por esta tela, e o aviso vai
+  // discreto logo abaixo do cabeçalho.
+  if (isError && !heatmap) {
     return (
-      <div className="grid h-full min-h-[320px] place-items-center rounded-2xl bg-sunken p-6 text-center">
+      <div role="alert" className="grid h-full min-h-[320px] place-items-center rounded-2xl bg-sunken p-6 text-center">
         <div className="max-w-sm space-y-3">
-          <p className="text-[15px] font-bold">Não foi possível carregar o mapa</p>
+          <p className="text-[15px] font-bold">{recusa ? "Sem acesso ao mapa" : "Não foi possível carregar o mapa"}</p>
           <p className="text-[13px] text-muted-foreground">{userMessageOf(error, "Tente de novo em instantes.")}</p>
-          <Button variant="outline" size="sm" onClick={() => void refetch()} disabled={isFetching}>
-            Tentar de novo
-          </Button>
+          {!recusa && (
+            <Button variant="outline" size="sm" onClick={() => void refetch()} disabled={isFetching}>
+              Tentar de novo
+            </Button>
+          )}
         </div>
       </div>
     );
@@ -144,9 +168,27 @@ function TabMapaBase() {
           </span>
         </div>
 
+        {/* Slot próprio, irmão do cabeçalho: nunca envolve o host do SVG, que
+            remontado perderia a pintura. */}
+        {isError && (
+          <div
+            role="alert"
+            className="mt-3 flex items-center justify-between gap-2 rounded-xl bg-sunken px-3 py-2 text-[12px] text-muted-foreground"
+          >
+            <span>
+              {recusa ? userMessageOf(error) : "Não deu para atualizar o mapa · mostrando a última carga"}
+            </span>
+            {!recusa && (
+              <Button variant="ghost" size="sm" onClick={() => void refetch()} disabled={isFetching}>
+                Tentar de novo
+              </Button>
+            )}
+          </div>
+        )}
+
         {vazio && (
           <p role="status" className="mt-3 rounded-xl bg-sunken px-3 py-2 text-[12px] text-muted-foreground">
-            Nenhum lead com estado identificado ainda. O estado vem do cadastro do ERP, da resposta do lead ou do DDD do telefone.
+            Nenhum lead com estado identificado ainda. O estado vem do cadastro, das integrações ou do DDD do telefone.
           </p>
         )}
 
@@ -163,7 +205,7 @@ function TabMapaBase() {
                   {porReceita ? ` · ${formatK(tooltip.sold)} vendido` : ""}
                 </b>
                 <span className="text-[11px] text-tinta-muted">
-                  {tooltip.count} lead{tooltip.count === 1 ? "" : "s"} · clique pra ver o relatório
+                  {fmt(tooltip.count)} lead{tooltip.count === 1 ? "" : "s"} · clique pra ver o relatório
                 </span>
               </div>
             )}
@@ -181,7 +223,7 @@ function TabMapaBase() {
         </div>
         {!vazio && (
           <div className="mt-3 flex flex-wrap justify-between gap-x-4 gap-y-1 text-[11px] font-semibold text-muted-foreground">
-            <span>Estado vem do cadastro do ERP, da resposta do lead ou do DDD do telefone</span>
+            <span>Estado vem do cadastro, das integrações ou do DDD do telefone</span>
             <span><b className="text-foreground">{unmapped.toLocaleString("pt-BR")} leads</b> sem estado identificado</span>
           </div>
         )}
@@ -210,25 +252,44 @@ function TabMapaBase() {
                 <X className="h-4 w-4" />
               </button>
             </div>
-            <div className="mt-3.5 grid grid-cols-3 gap-2">
+            {/* "Vendido" só quando a base tem receita na fonte do mapa — como no
+                balão. Sem nenhuma, "R$ 0" afirmaria uma venda zerada que a
+                fonte só não enxerga. */}
+            <div className={`mt-3.5 grid gap-2 ${porReceita ? "grid-cols-3" : "grid-cols-2"}`}>
               <div className="min-w-0 rounded-xl bg-card px-1.5 py-2 text-center">
-                <b className="block truncate text-[16px] font-extrabold tracking-[-0.03em] tabular-nums">{Number(selectedRow?.leads_count ?? 0)}</b>
+                <b className="block truncate text-[16px] font-extrabold tracking-[-0.03em] tabular-nums">{fmt(Number(selectedRow?.leads_count ?? 0))}</b>
                 <span className="text-[10px] font-bold uppercase tracking-[.06em] text-muted-foreground">Leads</span>
               </div>
               <div className="min-w-0 rounded-xl bg-card px-1.5 py-2 text-center">
-                <b className="block truncate text-[16px] font-extrabold tracking-[-0.03em] text-success tabular-nums">{Number(selectedRow?.clients_count ?? 0)}</b>
+                <b className="block truncate text-[16px] font-extrabold tracking-[-0.03em] text-success tabular-nums">{fmt(Number(selectedRow?.clients_count ?? 0))}</b>
                 <span className="text-[10px] font-bold uppercase tracking-[.06em] text-muted-foreground">Clientes</span>
               </div>
-              <div className="min-w-0 rounded-xl bg-card px-1.5 py-2 text-center">
-                <b className="block truncate text-[16px] font-extrabold tracking-[-0.03em] text-primary-soft-foreground tabular-nums">{formatK(Number(selectedRow?.total_sold ?? 0))}</b>
-                <span className="text-[10px] font-bold uppercase tracking-[.06em] text-muted-foreground">Vendido</span>
-              </div>
+              {porReceita && (
+                <div className="min-w-0 rounded-xl bg-card px-1.5 py-2 text-center">
+                  <b className="block truncate text-[16px] font-extrabold tracking-[-0.03em] text-primary-soft-foreground tabular-nums">{formatK(Number(selectedRow?.total_sold ?? 0))}</b>
+                  <span className="text-[10px] font-bold uppercase tracking-[.06em] text-muted-foreground">Vendido</span>
+                </div>
+              )}
             </div>
           </div>
 
           <div className="min-h-0 flex-1 overflow-y-auto p-2">
             {leadsLoading && <Skeleton className="h-40 rounded-xl" />}
-            {!leadsLoading && (ufLeads ?? []).length === 0 && (
+            {/* Falha sem lista na mão diz o que houve — nunca "nenhum lead". Com a
+                lista em cache, um refetch que falha não empilha alerta sobre ela. */}
+            {leadsIsError && ufLeads === undefined && (
+              <div role="alert" className="space-y-3 px-4 py-8 text-center">
+                <p className="text-[13px] font-bold">Não foi possível carregar os leads deste estado</p>
+                <p className="text-[12px] text-muted-foreground">{userMessageOf(leadsError, "Tente de novo em instantes.")}</p>
+                {!ehRecusa(leadsError) && (
+                  <Button variant="outline" size="sm" onClick={() => void refetchLeads()}>
+                    Tentar de novo
+                  </Button>
+                )}
+              </div>
+            )}
+            {/* Vazio só quando a resposta veio, e veio vazia. */}
+            {ufLeads?.length === 0 && (
               <p className="py-8 text-center text-[13px] text-muted-foreground">Nenhum lead neste estado.</p>
             )}
             {(ufLeads ?? []).map((lead) => (
@@ -258,9 +319,11 @@ function TabMapaBase() {
             ))}
           </div>
 
+          {/* Sem número: o mapa conta a base inteira, e a lista mostra o recorte
+              de quem olha (cadastros ocultos, filtros salvos, permissão). */}
           <div className="border-t border-border/60 p-3">
             <Button className="w-full" onClick={() => navigate(`/leads?uf=${selectedUf}`)}>
-              Abrir os {Number(selectedRow?.leads_count ?? 0)} em Leads →
+              Ver em Leads →
             </Button>
           </div>
         </div>
