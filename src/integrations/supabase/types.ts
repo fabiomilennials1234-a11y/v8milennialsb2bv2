@@ -20120,6 +20120,45 @@ export type Database = {
           },
         ]
       }
+      whatsapp_numero_lead_escolhido: {
+        Row: {
+          escolhido_em: string
+          escolhido_por: string | null
+          lead_id: string
+          normalized_phone: string
+          organization_id: string
+        }
+        Insert: {
+          escolhido_em?: string
+          escolhido_por?: string | null
+          lead_id: string
+          normalized_phone: string
+          organization_id: string
+        }
+        Update: {
+          escolhido_em?: string
+          escolhido_por?: string | null
+          lead_id?: string
+          normalized_phone?: string
+          organization_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "whatsapp_numero_lead_escolhido_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "leads"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "whatsapp_numero_lead_escolhido_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       whatsapp_rate_tracking: {
         Row: {
           created_at: string | null
@@ -22473,6 +22512,10 @@ export type Database = {
       ensure_pipeline_display_config: {
         Args: { p_org_id: string }
         Returns: undefined
+      }
+      escolher_lead_do_numero: {
+        Args: { p_lead_id: string; p_organization_id: string; p_phone: string }
+        Returns: number
       }
       export_lead_data: { Args: { p_lead_id: string }; Returns: Json }
       find_duplicate_leads: {

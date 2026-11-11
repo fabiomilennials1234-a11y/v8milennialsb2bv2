@@ -26,6 +26,7 @@ owner: claude-agent
 - [[disparos-falha-entrega|Disparos — Falha na Entrega por Lead]]
 - [[disparos-publico-por-condicao|Disparos — Público por Condição (Todos os Funis / Todas as Etapas)]]
 - [[layout-onda-2b|Chat Onda 2b — contrato de layout]]
+- [[numero-em-varios-cadastros|Número em vários cadastros — de qual lead é a conversa]]
 - [[whatsapp-stability-plan|WhatsApp Stability — estado consolidado]]
 
 ## Dashboard
