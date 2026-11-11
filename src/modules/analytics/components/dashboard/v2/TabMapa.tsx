@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useUfHeatmap, useLeadsByUf, type UfHeatmapRow } from "@/modules/analytics/hooks/useUfMap";
 import { UF_NAMES } from "@/shared/format/br-uf";
+import { userMessageOf } from "@/shared/errors";
 import brazilSvg from "@/assets/brazil-states.svg?raw";
 
 function formatK(value: number): string {
@@ -38,7 +39,7 @@ interface TooltipState {
  */
 function TabMapaBase() {
   const navigate = useNavigate();
-  const { data: heatmap, isLoading } = useUfHeatmap();
+  const { data: heatmap, isLoading, isError, error, refetch, isFetching } = useUfHeatmap();
   const [selectedUf, setSelectedUf] = useState<string | null>(null);
   const { data: ufLeads, isLoading: leadsLoading } = useLeadsByUf(selectedUf);
   const [tooltip, setTooltip] = useState<TooltipState | null>(null);
@@ -107,6 +108,25 @@ function TabMapaBase() {
     return <Skeleton className="h-full min-h-[320px] rounded-2xl" />;
   }
 
+  // Erro nunca vira mapa cinza mudo: diz o que houve e oferece de novo.
+  if (isError) {
+    return (
+      <div className="grid h-full min-h-[320px] place-items-center rounded-2xl bg-sunken p-6 text-center">
+        <div className="max-w-sm space-y-3">
+          <p className="text-[15px] font-bold">Não foi possível carregar o mapa</p>
+          <p className="text-[13px] text-muted-foreground">{userMessageOf(error, "Tente de novo em instantes.")}</p>
+          <Button variant="outline" size="sm" onClick={() => void refetch()} disabled={isFetching}>
+            Tentar de novo
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  // Nenhuma UF identificada: o mapa fica, mas diz por que está cinza (e não
+  // inventa "0 leads sem estado" — sem linhas, esse número não veio).
+  const vazio = (heatmap ?? []).length === 0;
+
   return (
     // Corpo da janela "Mapa de clientes" — o título mora na moldura. O mapa
     // fica numa superfície de tinta: a paleta do coroplético e o traço dos
@@ -123,6 +143,12 @@ function TabMapaBase() {
             {totalMapped.toLocaleString("pt-BR")} leads mapeados
           </span>
         </div>
+
+        {vazio && (
+          <p role="status" className="mt-3 rounded-xl bg-sunken px-3 py-2 text-[12px] text-muted-foreground">
+            Nenhum lead com estado identificado ainda. O estado vem do cadastro do ERP, da resposta do lead ou do DDD do telefone.
+          </p>
+        )}
 
         <div className="mt-3 flex shrink-0 flex-col rounded-2xl bg-tinta px-4 pb-4 pt-5 text-tinta-foreground">
           <div ref={mapRef} className="tabmapa-svg relative mx-auto flex w-full max-w-[500px] justify-center">
@@ -153,10 +179,12 @@ function TabMapaBase() {
             <span>{porReceita ? "mais receita" : "mais leads"}</span>
           </div>
         </div>
-        <div className="mt-3 flex flex-wrap justify-between gap-x-4 gap-y-1 text-[11px] font-semibold text-muted-foreground">
-          <span>Estado vem da resposta do lead ou do DDD do telefone</span>
-          <span><b className="text-foreground">{unmapped.toLocaleString("pt-BR")} leads</b> sem estado identificado</span>
-        </div>
+        {!vazio && (
+          <div className="mt-3 flex flex-wrap justify-between gap-x-4 gap-y-1 text-[11px] font-semibold text-muted-foreground">
+            <span>Estado vem do cadastro do ERP, da resposta do lead ou do DDD do telefone</span>
+            <span><b className="text-foreground">{unmapped.toLocaleString("pt-BR")} leads</b> sem estado identificado</span>
+          </div>
+        )}
       </div>
 
       {/* Drawer do estado */}

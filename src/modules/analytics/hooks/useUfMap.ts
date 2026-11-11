@@ -29,7 +29,9 @@ export function useUfHeatmap() {
     queryKey: ["uf-heatmap", organizationId],
     queryFn: async (): Promise<UfHeatmapRow[]> => {
       const { data, error } = await supabase.rpc("get_uf_heatmap", { p_org_id: organizationId ?? undefined });
-      if (error) throw new Error(`UF heatmap failed: ${error.message}`);
+      // O erro do PostgREST inteiro: `access_denied` vira a mensagem de
+      // permissão do catálogo, e não "erro desconhecido".
+      if (error) throw error;
       return (data ?? []) as UfHeatmapRow[];
     },
     enabled: !!organizationId,
@@ -45,7 +47,7 @@ export function useLeadsByUf(uf: string | null) {
     queryKey: ["uf-leads", organizationId, uf],
     queryFn: async (): Promise<UfLeadRow[]> => {
       const { data, error } = await supabase.rpc("get_leads_by_uf", { p_uf: uf!, p_org_id: organizationId ?? undefined });
-      if (error) throw new Error(`UF leads failed: ${error.message}`);
+      if (error) throw error;
       return (data ?? []) as UfLeadRow[];
     },
     enabled: !!organizationId && !!uf,
