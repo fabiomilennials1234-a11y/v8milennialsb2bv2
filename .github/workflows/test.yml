@@ -69,9 +69,13 @@ jobs:
       # ADR-0024 §4: só o governor assina credencial de chamada. Nem o
       # dependency-cruiser (exclui ^supabase/) nem o ESLint boundaries
       # (include: src/**) enxergam supabase/functions — a barreira é este script.
+      #
+      # Deno em versão exata, a mesma do job de testes de edge (ver o comentário
+      # lá): com `v2.x`, uma versão nova do Deno (e do TypeScript embutido nele)
+      # mudaria o resultado do `deno check` sem nenhuma mudança no repo.
       - uses: denoland/setup-deno@v1
         with:
-          deno-version: v2.x
+          deno-version: "2.9.8"
       # `deno task test` roda com `--no-check`: nada em `_shared/` passava por
       # compilador. Custou dois `TS2339` vivos por meses sobre
       # `crypto.subtle.timingSafeEqual` (função que não existe no Deno 2) no
@@ -319,9 +323,29 @@ jobs:
       # antes de rodar um teste sequer. A main já corrigiu isto no a9b99c7e; a
       # develop não recebeu, e ninguém viu porque o job vinha `skipped` atrás do
       # `needs: [quality]` vermelho.
+      #
+      # Versão exata, não `v2.x`: o lock de teste é congelado, e um Deno novo que
+      # reescrevesse o formato do lock reprovaria aqui sem ninguém ter mudado
+      # nada. Subir de versão é um PR deliberado, que regenera o deno.test.lock.
       - uses: denoland/setup-deno@v1
         with:
-          deno-version: v2.x
+          deno-version: "2.9.8"
+      # Os testes rodam com `supabase/functions/deno.test.json` e
+      # `deno.test.lock`, NÃO com o deno.json/deno.lock de deploy, que ficam
+      # intocados. O esm.sh recompila a MESMA URL de versão exata (tslib@2.8.1
+      # em 21/10/2026, zod@3.23.8 em 26/10/2026), enquanto o cache de cada POP
+      # do Cloudflare segue servindo os bytes velhos. O integrity check do lock
+      # reprovava este job conforme o POP que o runner sorteava: 12 de 145
+      # execuções entre 28/10 e 11/11/2026. A config de teste resolve
+      # supabase-js, jose e zod por npm: de versão exata (registro imutável,
+      # sha512 no lock). A guarda impede que ela derive do deno.json e que o
+      # esm.sh volte ao lock. O --frozen reprova import novo sem lock
+      # atualizado: rode `npm run test:edge:lock` (mesma descoberta de testes
+      # deste job) e commite o deno.test.lock.
+      - name: Config de teste do edge — self-test da guarda (vermelhos + controles positivos)
+        run: bash scripts/check-edge-test-config.test.sh
+      - name: Config de teste do edge (sem deriva do deno.json, lock próprio congelado, zero esm.sh)
+        run: node scripts/check-edge-test-config.mjs
       - run: npm run test:edge
       - run: npm run test:edge:coverage
       - name: Upload edge coverage artifact
