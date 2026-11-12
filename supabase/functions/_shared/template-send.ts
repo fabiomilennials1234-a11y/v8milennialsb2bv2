@@ -141,6 +141,7 @@ export function templateSemVariaveis(template: NotificameTemplate): boolean {
 export interface ParametroDeTexto {
   type: "text";
   text: string;
+  parameter_name?: string;
 }
 
 /**
@@ -225,7 +226,15 @@ export function montarComponentesDeEnvio(
   const out: ComponenteDeEnvio[] = [];
 
   const parametrosDe = (tokens: string[]) =>
-    tokens.map((t) => ({ type: "text" as const, text: (valores[t] ?? "").trim() }));
+    tokens.map((t) => ({
+      type: "text" as const,
+      text: (valores[t] ?? "").trim(),
+      // Named templates require the token name; positional templates forbid it.
+      ...(template.parameterFormat === "NAMED" ||
+          (template.parameterFormat == null && !/^\d+$/.test(t))
+        ? { parameter_name: t }
+        : {}),
+    }));
 
   // CABEÇALHO DE MÍDIA. O formato do parâmetro segue o da Graph: a chave é o
   // próprio tipo em minúscula, e dentro dela um `link`. Trocar por `url` faz a
