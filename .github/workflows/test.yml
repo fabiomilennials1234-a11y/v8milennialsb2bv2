@@ -72,7 +72,9 @@ jobs:
       #
       # Deno em versão exata, a mesma do job de testes de edge (ver o comentário
       # lá): com `v2.x`, uma versão nova do Deno (e do TypeScript embutido nele)
-      # mudaria o resultado do `deno check` sem nenhuma mudança no repo.
+      # mudaria o resultado do `deno check` sem nenhuma mudança no repo. Isso
+      # trava o Deno, não os tipos que o check baixa do esm.sh: ver o passo
+      # "Type-check shared edge modules" abaixo.
       - uses: denoland/setup-deno@v1
         with:
           deno-version: "2.9.8"
@@ -89,6 +91,16 @@ jobs:
       # funções em si NÃO entram: carregam dívida própria (medido em 2026-08-02:
       # 106 erros só em 4 delas), e portão que nasce vermelho é portão que alguém
       # desliga na primeira sexta-feira.
+      #
+      # Este check NÃO ficou determinístico: roda com o deno.json e o deno.lock
+      # de DEPLOY, sem --frozen, e baixa do esm.sh. No run 43073045996 (PR
+      # #2494, 11/11/2026) foram 56 arquivos: 2 módulos com hash no deno.lock
+      # (supabase-js@2.105.4 e zod@3.23.8) e 54 declarações de tipo (.d.ts e
+      # .d.mts) sem hash nenhum. Um .d.ts que o esm.sh recompile pode mudar o
+      # resultado sem mudança no repo, e uma falha do esm.sh aqui reprova este
+      # job e deixa o de edge (`needs: [quality]`) sem rodar. O determinismo do
+      # PR #2494 vale só para o job de edge; tirar o esm.sh daqui é o PR-2
+      # (migrar o deploy para npm:), decisão do CTO.
       - name: Type-check shared edge modules (deno check _shared/)
         run: npm run typecheck:edge-shared
       - name: VoIP choke barrier (só o governor assina)
@@ -338,13 +350,22 @@ jobs:
       # reprovava este job conforme o POP que o runner sorteava: 12 de 145
       # execuções entre 28/10 e 11/11/2026. A config de teste resolve
       # supabase-js, jose e zod por npm: de versão exata (registro imutável,
-      # sha512 no lock). A guarda impede que ela derive do deno.json e que o
-      # esm.sh volte ao lock. O --frozen reprova import novo sem lock
-      # atualizado: rode `npm run test:edge:lock` (mesma descoberta de testes
-      # deste job) e commite o deno.test.lock.
+      # sha512 no lock). A guarda impede que ela derive do deno.json (o mesmo
+      # pacote e a mesma versão de cada alvo esm.sh do deploy; num range, a do
+      # redirect do deno.lock de deploy), que algo remapeie a resolução por fora
+      # de `imports` (scopes, importMap, links, patch, workspace) e que o esm.sh
+      # volte ao lock. O --frozen reprova import novo sem lock atualizado: rode
+      # `npm run test:edge:lock`, que EXECUTA a suíte sem congelar (import()
+      # montado em runtime, como o de oraculo-turno/http-fixture.ts, só entra no
+      # lock rodando), e commite o deno.test.lock.
+      #
+      # Determinístico vale para ESTE job, que baixa zero do esm.sh. Ele só roda
+      # depois do `quality`, cujo `deno check _shared/` ainda baixa .d.ts do
+      # esm.sh pela config de deploy (ver o comentário lá). Isso fica para o
+      # PR-2, que migra o deploy para npm:, decisão do CTO.
       - name: Config de teste do edge — self-test da guarda (vermelhos + controles positivos)
         run: bash scripts/check-edge-test-config.test.sh
-      - name: Config de teste do edge (sem deriva do deno.json, lock próprio congelado, zero esm.sh)
+      - name: Config de teste do edge (mesmo pacote e versão do deno.json, lock próprio congelado, zero esm.sh)
         run: node scripts/check-edge-test-config.mjs
       - run: npm run test:edge
       - run: npm run test:edge:coverage

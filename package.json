@@ -55,7 +55,7 @@
     "typecheck:edge-shared": "cd supabase/functions && deno task check:shared",
     "test:edge": "cd supabase/functions && deno task --config deno.test.json --frozen test",
     "test:edge:coverage": "cd supabase/functions && rm -rf .coverage && deno task --config deno.test.json --frozen test:coverage && deno task --config deno.test.json --frozen coverage:report",
-    "test:edge:lock": "cd supabase/functions && deno test --config deno.test.json --frozen=false --no-check --no-run",
+    "test:edge:lock": "cd supabase/functions && deno test --config deno.test.json --frozen=false --allow-env --allow-net --allow-read --no-check",
     "test:all": "npm run test:unit && npm run test:integration && npm run test:e2e",
     "test:secrets": "bash scripts/test-secret-scan.sh",
     "vault:lint": "node scripts/vault-lint.mjs",
