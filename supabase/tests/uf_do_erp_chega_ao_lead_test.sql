@@ -83,9 +83,9 @@ SELECT ok(NOT (SELECT prosecdef FROM pg_proc WHERE oid = 'public.upsell_clients_
   'S1: a função do trigger é SECURITY INVOKER');
 SELECT ok(NOT has_function_privilege('authenticated', 'public.upsell_clients_uf_para_lead()', 'EXECUTE'),
   'S2: ninguém chama a função do trigger direto');
-SELECT ok(position('AFTER INSERT OR UPDATE OF erp_uf, lead_id ON public.upsell_clients'
+SELECT ok(position('AFTER INSERT OR DELETE OR UPDATE OF erp_uf, lead_id, organization_id ON public.upsell_clients'
                    IN pg_get_triggerdef((SELECT oid FROM pg_trigger WHERE tgname = 'trg_upsell_clients_uf_para_lead'))) > 0,
-  'S3: dispara só quando a UF do ERP ou o vínculo mudam');
+  'S3: dispara só quando a UF do ERP ou o vínculo (lead, org) mudam, e quando o cliente é apagado (20280111000900)');
 
 SELECT * FROM finish();
 ROLLBACK;
