@@ -479,7 +479,9 @@ export function useDealCardData(entryId: string | null, leadId: string | null, i
 
       movimentacoes,
       nota: typeof entry?.notes === "string" ? entry.notes : "",
-      notaIndisponivel: typeof entry?.notes !== "string",
+      // A coluna é nullable: NULL significa que ainda não há anotação.
+      // undefined (entrada ausente/erro/projeção incompleta) segue bloqueado.
+      notaIndisponivel: entry?.notes !== null && typeof entry?.notes !== "string",
 
       /**
        * As tarefas do negócio entram na MESMA lista da aba, e antes das
