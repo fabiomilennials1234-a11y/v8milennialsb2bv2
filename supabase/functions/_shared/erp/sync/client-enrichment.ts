@@ -8,6 +8,7 @@
  * que o cliente atualizado não tem.
  */
 
+import { ufBrasileira } from "../../br-uf.ts";
 import { CanonicalClient } from "../types.ts";
 import { type OwnerMap, resolveResponsible } from "./owner-map.ts";
 
@@ -122,6 +123,17 @@ export function seedLastOrderAt(
  * disso ser percebido. Qual ERP é informação de `upsell_clients.external_source`,
  * não desta coluna.
  *
+ * 🔴 UF só quando é uma das 27 do Brasil (`ufBrasileira`, espelho de
+ * `public.uf_brasileira`). O mapper do Toth aceita qualquer par de letras, e
+ * cliente do exterior chega com 'EX' — informação legítima na Carteira, que a
+ * guarda em `erp_uf` (ver `clientEnrichmentColumns`, que não filtra). No lead,
+ * o CHECK `leads_uf_check` só aceita as 27: 'EX' derrubava o INSERT do lead
+ * novo, e o cliente do exterior nunca era criado; na adoção, derrubava o
+ * UPDATE do lead, e o `erp_code` caía junto. Fora das 27, o lead não recebe UF
+ * do ERP — fica sem, ou com o palpite do DDD —, a mesma decisão que
+ * `public.uf_brasileira` toma no trigger que leva `erp_uf` ao lead
+ * (`trg_upsell_clients_uf_para_lead`).
+ *
  * `source` fica no parâmetro porque a assinatura é compartilhada com o resto da
  * camada de sync — e para o dia em que o vocabulário distinguir integradores.
  */
@@ -131,8 +143,9 @@ export function leadEnrichmentColumns(
 ): Record<string, unknown> {
   const cols: Record<string, unknown> = {};
   if (client.segment !== undefined && client.segment !== null) cols.segment = client.segment;
-  if (client.uf) {
-    cols.uf = client.uf;
+  const uf = ufBrasileira(client.uf);
+  if (uf) {
+    cols.uf = uf;
     cols.uf_source = "erp";
   }
   if (client.externalId) cols.erp_code = client.externalId;
