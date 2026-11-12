@@ -86,7 +86,7 @@ describe('AuthContext', () => {
 
   // ── 3 ──────────────────────────────────────────────────
   it('signIn calls supabase.auth.signInWithPassword with email and password', async () => {
-    mockSignInWithPassword.mockResolvedValue({ error: null });
+    mockSignInWithPassword.mockResolvedValue({ data: { session: null, user: null }, error: null });
 
     const { result } = renderHook(() => useAuth(), { wrapper: createWrapper() });
 

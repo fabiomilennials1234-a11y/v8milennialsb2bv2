@@ -449,7 +449,7 @@ export async function createBlastPlan(
   const drainedEntirely = lotsReleased >= 1 && lotsTotal <= 1 && deferredRows.length === 0;
   const patch: Partial<PlanRow> = {
     lots_released: lotsReleased,
-    status: drainedEntirely ? "completed" : "active",
+    status: drainedEntirely && !ehCanalOficial(singleInstance) ? "completed" : "active",
     next_release_date: drainedEntirely ? null : addDaysIso(todayDate, 1),
   };
   await deps.store.updatePlan(planId, patch);
@@ -593,7 +593,7 @@ async function createMultiNumberBlastPlan(
     patch.lots_total = Math.max(lotsTotal, lotsReleased + 1);
   }
   const drainedEntirely = lotsReleased >= 1 && lotsTotal <= 1 && deferredRows.length === 0;
-  patch.status = drainedEntirely ? "completed" : "active";
+  patch.status = drainedEntirely && !numbers.some((n) => ehCanalOficial(n.instance)) ? "completed" : "active";
   patch.next_release_date = drainedEntirely ? null : addDaysIso(todayDate, 1);
   await deps.store.updatePlan(planId, patch);
 
@@ -683,6 +683,12 @@ export async function releaseBlastPlanLot(
   if (!instance) return { ...empty, error: "instance_not_found" };
   // Tenant guard: the resolved instance must belong to the plan's org.
   if (instance.organization_id !== orgId) return { ...empty, error: "instance_org_mismatch" };
+
+  // Released official lots belong to the recipient worker until it drains them.
+  // Re-running the releaser must not complete the plan or charge its budget again.
+  if (ehCanalOficial(instance) && lotIndex >= plan.lots_total) {
+    return { ...empty, ok: true };
+  }
 
   // ADR-0015 / #909: honour the plan's send window. When today (BRT) falls outside
   // the allowed days, defer the WHOLE release to the next valid day without
@@ -856,12 +862,25 @@ export async function releaseBlastPlanLot(
   // the last one AND nothing deferred forward.
   const nextLotsReleased = lotIndex + 1;
   const lastLot = nextLotsReleased >= plan.lots_total;
-  const completed = lastLot && deferred === 0;
+  const allReleased = lastLot && deferred === 0;
+  let completed = allReleased && !ehCanalOficial(instance);
+  if (allReleased && ehCanalOficial(instance)) {
+    // A fully filtered final lot has no worker claim to finish the plan.
+    // Check every released lot, including earlier recipients still in flight.
+    let pending = false;
+    for (let index = 0; index < nextLotsReleased; index++) {
+      if ((await deps.store.getLotRecipients(params.planId, index)).some((r) => r.status === "pending")) {
+        pending = true;
+        break;
+      }
+    }
+    completed = !pending;
+  }
 
   await deps.store.updatePlan(params.planId, {
     lots_released: nextLotsReleased,
     status: completed ? "completed" : "active",
-    next_release_date: completed ? null : addDaysIso(todayDate, 1),
+    next_release_date: allReleased ? null : addDaysIso(todayDate, 1),
   });
 
   return { ok: true, sent, deferred, skippedRecency, skippedReplied, completed, reachBlockedInstances: reachBlocked };

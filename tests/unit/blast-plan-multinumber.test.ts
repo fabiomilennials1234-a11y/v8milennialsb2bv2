@@ -127,6 +127,18 @@ const baseParams = (overrides: any = {}) => ({
 });
 
 describe("createBlastPlan — multi-number distribution", () => {
+  it("keeps official recipients pending and the one-lot plan active", async () => {
+    const { store, state } = planStore();
+    const dispatch = okDispatch();
+    const out = await createBlastPlan({ store, dispatch, usageSource: usageStub().source,
+      instanceUsageSource: instanceUsageStub().source }, baseParams({ leads: leads(10),
+      numbers: [{ instance: { ...numA, provider: "notificame" }, cap: 80 }],
+      template: { name: "t", language: "pt_BR", components: [] } }));
+    expect(out.ok).toBe(true);
+    expect(state.plans.get(out.planId)).toMatchObject({ status: "active", lots_released: 1, next_release_date: null });
+    expect(state.recipients.every((r) => r.status === "pending")).toBe(true);
+    expect(dispatch).not.toHaveBeenCalled();
+  });
   it("splits the audience across numbers and stamps each recipient's instance_id", async () => {
     const { store, state } = planStore();
     const usage = usageStub();
