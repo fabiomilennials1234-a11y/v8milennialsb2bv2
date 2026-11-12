@@ -6,6 +6,8 @@ import { randomUUID, createHash } from 'node:crypto';
 
 const bucket = 'product-materials';
 const hash = bytes => createHash('sha256').update(bytes).digest('hex');
+// Storage authorization probes never carry customer content to foreign paths.
+export const probeBytes = Buffer.from('%PDF-1.4\n% Synthetic permission probe; no customer data\n%%EOF\n');
 
 export async function verifyProductMaterialAccess({
   client, anonymous, organizationId, productId, files,
@@ -26,8 +28,8 @@ export async function verifyProductMaterialAccess({
   const denyUpload = async (who, path, label) => {
     // Track even unexpected successes so a failed test still cleans them up.
     pendingPaths.add(path);
-    const result = await who.storage.from(bucket).upload(path, files[0].bytes, {
-      contentType: files[0].type, upsert: false,
+    const result = await who.storage.from(bucket).upload(path, probeBytes, {
+      contentType: 'application/pdf', upsert: false,
     });
     if (result.error) pendingPaths.delete(path);
     assert.ok(result.error, `${label}: upload must be denied`);
