@@ -11,7 +11,10 @@ vi.mock("@/integrations/supabase/client", () => ({
     rpc: (fn: string, args: unknown) => (fn === "get_uf_heatmap" ? rpc.heatmap(args) : rpc.leads(args)),
   },
 }));
-vi.mock("@/modules/identity", () => ({ useOrganization: () => ({ organizationId: "org-cj" }) }));
+vi.mock("@/modules/identity", () => ({
+  useOrganization: () => ({ organizationId: "org-cj" }),
+  useIdentity: () => ({ userId: "user-cj" }),
+}));
 
 import { TabMapa } from "./TabMapa";
 

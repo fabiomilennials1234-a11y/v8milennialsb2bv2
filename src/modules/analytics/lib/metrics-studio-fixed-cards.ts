@@ -78,7 +78,7 @@ export const FIXED_CARDS: Record<string, FixedCardEntry> = {
   "motivos-perda": { label: "Ganhos e perdas", descricao: "Desfechos dos negócios no período", tamanhoPadrao: { w: 328, h: 400 }, render: PerdasCard },
   "real-esperado": { label: "Realizado versus esperado", descricao: "Evolução em relação à meta do mês corrente", tamanhoPadrao: { w: 640, h: 400 }, render: RealEsperadoCard, requiresPerformance: true },
   "saude-funil": { label: "Saúde do funil", descricao: "Coortes, gargalos e conversões no período", tamanhoPadrao: { w: 984, h: 980 }, semMoldura: true, render: SaudeCard },
-  "mapa-clientes": { label: "Mapa de clientes", descricao: "Distribuição geográfica da base completa — sem filtro de período", tamanhoPadrao: { w: 984, h: 720 }, render: MapaCard },
+  "mapa-clientes": { label: "Mapa de clientes", descricao: "Distribuição geográfica da base que você vê — sem filtro de período", tamanhoPadrao: { w: 984, h: 720 }, render: MapaCard },
 };
 
 export type FixedCardId = keyof typeof FIXED_CARDS;

@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { useOrganization } from "@/modules/identity";
+import { useIdentity, useOrganization } from "@/modules/identity";
 
 export interface UfHeatmapRow {
   uf: string;
@@ -21,12 +21,19 @@ export interface UfLeadRow {
   created_at: string;
 }
 
-/** Agregado do mapa — base inteira da org, independente do período. */
+/**
+ * Agregado do mapa — a base que quem chama vê, independente do período.
+ *
+ * O resultado depende de QUEM chama (a RPC aplica a visibilidade de leads), e
+ * por isso a chave leva o usuário: trocar de conta na mesma aba nunca serve o
+ * mapa de outra pessoa a partir do cache.
+ */
 export function useUfHeatmap() {
   const { organizationId } = useOrganization();
+  const { userId } = useIdentity();
 
   return useQuery({
-    queryKey: ["uf-heatmap", organizationId],
+    queryKey: ["uf-heatmap", organizationId, userId],
     queryFn: async (): Promise<UfHeatmapRow[]> => {
       const { data, error } = await supabase.rpc("get_uf_heatmap", { p_org_id: organizationId ?? undefined });
       // O erro do PostgREST inteiro: `access_denied` vira a mensagem de
@@ -34,7 +41,7 @@ export function useUfHeatmap() {
       if (error) throw error;
       return (data ?? []) as UfHeatmapRow[];
     },
-    enabled: !!organizationId,
+    enabled: !!organizationId && !!userId,
     staleTime: 5 * 60 * 1000,
   });
 }
@@ -42,15 +49,17 @@ export function useUfHeatmap() {
 /** Relatório de um estado — leads + clientes + vendido, sob demanda no clique. */
 export function useLeadsByUf(uf: string | null) {
   const { organizationId } = useOrganization();
+  const { userId } = useIdentity();
 
   return useQuery({
-    queryKey: ["uf-leads", organizationId, uf],
+    // Nome e telefone do que quem chama vê: a chave leva o usuário (ver acima).
+    queryKey: ["uf-leads", organizationId, userId, uf],
     queryFn: async (): Promise<UfLeadRow[]> => {
       const { data, error } = await supabase.rpc("get_leads_by_uf", { p_uf: uf!, p_org_id: organizationId ?? undefined });
       if (error) throw error;
       return (data ?? []) as UfLeadRow[];
     },
-    enabled: !!organizationId && !!uf,
+    enabled: !!organizationId && !!userId && !!uf,
     staleTime: 60 * 1000,
   });
 }

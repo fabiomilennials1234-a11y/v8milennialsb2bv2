@@ -92,7 +92,7 @@ describe("TabMapa — estados do mapa", () => {
   it("vazio: o mapa fica, mas diz por que está cinza — sem inventar '0 sem estado'", () => {
     estado.heatmap.data = [];
     montar();
-    expect(screen.getByRole("status").textContent).toContain("Nenhum lead com estado identificado ainda");
+    expect(screen.getByRole("status").textContent).toContain("Nenhum lead com estado identificado entre os que você vê");
     expect(screen.queryByText(/sem estado identificado$/)).toBeNull();
   });
 
@@ -158,5 +158,23 @@ describe("TabMapa — drawer do estado", () => {
     abrirSC({ total_sold: 128_749.35 });
     expect(screen.getByText("Vendido")).toBeTruthy();
     expect(screen.getByText("R$ 129K")).toBeTruthy();
+  });
+
+  it("selo: cliente sem venda no caderno (cadastro do ERP) é só Cliente; quem comprou sem ser cliente mostra o valor", () => {
+    estado.leads = {
+      data: [
+        { id: "l1", name: "Cadastro do ERP", company: null, phone: null, uf_source: "erp", is_client: true, sold_value: 0, created_at: "2026-11-01" },
+        { id: "l2", name: "Comprou pelo CRM", company: null, phone: null, uf_source: "ddd", is_client: false, sold_value: 40_000, created_at: "2026-11-02" },
+        { id: "l3", name: "Só lead", company: null, phone: null, uf_source: "ddd", is_client: false, sold_value: 0, created_at: "2026-11-03" },
+      ],
+      isLoading: false,
+      isError: false,
+      error: null,
+      refetch: vi.fn(),
+    };
+    abrirSC({ total_sold: 40_000 });
+    expect(screen.getByText("Cliente")).toBeTruthy();
+    expect(screen.getByText("Lead · R$ 40K")).toBeTruthy();
+    expect(screen.getByText("Lead")).toBeTruthy();
   });
 });
