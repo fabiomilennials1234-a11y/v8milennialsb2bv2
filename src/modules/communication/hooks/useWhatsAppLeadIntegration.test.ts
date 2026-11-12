@@ -38,6 +38,7 @@ vi.mock("@/integrations/supabase/client", () => {
 
 vi.mock("@/modules/identity", () => ({
   useCurrentTeamMember: () => ({ data: { id: "tm-1", organization_id: "org-1" } }),
+  assertChatLeadCreationAllowed: vi.fn().mockResolvedValue(undefined),
   isVirtualTeamMember: () => false,
 }));
 

@@ -49,6 +49,7 @@ vi.mock("@/integrations/supabase/client", () => ({
 
 vi.mock("@/modules/identity", () => ({
   useCurrentTeamMember: () => teamMemberMock(),
+  assertChatLeadCreationAllowed: vi.fn().mockResolvedValue(undefined),
 }));
 
 import {

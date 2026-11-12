@@ -10,6 +10,7 @@
  */
 
 import { useState } from "react";
+import { useChatLeadCreation } from "@/modules/identity";
 import { Loader2 } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { LeadHeader } from "./header/LeadHeader";
@@ -42,6 +43,7 @@ export function LeadDetailContent({
   showHeader = false,
 }: LeadDetailContentProps) {
   const [activeTab, setActiveTab] = useState("info");
+  const chatCreation = useChatLeadCreation();
 
   const { data: lead, isLoading: leadLoading, refetch: refetchLead } = useLeadByPhone(phoneNumber);
   const { data: allPipelines = [], isLoading: pipelinesLoading } = useLeadAllPipelines(lead?.id ?? null);
@@ -69,6 +71,10 @@ export function LeadDetailContent({
         <div className="flex items-center justify-center py-12">
           <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
         </div>
+      ) : !lead && !chatCreation.allowed ? (
+        <p className="p-6 text-sm text-muted-foreground">
+          {chatCreation.isLoading ? "Verificando permissão..." : "Você não tem permissão para criar leads pelo chat nesta organização."}
+        </p>
       ) : !lead ? (
         <LeadCreateForm
           phoneNumber={phoneNumber}

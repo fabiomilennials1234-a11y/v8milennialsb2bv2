@@ -3,6 +3,7 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { LeadDetailContent } from "@/modules/leads/components/lead/LeadDetailContent";
+vi.mock("@/modules/identity", () => ({ useChatLeadCreation: () => ({ allowed: true, isLoading: false }) }));
 
 const state = vi.hoisted(() => ({
   lead: { id: "lead-1", name: "ELIEZER 7937 SEXTA", company: "", email: "", notes: "", phone: "5515996310303", segment: "", interest: "" },

@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { useCurrentTeamMember } from "@/modules/identity";
+import { useCurrentTeamMember, assertChatLeadCreationAllowed } from "@/modules/identity";
 import { responsavelParaGravar } from "@/modules/communication/lib/lead-responsible";
 import { FALLBACK_STAGES } from "@/contracts/pipe";
 import { normalizePhone } from "@/lib/normalizePhone";
@@ -238,6 +238,8 @@ export function useCreateLeadFromWhatsApp() {
       if (!teamMember?.organization_id) {
         throw new Error("Usuário não está vinculado a uma organização");
       }
+
+      await assertChatLeadCreationAllowed(teamMember.organization_id);
 
       const normalizedPhone = normalizePhone(phone) || phone.replace(/\D/g, "");
 

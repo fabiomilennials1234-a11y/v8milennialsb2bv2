@@ -24,7 +24,7 @@
  */
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { useCurrentTeamMember } from "@/modules/identity";
+import { useCurrentTeamMember, assertChatLeadCreationAllowed } from "@/modules/identity";
 import { chatQueryKeys } from "./shared/queryKeys";
 import type { LeadDestination } from "@/modules/communication/hooks/useWhatsAppLeadIntegration";
 
@@ -143,6 +143,7 @@ export function useCreateLeadFromSocial(messagingChannelId: string | null) {
 
       const name = input.name.trim();
       if (!name) throw new Error("Nome é obrigatório");
+      await assertChatLeadCreationAllowed(organizationId);
 
       const { data, error } = await (supabase as any).rpc(
         "create_lead_from_social_conversation",

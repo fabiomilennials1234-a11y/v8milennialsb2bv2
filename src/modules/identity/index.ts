@@ -58,6 +58,8 @@ export {
 } from "./org-team";
 export type { TeamMember } from "./org-team";
 export { useAvatarMap } from "./hooks/useAvatarMap";
+export { useChatLeadCreation } from "./permissions/hooks/useChatLeadCreation";
+export { assertChatLeadCreationAllowed } from "./permissions/lib/chatLeadCreation";
 
 // ── Subscription guard ──────────────────────────────────────────────────────
 export { SubscriptionProtectedRoute } from "./components/SubscriptionProtectedRoute";

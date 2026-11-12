@@ -13,8 +13,10 @@
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type React from "react";
-import { beforeAll, describe, expect, it, vi } from "vitest";
+import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { TooltipProvider } from "@/components/ui/tooltip";
+const chatCreation = vi.hoisted(() => ({ allowed: true, isLoading: false }));
+vi.mock("@/modules/identity", () => ({ useChatLeadCreation: () => chatCreation }));
 
 // Radix (dropdown + Popper) usa APIs de ponteiro e ResizeObserver que o jsdom
 // não implementa. Sem estes stubs o menu nem abre.
@@ -88,6 +90,21 @@ const linhaDoNome = () => nome().parentElement!;
 const blocoDoContato = () => nome().closest('[role="button"]')!;
 
 describe("ChatHeader — o contato é o último a perder espaço", () => {
+  beforeEach(() => { chatCreation.allowed = true; });
+  it("oculta criação quando a organização restringe o usuário", () => {
+    chatCreation.allowed = false;
+    montar({ hasLead: false });
+    expect(screen.queryByRole("button", { name: "Criar lead" })).not.toBeInTheDocument();
+  });
+  it("mantém consulta de lead existente para usuário sem criação", () => {
+    chatCreation.allowed = false;
+    montar({ hasLead: true });
+    expect(screen.getByRole("button", { name: "Ver lead" })).toBeInTheDocument();
+  });
+  it("mostra criação para usuário autorizado", () => {
+    montar({ hasLead: false });
+    expect(screen.getByRole("button", { name: "Criar lead" })).toBeInTheDocument();
+  });
   it("oferece ligação para contatos, mas não para grupos", () => {
     montar({ isGroup: true });
     expect(screen.queryByRole("button", { name: "Ligar" })).not.toBeInTheDocument();
