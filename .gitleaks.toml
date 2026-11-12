@@ -75,6 +75,14 @@ paths = [
   '''(^|/)conftest\.py$''',
   # This file plants fake service_role JWTs / sbp_ PATs to prove the rules fire.
   '''(^|/)scripts/test-secret-scan\.sh$''',
+  # The edge TEST lockfile (see scripts/check-edge-test-config.mjs). Lockfiles
+  # hold public integrity hashes — sha256 of each remote module, sha512 of each
+  # npm tarball — and std paths like `node/internal/crypto/keys.ts` followed by
+  # a 64-hex hash trip `generic-api-key`. gitleaks' default allowlist already
+  # skips `deno.lock` by file name; this is the same exemption for the one lock
+  # that has a different name. One path on purpose: no other file rides on it.
+  # `(^|/)` like the entries above: the tree scan reports absolute paths.
+  '''(^|/)supabase/functions/deno\.test\.lock$''',
 ]
 
 # Regex allowlist: values that LOOK like secrets but are public-by-design.
