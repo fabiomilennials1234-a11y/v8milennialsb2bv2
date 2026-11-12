@@ -103,6 +103,7 @@ function makeAdmin(tabelas: Record<string, Record<string, unknown>[]>) {
       maybeSingle: () => Promise.resolve({ data: linhas[0] ?? null, error: null }),
       then(resolve: (v: unknown) => unknown) {
         if (patch) {
+          for (const row of linhas) Object.assign(row, patch);
           escritas.push({ tabela, payload: patch, id: alvo });
           patch = null;
           return Promise.resolve({ data: null, error: null }).then(resolve);
@@ -149,6 +150,45 @@ function deps(over: Record<string, unknown> = {}) {
 }
 
 describe("processarTiqueDoDisparo", () => {
+  it("personalizes stored definitions before transport and retains recipient dedup keys", async () => {
+    const rows = [linha({ id: "r1", variable_snapshot: { nome: "Ana" } }),
+      linha({ id: "r2", phone: "5511999997777", variable_snapshot: { nome: "Bia" } })];
+    const admin = makeAdmin({ __claim: rows, blast_plan_recipients: rows,
+      blast_plans: [{ ...PLANO, template: { ...PLANO.template, components: [
+        { type: "BODY", text: "Olá {{nome}}" },
+        { type: "BUTTONS", buttons: [{ type: "QUICK_REPLY", text: "Sim" }] },
+      ] } }], whatsapp_instances: [INSTANCIA] });
+    const { d, enviarTemplate } = deps({ supabaseAdmin: admin.client });
+    await processarTiqueDoDisparo(d as never, { batchSize: 20, perOrgCap: 5, pausaMs: 0 });
+    expect(enviarTemplate.mock.calls.map(([call]) => call)).toMatchObject([
+      { trackId: "r1", trackSource: "mass_send", template: { previewText: "Olá Ana", components: [
+        { type: "body", parameters: [{ type: "text", text: "Ana", parameter_name: "nome" }] },
+      ] } },
+      { trackId: "r2", trackSource: "mass_send", template: { previewText: "Olá Bia" } },
+    ]);
+  });
+
+  for (const scenario of ["drained", "pending", "future_lot", "paused", "other_org"] as const) {
+    it(`completion is conditional and tenant-scoped: ${scenario}`, async () => {
+      const current = linha();
+      const rows = [current];
+      if (scenario === "pending") rows.push(linha({ id: "r2", claimed_at: null }));
+      const plan = { ...PLANO, lots_total: scenario === "future_lot" ? 2 : 1, lots_released: 1,
+        status: scenario === "paused" ? "paused" : "active" };
+      const unrelated = { ...PLANO, id: "other-plan", organization_id: "org-2", lots_total: 1, lots_released: 1 };
+      const admin = makeAdmin({ __claim: [current], blast_plan_recipients: rows,
+        blast_plans: [plan, unrelated], whatsapp_instances: [INSTANCIA] });
+      const { d, enviarTemplate } = deps({ supabaseAdmin: admin.client });
+      await processarTiqueDoDisparo(d as never, { batchSize: 20, perOrgCap: 5, pausaMs: 0 });
+      expect(plan.status).toBe(scenario === "drained" || scenario === "other_org" ? "completed" : scenario === "paused" ? "paused" : "active");
+      expect(unrelated.status).toBe("active");
+      expect(enviarTemplate).toHaveBeenCalledTimes(scenario === "paused" ? 0 : 1);
+      // Even if a stale claim is returned again, a terminal row is not resent.
+      await processarTiqueDoDisparo(d as never, { batchSize: 20, perOrgCap: 5, pausaMs: 0 });
+      expect(enviarTemplate).toHaveBeenCalledTimes(scenario === "paused" ? 0 : 1);
+    });
+  }
+
   it("reivindica, envia uma a uma e marca a linha como enviada", async () => {
     const { d, admin, enviarTemplate } = deps();
 

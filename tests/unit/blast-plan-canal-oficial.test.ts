@@ -30,7 +30,7 @@
  */
 import { describe, it, expect, vi } from "vitest";
 
-const { createBlastPlan } = await import(
+const { createBlastPlan, releaseBlastPlanLot } = await import(
   "../../supabase/functions/_shared/quick-blast/blast-plan.ts"
 );
 
@@ -110,6 +110,24 @@ function orgUsageStub(initialUsed = 0) {
 const okDispatch = () => vi.fn(async () => ({ sender_job_id: "j", uazapi_sender_id: "u" }));
 
 describe("createBlastPlan — regime OFICIAL", () => {
+  it("the final released lot stays active until the recipient worker drains it", async () => {
+    const { store, state } = planStore();
+    state.plans.set("p", { id: "p", organization_id: "org-1", status: "active",
+      instance_id: OFICIAL.id, instance: OFICIAL, lots_released: 1, lots_total: 2,
+      template: TEMPLATE, message: "Olá!", refinements: {} });
+    state.recipients.push({ plan_id: "p", lead_id: "l", phone: "5511999998888", lot_index: 1,
+      status: "pending", variable_snapshot: { nome: "Ana" } });
+    const dispatch = okDispatch();
+    const usage = orgUsageStub();
+    const deps = { store, dispatch, usageSource: usage.source } as any;
+    const result = await releaseBlastPlanLot(deps, { planId: "p", dailyBudget: 100 });
+    expect(result.completed).toBe(false);
+    expect(state.plans.get("p")).toMatchObject({ status: "active", lots_released: 2, next_release_date: null });
+    expect(state.recipients[0].status).toBe("pending");
+    await releaseBlastPlanLot(deps, { planId: "p", dailyBudget: 100 });
+    expect(usage.state.increments).toEqual([1]);
+    expect(dispatch).not.toHaveBeenCalled();
+  });
   it("não despacha pelo fornecedor e não marca ninguém como enviado", async () => {
     const dispatch = okDispatch();
     const { store, state } = planStore();
@@ -154,6 +172,8 @@ describe("createBlastPlan — regime OFICIAL", () => {
 
     const plano = state.plans.get((out as any).planId);
     expect(plano.lots_released).toBe(1);
+    expect(plano.status).toBe("active");
+    expect(plano.next_release_date).toBeNull();
     expect(state.recipients.filter((r) => r.lot_index === 0)).toHaveLength(10);
   });
 
@@ -208,6 +228,7 @@ describe("createBlastPlan — regime CHIP segue idêntico (critério 8)", () => 
     expect(out.ok).toBe(true);
     expect(dispatch).toHaveBeenCalledTimes(1);
     expect(state.recipients.filter((r) => r.status === "sent")).toHaveLength(10);
+    expect(state.plans.get((out as any).planId).status).toBe("completed");
     expect(org.state.increments).toEqual([10]);
   });
 });

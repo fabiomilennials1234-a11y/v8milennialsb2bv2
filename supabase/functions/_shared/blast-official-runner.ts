@@ -28,6 +28,7 @@ import {
   regimeDoProvedor,
   type TemplateDoDisparo,
 } from "./decisao-do-disparo.ts";
+import { prepararTemplateDoDisparo } from "./blast-template-send.ts";
 
 /**
  * O `trackSource` do envio.
@@ -48,10 +49,13 @@ export interface LinhaDoDisparo {
   status: string;
   claimed_at: string | null;
   lot_index: number;
+  variable_snapshot?: Record<string, unknown> | null;
 }
 
 /** O Template do plano, já no formato que o transporte espera. */
 export interface TemplateDoPlano extends TemplateDoDisparo {
+  parameterFormat?: "NAMED" | "POSITIONAL" | null;
+  parameter_format?: "NAMED" | "POSITIONAL" | null;
   previewText: string;
   buttonLabels: string[];
 }
@@ -136,6 +140,8 @@ interface LinhaDePlano {
   instance_id: string | null;
   template: TemplateDoPlano | null;
   post_send_target: unknown;
+  lots_total: number;
+  lots_released: number;
 }
 
 /** Instância como o worker a usa: opaca, exceto o id que indexa o mapa. */
@@ -251,10 +257,18 @@ export async function processarTiqueDoDisparo(
     if (!primeiro) await deps.esperar(cfg.pausaMs);
     primeiro = false;
 
+    let template: TemplateDoPlano;
+    try {
+      template = prepararTemplateDoDisparo(ctx!.plano.template!, linha.variable_snapshot ?? {});
+    } catch (error) {
+      await marcar(deps, linha.id, { status: "failed", reason: (error as Error).message });
+      r.falhas += 1;
+      continue;
+    }
     const envio = await deps.enviarTemplate({
       instance: ctx!.instance,
       phone: linha.phone!,
-      template: ctx!.plano.template!,
+      template,
       trackSource: TRACK_SOURCE_DO_DISPARO,
       trackId: linha.id,
     });
@@ -301,10 +315,24 @@ export async function processarTiqueDoDisparo(
     }
   }
 
+  for (const [planId, ctx] of contexto) {
+    if (ctx.regime !== "oficial" || ctx.plano.status !== "active" ||
+        !(ctx.lotsTotal > 0 && ctx.lotsReleased >= ctx.lotsTotal)) continue;
+    const { data, error } = await deps.supabaseAdmin.from("blast_plan_recipients")
+      .select("id").eq("plan_id", planId).eq("status", "pending");
+    // Fail closed on query errors: an empty response is not proof of completion.
+    if (error || !data || data.length) continue;
+    await deps.supabaseAdmin.from("blast_plans")
+      .update({ status: "completed", next_release_date: null })
+      .eq("id", planId).eq("organization_id", ctx.orgId).eq("status", "active")
+      .eq("lots_released", ctx.lotsReleased).eq("lots_total", ctx.lotsTotal);
+  }
   return r;
 }
 
 interface ContextoDoPlano {
+  lotsTotal: number;
+  lotsReleased: number;
   plano: { status: string; template: TemplateDoPlano | null };
   instance: Record<string, unknown>;
   regime: "chip" | "oficial";
@@ -326,7 +354,7 @@ async function carregarContexto(
 
   const { data: planos } = await deps.supabaseAdmin
     .from("blast_plans")
-    .select("id, organization_id, status, instance_id, template, post_send_target")
+    .select("id, organization_id, status, instance_id, template, post_send_target, lots_total, lots_released")
     .in("id", planIds);
 
   const instanceIds = [
@@ -351,6 +379,8 @@ async function carregarContexto(
     const instance = p.instance_id ? porInstancia.get(p.instance_id) : undefined;
     if (!instance) continue;
     mapa.set(p.id, {
+      lotsTotal: p.lots_total,
+      lotsReleased: p.lots_released,
       plano: { status: p.status, template: p.template ?? null },
       instance,
       // O regime vem da FONTE ÚNICA do servidor. Comparar o provedor à mão aqui
