@@ -797,6 +797,17 @@ function normalizarParametro(bruto: unknown): TemplateSendParameter {
   const p = (bruto ?? {}) as Record<string, unknown>;
   const tipo = String(p.type ?? "").toLowerCase();
 
+  if (tipo === "text") {
+    const name = p.parameter_name ?? p.parameterName;
+    return {
+      type: "text",
+      text: p.text as string,
+      ...(typeof name === "string" && name.trim()
+        ? { parameterName: name.trim() }
+        : {}),
+    };
+  }
+
   if (tipo === "image" || tipo === "video" || tipo === "document") {
     const aninhado = (p[tipo] ?? {}) as Record<string, unknown>;
     const link = typeof p.link === "string" && p.link
