@@ -196,6 +196,13 @@ jobs:
           node-version: '24'
           cache: 'npm'
       - run: npm ci
+      - name: Meeting preservation and local lead-storage fixture regression tests
+        run: node --test tests/integration/meeting-historical-pipeline.test.mjs tests/integration/lead-storage-fixture.test.mjs
+      - name: Mirror private lead storage in the local integration database
+        env:
+          PGPASSWORD: postgres
+          PGOPTIONS: '-c app.ci_local_fixture=true'
+        run: psql -v ON_ERROR_STOP=1 -h 127.0.0.1 -p 54322 -U postgres -d postgres -f scripts/ci/lead-storage-fixture.sql
       - run: npm run test:integration
         env:
           SUPABASE_URL: http://localhost:54321
