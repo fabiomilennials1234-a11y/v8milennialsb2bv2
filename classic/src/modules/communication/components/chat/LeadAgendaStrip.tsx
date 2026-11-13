@@ -1,8 +1,13 @@
 import { useMemo, useState } from "react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { CalendarDays, ChevronDown, ChevronUp } from "lucide-react";
-import { useMeetings } from "@/modules/engagement";
+import { CalendarDays, ChevronDown, ChevronUp, Pencil, X } from "lucide-react";
+import { EditMeetingDialog, useMeetings, useUpdateMeeting } from "@/modules/engagement";
+import { Button } from "@/components/ui/button";
+import {
+  AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogCancel,
+} from "@/components/ui/alert-dialog";
 import {
   resumirAgendaDoLead,
   type SituacaoNaAgenda,
@@ -36,10 +41,21 @@ const COR_DO_ROTULO: Record<SituacaoNaAgenda, string> = {
  * banner de mensagens agendadas ao lado.
  */
 export function LeadAgendaStrip({ leadId }: LeadAgendaStripProps) {
+  // Trocar de conversa fecha qualquer edição/confirmação do lead anterior.
+  return <LeadAgendaContent key={leadId} leadId={leadId} />;
+}
+
+function LeadAgendaContent({ leadId }: LeadAgendaStripProps) {
   const { data: reunioes = [] } = useMeetings({ leadId });
   const [expanded, setExpanded] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [cancellingId, setCancellingId] = useState<string | null>(null);
+  const updateMeeting = useUpdateMeeting();
 
   const agenda = useMemo(() => resumirAgendaDoLead(reunioes), [reunioes]);
+
+  const cancelling = agenda.itens.find((item) => item.id === cancellingId);
+  const editing = agenda.itens.find((item) => item.id === editingId);
 
   if (agenda.itens.length === 0) return null;
 
@@ -75,9 +91,9 @@ export function LeadAgendaStrip({ leadId }: LeadAgendaStripProps) {
           {itens.map((item) => (
             <li
               key={item.id}
-              className="flex items-center gap-2 rounded-lg border border-border bg-card px-3 py-1.5 text-xs"
+              className="flex flex-wrap items-center gap-2 rounded-lg border border-border bg-card px-3 py-1.5 text-xs"
             >
-              <span className="flex-1 truncate text-foreground">{item.title}</span>
+              <span className="min-w-0 flex-1 truncate text-foreground">{item.title}</span>
               <span className="whitespace-nowrap tabular-nums text-muted-foreground">
                 {format(item.start, "dd/MM HH:mm", { locale: ptBR })}
               </span>
@@ -86,10 +102,48 @@ export function LeadAgendaStrip({ leadId }: LeadAgendaStripProps) {
               >
                 {item.situacao === "atrasada" && item.faltou ? "Não compareceu" : ROTULO[item.situacao]}
               </span>
+              <div className="flex w-full flex-wrap gap-1">
+                <Button type="button" variant="ghost" size="sm" disabled={updateMeeting.isPending}
+                  aria-label={`Editar reunião ${item.title}`} onClick={() => setEditingId(item.id)}>
+                  <Pencil className="mr-1.5 h-3.5 w-3.5" aria-hidden />Editar
+                </Button>
+                <Button type="button" variant="ghost" size="sm" disabled={updateMeeting.isPending}
+                  aria-label={`Cancelar reunião ${item.title}`} onClick={() => setCancellingId(item.id)}>
+                  <X className="mr-1.5 h-3.5 w-3.5" aria-hidden />Cancelar reunião
+                </Button>
+              </div>
             </li>
           ))}
         </ul>
       )}
+      {editing && <EditMeetingDialog meetingId={editing.id} open onOpenChange={(open) => {
+        if (!open) setEditingId(null);
+      }} />}
+      <AlertDialog open={!!cancelling} onOpenChange={(open) => {
+        if (!open && !updateMeeting.isPending) setCancellingId(null);
+      }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Cancelar reunião?</AlertDialogTitle>
+            <AlertDialogDescription>
+              A reunião “{cancelling?.title}” deixará de aparecer entre os agendamentos pendentes.
+              O registro será preservado como cancelado na Agenda.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={updateMeeting.isPending}>Manter reunião</AlertDialogCancel>
+            <Button type="button" variant="destructive" disabled={updateMeeting.isPending || !cancelling}
+              onClick={() => {
+                if (!cancelling || updateMeeting.isPending) return;
+                updateMeeting.mutate({ id: cancelling.id, status: "cancelled" }, {
+                  onSuccess: () => setCancellingId(null),
+                });
+              }}>
+              {updateMeeting.isPending ? "Cancelando…" : "Confirmar cancelamento"}
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
