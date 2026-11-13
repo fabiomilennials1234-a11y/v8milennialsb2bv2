@@ -42,6 +42,18 @@ describe("configured official daily cap", () => {
     expect(number.isNew).toBe(false);
   });
 
+  it.each([1, 10, 20, 50, 80])("represents a small configured ceiling (%s) without invalid controls", (daily_blast_cap) => {
+    render(<SpeedFixture instances={[{ ...official, daily_blast_cap }]} />);
+    expect(screen.getByTestId("submitted-cap").textContent).toBe(String(daily_blast_cap));
+    expect(screen.getAllByRole("radio", { checked: true })).toHaveLength(1);
+    if (daily_blast_cap <= 20) {
+      expect(screen.queryByRole("slider")).not.toBeInTheDocument();
+      expect(screen.getByText(`Limite fixo de ${daily_blast_cap} envios por dia.`)).toBeInTheDocument();
+    } else {
+      expect(screen.getByRole("slider")).toHaveAttribute("aria-valuemax", String(daily_blast_cap));
+    }
+  });
+
   it("bounds each number independently and resyncs the slider when selection changes", () => {
     render(<SpeedFixture instances={[
       official,

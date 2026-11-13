@@ -88,7 +88,7 @@ export function StepSpeed({ draft, patch }: StepSpeedProps) {
     { label: "Conservador", value: minCap },
     { label: "Recomendado", value: Math.min(CAP_RECOMMENDED, maxCap) },
     { label: "Máximo", value: maxCap },
-  ];
+  ].filter((preset, index, all) => !all.slice(index + 1).some((other) => other.value === preset.value));
   const peak = Math.max(1, ...plan.lots.map((l) => l.dayTotal));
 
   return (
@@ -137,7 +137,7 @@ export function StepSpeed({ draft, patch }: StepSpeedProps) {
           </div>
         </div>
 
-        <div className="relative mt-5">
+        {maxCap > minCap ? <div className="relative mt-5">
           {/* zone track behind the slider: green up to recommended, red after */}
           <div className="pointer-events-none absolute inset-x-0 top-1/2 h-1.5 -translate-y-1/2 overflow-hidden rounded-full">
             <div className="absolute inset-y-0 left-0 bg-success/30" style={{ width: `${safeZonePct}%` }} />
@@ -151,7 +151,9 @@ export function StepSpeed({ draft, patch }: StepSpeedProps) {
             onValueChange={(v) => setCap(v[0])}
             className="relative"
           />
-        </div>
+        </div> : (
+          <p className="mt-5 text-xs text-muted-foreground">Limite fixo de {maxCap} envios por dia.</p>
+        )}
 
         <div className="mt-2 flex justify-between text-[11px] tabular-nums text-muted-foreground">
           <span>{minCap}</span>
