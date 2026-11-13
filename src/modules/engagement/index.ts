@@ -140,3 +140,5 @@ export * from "./hooks/useCommissions";
  * consumidor deste barrel — ver o cabeçalho de `CreateMeetingDialogLazy`.
  */
 export { CreateMeetingDialog } from "./components/agenda/CreateMeetingDialogLazy";
+
+export { EditMeetingDialog } from "./components/agenda/EditMeetingDialogLazy";
