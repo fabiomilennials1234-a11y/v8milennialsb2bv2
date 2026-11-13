@@ -1,7 +1,7 @@
 import { Component, type ErrorInfo, type ReactNode } from "react";
 import { AlertTriangle, RefreshCw } from "lucide-react";
 import { ErrorReference, reportError, toAppError } from "@/shared/errors";
-import { isStaleChunkError, recoverFromStaleBuild } from "@/core/stale-build-recovery";
+import { browserEnv, isStaleChunkError, recoverFromStaleBuild } from "@/core/stale-build-recovery";
 
 interface Props {
   children: ReactNode;
@@ -13,6 +13,8 @@ interface State {
   isChunkError: boolean;
   /** Código que o usuário copia para o suporte (ADR-0038). */
   reference: string | null;
+  recovering?: boolean;
+  recoveryFailed?: boolean;
 }
 
 const RENDER_FALLBACK = "Algo deu errado nesta tela.";
@@ -49,18 +51,32 @@ export class GlobalErrorBoundary extends Component<Props, State> {
     // Chunk velho: recuperação única (unregister SW + caches + reload, com
     // throttle). Dentro da janela ela não recarrega — a tela abaixo fica, e o
     // botão "Recarregar" força a mesma recuperação.
-    if (this.state.isChunkError) void recoverFromStaleBuild();
+    if (this.state.isChunkError) void this.recover();
   }
 
   handleReload = () => {
     // Reload puro numa versão velha reentra no mesmo erro: o SW antigo serve o
     // mesmo index.html. O clique do usuário força a limpeza.
-    if (this.state.isChunkError) void recoverFromStaleBuild(undefined, { force: true });
+    if (this.state.isChunkError) void this.recover(true);
     else window.location.reload();
   };
 
+  recover = async (force = false, goHome = false) => {
+    if (this.state.recovering) return;
+    this.setState({ recovering: true, recoveryFailed: false });
+    try {
+      const env = goHome ? { ...browserEnv(), reload: () => { window.location.href = "/"; } } : undefined;
+      const reloading = await recoverFromStaleBuild(env, { force });
+      if (!reloading) this.setState({ recovering: false, recoveryFailed: true });
+    } catch {
+      this.setState({ recovering: false, recoveryFailed: true });
+    }
+  };
+
   handleGoHome = () => {
-    window.location.href = "/";
+    // The old worker can serve the same broken build at the root URL.
+    if (this.state.isChunkError) void this.recover(true, true);
+    else window.location.href = "/";
   };
 
   render() {
@@ -89,11 +105,17 @@ export class GlobalErrorBoundary extends Component<Props, State> {
               ? "Publicamos uma atualização. Recarregue para continuar de onde parou."
               : "Recarregue a página para tentar de novo. Se continuar, fale com o suporte e informe o código abaixo."}
           </p>
+          {isChunkError && this.state.recoveryFailed && (
+            <p role="status" className="mt-3 text-sm text-muted-foreground">
+              Não foi possível concluir a atualização. Confira sua conexão e tente recarregar novamente.
+            </p>
+          )}
           {!isChunkError && reference && <ErrorReference reference={reference} className="mt-3" />}
           <div className="mt-6 flex gap-2">
             <button
               type="button"
               onClick={this.handleGoHome}
+              disabled={this.state.recovering}
               className="h-9 rounded-lg border border-border px-4 text-sm transition-colors hover:bg-muted"
             >
               Ir para o início
@@ -101,10 +123,11 @@ export class GlobalErrorBoundary extends Component<Props, State> {
             <button
               type="button"
               onClick={this.handleReload}
+              disabled={this.state.recovering}
               className="inline-flex h-9 items-center gap-2 rounded-lg bg-primary px-4 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
             >
               <RefreshCw className="h-4 w-4" aria-hidden />
-              Recarregar
+              {this.state.recovering ? "Atualizando…" : "Recarregar"}
             </button>
           </div>
         </div>
