@@ -30,6 +30,25 @@ test("attendance survives pipeline movement; new and foreign bindings remain rej
     const mark = () => db.query("UPDATE meetings SET status='completed' WHERE id=$1", [meeting.id]);
     await assert.rejects(mark, /Meeting references/);
     await db.exec(migration);
+    // Editing and soft-cancelling from chat preserve all existing meetings,
+    // their original bindings, and unrelated meetings in the same database.
+    const before = (await db.query("SELECT * FROM meetings ORDER BY id")).rows;
+    await db.query("UPDATE meetings SET title='Reagendada', start_at='2026-09-03T18:00:00Z' WHERE id=$1 AND organization_id=$2", [meeting.id, org]);
+    await db.query("UPDATE meetings SET status='cancelled' WHERE id=$1 AND organization_id=$2", [meeting.id, org]);
+    const after = (await db.query("SELECT * FROM meetings ORDER BY id")).rows;
+    assert.equal(after.length, before.length);
+    for (const original of before) {
+      const current = after.find((row) => row.id === original.id);
+      if (original.id !== meeting.id) assert.deepEqual(current, original);
+      else {
+        assert.equal(current.status, 'cancelled');
+        assert.equal(current.title, 'Reagendada');
+        for (const field of ['lead_id', 'deal_id', 'pipeline_id', 'pipeline_entry_id', 'booked_event_id', 'created_at'])
+          assert.deepEqual(current[field], original[field]);
+      }
+    }
+    assert.equal((await db.query("SELECT count(*)::int n FROM meeting_events WHERE booked_event_id=$1", [meeting.booked_event_id])).rows[0].n, 0);
+    await db.query("UPDATE meetings SET status='scheduled' WHERE id=$1", [meeting.id]);
     await mark();
     await mark();
     assert.deepEqual((await db.query("SELECT pipeline_id,booked_event_id,status FROM meetings WHERE id=$1", [meeting.id])).rows,
