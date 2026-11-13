@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   RECOVERY_THROTTLE_MS,
+  RECOVERY_CLEANUP_TIMEOUT_MS,
   isStaleAssetLoadError,
   isStaleChunkError,
   missingStylesheets,
@@ -98,6 +99,27 @@ describe("recoverFromStaleBuild", () => {
     };
     await recoverFromStaleBuild(env);
     expect(log).toContain("reload");
+  });
+
+  it("recarrega mesmo quando o SW ou cache nunca responde", async () => {
+    vi.useFakeTimers();
+    try {
+      const { env, log } = fakeEnv();
+      env.serviceWorker = { getRegistrations: () => new Promise(() => {}) };
+      env.caches = { keys: () => new Promise(() => {}), delete: vi.fn() };
+      const result = recoverFromStaleBuild(env, { force: true });
+      await vi.advanceTimersByTimeAsync(2 * RECOVERY_CLEANUP_TIMEOUT_MS + 1);
+      expect(await result).toBe(true);
+      expect(log.at(-1)).toBe("reload");
+    } finally { vi.useRealTimers(); }
+  });
+
+  it("limpa os caches mesmo quando unregister falha", async () => {
+    const { env, log } = fakeEnv();
+    env.serviceWorker = { getRegistrations: async () => { throw new Error("blocked"); } };
+    await recoverFromStaleBuild(env);
+    expect(log).toContain("delete:workbox-precache-v2");
+    expect(log.at(-1)).toBe("reload");
   });
 
   it("storage inacessível (aba privada) não impede a recuperação", async () => {

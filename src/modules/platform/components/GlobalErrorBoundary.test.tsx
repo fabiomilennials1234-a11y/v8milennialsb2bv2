@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { addErrorReporter, type ErrorReport } from "@/shared/errors";
+import * as recovery from "@/core/stale-build-recovery";
 import { GlobalErrorBoundary } from "./GlobalErrorBoundary";
 
 function Thrower({ error }: { error: Error }): never {
@@ -56,4 +57,20 @@ describe("GlobalErrorBoundary", () => {
     expect(reports).toHaveLength(0);
     expect(screen.queryByText(/^Código /)).not.toBeInTheDocument();
   });
+  it("explica a falha e permite nova tentativa sem apagar a sessão", async () => {
+    const recover = vi.spyOn(recovery, "recoverFromStaleBuild").mockResolvedValue(false);
+    render(<GlobalErrorBoundary><Thrower error={new Error("Loading chunk 42 failed")} /></GlobalErrorBoundary>);
+    await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("Confira sua conexão"));
+    fireEvent.click(screen.getByRole("button", { name: "Recarregar" }));
+    await waitFor(() => expect(recover).toHaveBeenCalledWith(undefined, { force: true }));
+  });
+
+  it("ir para o início também recupera o build antes de navegar", async () => {
+    const recover = vi.spyOn(recovery, "recoverFromStaleBuild").mockResolvedValue(false);
+    render(<GlobalErrorBoundary><Thrower error={new Error("Loading chunk 42 failed")} /></GlobalErrorBoundary>);
+    await waitFor(() => expect(screen.getByRole("button", { name: "Ir para o início" })).toBeEnabled());
+    fireEvent.click(screen.getByRole("button", { name: "Ir para o início" }));
+    await waitFor(() => expect(recover).toHaveBeenCalledWith(expect.objectContaining({ reload: expect.any(Function) }), { force: true }));
+  });
+
 });

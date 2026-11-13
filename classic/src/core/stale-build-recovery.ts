@@ -20,6 +20,7 @@
 
 export const RECOVERY_KEY = "v8:stale-build-recovery-at";
 export const RECOVERY_THROTTLE_MS = 10_000;
+export const RECOVERY_CLEANUP_TIMEOUT_MS = 3000;
 
 const STALE_CHUNK_PATTERNS = [
   /Failed to fetch dynamically imported module/i,
@@ -172,6 +173,18 @@ export function recoverFromStaleBuild(
   return browserRecovery;
 }
 
+async function boundedCleanup(action: () => Promise<void>): Promise<void> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    await Promise.race([
+      Promise.resolve().then(action).catch(() => undefined),
+      new Promise<void>((resolve) => { timer = setTimeout(resolve, RECOVERY_CLEANUP_TIMEOUT_MS); }),
+    ]);
+  } finally {
+    if (timer !== undefined) clearTimeout(timer);
+  }
+}
+
 async function recover(env: RecoveryEnv, force: boolean): Promise<boolean> {
   const now = env.now();
   const last = readLast(env);
@@ -180,16 +193,18 @@ async function recover(env: RecoveryEnv, force: boolean): Promise<boolean> {
   if (!await env.canReload()) return false;
   writeLast(env, env.now());
 
-  try {
+  // A browser cache API may never settle. Each independent cleanup phase has
+  // a deadline so a stuck/rejected SW operation cannot trap the recovery UI
+  // or prevent cache cleanup. Auth storage and IndexedDB are never touched.
+  await boundedCleanup(async () => {
     const regs = (await env.serviceWorker?.getRegistrations()) ?? [];
-    await Promise.all(regs.map((r) => r.unregister()));
-    if (env.caches) {
-      const keys = await env.caches.keys();
-      await Promise.all(keys.map((k) => env.caches!.delete(k)));
-    }
-  } catch {
-    // Best-effort: a limpeza falhar não pode impedir o reload.
-  }
+    await Promise.allSettled(regs.map((r) => r.unregister()));
+  });
+  await boundedCleanup(async () => {
+    if (!env.caches) return;
+    const keys = await env.caches.keys();
+    await Promise.allSettled(keys.map((k) => env.caches!.delete(k)));
+  });
   env.reload();
   return true;
 }
