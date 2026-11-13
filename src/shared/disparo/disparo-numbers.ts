@@ -23,7 +23,7 @@
  * participar de ciclo. Mantenha assim: um único import de módulo aqui recria o
  * problema.
  */
-import { effectiveCap, CAP_RECOMMENDED } from "./speed-safety";
+import { effectiveCap, CAP_MAX, CAP_RECOMMENDED } from "./speed-safety";
 
 /** Statuses de conexão do provedor (Uazapi `open`, genérico `connected`). */
 const CONNECTED_STATUSES = new Set(["open", "connected"]);
@@ -74,6 +74,7 @@ export interface InstanceLike {
   status?: string | null;
   created_at?: string | null;
   provider?: string | null;
+  daily_blast_cap?: number | null;
   /**
    * O tipo de canal, quando a linha vem de `messaging_channels` (#1722).
    *
@@ -90,6 +91,8 @@ export interface DisparoNumber {
   label: string;
   /** Number Daily Cap efetivo — máximo de envios/dia (após o clamp de novo). */
   cap: number;
+  /** Configured ceiling for an official channel; Chip retains CAP_MAX. */
+  maxCap?: number;
   selected: boolean;
   /** Linha recém-conectada: auto-clampada abaixo do slider (#908). */
   isNew?: boolean;
@@ -162,16 +165,22 @@ export function instancesToNumbers(
     .filter((i) => isConnectedInstance(i) && isBlastableInstance(i))
     .map((i, idx) => {
       const createdMs = i.created_at ? Date.parse(i.created_at) : NaN;
-      const isNew =
+      const regime = regimeDaInstancia(i)!;
+      // The age-based Chip protection does not apply to approved templates.
+      const isNew = regime === "chip" &&
         Number.isFinite(createdMs) && nowMs - createdMs < NEW_NUMBER_WINDOW_MS;
+      const configured = i.daily_blast_cap;
+      const officialCap = regime === "oficial" && typeof configured === "number" &&
+        Number.isFinite(configured) && configured >= 1 ? Math.floor(configured) : null;
       return {
         id: i.id,
         label: rotuloDaInstancia(i, idx),
-        cap: effectiveCap(defaultCap, isNew),
+        cap: officialCap ?? effectiveCap(defaultCap, isNew),
+        maxCap: officialCap ?? CAP_MAX,
         selected: idx === 0,
         isNew,
         // Já filtrado por `isBlastableInstance` — o `!` é o que o filtro provou.
-        regime: regimeDaInstancia(i)!,
+        regime,
       };
     });
 }

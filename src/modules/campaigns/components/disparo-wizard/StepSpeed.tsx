@@ -7,7 +7,8 @@
  * explicitly assumes ban risk). A number flagged "new" is auto-clamped below
  * the slider. The live `planBlast` readout turns the combined capacity into
  * "→ N dias" so the operator sees the pace — and the protection — before
- * committing. Numbers are mock until real instances land — TODO(#910 dispatch).
+ * committing. Official channels use their configured daily ceiling; Chip
+ * retains the conservative bounds and the age-based protection.
  */
 import { useMemo } from "react";
 import {
@@ -38,12 +39,15 @@ interface StepSpeedProps {
 }
 
 export function StepSpeed({ draft, patch }: StepSpeedProps) {
-  const toggle = (id: string) =>
-    patch({
-      numbers: draft.numbers.map((n) =>
-        n.id === id ? { ...n, selected: !n.selected } : n,
-      ),
-    });
+  const selected = draft.numbers.filter((n) => n.selected);
+  const maxCap = selected.length ? Math.max(...selected.map((n) => n.maxCap ?? CAP_MAX)) : CAP_MAX;
+  const minCap = Math.min(CAP_MIN, maxCap);
+  const officialOnly = selected.length > 0 && selected.every((n) => n.regime === "oficial");
+  const toggle = (id: string) => {
+    const numbers = draft.numbers.map((n) => n.id === id ? { ...n, selected: !n.selected } : n);
+    const active = numbers.filter((n) => n.selected);
+    patch({ numbers, capPerNumber: active.length ? Math.max(...active.map((n) => n.cap)) : CAP_RECOMMENDED });
+  };
 
   /**
    * The slider sets one cap for every number; each number's effective cap is
@@ -51,19 +55,21 @@ export function StepSpeed({ draft, patch }: StepSpeedProps) {
    * risky value. Writing it back onto `n.cap` keeps capacity/planBlast pure.
    */
   const setCap = (raw: number) => {
-    const capPerNumber = clampCap(raw);
+    const capPerNumber = clampCap(raw, maxCap);
     patch({
       capPerNumber,
       numbers: draft.numbers.map((n) => ({
         ...n,
-        cap: effectiveCap(capPerNumber, Boolean(n.isNew)),
+        cap: Math.min(n.maxCap ?? CAP_MAX, effectiveCap(capPerNumber, Boolean(n.isNew))),
       })),
     });
   };
 
-  const risk = capRisk(draft.capPerNumber);
+  const chipCap = Math.max(0, ...selected.filter((n) => n.regime !== "oficial").map((n) => n.cap));
+  const risk = capRisk(chipCap);
   const safeZonePct =
-    ((CAP_RECOMMENDED - CAP_MIN) / (CAP_MAX - CAP_MIN)) * 100;
+    officialOnly || maxCap <= CAP_RECOMMENDED ? 100 :
+      ((CAP_RECOMMENDED - minCap) / (maxCap - minCap)) * 100;
 
   const capacity = selectedDailyCapacity(draft);
   const plan = useMemo(
@@ -79,9 +85,9 @@ export function StepSpeed({ draft, patch }: StepSpeedProps) {
   );
 
   const presets = [
-    { label: "Conservador", value: CAP_MIN },
-    { label: "Recomendado", value: CAP_RECOMMENDED },
-    { label: "Máximo", value: CAP_MAX },
+    { label: "Conservador", value: minCap },
+    { label: "Recomendado", value: Math.min(CAP_RECOMMENDED, maxCap) },
+    { label: "Máximo", value: maxCap },
   ];
   const peak = Math.max(1, ...plan.lots.map((l) => l.dayTotal));
 
@@ -139,25 +145,29 @@ export function StepSpeed({ draft, patch }: StepSpeedProps) {
           </div>
           <Slider
             value={[draft.capPerNumber]}
-            min={CAP_MIN}
-            max={CAP_MAX}
-            step={5}
+            min={minCap}
+            max={maxCap}
+            step={officialOnly ? 1 : 5}
             onValueChange={(v) => setCap(v[0])}
             className="relative"
           />
         </div>
 
         <div className="mt-2 flex justify-between text-[11px] tabular-nums text-muted-foreground">
-          <span>{CAP_MIN}</span>
-          <span>seguro até {CAP_RECOMMENDED}</span>
-          <span>{CAP_MAX}</span>
+          <span>{minCap}</span>
+          <span>{officialOnly ? "limite configurado por número" : `seguro até ${CAP_RECOMMENDED}`}</span>
+          <span>{maxCap}</span>
         </div>
 
-        {risk === "safe" ? (
+        {officialOnly ? (
+          <p className="mt-3 text-xs text-muted-foreground">
+            O envio respeita o limite configurado de cada canal oficial e a disponibilidade diária.
+          </p>
+        ) : risk === "safe" ? (
           <div className="mt-3 flex items-center gap-2 rounded-xl border border-success/30 bg-success/[0.06] px-3 py-2 text-xs text-success-strong">
             <ShieldCheck className="h-4 w-4 shrink-0" />
             <span>
-              <span className="font-medium tabular-nums">{draft.capPerNumber}/dia</span> por número —
+              <span className="font-medium tabular-nums">{chipCap}/dia</span> por número de chip —
               recomendado por nós. Número saudável.
             </span>
           </div>
@@ -165,7 +175,7 @@ export function StepSpeed({ draft, patch }: StepSpeedProps) {
           <div className="mt-3 flex items-center gap-2 rounded-xl border border-destructive/40 bg-destructive/[0.08] px-3 py-2 text-xs text-destructive">
             <AlertTriangle className="h-4 w-4 shrink-0" />
             <span>
-              <span className="font-medium tabular-nums">{draft.capPerNumber}/dia</span> por número —
+              <span className="font-medium tabular-nums">{chipCap}/dia</span> por número de chip —
               RISCO de banimento. Recomendamos {CAP_RECOMMENDED}. Você assume o risco.
             </span>
           </div>

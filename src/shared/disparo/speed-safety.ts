@@ -18,10 +18,11 @@ export const CAP_RECOMMENDED = 80;
 /** Ceiling a freshly connected number is clamped to, regardless of the slider. */
 export const NEW_NUMBER_CAP = 20;
 
-/** Clamp a raw slider value into the allowed [CAP_MIN, CAP_MAX] range. */
-export function clampCap(value: number): number {
-  if (!Number.isFinite(value)) return CAP_RECOMMENDED;
-  return Math.min(CAP_MAX, Math.max(CAP_MIN, Math.floor(value)));
+/** Chip uses CAP_MAX; an official channel can supply its configured ceiling. */
+export function clampCap(value: number, maximum: number = CAP_MAX): number {
+  const cap = Number.isFinite(maximum) && maximum >= 1 ? Math.floor(maximum) : CAP_MAX;
+  const raw = Number.isFinite(value) ? Math.floor(value) : CAP_RECOMMENDED;
+  return Math.min(cap, Math.max(Math.min(CAP_MIN, cap), raw));
 }
 
 /**
