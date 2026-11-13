@@ -154,6 +154,20 @@
   function textOf(v) { return typeof v === "string" ? v.trim() : ""; }
 
   /*
+   * Resposta de pergunta de qualificação: o Cal manda o texto da opção, mas pode embrulhar em { label, value }.
+   * Desembrulha `value` como o `txt` do n8n (workflow YVJSnwZ8Zgby432e); objeto sem `value` fica vazio aqui
+   * (o `txt` junta firstName/lastName, regra que só serve ao nome).
+   */
+  function answerOf(v) {
+    if (v == null) return "";
+    if (typeof v === "object") return "value" in v ? answerOf(v.value) : "";
+    return String(v).trim();
+  }
+
+  /* Slug no Cal = chave no payload. O valor é o texto da opção, igual ao do formulário do evento no Cal. */
+  var QUALIFICATION_KEYS = ["erp", "cargo"];
+
+  /*
    * Respostas do formulário do evento, no payload do Cal. Fontes em calcom/cal.com:
    * packages/embeds/embed-core/src/sdk-action-manager.ts (envelope `detail.data`) e
    * apps/web/modules/bookings/hooks/useBookings.ts (`booking` é a resposta de /api/book/event).
@@ -165,13 +179,16 @@
     var attendee = (b.attendees && b.attendees[0]) || {};
     var name = responses.name;
     if (name && typeof name === "object") name = [name.firstName, name.lastName].filter(Boolean).join(" ");
-    return {
+    var answers = {
       nome: textOf(name) || textOf(attendee.name),
       email: textOf(responses.email) || textOf(attendee.email),
       whatsapp: textOf(responses.telefone) || textOf(attendee.phoneNumber),
       empresa: textOf(responses.empresa),
       desafio: textOf(responses.maior_dificuldade)
     };
+    /* Pergunta que ainda não existe no evento do Cal chega vazia: o payload mantém a chave. */
+    QUALIFICATION_KEYS.forEach(function (key) { answers[key] = answerOf(responses[key]); });
+    return answers;
   }
 
   function notifyBooking(data) {
@@ -191,6 +208,8 @@
       whatsapp: answers.whatsapp,
       empresa: answers.empresa,
       desafio: answers.desafio,
+      erp: answers.erp,
+      cargo: answers.cargo,
       reuniao_em: when,
       agenda: AGENDA.id,
       agenda_link: AGENDA_URL,
@@ -309,6 +328,20 @@
     '</div>';
   }
 
+  /* Mesmas opções, no mesmo texto, da pergunta `erp` da reserva no Cal: o CRM agrupa pelo valor. Texto fixo, sem escape. */
+  var ERP_OPTIONS = ["Omie", "Bling", "Tiny (Olist)", "Sankhya", "TOTVS (Protheus/Winthor)", "SAP Business One", "Conta Azul", "Outro", "Não usamos ERP"];
+
+  function selectHtml(id, label, name, options, error) {
+    return '<div class="lpm-field">' +
+      '<label for="' + id + '">' + label + '</label>' +
+      '<select id="' + id + '" name="' + name + '" required aria-describedby="' + id + '-erro">' +
+        '<option value="" disabled selected>Selecione</option>' +
+        options.map(function (o) { return '<option value="' + o + '">' + o + '</option>'; }).join("") +
+      '</select>' +
+      '<p class="lpm-err" id="' + id + '-erro" hidden>' + error + '</p>' +
+    '</div>';
+  }
+
   var duvidasDialog = mountDialog(
     '<dialog class="lpm lpm-lead" aria-labelledby="duvidasTitle">' +
       '<form class="lpm-card" id="duvidasForm" novalidate>' +
@@ -318,6 +351,7 @@
         '</header>' +
         fieldHtml("d-nome", "Nome", 'type="text" name="nome" autocomplete="name"', "Informe seu nome.") +
         fieldHtml("d-empresa", "Nome da empresa", 'type="text" name="empresa" autocomplete="organization"', "Informe o nome da empresa.") +
+        selectHtml("d-erp", "Qual ERP sua empresa usa?", "erp", ERP_OPTIONS, "Selecione o ERP da empresa.") +
         fieldHtml("d-whatsapp", "WhatsApp — DDD + número", 'type="tel" name="whatsapp" autocomplete="tel-national" inputmode="tel" placeholder="(00) 00000-0000"', "DDD + número, sem +55") +
         fieldHtml("d-email", "E-mail", 'type="email" name="email" autocomplete="email" inputmode="email"', "Informe um e-mail válido.") +
         '<button type="submit" class="lpm-submit">Continuar no WhatsApp →</button>' +
@@ -346,7 +380,7 @@
   (function initDuvidas() {
     var form = $("#duvidasForm");
     var submit = $(".lpm-submit", form);
-    var fields = $$("input", form);
+    var fields = $$("input, select", form);
     var duvidaEventId = null;
 
     /* O n8n descarta em silêncio telefone inválido: a página barra antes. */
@@ -364,10 +398,15 @@
       if (busy) submit.setAttribute("aria-busy", "true"); else submit.removeAttribute("aria-busy");
     }
 
+    function revalidate(e) {
+      if (e.target.getAttribute("aria-invalid") && valid(e.target)) mark(e.target, true);
+    }
     form.addEventListener("input", function (e) {
       if (e.target.type === "tel") e.target.value = window.TorquePhone.format(e.target.value);
-      if (e.target.getAttribute("aria-invalid") && valid(e.target)) mark(e.target, true);
+      revalidate(e);
     });
+    /* Safari antigo só avisa `change` no <select>. */
+    form.addEventListener("change", revalidate);
     form.addEventListener("submit", function (e) {
       e.preventDefault();
       if (submit.disabled) return;
@@ -384,6 +423,7 @@
         evento: "duvida",
         nome: $("#d-nome").value.trim(),
         empresa: $("#d-empresa").value.trim(),
+        erp: $("#d-erp").value,
         whatsapp: window.TorquePhone.digits($("#d-whatsapp").value),
         email: $("#d-email").value.trim()
       });
