@@ -281,7 +281,9 @@ export function createInitialState(
       postSendStageId: "",
       postSendLabel: "",
       numbers,
-      capPerNumber: CAP_RECOMMENDED,
+      capPerNumber: numbers.some((n) => n.selected)
+        ? Math.max(...numbers.filter((n) => n.selected).map((n) => n.cap))
+        : CAP_RECOMMENDED,
       startDateIso,
       released: false,
     },

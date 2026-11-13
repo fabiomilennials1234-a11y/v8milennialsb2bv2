@@ -48,6 +48,13 @@ describe("capRisk — safe/risk zone from the recommended value", () => {
 });
 
 describe("clampCap — slider bounds", () => {
+  it("honors a configured ceiling without raising a lower explicit choice", () => {
+    expect(clampCap(1000, 1000)).toBe(1000);
+    expect(clampCap(1200, 1000)).toBe(1000);
+    expect(clampCap(80, 1000)).toBe(80);
+    expect(clampCap(20, 10)).toBe(10);
+  });
+
   it("clamps below the floor and above the ceiling", () => {
     expect(clampCap(5)).toBe(CAP_MIN);
     expect(clampCap(999)).toBe(CAP_MAX);
