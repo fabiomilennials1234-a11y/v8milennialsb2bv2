@@ -128,6 +128,32 @@ O resumo de cada execução aparece na página da execução, no **Summary**: ve
 
 **Um deploy por vez.** O grupo `front-cloudflare-production` não cancela o que está rodando, e a fila guarda **um** pendente só: o que chega por último substitui o que estava esperando. Ver o efeito disso no rollback em [Rollbacks](#rollbacks-três-caminhos).
 
+### Retenção de chunks das builds anteriores
+
+Cada versão do Worker publica só os arquivos da sua build. Sem retenção, o deploy
+apagava os chunks hashados da anterior e toda aba aberta (ou service worker
+velho) tomava 404 no próximo `import()`: a tela "Há uma versão nova do Torque".
+
+O step "Reter chunks das builds anteriores" (`npm run cf:retain`,
+`scripts/cloudflare/retain-previous.mjs`) roda entre a build e o `cf:prepare`:
+
+- lê o `/torque-builds.json` do que está no ar (`{ builds, files }`, arquivo →
+  última build que o usou) e baixa de lá os `/assets/*` das builds que ainda
+  valem, gravando-os em `dist/assets/`;
+- uma build fica por 7 dias (a que está no ar sempre fica), até 30 builds e
+  15.000 arquivos (limite do Workers Static Assets: 20.000). Chunk que não mudou
+  tem o mesmo nome (hash) em todas as builds: o custo é só dos que mudaram, e o
+  upload do wrangler só envia o que a Cloudflare ainda não tem;
+- no primeiro deploy (sem `torque-builds.json` no ar) semeia com a build viva,
+  achada pelo grafo de referências de `index.html` e `sw.js`;
+- o `cf:prepare` varre também o que veio do prod (segredo, source map);
+- `/torque-builds.json` sai pela rota `spa` do Worker, sem cache, sem rota nova.
+
+Melhor esforço: prod fora do ar ou arquivo que não baixa vira `::warning::` no
+log do build e o deploy segue (hotfix não espera por isto). Procure
+`retenção de chunks` no log se uma aba antiga voltar a tomar 404. `index.html` e
+`sw.js` nunca são retidos: o prod sempre serve os da build nova.
+
 ### Prova de versão (`X-Torque-Version`)
 
 Toda resposta que o **Worker** gera leva `X-Torque-Version: <version id>`: páginas, SPA, LPs, redirects, 404, 405, 500 e a API. O id vem do binding `version_metadata` (`CF_VERSION_METADATA` no `wrangler.jsonc`). Os arquivos de `/assets/*` saem direto do servidor de assets, sem Worker, e não levam o header.
