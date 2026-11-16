@@ -32,8 +32,8 @@ export function CadastrosDoNumeroLista({
           </h3>
           {!leadIdDaConversa && (
             <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-              A conversa não está ligada a nenhum cadastro. Escolha de quem é
-              esta conversa.
+              A conversa não está ligada a nenhum cadastro.
+              {onVincular && " Escolha de quem é esta conversa."}
             </p>
           )}
         </div>

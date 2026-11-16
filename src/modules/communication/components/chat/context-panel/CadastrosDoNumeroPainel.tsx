@@ -23,6 +23,8 @@ interface Props {
   leadIdDaConversa: string | null | undefined;
   isGroup?: boolean;
   fallback?: ReactNode;
+  /** Rascunho: consultar antes do primeiro envio, sem criar ou vincular. */
+  somenteConsulta?: boolean;
 }
 
 function useCadastrosVisiveis({
@@ -49,7 +51,7 @@ function useCadastrosVisiveis({
 export function CadastrosDoNumeroPainel(props: Props) {
   const { cadastros, visivel } = useCadastrosVisiveis(props);
   if (!visivel) return props.fallback ?? null;
-  if (!props.leadIdDaConversa && props.telefone) {
+  if (!props.leadIdDaConversa && props.telefone && !props.somenteConsulta) {
     return (
       <SemLeadVinculado
         phoneNumber={props.telefone}
@@ -65,8 +67,8 @@ export function CadastrosDoNumeroPainel(props: Props) {
   );
 }
 
-/** O layout móvel não monta a coluna de contexto. Um acesso no header abre a lista. */
-export function CadastrosDoNumeroMobile(props: Props) {
+/** Acesso lateral quando não há coluna de contexto: celular ou rascunho desktop. */
+export function CadastrosDoNumeroAcesso(props: Props) {
   const { cadastros, visivel } = useCadastrosVisiveis(props);
   if (!visivel) return null;
   return (

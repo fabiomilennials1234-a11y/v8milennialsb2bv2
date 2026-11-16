@@ -10,6 +10,8 @@
  *
  * Exceção por org: onde `mostraNegocioNoChat` libera (hoje só a Riofix), entra
  * a seção "Negócios" logo abaixo dos funis — ver `lib/negocioNoChat.ts`.
+ * Com `chat_cadastros_do_numero` (Café Jurerê), os cadastros do número ficam
+ * antes dos funis, no mesmo scroll; o centro fica livre para as mensagens.
  *
  * Nada além disso. Sem Jornada, Copilot toggle ou CTA ficha — residem em
  * outros lugares do produto.

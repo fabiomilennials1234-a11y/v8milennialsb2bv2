@@ -46,7 +46,7 @@ vi.mock("sonner", () => ({ toast: { success: h.success } }));
 vi.mock("@/shared/errors", () => ({ notifyError: h.error }));
 
 import {
-  CadastrosDoNumeroMobile,
+  CadastrosDoNumeroAcesso,
   CadastrosDoNumeroPainel,
 } from "./CadastrosDoNumeroPainel";
 
@@ -100,6 +100,23 @@ beforeEach(() => {
 });
 
 describe("cadastros no painel da conversa", () => {
+  it("rascunho permite consultar os cadastros sem vincular ou criar antes do envio", async () => {
+    mount(
+      <CadastrosDoNumeroPainel
+        telefone={PHONE}
+        leadIdDaConversa={null}
+        somenteConsulta
+      />,
+    );
+    await screen.findByRole("region", { name: "Cadastros deste número" });
+    expect(screen.getByRole("link", { name: /Cliente 1/ })).toBeInTheDocument();
+    expect(
+      screen.queryAllByRole("button", {
+        name: /Vincular esta conversa|Criar ou vincular/,
+      }),
+    ).toHaveLength(0);
+    expect(h.rpc).not.toHaveBeenCalled();
+  });
   it("mostra negócios e vínculo na lateral sem misturar outra organização ou excluídos", async () => {
     mount(<CadastrosDoNumeroPainel telefone={PHONE} leadIdDaConversa="1" />);
     const region = await screen.findByRole("region", {
@@ -168,14 +185,14 @@ describe("cadastros no painel da conversa", () => {
 
   it("grupo não mostra nem consulta cadastros", () => {
     mount(
-      <CadastrosDoNumeroMobile telefone={PHONE} leadIdDaConversa="1" isGroup />,
+      <CadastrosDoNumeroAcesso telefone={PHONE} leadIdDaConversa="1" isGroup />,
     );
     expect(screen.queryByRole("button")).not.toBeInTheDocument();
     expect(h.from).not.toHaveBeenCalled();
   });
 
   it("mobile mantém a lista fora da conversa até abrir o painel e permite fechar", async () => {
-    mount(<CadastrosDoNumeroMobile telefone={PHONE} leadIdDaConversa="1" />);
+    mount(<CadastrosDoNumeroAcesso telefone={PHONE} leadIdDaConversa="1" />);
     const open = await screen.findByRole("button", {
       name: "Ver 2 cadastros deste número",
     });

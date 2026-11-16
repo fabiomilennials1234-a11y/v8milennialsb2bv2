@@ -103,6 +103,8 @@ export interface ChatHeaderProps {
    * "Cobrança" no lugar de "Sem lead", e sem "Criar lead".
    */
   daCobranca?: boolean;
+  /** Acesso a dados laterais quando o painel de contexto ainda não está montado. */
+  extraActions?: React.ReactNode;
 }
 
 // ─── Densidade ────────────────────────────────────────────────────────────────
@@ -188,6 +190,7 @@ export function ChatHeader({
   onArchive,
   onUnarchive,
   daCobranca = false,
+  extraActions,
 }: ChatHeaderProps) {
   const { data: limits } = useMessageLimits(instanceId ?? null, organizationId);
   const limitsPercent = limits?.current != null && limits?.limit != null && limits.limit > 0
@@ -270,6 +273,7 @@ export function ChatHeader({
       {/* Grupo de ações: largura previsível, nunca encolhe. Ver lead · Ligar ·
           densidade · ⋯. Abaixo de `lg` os rótulos viram ícone com tooltip. */}
       <div className="flex items-center gap-1.5 shrink-0">
+        {extraActions}
         {/* Botão ver / criar lead */}
         {onOpenLeadModal && !daCobranca && (hasLead || chatCreation.allowed) && <Button
           type="button"

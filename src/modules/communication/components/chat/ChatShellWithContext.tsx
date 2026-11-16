@@ -59,7 +59,7 @@ import { MobileChatThreadHeader } from "@/modules/communication/components/chat/
 import { MessageList } from "@/modules/communication/components/chat/view/MessageList";
 import { ChatComposer } from "@/modules/communication/components/chat/composer/ChatComposer";
 import { ScheduledMessagesBanner } from "@/modules/communication/components/chat/ScheduledMessagesBanner";
-import { CadastrosDoNumeroMobile } from "@/modules/communication/components/chat/context-panel/CadastrosDoNumeroPainel";
+import { CadastrosDoNumeroAcesso } from "@/modules/communication/components/chat/context-panel/CadastrosDoNumeroPainel";
 import { LeadAgendaStrip } from "@/modules/communication/components/chat/LeadAgendaStrip";
 import { MobileComposerContextual } from "@/modules/communication/components/chat/composer/MobileComposerContextual";
 import { ContextPanel } from "@/modules/communication/components/chat/context-panel/ContextPanel";
@@ -377,7 +377,7 @@ function ChatView({
           leadId={effectiveLeadId ?? undefined}
           onBack={onBack}
           onTapContact={onOpenLeadModal}
-          extraActions={<CadastrosDoNumeroMobile telefone={phoneNumber} leadIdDaConversa={effectiveLeadId} isGroup={selectedContact?.is_group === true} />}
+          extraActions={<CadastrosDoNumeroAcesso telefone={phoneNumber} leadIdDaConversa={effectiveLeadId} isGroup={selectedContact?.is_group === true} somenteConsulta={!!onConversationEstablished} />}
         />
       ) : (
         <ChatHeader
@@ -393,6 +393,7 @@ function ChatView({
           organizationId={organizationId}
           onBack={onBack}
           onOpenLeadModal={onOpenLeadModal}
+          extraActions={onConversationEstablished ? <CadastrosDoNumeroAcesso telefone={phoneNumber} leadIdDaConversa={effectiveLeadId} isGroup={selectedContact?.is_group === true} somenteConsulta /> : undefined}
           onTransferToSzChatTeam={() => {
             // SZ.chat transfer — Onda 6
           }}
