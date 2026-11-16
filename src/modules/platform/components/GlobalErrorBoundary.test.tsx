@@ -85,7 +85,10 @@ describe("GlobalErrorBoundary", () => {
     );
     recover.mockClear();
     fireEvent.click(screen.getByRole("button", { name: "Recarregar" }));
-    expect(recover).toHaveBeenCalledWith(undefined, { force: true });
+    expect(recover).toHaveBeenCalledWith(undefined, {
+      force: true,
+      assetUrls: [`${window.location.origin}/assets/x.js`],
+    });
     expect(await screen.findByRole("status")).toHaveTextContent("Não conseguimos falar com o servidor");
     await waitFor(() => expect(screen.getByRole("button", { name: "Tentar de novo" })).toBeEnabled());
   });

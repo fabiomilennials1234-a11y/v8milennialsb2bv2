@@ -3,6 +3,7 @@ import { AlertTriangle, RefreshCw } from "lucide-react";
 import { ErrorReference, reportError, toAppError } from "@/shared/errors";
 import {
   failedAssetPath,
+  failedAssetUrl,
   isStaleChunkError,
   recoveredRecently,
   recoverFromStaleBuild,
@@ -22,6 +23,8 @@ interface State {
    * (rede, extensão, antivírus, arquivo ausente) e precisa chegar até nós.
    */
   persistentChunkError: boolean;
+  /** Arquivo do build que falhou: a recuperação re-busca ele, furando o cache HTTP. */
+  assetUrl: string | null;
   /** Código que o usuário copia para o suporte (ADR-0038). */
   reference: string | null;
   /** Recuperação de build velho disparada pelo botão, ainda em andamento. */
@@ -47,6 +50,7 @@ export class GlobalErrorBoundary extends Component<Props, State> {
       error: null,
       isChunkError: false,
       persistentChunkError: false,
+      assetUrl: null,
       reference: null,
       recovering: false,
       recoveryFailed: false,
@@ -69,6 +73,7 @@ export class GlobalErrorBoundary extends Component<Props, State> {
       error: reported,
       isChunkError,
       persistentChunkError,
+      assetUrl: isChunkError ? failedAssetUrl(error) : null,
       reference: toAppError(reported, RENDER_FALLBACK).reference,
       recovering: false,
       recoveryFailed: false,
@@ -90,7 +95,11 @@ export class GlobalErrorBoundary extends Component<Props, State> {
     // Chunk velho: recuperação única (unregister SW + caches + reload, com
     // throttle). Dentro da janela ela não recarrega — a tela abaixo fica, e o
     // botão "Recarregar" força a mesma recuperação.
-    if (isChunkError) void recoverFromStaleBuild();
+    if (isChunkError) void recoverFromStaleBuild(undefined, { assetUrls: this.assetUrls() });
+  }
+
+  private assetUrls(): string[] {
+    return this.state.assetUrl ? [this.state.assetUrl] : [];
   }
 
   handleReload = async () => {
@@ -104,7 +113,7 @@ export class GlobalErrorBoundary extends Component<Props, State> {
     // não respondeu e o cache foi mantido de propósito; sem avisar, o botão
     // parecia quebrado.
     this.setState({ recovering: true, recoveryFailed: false });
-    const recovered = await recoverFromStaleBuild(undefined, { force: true });
+    const recovered = await recoverFromStaleBuild(undefined, { force: true, assetUrls: this.assetUrls() });
     if (!recovered) this.setState({ recovering: false, recoveryFailed: true });
   };
 

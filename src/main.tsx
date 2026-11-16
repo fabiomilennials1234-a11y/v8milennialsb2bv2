@@ -8,6 +8,7 @@ import {
   isStaleAssetLoadError,
   missingStylesheets,
   recoverFromStaleBuild,
+  staleAssetUrl,
 } from "@/core/stale-build-recovery";
 import App from "./App.tsx";
 import "./index.css";
@@ -35,9 +36,12 @@ window.addEventListener("unhandledrejection", (e) => handleStaleChunk(e.reason))
 // CSS/JS do build que falha no <link>/<script> não vira exceção: só aparece
 // como evento de recurso, que não borbulha — daí a fase de captura.
 window.addEventListener("error", (e) => {
-  if (isStaleAssetLoadError(e)) void recoverFromStaleBuild();
+  if (!isStaleAssetLoadError(e)) return;
+  const url = staleAssetUrl(e);
+  void recoverFromStaleBuild(undefined, { assetUrls: url ? [url] : [] });
 }, true);
 // O CSS principal falha antes deste script rodar: confere no boot.
-if (missingStylesheets().length > 0) void recoverFromStaleBuild();
+const missing = missingStylesheets();
+if (missing.length > 0) void recoverFromStaleBuild(undefined, { assetUrls: missing });
 
 createRoot(document.getElementById("root")!).render(<App />);
