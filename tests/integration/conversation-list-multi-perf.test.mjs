@@ -20,7 +20,13 @@
 //      `private.` no corpo; a leitura de marcadas-não-lidas fica na TABELA;
 //   c. forma do repo (sem strict, sem private.*): a migration aplica, nada é
 //      trocado, e a função roda — os desvios JR Tex/Riofix são guardados;
-//   d. ACL igual à de prod: só authenticated (+ owner) executa.
+//   d. ACL igual à de prod: só authenticated (+ owner) executa;
+//   e. desvios de prod no caminho VERDADEIRO: escopo de funil JR Tex ligado
+//      (lead em funil visível e fora dele) e balcão Riofix com isolamento
+//      ligado — antiga × nova, mesma saída;
+//   f. falha FECHADA: forma de prod sem uma das funções JR Tex/Riofix → o
+//      apply aborta (o escopo nunca abre em silêncio);
+//   g. gate de org: usuário de outra org recebe 42501, nas duas versões.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -36,8 +42,11 @@ const RELS = ['conversation_read_state', 'conversations', 'lead_tags', 'leads', 
 
 const id = (p, n) => `${p}000000-0000-0000-0000-${n.toString(16).padStart(12, '0')}`;
 const ORG = id('0a', 1);
+const ORG2 = id('0a', 2);
 const U = { adm: id('0b', 1), mem: id('0b', 2) };
+const U_FORA = id('0b', 9);
 const TM = { adm: id('0c', 1), mem: id('0c', 2) };
+const PIPE = { visivel: id('09', 1), oculto: id('09', 2) };
 // Caixa A tem um uuid HISTÓRICO (A_OLD) do mesmo número, na reap_queue.
 const A = id('0d', 1), A_OLD = id('0d', 2), B = id('0d', 3);
 const NUM_A = '+55 (48) 99999-0001', NUM_B = '5548999990002';
@@ -144,7 +153,12 @@ CREATE FUNCTION public.is_conversation_marked_unread(p_org uuid, p_instance uuid
  AND conversation_key = 'whatsapp:' || p_instance::text || ':' || p_phone AND marked_unread);
 $$;
 
-INSERT INTO public.organizations(id) VALUES ('${ORG}');
+INSERT INTO public.organizations(id) VALUES ('${ORG}'), ('${ORG2}');
+INSERT INTO public.team_members(id, user_id, organization_id, role) VALUES ('${id('0c', 9)}', '${U_FORA}', '${ORG2}', 'admin');
+-- L1 num funil visível ao escopo JR Tex; L2 num funil fora dele.
+INSERT INTO public.pipeline_entries(organization_id, lead_id, pipeline_id, stage_key) VALUES
+  ('${ORG}', '${id('0e', 1)}', '${PIPE.visivel}', 'novo'),
+  ('${ORG}', '${id('0e', 2)}', '${PIPE.oculto}', 'novo');
 INSERT INTO public.team_members(id, user_id, organization_id, role) VALUES
   ('${TM.adm}', '${U.adm}', '${ORG}', 'admin'),
   ('${TM.mem}', '${U.mem}', '${ORG}', 'member');
@@ -205,9 +219,12 @@ const PROD_SHAPE = `
 CREATE SCHEMA private;
 GRANT USAGE ON SCHEMA private TO authenticated, service_role;
 CREATE FUNCTION private.strict_lead_member_orgs() RETURNS uuid[] LANGUAGE sql STABLE AS $$ SELECT '{}'::uuid[] $$;
-CREATE FUNCTION private.jrtex_pipeline_scoped() RETURNS boolean LANGUAGE sql STABLE AS $$ SELECT false $$;
-CREATE FUNCTION private.jrtex_visible_pipeline_ids() RETURNS uuid[] LANGUAGE sql STABLE AS $$ SELECT '{}'::uuid[] $$;
-CREATE FUNCTION private.riofix_balcao_current_scope() RETURNS uuid LANGUAGE sql STABLE AS $$ SELECT NULL::uuid $$;
+-- Botões dos desvios: desligados por padrão; os testes e) ligam.
+CREATE TABLE private.knobs (jrtex boolean NOT NULL DEFAULT false, pipelines uuid[] NOT NULL DEFAULT '{}', balcao uuid);
+INSERT INTO private.knobs DEFAULT VALUES;
+CREATE FUNCTION private.jrtex_pipeline_scoped() RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER AS $$ SELECT jrtex FROM private.knobs $$;
+CREATE FUNCTION private.jrtex_visible_pipeline_ids() RETURNS uuid[] LANGUAGE sql STABLE SECURITY DEFINER AS $$ SELECT pipelines FROM private.knobs $$;
+CREATE FUNCTION private.riofix_balcao_current_scope() RETURNS uuid LANGUAGE sql STABLE SECURITY DEFINER AS $$ SELECT balcao FROM private.knobs $$;
 ${RELS.map((r) => `CREATE VIEW private.${r} WITH (security_invoker = true) AS SELECT * FROM public.${r};`).join('\n')}
 `;
 
@@ -305,14 +322,16 @@ for (const restrict of [false, true]) {
   });
 }
 
-test('b: forma de prod — 8 relações em private.*, 25 ocorrências, marcadas na tabela', async () => {
+test('b: forma de prod — 8 relações em private.*, 24 ocorrências, marcadas na tabela, escopo JR Tex sem guarda', async () => {
   const pg = await db();
   await pg.exec(RB);
   await pg.exec(MIG);
   const def = (await pg.query(`SELECT pg_get_functiondef('${SIG}'::regprocedure) AS d`)).rows[0].d;
   const sobra = def.match(new RegExp(`public\\.(${RELS.join('|')})(?![A-Za-z0-9_])`, 'g')) ?? [];
   assert.deepEqual(sobra, [], 'nenhuma das 8 relações fica em public');
-  assert.equal((def.match(/private\./g) ?? []).length, 25);
+  assert.equal((def.match(/private\./g) ?? []).length, 24);
+  assert.ok(!def.includes("to_regprocedure('private.jrtex_pipeline_scoped()')"), 'guarda do escopo JR Tex removida em prod');
+  assert.ok(def.includes('IF true THEN'), 'escopo JR Tex roda sempre em prod');
   assert.ok(def.includes('FROM public."conversation_read_state" rs'), 'marcadas-não-lidas lê a TABELA');
   assert.ok(!/\bread_state AS\b/.test(def), 'CTE read_state não existe mais');
 });
@@ -339,4 +358,62 @@ test('d: ACL igual à de prod', async () => {
       has_function_privilege('service_role', '${SIG}', 'EXECUTE') AS service_role,
       has_function_privilege('authenticated', '${SIG}', 'EXECUTE') AS authenticated`)).rows[0];
   assert.deepEqual(r, { anon: false, service_role: false, authenticated: true });
+});
+
+// e) caminhos verdadeiros dos desvios de prod, antiga × nova.
+async function compararComDesvio(knobs, { restrict = false, cenarios }) {
+  const pg = await db({ restrict });
+  await pg.exec(knobs);
+  await pg.exec(RB);
+  await pg.exec(PROD_ACL);
+  const antes = {};
+  for (const [k, [user, args]] of Object.entries(cenarios)) antes[k] = await call(pg, user, args);
+  await pg.exec(MIG);
+  for (const [k, [user, args]] of Object.entries(cenarios)) {
+    assert.deepEqual(await call(pg, user, args), antes[k], `cenário ${k}`);
+  }
+  return antes;
+}
+
+test('e1: escopo de funil JR Tex ligado — mesma saída, só lead em funil visível', async () => {
+  const antes = await compararComDesvio(
+    `UPDATE private.knobs SET jrtex = true, pipelines = ARRAY['${PIPE.visivel}']::uuid[]`,
+    { cenarios: {
+      adm: [U.adm, {}], mem: [U.mem, {}], admNaoLidas: [U.adm, { unread: true }], admGrupos: [U.adm, { groups: true }],
+    } },
+  );
+  // Só p1 (L1, funil visível). p6 (L2, funil oculto) e telefones sem lead somem.
+  assert.deepEqual(antes.adm.map((r) => r.normalized_phone), [P.p1]);
+  assert.deepEqual(antes.mem.map((r) => r.normalized_phone), [P.p1]);
+});
+
+test('e2: balcão Riofix com isolamento ligado — mesma saída, bypass do isolamento', async () => {
+  const antes = await compararComDesvio(
+    `UPDATE private.knobs SET balcao = '${id('09', 9)}'`,
+    { restrict: true, cenarios: { mem: [U.mem, {}], memNaoLidas: [U.mem, { unread: true }] } },
+  );
+  // Sem o balcão, o membro só veria p1 e p6 (teste a). Com ele, vê telefone sem lead.
+  assert.ok(antes.mem.some((r) => r.normalized_phone === P.p2), 'balcão faz bypass do isolamento');
+});
+
+test('f: forma de prod sem função de desvio — apply aborta (falha fechada)', async () => {
+  for (const fn of ['jrtex_pipeline_scoped()', 'jrtex_visible_pipeline_ids()', 'riofix_balcao_current_scope()']) {
+    const pg = await db();
+    await pg.exec(RB);
+    await pg.exec(`DROP FUNCTION private.${fn}`);
+    const antes = (await pg.query(`SELECT prosrc FROM pg_proc WHERE oid = '${SIG}'::regprocedure`)).rows[0].prosrc;
+    await assert.rejects(pg.exec(`BEGIN;\n${MIG}\nCOMMIT;`), new RegExp(`faltam .*private\\.${fn.replace(/[()]/g, '\\$&')}`));
+    await pg.exec('ROLLBACK');
+    const depois = (await pg.query(`SELECT prosrc FROM pg_proc WHERE oid = '${SIG}'::regprocedure`)).rows[0].prosrc;
+    assert.equal(depois, antes, `sem ${fn}: a função de antes fica intacta`);
+  }
+});
+
+test('g: gate de org — usuário de outra org recebe 42501 nas duas versões', async () => {
+  const pg = await db();
+  await pg.exec(RB);
+  await pg.exec(PROD_ACL);
+  await assert.rejects(call(pg, U_FORA), (e) => e.code === '42501');
+  await pg.exec(MIG);
+  await assert.rejects(call(pg, U_FORA), (e) => e.code === '42501');
 });

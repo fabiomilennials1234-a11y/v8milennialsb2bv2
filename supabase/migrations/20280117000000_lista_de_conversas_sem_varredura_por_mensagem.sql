@@ -74,7 +74,9 @@
 -- do repo. Prod tem dois desvios fora do ledger (escopo de funil da JR Tex e
 -- balcão da Riofix); aqui eles entram por EXECUTE guardado por
 -- to_regprocedure, para a função seguir executável num banco montado só do
--- repo. Mesma assinatura e mesmo retorno ⇒ CREATE OR REPLACE preserva a ACL;
+-- repo. Em PROD a guarda não sobrevive: o bloco DO do fim exige as três
+-- funções e troca a guarda do escopo JR Tex por `true` — falha FECHADA, como
+-- no corpo vivo (função ausente = erro, nunca escopo aberto). Mesma assinatura e mesmo retorno ⇒ CREATE OR REPLACE preserva a ACL;
 -- o REVOKE/GRANT abaixo é só para torná-la explícita.
 --
 -- FORA DO ESCOPO (diagnosticado, fica para outro PR):
@@ -110,8 +112,11 @@ DECLARE
   v_balcao       boolean;
 BEGIN
   -- Escopo de funil da JR Tex. Existe só em prod (aplicado fora do ledger);
-  -- chamado por EXECUTE guardado para a função continuar executável num banco
-  -- montado só do repo. Em prod a semântica é a do corpo vivo, sem mudança.
+  -- chamado por EXECUTE para a função continuar executável num banco montado
+  -- só do repo. FALHA FECHADA em prod: o bloco DO do fim exige que as funções
+  -- existam e troca a guarda abaixo por `true` — em prod o EXECUTE sempre roda
+  -- e função ausente vira erro, como no corpo vivo. A guarda só sobrevive onde
+  -- o recorte strict não está instalado (repo/PGlite).
   IF to_regprocedure('private.jrtex_pipeline_scoped()') IS NOT NULL THEN
     EXECUTE 'SELECT CASE WHEN private.jrtex_pipeline_scoped()
                  THEN ARRAY(SELECT unnest(private.jrtex_visible_pipeline_ids())
@@ -225,7 +230,8 @@ BEGIN
   END IF;
 
   -- Acesso compartilhado do balcão Riofix: limitado pelas relações private.*
-  -- protegidas. Mesma guarda do bloco JR Tex acima (função só existe em prod).
+  -- protegidas. Função ausente aqui só RESTRINGE (sem bypass) — falha fechada
+  -- por construção; o bloco DO do fim ainda exige que ela exista em prod.
   IF to_regprocedure('private.riofix_balcao_current_scope()') IS NOT NULL THEN
     EXECUTE 'SELECT private.riofix_balcao_current_scope() IS NOT NULL' INTO v_balcao;
     IF v_balcao THEN
@@ -340,6 +346,14 @@ BEGIN
       --     mensagem recebida passa, e o EXISTS sobre whatsapp_messages é pulado
       --     sem tocar a tabela. A poda é condição necessária, não suficiente:
       --     quem passa ainda prova a mensagem recebida no EXISTS.
+      --     INVARIANTE de que a poda depende: o resumo só é mantido pelo
+      --     trigger de INSERT. Um UPDATE que mova mensagem para outro
+      --     (instance_id, normalized_phone) ou adiante o "timestamp" — p.ex.
+      --     riofix_proposal_message_update, se um dia mexer nessas colunas —
+      --     deixaria o resumo atrás da mensagem e a poda esconderia a não-lida.
+      --     Medido em prod (16/11/2026), janela de 30 dias: 0 pares (chip,
+      --     telefone) com o resumo atrás da mensagem. Quem criar esse UPDATE tem de
+      --     atualizar o resumo junto ou remover esta poda.
       --   * o corte `GREATEST(30 dias, última leitura ou 7 dias)` é calculado
       --     uma vez por conversa e vira condição de índice no EXISTS.
       AND (
@@ -514,8 +528,15 @@ GRANT EXECUTE ON FUNCTION public.get_whatsapp_conversation_list_multi(uuid, uuid
 -- tem essas views, então o CREATE acima usa public.*, e este bloco reescreve
 -- para a forma de prod quando o recorte está instalado — falha FECHADA se
 -- faltar alguma view, e confere o resultado.
---   * esperado depois da troca: zero `public.<8 rels>` e exatamente 25
---     ocorrências de `private.` no corpo (17 referências às 8 relações, 6 nos
+--   * desvios de prod com FALHA FECHADA: as três funções de que o corpo
+--     depende (escopo JR Tex e balcão Riofix) TÊM de existir; faltou uma →
+--     RAISE. E a guarda `to_regprocedure('private.jrtex_pipeline_scoped()') IS
+--     NOT NULL` do corpo vira `true` (exatamente 1 troca, conferida): em prod o
+--     EXECUTE do escopo JR Tex sempre roda, e função sumida ou com assinatura
+--     trocada vira ERRO no chat — como no corpo vivo —, nunca escopo aberto em
+--     silêncio. O pg_depend não enxerga corpo plpgsql; esta é a única trava.
+--   * esperado depois da troca: zero `public.<8 rels>` e exatamente 24
+--     ocorrências de `private.` no corpo (17 referências às 8 relações, 5 nos
 --     blocos JR Tex / Riofix, 2 em comentários do corpo).
 --   * `public."conversation_read_state"` (com aspas) NÃO é trocado — ver o
 --     comentário no corpo.
@@ -527,7 +548,9 @@ DECLARE
     'pipeline_entries', 'whatsapp_conversation_summary', 'whatsapp_conversations',
     'whatsapp_messages'
   ];
-  v_esperado constant integer := 25;
+  v_esperado constant integer := 24;
+  v_guarda constant text := 'to_regprocedure(''private.jrtex_pipeline_scoped()'') IS NOT NULL';
+  v_trocas integer;
   v_def text;
   v_rel text;
   v_faltando text[];
@@ -549,7 +572,22 @@ BEGIN
       array_to_string(v_faltando, ', private.');
   END IF;
 
+  SELECT array_agg(f ORDER BY f) INTO v_faltando
+    FROM unnest(ARRAY['private.jrtex_pipeline_scoped()',
+                      'private.jrtex_visible_pipeline_ids()',
+                      'private.riofix_balcao_current_scope()']) AS f
+   WHERE to_regprocedure(f) IS NULL;
+  IF v_faltando IS NOT NULL THEN
+    RAISE EXCEPTION 'forma de prod incompleta: strict instalado, mas faltam % — abortado para o escopo não abrir em silêncio',
+      array_to_string(v_faltando, ', ');
+  END IF;
+
   v_def := pg_get_functiondef(v_sig);
+  v_trocas := (length(v_def) - length(replace(v_def, v_guarda, ''))) / length(v_guarda);
+  IF v_trocas <> 1 THEN
+    RAISE EXCEPTION 'forma de prod divergente: guarda do escopo JR Tex aparece % vez(es) (esperado 1)', v_trocas;
+  END IF;
+  v_def := replace(v_def, v_guarda, 'true');
   FOREACH v_rel IN ARRAY v_rels LOOP
     v_def := regexp_replace(v_def, 'public\.' || v_rel || '\M', 'private.' || v_rel, 'g');
   END LOOP;
@@ -559,6 +597,9 @@ BEGIN
   SELECT count(*) INTO v_sobra
     FROM regexp_matches(v_def, 'public\.(' || array_to_string(v_rels, '|') || ')\M', 'g');
   SELECT count(*) INTO v_private FROM regexp_matches(v_def, 'private\.', 'g');
+  IF position(v_guarda IN v_def) > 0 THEN
+    RAISE EXCEPTION 'forma de prod divergente: guarda do escopo JR Tex sobreviveu à troca';
+  END IF;
   IF v_sobra <> 0 OR v_private <> v_esperado THEN
     RAISE EXCEPTION 'forma de prod divergente: % referência(s) public.* às 8 relações e % private.* (esperado 0 e %)',
       v_sobra, v_private, v_esperado;
