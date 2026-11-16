@@ -4,7 +4,7 @@ import { useOrganization } from "../org-team/hooks/useOrganization";
 
 /**
  * Retorna um Map<team_member_id, avatar_url> para exibir fotos de perfil.
- * Faz join de team_members.user_id → profiles.avatar_url.
+ * Usa a foto do perfil vinculado ou a foto configurada no membro da equipe.
  */
 export function useAvatarMap() {
   const { organizationId, isReady } = useOrganization();
@@ -14,13 +14,17 @@ export function useAvatarMap() {
       // Buscar team_members com user_id
       const { data: members, error: membersError } = await supabase
         .from("team_members")
-        .select("id, user_id")
+        .select("id, user_id, avatar_url")
         .eq("organization_id", organizationId!);
 
       if (membersError) throw membersError;
 
       const userIds = [...new Set((members ?? []).flatMap(member => member.user_id ? [member.user_id] : []))];
-      if (userIds.length === 0) return new Map<string, string>();
+      const map = new Map<string, string>();
+      for (const member of members ?? []) {
+        if (member.avatar_url) map.set(member.id, member.avatar_url);
+      }
+      if (userIds.length === 0) return map;
 
       // Buscar profiles com avatar_url
       const { data: profiles, error: profilesError } = await supabase
@@ -40,7 +44,6 @@ export function useAvatarMap() {
       }
 
       // Mapear team_member.id → avatar_url (via user_id)
-      const map = new Map<string, string>();
       for (const member of members || []) {
         if (member.user_id) {
           const url = profileMap.get(member.user_id);

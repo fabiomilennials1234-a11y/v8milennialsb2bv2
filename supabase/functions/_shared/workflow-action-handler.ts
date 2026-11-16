@@ -532,6 +532,12 @@ export async function executeWorkflowAction(ctx: ActionContext): Promise<ActionR
 
     // ── Lead Management ──
     case "move_stage": {
+      if (ctx.nodeData.awaitDeliveryConfirmation === true) {
+        if (!ctx.executionId) return { success: false, error: "Execução ausente ao verificar entrega", retryable: false };
+        const { guardWorkflowDelivery } = await import("./workflow-delivery-guard.ts");
+        const delivery = await guardWorkflowDelivery(ctx.supabase, ctx.organizationId, ctx.executionId);
+        if (delivery) return delivery;
+      }
       // UUID canônico; slug/uuid em pipeType sobrevive só para nós antigos.
       const pipeRef = (ctx.nodeData.pipelineId as string)
         || (ctx.nodeData.pipeType as string);
@@ -776,7 +782,12 @@ export async function executeWorkflowAction(ctx: ActionContext): Promise<ActionR
       const notifyMsg = await resolveVariables(ctx.supabase, ctx.leadId, ctx.nodeData.notifyMessage as string || "");
       result = await sharedNotifyTeamMember({
         ...toActionInput(ctx),
-        params: { notifyMemberId: ctx.nodeData.notifyMemberId, notifyMessage: notifyMsg },
+        params: {
+          notifyMemberId: ctx.nodeData.notifyMemberId,
+          notifyMessage: notifyMsg,
+          notifyChannel: ctx.nodeData.notifyChannel,
+          whatsappInstanceId: ctx.nodeData.whatsappInstanceId,
+        },
       });
       break;
     }

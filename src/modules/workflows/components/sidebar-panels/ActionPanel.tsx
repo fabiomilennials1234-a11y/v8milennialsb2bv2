@@ -1,3 +1,4 @@
+import { NotifyTeamMemberConfig } from "./NotifyTeamMemberConfig";
 import { ActionTypeSelector } from "./ActionTypeSelector";
 import { isPipelineVisible, sortPipelinesForNavigation } from "@/modules/pipelines";
 import { useState, useRef, useEffect, useCallback } from "react";
@@ -818,7 +819,16 @@ export function ActionPanel({ data, onUpdate, onConvertLegacyMenu }: ActionPanel
 
       {/* Move Stage */}
       {at === "move_stage" && (
-        <MoveStageFields data={data} onUpdate={onUpdate} />
+        <>
+          <MoveStageFields data={data} onUpdate={onUpdate} />
+          <div className="space-y-2">
+            <div className="flex items-center justify-between gap-3">
+              <Label htmlFor="move-await-delivery">Aguardar entrega no WhatsApp</Label>
+              <Switch id="move-await-delivery" checked={data.awaitDeliveryConfirmation === true} onCheckedChange={(checked) => onUpdate({ awaitDeliveryConfirmation: checked })} />
+            </div>
+            <p className="text-xs text-muted-foreground">Após enviar um template pela API oficial, só move quando houver confirmação de entrega. Se o envio falhar ou ficar sem confirmação por 24 horas, mantém a etapa atual.</p>
+          </div>
+        </>
       )}
 
       {/* Add/Remove Tag */}
@@ -1067,45 +1077,7 @@ export function ActionPanel({ data, onUpdate, onConvertLegacyMenu }: ActionPanel
         <AssignResponsibleConfig data={data} onUpdate={onUpdate} />
       )}
 
-      {at === "notify_team_member" && (
-        <>
-          <div className="space-y-2">
-            <Label>Nome do Membro</Label>
-            <Input
-              value={data.notifyMemberName || ""}
-              onChange={(e) => onUpdate({ notifyMemberName: e.target.value })}
-              placeholder="Nome ou ID"
-            />
-          </div>
-          <div className="space-y-2">
-            <Label>Mensagem</Label>
-            <Textarea
-              value={data.notifyMessage || ""}
-              onChange={(e) => onUpdate({ notifyMessage: e.target.value })}
-              placeholder="Lead {{nome}} precisa de atenção!"
-              rows={3}
-            />
-          </div>
-          <div className="space-y-2">
-            <Label>Canal de Notificação</Label>
-            <Select
-              value={data.notifyChannel || "app"}
-              onValueChange={(v) =>
-                onUpdate({ notifyChannel: v as "app" | "whatsapp" | "both" })
-              }
-            >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="app">Apenas no App</SelectItem>
-                <SelectItem value="whatsapp">WhatsApp</SelectItem>
-                <SelectItem value="both">App + WhatsApp</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-        </>
-      )}
+      {at === "notify_team_member" && <NotifyTeamMemberConfig data={data} onUpdate={onUpdate} />}
 
       {/* ═══════ NEGÓCIOS ═══════ */}
 

@@ -10,7 +10,8 @@ import "../../tests/helpers/deno-mock";
 import { setDenoEnv, clearDenoEnv } from "../../tests/helpers/deno-mock";
 import { createMockSupabase } from "../helpers/supabase-mock";
 
-vi.mock("../../supabase/functions/_shared/whatsapp-dispatch.ts", () => ({
+vi.mock("../../supabase/functions/_shared/whatsapp-dispatch.ts", async (original) => ({
+  ...(await original<typeof import("../../supabase/functions/_shared/whatsapp-dispatch.ts")>()),
   sendTextViaInstance: vi.fn().mockResolvedValue({ success: true, messageId: "mock-text-id" }),
   sendMediaViaInstance: vi.fn().mockResolvedValue({ success: true, messageId: "mock-media-id" }),
   sendMenuViaInstance: vi.fn().mockResolvedValue({ success: true, messageId: "mock-menu-id" }),
@@ -1119,10 +1120,27 @@ describe("handleAssign (sdr/closer) — deep", () => {
 });
 
 describe("handleNotifyTeamMember — deep", () => {
+  it("passes WhatsApp channel and sender through the real dispatcher", async () => {
+    const { sb, mockTable, getInserted } = createMockSupabase();
+    mockTable("leads", [LEAD_WITH_PHONE]);
+    mockTable("team_members", [{ id: "tm-notify", user_id: "u", name: "Maria", organization_id: "org-1", is_active: true, phone: "5511999887766" }]);
+    mockTable("whatsapp_instances", [
+      { id: "chosen", organization_id: "org-1", status: "connected", provider: "uazapi", session_dead_since: null },
+      { id: "other", organization_id: "org-1", status: "connected", provider: "uazapi", session_dead_since: null },
+    ]);
+    const { sendTextViaInstance } = await import("../../supabase/functions/_shared/whatsapp-dispatch");
+    const result = await executeWorkflowAction({
+      supabase: sb, organizationId: "org-1", leadId: "lead-1", executionContext: {},
+      nodeData: { actionType: "notify_team_member", notifyMemberId: "tm-notify", notifyMessage: "Lead {{nome}}", notifyChannel: "whatsapp", whatsappInstanceId: "chosen" },
+    });
+    expect(result.success).toBe(true);
+    expect(sendTextViaInstance).toHaveBeenCalledWith(sb, expect.objectContaining({ id: "chosen" }), "5511999887766", expect.stringContaining("Lead "), expect.any(Object));
+    expect(getInserted("notifications")).toHaveLength(0);
+  });
   it("sends notification to team member with user_id", async () => {
     const { sb, mockTable, getInserted } = createMockSupabase();
     mockTable("leads", [LEAD_WITH_PHONE]);
-    mockTable("team_members", [{ id: "tm-notify", user_id: "user-abc", name: "Maria", organization_id: "org-1" }]);
+    mockTable("team_members", [{ id: "tm-notify", user_id: "user-abc", name: "Maria", organization_id: "org-1", is_active: true }]);
     mockTable("notifications", []);
     mockTable("lead_history", []);
 

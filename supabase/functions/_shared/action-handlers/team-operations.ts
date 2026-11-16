@@ -1,4 +1,5 @@
 import type { ActionInput, ActionResult } from "./types.ts";
+import { sendToNumber } from "./send-to-number.ts";
 
 export async function assignResponsible(input: ActionInput): Promise<ActionResult> {
   const { supabase, organizationId, leadId, params } = input;
@@ -113,24 +114,60 @@ export async function notifyTeamMember(input: ActionInput): Promise<ActionResult
   if (!memberId) return { success: false, error: "No team member configured" };
 
   const message = (params.notifyMessage as string) || "";
+  const channel = params.notifyChannel || "app";
+  if (!["app", "whatsapp", "both"].includes(String(channel))) {
+    return { success: false, error: "Canal de notificação inválido", retryable: false };
+  }
+  const needsApp = channel !== "whatsapp";
+  const needsWhatsApp = channel !== "app";
 
-  const { data: member } = await supabase
+  const { data: member, error: memberError } = await supabase
     .from("team_members")
-    .select("user_id, name")
+    .select("user_id, name, phone")
     .eq("id", memberId)
+    .eq("organization_id", organizationId)
+    .eq("is_active", true)
     .maybeSingle();
 
-  if (!member?.user_id) return { success: false, error: "Team member not found" };
+  if (memberError) return { success: false, error: memberError.message, retryable: true };
+  if (!member || (needsApp && !member.user_id)) {
+    return { success: false, error: "Team member not found or without app access", retryable: false };
+  }
+  if (needsWhatsApp && !member.phone?.trim()) {
+    return { success: false, error: "Cadastre o telefone WhatsApp do membro da equipe", retryable: false };
+  }
 
-  await supabase.from("notifications").insert({
-    organization_id: organizationId,
-    user_id: member.user_id,
-    type: "workflow_notification",
-    title: "Notificacao de Workflow",
-    description: message || "Acao de workflow executada",
-    lead_id: leadId,
-    link: "/pipe-whatsapp",
-  });
+  // Reuse the fixed-recipient transport: tenant-scoped instance selection,
+  // recipient validation and send dedup. Never follow the lead's conversation
+  // or attach its private conversation summary to a staff notification.
+  if (needsWhatsApp) {
+    const sent = await sendToNumber({
+      ...input,
+      params: {
+        whatsappInstanceId: params.whatsappInstanceId,
+        instanceRoutingPolicy: "fixed",
+        notifyPhones: [member.phone],
+        messageTemplate: message || "Acao de workflow executada",
+        includeConversationSummary: false,
+      },
+    });
+    if (!sent.success) return sent;
+  }
 
-  return { success: true, message: `Notification sent to ${member.name || memberId}` };
+  // Insert only after transport success so a provider retry cannot duplicate
+  // the app notification. The transport handles an already-sent WhatsApp.
+  if (needsApp) {
+    const { error } = await supabase.from("notifications").insert({
+      organization_id: organizationId,
+      user_id: member.user_id,
+      type: "workflow_notification",
+      title: "Notificacao de Workflow",
+      description: message || "Acao de workflow executada",
+      lead_id: leadId,
+      link: "/pipe-whatsapp",
+    });
+    if (error) return { success: false, error: error.message, retryable: true };
+  }
+
+  return { success: true, message: `Notification sent to ${member.name || memberId}`, data: { channel } };
 }
