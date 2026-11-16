@@ -18,6 +18,15 @@ export interface EntradaDoPayload {
   content: string;
   /** `null` quando a linha da fila não resolveu a Instance. */
   instanceId: string | null;
+  /**
+   * Mídia da mensagem mais recente do batch, já resolvida para a cópia no
+   * Storage. Sem isto o `agent-message` chama `resolveMediaContent` com
+   * `mediaUrl: null` e devolve placeholder — ou nada, quando a mensagem é só
+   * áudio e `content` vem vazio.
+   */
+  mediaUrl?: string | null;
+  /** Tipo REAL da mensagem (`ptt`, `image`, `document`…), não um palpite. */
+  incomingMessageType?: string | null;
   messageContext?: { storage: "whatsapp_messages"; messageId: string; messageIds?: string[]; boxId: string; provider: string; participantId: string } | null;
 }
 
@@ -26,7 +35,8 @@ export interface PayloadDoAgente {
   message: string;
   channel: "whatsapp";
   organization_id: string;
-  incoming_message_type: "text";
+  incoming_message_type: string;
+  media_url?: string | null;
   instance_id: string | null;
   message_context?: EntradaDoPayload["messageContext"];
 }
@@ -37,7 +47,12 @@ export function montarPayloadDoAgente(entrada: EntradaDoPayload): PayloadDoAgent
     message: entrada.content,
     channel: "whatsapp",
     organization_id: entrada.orgId,
-    incoming_message_type: "text",
+    // Fixar "text" aqui apagava TODA resposta em áudio/imagem/documento: o
+    // `content` de um `ptt` vem vazio, o agente recebia string vazia e o turno
+    // morria sem erro nenhum. Medido na Macerados em 16/11/2026 — a lead
+    // respondeu a saudação com um áudio e ninguém nunca soube.
+    incoming_message_type: entrada.incomingMessageType || "text",
+    ...(entrada.mediaUrl ? { media_url: entrada.mediaUrl } : {}),
     // Nulo explícito, nunca um palpite: o batch é agrupado por telefone+org e
     // não por Instance. Sem a Instance o matcher reprova por fail-closed, que é
     // o comportamento certo — melhor não disparar do que disparar achando que
