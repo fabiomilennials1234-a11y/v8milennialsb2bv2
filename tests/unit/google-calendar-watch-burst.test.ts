@@ -21,6 +21,9 @@ import { PGlite } from "@electric-sql/pglite";
 
 const read = (p: string) => readFileSync(new URL(`../../${p}`, import.meta.url), "utf8");
 const MIGRATION = read("supabase/migrations/20280116000000_google_watch_channel_unico.sql");
+const TOKEN_MIGRATION = read(
+  "supabase/migrations/20280116020000_google_calendar_cache_por_usuario_e_token_do_canal.sql",
+);
 
 // DDL literal do baseline de prod: CREATE TABLE + PK/UNIQUE + índices.
 const BASELINE = read("supabase/migrations/20260101000000_baseline_prod_schema.sql").split("\n");
@@ -28,6 +31,9 @@ const TABLE_DDL = [
   BASELINE.slice(24529, 24541).join("\n"),
   BASELINE.slice(29087, 29094).join("\n"),
   BASELINE.slice(32395, 32408).join("\n"),
+  // google_calendar_events_cache: a migration do token também troca a PK dela.
+  BASELINE.slice(24416, 24438).join("\n"),
+  BASELINE.slice(29067, 29069).join("\n"),
 ].join("\n");
 
 type Handler = (req: Request) => Promise<Response>;
@@ -77,14 +83,15 @@ vi.mock("../../supabase/functions/_shared/google-calendar-utils.ts", async (impo
 });
 
 // ── Google dublado ───────────────────────────────────────────────────────────
-const google = { watch: [] as string[], stop: [] as string[], list: 0 };
+const google = { watch: [] as string[], stop: [] as string[], list: 0, tokens: {} as Record<string, string> };
 const jitter = () => new Promise((r) => setTimeout(r, Math.random() * 3)); // embaralha a chegada
 
 global.fetch = (async (url: string, init?: RequestInit) => {
   await jitter();
   if (url.includes("/events/watch")) {
-    const { id } = JSON.parse(String(init!.body));
+    const { id, token } = JSON.parse(String(init!.body));
     google.watch.push(id);
+    google.tokens[id] = token;
     return {
       ok: true,
       json: async () => ({ resourceId: `res-${id}`, expiration: String(Date.now() + 7 * DAY) }),
@@ -170,6 +177,7 @@ async function freshDb() {
     GRANT ALL ON public.google_calendar_watch_channels TO service_role;
   `);
   await db.exec(MIGRATION);
+  await db.exec(TOKEN_MIGRATION);
 }
 
 async function seed(channelId: string, expiresInMs: number, active = true) {
@@ -189,12 +197,15 @@ const actives = async () =>
   ).rows.map((r) => r.channel_id);
 
 function notify(channelId: string) {
-  return h.handler!(
-    new Request("https://x/functions/v1/google-calendar-webhook", {
-      method: "POST",
-      headers: { "X-Goog-Channel-ID": channelId, "X-Goog-Resource-State": "exists", "X-Goog-Resource-ID": "r" },
-    }),
-  );
+  // Como o Google: devolve o token registrado no events/watch (canais semeados
+  // no teste não têm token — legado, hash NULL).
+  const headers: Record<string, string> = {
+    "X-Goog-Channel-ID": channelId,
+    "X-Goog-Resource-State": "exists",
+    "X-Goog-Resource-ID": "r",
+  };
+  if (google.tokens[channelId]) headers["X-Goog-Channel-Token"] = google.tokens[channelId];
+  return h.handler!(new Request("https://x/functions/v1/google-calendar-webhook", { method: "POST", headers }));
 }
 
 /** O handler responde 200 e processa em background; espera N processamentos. */
@@ -208,6 +219,7 @@ beforeEach(async () => {
   google.watch = [];
   google.stop = [];
   google.list = 0;
+  google.tokens = {};
   ops.total = 0;
   ops.selects = 0;
   logRuntime.mockClear();

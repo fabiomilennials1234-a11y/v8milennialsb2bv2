@@ -123,7 +123,8 @@ async function upsertEventCache(
       origin,
       synced_at:          new Date().toISOString(),
     },
-    { onConflict: "id" }
+    // Id de evento do Google se repete entre participantes: chave (user_id, id).
+    { onConflict: "user_id,id" }
   );
 }
 
@@ -405,6 +406,7 @@ Deno.serve(withErrorBoundary('google-calendar-events', async (req) => {
         await supabase
           .from("google_calendar_events_cache")
           .update({ lead_id: payload.lead_id })
+          .eq("user_id", targetOwnerId)
           .eq("id", createdEvent.id);
       }
 
@@ -567,6 +569,7 @@ Deno.serve(withErrorBoundary('google-calendar-events', async (req) => {
       await supabase
         .from("google_calendar_events_cache")
         .update({ google_event_status: "cancelled" })
+        .eq("user_id", targetOwnerId)
         .eq("id", eventId);
 
       await logCalendarOp(supabase, {

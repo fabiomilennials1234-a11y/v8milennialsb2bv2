@@ -9,6 +9,9 @@
  * 2. Busca o evento alterado na Google Calendar API
  * 3. Atualiza o cache (google_calendar_events_cache)
  * 4. Se o evento tiver lead_id nos extendedProperties, atualiza compromisso_date no lead
+ *    — SÓ se o lead pertence à org do canal. O lead_id vem do evento, e o evento
+ *    é escrito por quem é dono da agenda: sem esse filtro, qualquer usuário com
+ *    Google conectado alteraria leads de outra org criando eventos na própria.
  * 5. Renova o watch channel se próximo do vencimento — só o canal ATIVO, pela
  *    expiration do banco, com compare-and-swap (ver replace_google_watch_channel)
  *
@@ -17,11 +20,15 @@
  *   X-Goog-Resource-State → "sync" | "exists" (modified) | "not_exists" (deleted)
  *   X-Goog-Resource-ID    → resource_id do Google
  *   X-Goog-Channel-Expiration → timestamp de expiração do canal
+ *   X-Goog-Channel-Token  → token que registramos no events/watch; comparado
+ *                           com channel_token_hash (NULL = canal legado, aceito
+ *                           até a renovação)
  */
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import {
   getValidAccessToken,
+  isWatchChannelTokenValid,
   logCalendarOp,
   registerWatchChannel,
   watchChannelNeedsRenewal,
@@ -46,12 +53,14 @@ Deno.serve(withErrorBoundary('google-calendar-webhook', async (req) => {
   try {
     const channelId     = req.headers.get("X-Goog-Channel-ID");
     const resourceState = req.headers.get("X-Goog-Resource-State");
+    const channelToken  = req.headers.get("X-Goog-Channel-Token");
 
     // Responde 200 imediatamente (Google exige resposta rápida)
     // O processamento continua assincronamente
     processNotification({
       channelId,
       resourceState,
+      channelToken,
     }).then(() => {
       logRuntime({
         module: "calendar",
@@ -93,8 +102,9 @@ Deno.serve(withErrorBoundary('google-calendar-webhook', async (req) => {
 async function processNotification(params: {
   channelId: string | null;
   resourceState: string | null;
+  channelToken: string | null;
 }): Promise<void> {
-  const { channelId, resourceState } = params;
+  const { channelId, resourceState, channelToken } = params;
 
   if (!channelId) return;
 
@@ -112,13 +122,20 @@ async function processNotification(params: {
   // nada de token nem Google — esse SELECT (channel_id é único) é todo o custo.
   const { data: channel } = await supabase
     .from("google_calendar_watch_channels")
-    .select("user_id, organization_id, expiration")
+    .select("user_id, organization_id, expiration, channel_token_hash")
     .eq("channel_id", channelId)
     .eq("is_active", true)
     .maybeSingle();
 
   if (!channel) {
     console.warn("[google-calendar-webhook] Canal não encontrado:", channelId);
+    return;
+  }
+
+  // Token divergente/ausente num canal que tem hash: notificação forjada (o
+  // channel_id sozinho não autentica). Para aqui, antes de token e Google.
+  if (!(await isWatchChannelTokenValid(channelToken, channel.channel_token_hash))) {
+    console.warn("[google-calendar-webhook] Token do canal inválido:", channelId);
     return;
   }
 
@@ -209,7 +226,9 @@ async function processEvent(
       origin:              "google",
       synced_at:           new Date().toISOString(),
     },
-    { onConflict: "id" }
+    // O id de evento do Google se repete entre participantes (inclusive de
+    // orgs diferentes): a chave é (user_id, id), nunca id sozinho.
+    { onConflict: "user_id,id" }
   );
 
   // Verifica se o evento tem lead vinculado (via extendedProperties)
@@ -217,13 +236,34 @@ async function processEvent(
     (event.extendedProperties as Record<string, Record<string, string>> | undefined)
       ?.private ?? {};
 
-  const leadId = privateProps.lead_id;
-  if (!leadId) return;
+  const claimedLeadId = privateProps.lead_id;
+  if (!claimedLeadId) return;
 
-  // Atualiza lead_id no cache
+  // O lead_id é dado do evento — controlado por quem é dono da agenda. Só vale
+  // se o lead existe NA ORG DO CANAL; caso contrário nada de lead é tocado
+  // (nem o vínculo no cache, nem compromisso_date, nem pipeline).
+  const leadId = await resolveLeadInOrg(supabase, claimedLeadId, orgId);
+  if (!leadId) {
+    console.warn("[google-calendar-webhook] lead_id fora da org do canal, ignorado:", {
+      eventId,
+      orgId,
+    });
+    await logCalendarOp(supabase, {
+      userId,
+      operation: "sync",
+      status: "failed",
+      googleEventId: eventId,
+      initiatedBy: "system",
+      errorMessage: "lead_id do evento não pertence à organização do canal",
+    });
+    return;
+  }
+
+  // Atualiza lead_id no cache (só a linha deste usuário)
   await supabase
     .from("google_calendar_events_cache")
     .update({ lead_id: leadId })
+    .eq("user_id", userId)
     .eq("id", eventId);
 
   // Se o evento foi cancelado/deletado, limpa o compromisso_date do lead
@@ -231,7 +271,8 @@ async function processEvent(
     await supabase
       .from("leads")
       .update({ compromisso_date: null })
-      .eq("id", leadId);
+      .eq("id", leadId)
+      .eq("organization_id", orgId);
 
     await logCalendarOp(supabase, {
       userId,
@@ -250,7 +291,8 @@ async function processEvent(
   const { error: updateError } = await supabase
     .from("leads")
     .update({ compromisso_date: startDateTime })
-    .eq("id", leadId);
+    .eq("id", leadId)
+    .eq("organization_id", orgId);
 
   if (updateError) {
     console.error("[google-calendar-webhook] Erro ao atualizar lead:", updateError);
@@ -296,4 +338,31 @@ async function processEvent(
       meet_link: meetLink,
     },
   });
+}
+
+// ─── Lead da org do canal ────────────────────────────────────────────────────
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * Devolve o id do lead se ele existe em `orgId`; null caso contrário (lead de
+ * outra org, inexistente, ou lead_id malformado — que nem chega ao banco).
+ */
+async function resolveLeadInOrg(
+  supabase: ReturnType<typeof createClient>,
+  leadId: string,
+  orgId: string,
+): Promise<string | null> {
+  if (typeof leadId !== "string" || !UUID_RE.test(leadId)) return null;
+  const { data, error } = await supabase
+    .from("leads")
+    .select("id")
+    .eq("id", leadId)
+    .eq("organization_id", orgId)
+    .maybeSingle();
+  if (error) {
+    console.error("[google-calendar-webhook] Erro ao validar lead:", error);
+    return null;
+  }
+  return (data as { id: string } | null)?.id ?? null;
 }
