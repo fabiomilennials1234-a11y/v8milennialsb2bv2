@@ -27,6 +27,16 @@ import { timingSafeCompare } from "../_shared/auth.ts";
 import { isCopilotCanceled } from "../_shared/copilot/cancellation.ts";
 import { checkReplyGate, replyTurnFromAgentResponse, type ReplyTurn } from "../_shared/copilot/reply-gate.ts";
 import { montarPayloadDoAgente } from "../_shared/copilot-batch-payload.ts";
+// Entrega: import ESTÁTICO. Com `await import()` o bundler da Supabase não leva
+// whatsapp-dispatch.ts pro deploy e o envio morre em runtime com
+// "Module not found: .../_shared/whatsapp-dispatch.ts" — a IA gera a resposta,
+// grava em conversation_messages e a mensagem NUNCA sai. Medido na Macerados:
+// zero entregas do copilot entre 03/11 e 16/11/2026, com o erro em
+// copilot_message_queue.last_error e NADA em runtime_logs.
+import { selectSendableInstance, sendTextViaInstance } from "../_shared/whatsapp-dispatch.ts";
+// Força o bundler a incluir os providers (carregados por import dinâmico lá dentro).
+import "../_shared/whatsapp-providers/evolution-provider.ts";
+import "../_shared/whatsapp-providers/uazapi-provider.ts";
 import { recordQuotePresentation, type QuotePresentation } from "../_shared/quotes/presentation.ts";
 import {
   checkBatchMaturity,
@@ -224,9 +234,6 @@ Deno.serve(withErrorBoundary('copilot-batch-processor', async (req: Request): Pr
     // conexão mais recente) com FALLBACK pra query legada — nunca devolve
     // no_active_instance quando existe instância connected (flag pode ser
     // falso-positivo stale; exclusão dura silenciaria o copilot).
-    const { selectSendableInstance, sendTextViaInstance } = await import(
-      "../_shared/whatsapp-dispatch.ts"
-    );
     const instance = await selectSendableInstance(supabase, orgId);
 
     if (!instance) {
