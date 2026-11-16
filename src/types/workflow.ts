@@ -575,6 +575,8 @@ export interface ActionNodeData {
   pipeType?: string;
   /** Etapa de destino: stage_key (legado) ou `pipeline_stages.id` — os dois valem. */
   targetStage?: string;
+  /** Aguarda callbacks de entrega dos templates oficiais desta execução. */
+  awaitDeliveryConfirmation?: boolean;
   // Tag
   tagId?: string;
   tagName?: string;

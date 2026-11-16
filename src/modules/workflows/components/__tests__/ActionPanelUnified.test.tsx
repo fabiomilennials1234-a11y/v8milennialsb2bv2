@@ -28,6 +28,7 @@ vi.mock("@/modules/workflows/components/VariableInserter", () => ({
 vi.mock("@/modules/identity", () => ({
   useOrganization: () => ({ organizationId: "org-1", isReady: true }),
   useTeamMembers: () => ({ data: [] }),
+  useTeamMember: () => ({ data: null }),
 }));
 
 vi.mock("@/integrations/supabase/client", () => ({

@@ -9,6 +9,8 @@ const state = vi.hoisted(() => ({
   filters: [] as Array<[string, string, unknown]>,
   tables: [] as string[],
   empty: false,
+  memberAvatar: null as string | null,
+  profileAvatar: true,
 }));
 vi.mock("../org-team/hooks/useOrganization", () => ({
   useOrganization: () => ({ organizationId: state.org, isReady: !!state.org }),
@@ -26,21 +28,26 @@ vi.mock("@/integrations/supabase/client", () => ({
         then: (resolve: (value: unknown) => unknown) => Promise.resolve(resolve({
           error: null,
           data: table === "team_members"
-            ? state.empty ? [] : [{ id: "member-" + org, user_id: "user-" + org }]
-            : [{ id: "user-" + org, avatar_url: "/" + org + ".png" }],
+            ? state.empty ? [] : [{ id: "member-" + org, user_id: "user-" + org, avatar_url: state.memberAvatar }]
+            : state.profileAvatar ? [{ id: "user-" + org, avatar_url: "/" + org + ".png" }] : [],
         })),
       };
       return chain;
     },
   },
 }));
-beforeEach(() => { state.org = "org-a"; state.filters = []; state.tables = []; state.empty = false; });
+beforeEach(() => { state.org = "org-a"; state.filters = []; state.tables = []; state.empty = false; state.memberAvatar = null; state.profileAvatar = true; });
 afterEach(cleanup);
 function wrapper() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return ({ children }: { children: ReactNode }) => <QueryClientProvider client={client}>{children}</QueryClientProvider>;
 }
 describe("useAvatarMap organization scope", () => {
+  it("uses the member's configured photo when the linked account has no profile photo", async () => {
+    state.profileAvatar = false; state.memberAvatar = "/member-photo.png";
+    const { result } = renderHook(() => useAvatarMap(), { wrapper: wrapper() });
+    await waitFor(() => expect(result.current.get("member-org-a")).toBe("/member-photo.png"));
+  });
   it("queries only the selected organization's members and their profiles", async () => {
     const { result } = renderHook(() => useAvatarMap(), { wrapper: wrapper() });
     await waitFor(() => expect(result.current.get("member-org-a")).toBe("/org-a.png"));

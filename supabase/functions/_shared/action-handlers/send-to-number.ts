@@ -218,7 +218,29 @@ export async function sendToNumber(input: ActionInput): Promise<ActionResult> {
     // Content-hash dedup backstop (fail-open): if this exact notification already
     // went to this number inside the window, count it delivered and skip re-send.
     const dedup = await reserveSendOrSkip({ supabase, orgId: organizationId, phone, content: message, source: "workflow" });
-    if (dedup.duplicate) { succeeded.push(phone); continue; }
+    if (dedup.duplicate) {
+      // A reservation precedes the provider call and may represent a FAILED
+      // attempt. Staff notifications require actual send evidence before a
+      // retry may claim success or create the second (app) notification.
+      if (params.requireSendEvidence === true) {
+        const { data: previous, error } = await supabase.from("whatsapp_messages")
+          .select("id")
+          .eq("organization_id", organizationId)
+          .eq("instance_id", wa.instance.id)
+          .eq("phone_number", phone)
+          .eq("direction", "outgoing")
+          .eq("content", message)
+          .in("status", ["sent", "delivered", "read"])
+          .gte("created_at", new Date(Date.now() - (dedup.ttlSeconds ?? 300) * 1000).toISOString())
+          .limit(1);
+        if (error || !previous?.length) {
+          failures.push({ phone, error: "Envio anterior sem confirmação; reserva de duplicidade não comprova envio" });
+          continue;
+        }
+      }
+      succeeded.push(phone);
+      continue;
+    }
 
     const res = await sendTextViaInstance(supabase, wa.instance, phone, message, {
       trackSource: "workflow-send-to-number",

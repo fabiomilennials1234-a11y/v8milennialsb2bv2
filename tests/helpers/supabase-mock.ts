@@ -110,6 +110,10 @@ export function createMockSupabase() {
      * inner join.
      */
     const resolveField = (row: Record<string, unknown>, field: string): unknown => {
+      if (field.includes("->")) {
+        return field.split(/->>?/).reduce<unknown>((value, key) =>
+          value && typeof value === "object" ? (value as Record<string, unknown>)[key] : undefined, row);
+      }
       if (!field.includes('.')) return row[field];
       const [head, ...rest] = field.split('.');
       const tail = rest.join('.');
