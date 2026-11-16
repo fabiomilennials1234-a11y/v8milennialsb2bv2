@@ -20,6 +20,12 @@
 
 export const RECOVERY_KEY = "v8:stale-build-recovery-at";
 export const RECOVERY_THROTTLE_MS = 10_000;
+/**
+ * Falha de chunk dentro desta janela depois de uma recuperação já feita não é
+ * build velho: o cache e o SW foram limpos e a página veio nova. O arquivo
+ * continua sem carregar por causa de rede, bloqueio ou ausência real.
+ */
+export const RECOVERY_PERSISTENT_MS = 60_000;
 
 const STALE_CHUNK_PATTERNS = [
   /Failed to fetch dynamically imported module/i,
@@ -196,6 +202,29 @@ async function recover(env: RecoveryEnv, force: boolean): Promise<boolean> {
   }
   env.reload();
   return true;
+}
+
+/** A aba já limpou SW e cache há pouco — chunk que falha de novo é defeito, não deploy. */
+export function recoveredRecently(env: RecoveryEnv = browserEnv()): boolean {
+  const last = readLast(env);
+  if (last === null) return false;
+  const elapsed = env.now() - last;
+  return elapsed >= 0 && elapsed < RECOVERY_PERSISTENT_MS;
+}
+
+/**
+ * Caminho do arquivo do build que falhou, tirado da mensagem do erro. Só o
+ * caminho: sem origem e sem query, para ir ao relato sem dado do usuário.
+ */
+export function failedAssetPath(reason: unknown): string | null {
+  const message = reason instanceof Error ? reason.message : typeof reason === "string" ? reason : "";
+  const match = message.match(/https?:\/\/[^\s"')]+|\/assets\/[^\s"')]+/i);
+  if (!match) return null;
+  try {
+    return new URL(match[0], "https://x.invalid").pathname;
+  } catch {
+    return null;
+  }
 }
 
 /** Handler global (`error` / `unhandledrejection`): só age em chunk velho. */
