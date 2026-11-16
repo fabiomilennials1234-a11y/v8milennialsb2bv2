@@ -96,6 +96,25 @@ function makeInput(overrides: Partial<{
 }
 
 describe("sendToNumber action handler", () => {
+  it("does not report a failed attempt's dedup reservation as sent", async () => {
+    const { input, sb } = makeInput();
+    input.params.requireSendEvidence = true;
+    vi.spyOn(sb, "rpc").mockResolvedValue({ data: 2, error: null });
+    const result = await sendToNumber(input);
+    expect(result.success).toBe(false);
+    expect(result.error).toContain("reserva de duplicidade não comprova envio");
+    expect(sendTextViaInstance).not.toHaveBeenCalled();
+  });
+  it("accepts a duplicate only when the same instance has confirmed the send", async () => {
+    const { input, sb, mockTable } = makeInput();
+    input.params.requireSendEvidence = true;
+    vi.spyOn(sb, "rpc").mockResolvedValue({ data: 2, error: null });
+    mockTable("whatsapp_messages", [{ id: "sent", organization_id: "org-1", instance_id: "inst-1", phone_number: "5511988887777",
+      direction: "outgoing", status: "delivered", content: "Lead Test Lead respondeu!", created_at: new Date().toISOString() }]);
+    const result = await sendToNumber(input);
+    expect(result.success).toBe(true);
+    expect(sendTextViaInstance).not.toHaveBeenCalled();
+  });
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(sendTextViaInstance).mockResolvedValue({ success: true, messageId: "m1" });

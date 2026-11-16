@@ -50,6 +50,7 @@ export {
   useOrgQuotas,
   useOrgSwitcher,
   useTeamMembers,
+  useTeamMember,
   useGuidedResponsibleOptions,
   useCurrentTeamMember,
   useResponsibleMembers,

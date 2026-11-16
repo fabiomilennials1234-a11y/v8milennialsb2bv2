@@ -18,6 +18,9 @@ export async function guardWorkflowDelivery(
     .limit(101);
   if (error) return { success: false, error: `Falha ao verificar entrega: ${error.message}`, retryable: true };
   const messages = data ?? [];
+  if (!messages.length) {
+    return { success: false, error: "Nenhum envio oficial desta execução foi encontrado para confirmar a entrega. O negócio permaneceu na etapa atual.", retryable: false };
+  }
   if (messages.length > 100) {
     return { success: false, error: "Limite de mensagens excedido ao verificar a entrega. Revise a execução.", retryable: false };
   }

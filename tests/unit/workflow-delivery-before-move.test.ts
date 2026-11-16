@@ -39,7 +39,9 @@ describe("workflow movement after official delivery", () => {
     { organization_id: "org-b" },
     { metadata: { origem: { id: "other-execution", source: "workflow-action-template" } } },
     { channel: "instagram" },
-  ])("does not use another tenant/execution/channel's failure %j", async (patch) => {
-    expect((await run("failed", patch)).result.success).toBe(true);
+  ])("refuses movement without same-tenant/execution/channel evidence %j", async (patch) => {
+    const { result, writes } = await run("delivered", patch);
+    expect(result).toMatchObject({ success: false, retryable: false });
+    expect(writes).toHaveLength(0);
   });
 });

@@ -1,7 +1,7 @@
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { useTeamMembers } from "@/modules/identity";
+import { useTeamMember, useTeamMembers } from "@/modules/identity";
 import type { ActionNodeData } from "@/types/workflow";
 import { InstanceRoutingSelector } from "./InstanceRoutingSelector";
 
@@ -10,6 +10,9 @@ export function NotifyTeamMemberConfig({ data, onUpdate }: {
   onUpdate: (updates: Partial<ActionNodeData>) => void;
 }) {
   const { data: members = [] } = useTeamMembers();
+  // org_visible_members intentionally omits phone. Read only the selected
+  // member through the tenant-scoped detail hook before showing this warning.
+  const { data: memberDetails } = useTeamMember(data.notifyMemberId || "");
   const activeMembers = members.filter((member) => member.is_active);
   const selected = activeMembers.find((member) => member.id === data.notifyMemberId);
   const needsWhatsApp = data.notifyChannel === "whatsapp" || data.notifyChannel === "both";
@@ -45,7 +48,7 @@ export function NotifyTeamMemberConfig({ data, onUpdate }: {
         </Select>
       </div>
       {needsWhatsApp && <>
-        {selected && !selected.phone?.trim() && <p role="alert" className="text-xs text-warning">Cadastre o telefone WhatsApp deste membro em Equipe antes de ativar a automação.</p>}
+        {selected && memberDetails && !memberDetails.phone?.trim() && <p role="alert" className="text-xs text-warning">Cadastre o telefone WhatsApp deste membro em Equipe antes de ativar a automação.</p>}
         <InstanceRoutingSelector data={data} onUpdate={onUpdate} fixedOnly />
       </>}
     </>

@@ -2,7 +2,7 @@ import { render, screen, fireEvent, cleanup } from "@testing-library/react";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { NotifyTeamMemberConfig } from "../sidebar-panels/NotifyTeamMemberConfig";
 import type { ActionNodeData } from "@/types/workflow";
-vi.mock("@/modules/identity", () => ({ useTeamMembers: () => ({ data: [
+vi.mock("@/modules/identity", () => ({ useTeamMember: () => ({ data: { id: "ana", phone: null } }), useTeamMembers: () => ({ data: [
   { id: "ana", name: "Ana", is_active: true, phone: null },
   { id: "inactive", name: "Inativo", is_active: false },
 ] }) }));

@@ -115,7 +115,7 @@ export async function notifyTeamMember(input: ActionInput): Promise<ActionResult
 
   const message = (params.notifyMessage as string) || "";
   const channel = params.notifyChannel || "app";
-  if (!["app", "whatsapp", "both"].includes(String(channel))) {
+  if (typeof channel !== "string" || !["app", "whatsapp", "both"].includes(channel)) {
     return { success: false, error: "Canal de notificação inválido", retryable: false };
   }
   const needsApp = channel !== "whatsapp";
@@ -149,6 +149,7 @@ export async function notifyTeamMember(input: ActionInput): Promise<ActionResult
         notifyPhones: [member.phone],
         messageTemplate: message || "Acao de workflow executada",
         includeConversationSummary: false,
+        requireSendEvidence: true,
       },
     });
     if (!sent.success) return sent;
