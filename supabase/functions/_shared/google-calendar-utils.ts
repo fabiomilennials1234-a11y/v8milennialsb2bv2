@@ -189,19 +189,78 @@ export async function getValidAccessToken(
 
 // ─── Registro de watch channel (push notifications) ──────────────────────────
 
+const GOOGLE_WATCH_URL = "https://www.googleapis.com/calendar/v3/calendars/primary/events/watch";
+const GOOGLE_STOP_URL  = "https://www.googleapis.com/calendar/v3/channels/stop";
+const WATCH_CALENDAR_ID = "primary";
+
+/** Janela antes da expiração em que o canal ativo é renovado. */
+export const WATCH_RENEWAL_WINDOW_MS = 2 * 24 * 60 * 60 * 1000;
+
+/**
+ * Decide se o canal ativo precisa ser renovado, a partir da `expiration`
+ * gravada no BANCO (não do header da notificação). Sem expiração conhecida,
+ * não renova — renovar às cegas a cada notificação é o que alimentou a
+ * multiplicação de canais do incidente de 2026-11-16.
+ */
+export function watchChannelNeedsRenewal(
+  expiration: string | null | undefined,
+  nowMs: number = Date.now(),
+): boolean {
+  if (!expiration) return false;
+  const expiresAt = Date.parse(expiration);
+  if (Number.isNaN(expiresAt)) return false;
+  return expiresAt - nowMs < WATCH_RENEWAL_WINDOW_MS;
+}
+
+/** Para um canal no Google. Best-effort: nunca lança. */
+export async function stopGoogleChannel(
+  accessToken: string,
+  channelId: string,
+  resourceId: string,
+): Promise<void> {
+  await fetch(GOOGLE_STOP_URL, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ id: channelId, resourceId }),
+  }).catch((err) => {
+    console.warn("[GoogleCalendar] Falha ao parar watch channel:", channelId, err);
+  });
+}
+
+interface ReplaceWatchChannelResult {
+  won: boolean;
+  stopped: Array<{ channel_id: string; resource_id: string | null }>;
+}
+
+/**
+ * Cria um watch channel no Google e o torna o ÚNICO ativo de
+ * (userId, "primary"), via `replace_google_watch_channel` (atômico).
+ *
+ * - Sem `expectedOldChannelId` (conexão/reconexão OAuth): substitui todos os
+ *   ativos do usuário e para os antigos no Google.
+ * - Com `expectedOldChannelId` (renovação pelo webhook): compare-and-swap.
+ *   Se outro processo já renovou, este perde, e o canal recém-criado é parado
+ *   no Google para não ficar órfão disparando notificações.
+ *
+ * Nunca lança: falha aqui não pode bloquear o OAuth nem o webhook.
+ */
 export async function registerWatchChannel(
   userId: string,
   orgId: string,
   accessToken: string,
-  supabase: SupabaseClient
-): Promise<void> {
+  supabase: SupabaseClient,
+  expectedOldChannelId?: string,
+): Promise<{ renewed: boolean }> {
   const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
   const channelId = crypto.randomUUID();
   const webhookUrl = `${supabaseUrl}/functions/v1/google-calendar-webhook`;
 
-  const response = await fetch(
-    "https://www.googleapis.com/calendar/v3/calendars/primary/events/watch",
-    {
+  let data: { resourceId?: string; expiration?: string };
+  try {
+    const response = await fetch(GOOGLE_WATCH_URL, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${accessToken}`,
@@ -212,29 +271,65 @@ export async function registerWatchChannel(
         type: "web_hook",
         address: webhookUrl,
       }),
-    }
-  );
+    });
 
-  if (!response.ok) {
-    const err = await response.json();
-    console.error("[GoogleCalendar] Erro ao registrar watch channel:", err);
-    // Não bloqueia o fluxo OAuth — apenas loga
-    return;
+    if (!response.ok) {
+      const err = await response.json().catch(() => null);
+      console.error("[GoogleCalendar] Erro ao registrar watch channel:", err);
+      return { renewed: false };
+    }
+
+    data = await response.json();
+  } catch (err) {
+    console.error("[GoogleCalendar] Falha de rede ao registrar watch channel:", err);
+    return { renewed: false };
   }
 
-  const data = await response.json();
+  const resourceId = data.resourceId ?? null;
+  const expiration = data.expiration
+    ? new Date(parseInt(data.expiration, 10)).toISOString()
+    : null;
 
-  await supabase.from("google_calendar_watch_channels").insert({
-    user_id: userId,
-    organization_id: orgId,
-    channel_id: channelId,
-    resource_id: data.resourceId ?? null,
-    calendar_id: "primary",
-    expiration: data.expiration
-      ? new Date(parseInt(data.expiration)).toISOString()
-      : null,
-    is_active: true,
+  const { data: result, error } = await supabase.rpc("replace_google_watch_channel", {
+    p_user_id: userId,
+    p_org_id: orgId,
+    p_calendar_id: WATCH_CALENDAR_ID,
+    p_channel_id: channelId,
+    p_resource_id: resourceId,
+    p_expiration: expiration,
+    p_expected_old_channel_id: expectedOldChannelId ?? null,
   });
+
+  if (error) {
+    console.error("[GoogleCalendar] Erro ao gravar watch channel:", error);
+    // Com `code`, o Postgres respondeu e a transação foi desfeita: o canal novo
+    // não tem linha no banco e só viraria órfão — para no Google. (Ex.: connect
+    // manda orgId "" e o cast para uuid quebra a cada conexão.)
+    // Sem `code` é erro de transporte (timeout): o commit pode ter acontecido,
+    // e parar o canal que o banco tem como ativo deixaria a agenda muda. Aí só
+    // loga; se for órfão, expira sozinho e cai no early-return do webhook.
+    if (error.code && resourceId) {
+      await stopGoogleChannel(accessToken, channelId, resourceId);
+    }
+    return { renewed: false };
+  }
+
+  const outcome = result as ReplaceWatchChannelResult | null;
+
+  if (!outcome?.won) {
+    // Outro processo renovou primeiro. O canal recém-criado não tem linha
+    // ativa no banco: para no Google para não virar mais uma fonte de webhook.
+    if (resourceId) await stopGoogleChannel(accessToken, channelId, resourceId);
+    return { renewed: false };
+  }
+
+  for (const old of outcome.stopped ?? []) {
+    if (old.resource_id) {
+      await stopGoogleChannel(accessToken, old.channel_id, old.resource_id);
+    }
+  }
+
+  return { renewed: true };
 }
 
 // ─── Cancelamento de watch channel ──────────────────────────────────────────
@@ -254,14 +349,7 @@ export async function cancelWatchChannels(
 
   for (const ch of channels) {
     if (!ch.resource_id) continue;
-    await fetch("https://www.googleapis.com/calendar/v3/channels/stop", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ id: ch.channel_id, resourceId: ch.resource_id }),
-    }).catch(() => {}); // best-effort
+    await stopGoogleChannel(accessToken, ch.channel_id, ch.resource_id);
   }
 
   await supabase
