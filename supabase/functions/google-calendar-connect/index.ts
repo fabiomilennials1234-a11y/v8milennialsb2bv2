@@ -5,6 +5,12 @@
  * Retorna { authorization_url: string }.
  *
  * Requer: Authorization: Bearer <supabase_jwt>
+ * Query:  ?organization_id=<uuid> — org em que o usuário está agindo. Opcional
+ *         só para quem tem exatamente UMA membership ativa.
+ *
+ * SEGURANÇA: o `state` sai daqui assinado (HMAC) e com nonce de uso único
+ * gravado em google_calendar_oauth_nonces. Sem membership ativa na org, não há
+ * conexão — antes caía em `orgId ?? ""` e seguia.
  */
 
 import { withErrorBoundary } from '../_shared/error-boundary.ts';
@@ -13,11 +19,14 @@ import { getCorsHeaders } from "../_shared/cors.ts";
 import { withSecurityHeaders } from "../_shared/security-headers.ts";
 import { logRuntime } from "../_shared/logger.ts";
 import {
-  encodeState,
   GOOGLE_CLIENT_ID,
+  GOOGLE_CLIENT_SECRET,
   GOOGLE_REDIRECT_URI,
   GOOGLE_SCOPES,
 } from "../_shared/google-calendar-utils.ts";
+import { signGoogleCalendarState } from "../_shared/google-calendar-oauth-state.ts";
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const SUPABASE_URL             = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -60,30 +69,77 @@ Deno.serve(withErrorBoundary('google-calendar-connect', async (req) => {
       );
     }
 
-    // ── Busca org_id do usuário ──────────────────────────────────────────────
+    const json = (status: number, body: Record<string, unknown>) =>
+      new Response(JSON.stringify(body), {
+        status,
+        headers: { ...corsHeaders, "Content-Type": "application/json", "Cache-Control": "no-store" },
+      });
+
+    if (!GOOGLE_CLIENT_ID || !GOOGLE_CLIENT_SECRET || !GOOGLE_REDIRECT_URI) {
+      return json(500, {
+        error: "Configuração incompleta",
+        message: "GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET ou GOOGLE_REDIRECT_URI não configurados",
+      });
+    }
+
+    // ── Resolve a org pela membership ativa ─────────────────────────────────
+    // Mesmo critério que google_calendar_consume_oauth_nonce revalida no
+    // callback: team_members ativo. Multi-org sem org explícita é ambíguo e
+    // é recusado — nunca "a primeira org".
+    const requestedOrg = new URL(req.url).searchParams.get("organization_id")?.trim() || null;
+    if (requestedOrg && !UUID_RE.test(requestedOrg)) {
+      return json(400, { error: "organization_id inválido", message: "organization_id precisa ser um UUID" });
+    }
+
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
-      auth: { persistSession: false },
+      auth: { persistSession: false, autoRefreshToken: false },
     });
 
-    const { data: member } = await supabase
+    const { data: memberships, error: membershipError } = await supabase
       .from("team_members")
       .select("organization_id")
       .eq("user_id", user.id)
-      .eq("is_active", true)
-      .maybeSingle();
+      .eq("is_active", true);
 
-    const orgId = member?.organization_id ?? "";
+    if (membershipError) throw membershipError;
 
-    // ── Gera URL OAuth ───────────────────────────────────────────────────────
-    if (!GOOGLE_CLIENT_ID || !GOOGLE_REDIRECT_URI) {
-      return new Response(
-        JSON.stringify({ error: "Configuração incompleta", message: "GOOGLE_CLIENT_ID ou GOOGLE_REDIRECT_URI não configurados" }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+    const orgIds = [...new Set((memberships ?? []).map((m) => m.organization_id as string))];
+    let orgId: string;
+    if (requestedOrg) {
+      if (!orgIds.includes(requestedOrg)) {
+        return json(403, { error: "Forbidden", message: "Você não pertence a esta organização" });
+      }
+      orgId = requestedOrg;
+    } else if (orgIds.length === 1) {
+      orgId = orgIds[0];
+    } else if (orgIds.length === 0) {
+      return json(403, { error: "Forbidden", message: "Sem membership ativa em nenhuma organização" });
+    } else {
+      return json(400, {
+        error: "organization_id obrigatório",
+        message: "Usuário com mais de uma organização precisa informar organization_id",
+      });
     }
 
-    const state = encodeState(user.id, orgId);
+    // ── Nonce de uso único + state assinado ─────────────────────────────────
+    const nonce = crypto.randomUUID();
+    const { state, expiresAt } = await signGoogleCalendarState(
+      { userId: user.id, orgId, nonce },
+      GOOGLE_CLIENT_SECRET,
+    );
 
+    const { error: nonceError } = await supabase.from("google_calendar_oauth_nonces").insert({
+      nonce,
+      user_id: user.id,
+      organization_id: orgId,
+      expires_at: new Date(expiresAt).toISOString(),
+    });
+    if (nonceError) {
+      console.error("[google-calendar-connect] nonce insert error:", nonceError);
+      return json(503, { error: "state_storage_unavailable", message: "Não foi possível iniciar a conexão" });
+    }
+
+    // ── Gera URL OAuth ───────────────────────────────────────────────────────
     const params = new URLSearchParams({
       client_id:     GOOGLE_CLIENT_ID,
       redirect_uri:  GOOGLE_REDIRECT_URI,
@@ -106,10 +162,7 @@ Deno.serve(withErrorBoundary('google-calendar-connect', async (req) => {
       entityId: user.id,
     });
 
-    return new Response(
-      JSON.stringify({ authorization_url, state }),
-      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
+    return json(200, { authorization_url });
   } catch (err) {
     console.error("[google-calendar-connect]", err);
 
@@ -122,7 +175,7 @@ Deno.serve(withErrorBoundary('google-calendar-connect', async (req) => {
     });
 
     return new Response(
-      JSON.stringify({ error: "Erro interno", message: String(err) }),
+      JSON.stringify({ error: "Erro interno", message: "Não foi possível iniciar a conexão" }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }

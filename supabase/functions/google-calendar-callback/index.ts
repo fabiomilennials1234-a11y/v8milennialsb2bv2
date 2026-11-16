@@ -6,14 +6,22 @@
  * e redireciona o usuário para /configuracoes?google=connected.
  *
  * URL: ${SUPABASE_URL}/functions/v1/google-calendar-callback?code=...&state=...
+ *
+ * SEGURANÇA: este endpoint é público e grava com service_role, então NADA do
+ * `state` vale antes de duas provas, nesta ordem e antes de trocar o code:
+ *   1. assinatura HMAC + expiração (verifyGoogleCalendarState);
+ *   2. consumo do nonce de uso único, que revalida a membership atual
+ *      (google_calendar_consume_oauth_nonce).
+ * State forjado, adulterado, expirado ou reusado → redirect de erro, sem
+ * tocar no Google nem no banco.
  */
 
 import { withErrorBoundary } from '../_shared/error-boundary.ts';
 import { withSecurityHeaders } from "../_shared/security-headers.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { logRuntime } from "../_shared/logger.ts";
+import { verifyGoogleCalendarState } from "../_shared/google-calendar-oauth-state.ts";
 import {
-  decodeState,
   encryptToken,
   ENCRYPTION_KEY_ID,
   GOOGLE_CLIENT_ID,
@@ -39,25 +47,40 @@ Deno.serve(withErrorBoundary('google-calendar-callback', async (req) => {
       return Response.redirect(`${APP_URL}/configuracoes?${p}`, 302);
     };
 
-    // ── Erro retornado pelo Google ───────────────────────────────────────────
-    if (errParam) {
-      return redirect({ google: "error", reason: errParam });
-    }
-
-    if (!code || !state) {
+    if (!state) {
       return redirect({ google: "error", reason: "parametros_ausentes" });
     }
 
-    // ── Valida state (CSRF) ──────────────────────────────────────────────────
-    const stateData = decodeState(state);
+    // ── 1. Assinatura + expiração ────────────────────────────────────────────
+    const stateData = await verifyGoogleCalendarState(state, GOOGLE_CLIENT_SECRET);
     if (!stateData) {
       return redirect({ google: "error", reason: "state_invalido_ou_expirado" });
     }
     const { userId, orgId } = stateData;
 
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
-      auth: { persistSession: false },
+      auth: { persistSession: false, autoRefreshToken: false },
     });
+
+    // ── 2. Nonce de uso único + membership atual ─────────────────────────────
+    // Consumido também quando o Google devolve erro: o state não serve mais.
+    const { data: consumed, error: nonceError } = await supabase.rpc(
+      "google_calendar_consume_oauth_nonce",
+      { p_nonce: stateData.nonce, p_user_id: userId, p_organization_id: orgId },
+    );
+    if (nonceError || consumed !== true) {
+      if (nonceError) console.error("[google-calendar-callback] nonce consume error:", nonceError);
+      return redirect({ google: "error", reason: "state_invalido_ou_expirado" });
+    }
+
+    // ── Erro retornado pelo Google ───────────────────────────────────────────
+    if (errParam) {
+      return redirect({ google: "error", reason: "autorizacao_recusada" });
+    }
+
+    if (!code) {
+      return redirect({ google: "error", reason: "parametros_ausentes" });
+    }
 
     // ── Troca code por tokens ────────────────────────────────────────────────
     const tokenRes = await fetch("https://oauth2.googleapis.com/token", {
@@ -119,7 +142,7 @@ Deno.serve(withErrorBoundary('google-calendar-callback', async (req) => {
       .upsert(
         {
           user_id:                 userId,
-          organization_id:         orgId || null,
+          organization_id:         orgId,
           google_email:            userInfo.email,
           google_account_id:       userInfo.id,
           encrypted_refresh_token: encrypted,

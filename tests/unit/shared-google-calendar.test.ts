@@ -1,5 +1,5 @@
 /**
- * Tests for _shared/google-calendar-utils.ts — encryption, OAuth state, token refresh,
+ * Tests for _shared/google-calendar-utils.ts — encryption, token refresh,
  * watch channel registration/cancellation, audit logging.
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
@@ -27,8 +27,6 @@ const TEST_ENCRYPTION_KEY = "0123456789abcdef0123456789abcdef0123456789abcdef012
 import {
   encryptToken,
   decryptToken,
-  encodeState,
-  decodeState,
   refreshAccessToken,
   getValidAccessToken,
   registerWatchChannel,
@@ -78,47 +76,6 @@ describe("encryptToken / decryptToken", () => {
     // This is expected behavior — the module caches env vars at import time.
     // We verify the throw behavior is correct.
     await expect(encryptToken("test")).rejects.toThrow("GOOGLE_CALENDAR_ENCRYPTION_KEY");
-  });
-});
-
-// ── encodeState / decodeState (OAuth CSRF) ──
-describe("encodeState / decodeState", () => {
-  it("encodes and decodes state round-trip", () => {
-    const state = encodeState("user-1", "org-1");
-    expect(typeof state).toBe("string");
-
-    const decoded = decodeState(state);
-    expect(decoded).not.toBeNull();
-    expect(decoded!.userId).toBe("user-1");
-    expect(decoded!.orgId).toBe("org-1");
-    expect(decoded!.ts).toBeGreaterThan(0);
-  });
-
-  it("returns null for expired state (>15 min)", () => {
-    // Create a state with an old timestamp
-    const oldPayload = JSON.stringify({ userId: "u1", orgId: "o1", ts: Date.now() - 20 * 60 * 1000 });
-    const state = btoa(oldPayload);
-    const decoded = decodeState(state);
-    expect(decoded).toBeNull();
-  });
-
-  it("returns null for invalid base64", () => {
-    const decoded = decodeState("not-valid-base64!!!");
-    expect(decoded).toBeNull();
-  });
-
-  it("returns null for non-JSON payload", () => {
-    const state = btoa("this is not json");
-    const decoded = decodeState(state);
-    expect(decoded).toBeNull();
-  });
-
-  it("accepts state within 15 minute window", () => {
-    const recentPayload = JSON.stringify({ userId: "u1", orgId: "o1", ts: Date.now() - 10 * 60 * 1000 });
-    const state = btoa(recentPayload);
-    const decoded = decodeState(state);
-    expect(decoded).not.toBeNull();
-    expect(decoded!.userId).toBe("u1");
   });
 });
 

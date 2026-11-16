@@ -10,7 +10,7 @@
  */
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useAuth } from "@/modules/identity";
+import { useAuth, useOrganization } from "@/modules/identity";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { notifyError } from "@/shared/errors";
@@ -89,8 +89,11 @@ async function fetchConnectionStatus(userId: string): Promise<ConnectionStatus> 
 
 // ─── Connect: chama Edge Function e redireciona ao Google ─────────────────────
 
-async function initiateOAuth(accessToken: string): Promise<string> {
-  const response = await fetch(edgeFunctionUrl("google-calendar-connect"), {
+async function initiateOAuth(accessToken: string, organizationId: string): Promise<string> {
+  // A org vai explícita: o servidor recusa usuário multi-org sem ela e assina
+  // o state OAuth para esta org (ver google-calendar-connect).
+  const params = new URLSearchParams({ organization_id: organizationId });
+  const response = await fetch(`${edgeFunctionUrl("google-calendar-connect")}?${params}`, {
     method: "GET",
     headers: authHeaders(accessToken),
   });
@@ -167,11 +170,13 @@ export function useGoogleCalendarStatus() {
  */
 export function useConnectGoogleCalendar() {
   const { session } = useAuth();
+  const { organizationId } = useOrganization();
 
   return useMutation({
     mutationFn: async () => {
       if (!session?.access_token) throw new Error("Usuário não autenticado");
-      const authUrl = await initiateOAuth(session.access_token);
+      if (!organizationId) throw new Error("Organização não selecionada");
+      const authUrl = await initiateOAuth(session.access_token, organizationId);
       window.location.href = authUrl;
     },
     onError: (error: Error) => {

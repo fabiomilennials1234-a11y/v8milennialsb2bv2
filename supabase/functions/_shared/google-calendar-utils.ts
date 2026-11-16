@@ -102,25 +102,9 @@ export async function decryptToken(
   return new TextDecoder().decode(decrypted);
 }
 
-// ─── OAuth state (CSRF protection) ───────────────────────────────────────────
-
-export function encodeState(userId: string, orgId: string): string {
-  const payload = JSON.stringify({ userId, orgId, ts: Date.now() });
-  return btoa(payload);
-}
-
-export function decodeState(
-  state: string
-): { userId: string; orgId: string; ts: number } | null {
-  try {
-    const payload = JSON.parse(atob(state));
-    // Rejeita states com mais de 15 minutos
-    if (Date.now() - payload.ts > 15 * 60 * 1000) return null;
-    return payload;
-  } catch {
-    return null;
-  }
-}
+// ─── OAuth state ─────────────────────────────────────────────────────────────
+// Assinado (HMAC) com nonce de uso único: ver ./google-calendar-oauth-state.ts.
+// O encodeState/decodeState em base64 puro que vivia aqui era forjável.
 
 // ─── Token refresh ────────────────────────────────────────────────────────────
 
