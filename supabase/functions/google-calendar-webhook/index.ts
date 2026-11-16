@@ -9,7 +9,8 @@
  * 2. Busca o evento alterado na Google Calendar API
  * 3. Atualiza o cache (google_calendar_events_cache)
  * 4. Se o evento tiver lead_id nos extendedProperties, atualiza compromisso_date no lead
- * 5. Renova o watch channel se próximo do vencimento
+ * 5. Renova o watch channel se próximo do vencimento — só o canal ATIVO, pela
+ *    expiration do banco, com compare-and-swap (ver replace_google_watch_channel)
  *
  * Google envia headers:
  *   X-Goog-Channel-ID     → nosso channel_id (UUID que registramos)
@@ -23,6 +24,7 @@ import {
   getValidAccessToken,
   logCalendarOp,
   registerWatchChannel,
+  watchChannelNeedsRenewal,
 } from "../_shared/google-calendar-utils.ts";
 import { logRuntime } from "../_shared/logger.ts";
 import { withErrorBoundary } from '../_shared/error-boundary.ts';
@@ -44,16 +46,12 @@ Deno.serve(withErrorBoundary('google-calendar-webhook', async (req) => {
   try {
     const channelId     = req.headers.get("X-Goog-Channel-ID");
     const resourceState = req.headers.get("X-Goog-Resource-State");
-    const resourceId    = req.headers.get("X-Goog-Resource-ID");
-    const expirationMs  = req.headers.get("X-Goog-Channel-Expiration");
 
     // Responde 200 imediatamente (Google exige resposta rápida)
     // O processamento continua assincronamente
     processNotification({
       channelId,
       resourceState,
-      resourceId,
-      expirationMs,
     }).then(() => {
       logRuntime({
         module: "calendar",
@@ -95,10 +93,8 @@ Deno.serve(withErrorBoundary('google-calendar-webhook', async (req) => {
 async function processNotification(params: {
   channelId: string | null;
   resourceState: string | null;
-  resourceId: string | null;
-  expirationMs: string | null;
 }): Promise<void> {
-  const { channelId, resourceState, expirationMs } = params;
+  const { channelId, resourceState } = params;
 
   if (!channelId) return;
 
@@ -112,10 +108,11 @@ async function processNotification(params: {
     auth: { persistSession: false },
   });
 
-  // Busca o canal e o usuário associado
+  // Busca o canal e o usuário associado. Canal inativo/desconhecido para AQUI:
+  // nada de token nem Google — esse SELECT (channel_id é único) é todo o custo.
   const { data: channel } = await supabase
     .from("google_calendar_watch_channels")
-    .select("user_id, organization_id")
+    .select("user_id, organization_id, expiration")
     .eq("channel_id", channelId)
     .eq("is_active", true)
     .maybeSingle();
@@ -125,7 +122,7 @@ async function processNotification(params: {
     return;
   }
 
-  const { user_id: userId, organization_id: orgId } = channel;
+  const { user_id: userId, organization_id: orgId, expiration } = channel;
 
   // Obtém access token válido
   const tokenData = await getValidAccessToken(userId, supabase);
@@ -154,15 +151,13 @@ async function processNotification(params: {
     await processEvent(supabase, userId, orgId, event);
   }
 
-  // Verifica se o canal está próximo do vencimento (menos de 2 dias)
-  if (expirationMs) {
-    const expirationTs = parseInt(expirationMs.replace(/[^0-9]/g, ""));
-    const twoDaysMs    = 2 * 24 * 60 * 60 * 1000;
-
-    if (expirationTs - Date.now() < twoDaysMs) {
-      console.log("[google-calendar-webhook] Renovando canal próximo do vencimento:", channelId);
-      await registerWatchChannel(userId, orgId, tokenData.accessToken, supabase);
-    }
+  // Renova se o canal ATIVO está a menos de 2 dias de expirar (expiration do
+  // banco, não do header). channelId vai como expected: compare-and-swap no
+  // banco garante que N notificações concorrentes do mesmo canal produzem 1
+  // canal novo; os perdedores param o próprio canal no Google.
+  if (watchChannelNeedsRenewal(expiration)) {
+    console.log("[google-calendar-webhook] Renovando canal próximo do vencimento:", channelId);
+    await registerWatchChannel(userId, orgId, tokenData.accessToken, supabase, channelId);
   }
 }
 

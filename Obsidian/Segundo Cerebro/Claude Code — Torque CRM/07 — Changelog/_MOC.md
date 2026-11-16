@@ -188,3 +188,4 @@ owner: claude-agent
 - [[2026-11-04-lps-v5-gestao-comercial-crm-b2b|LPs no padrão V5 e rotas antigas aposentadas]]
 - [[2026-11-09-mencao-em-grupo-uazapi|Menção (@) ao enviar para grupo do WhatsApp (Uazapi)]]
 - [[2026-11-09-numero-em-varios-cadastros|Número em vários cadastros volta a vincular a conversa]]
+- [[2026-11-16-google-watch-channel-unico|Watch channel do Google Calendar deixa de se multiplicar]]

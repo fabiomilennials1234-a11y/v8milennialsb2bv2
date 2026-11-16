@@ -24641,6 +24641,18 @@ export type Database = {
         Args: { p_stage_ids: string[] }
         Returns: number
       }
+      replace_google_watch_channel: {
+        Args: {
+          p_calendar_id: string
+          p_channel_id: string
+          p_expected_old_channel_id?: string
+          p_expiration: string
+          p_org_id: string
+          p_resource_id: string
+          p_user_id: string
+        }
+        Returns: Json
+      }
       reset_onboarding_state: {
         Args: { p_org_id: string; p_target_state?: string }
         Returns: undefined

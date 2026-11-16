@@ -33,6 +33,9 @@ import {
   getValidAccessToken,
   registerWatchChannel,
   cancelWatchChannels,
+  stopGoogleChannel,
+  watchChannelNeedsRenewal,
+  WATCH_RENEWAL_WINDOW_MS,
   logCalendarOp,
   GOOGLE_SCOPES,
   ENCRYPTION_KEY_ID,
@@ -171,46 +174,202 @@ describe("getValidAccessToken", () => {
 });
 
 // ── registerWatchChannel ──
-describe("registerWatchChannel", () => {
-  it("calls Google Calendar watch API and inserts channel", async () => {
-    setDenoEnv("SUPABASE_URL", "https://test.supabase.co");
+const WATCH_URL = "https://www.googleapis.com/calendar/v3/calendars/primary/events/watch";
+const STOP_URL = "https://www.googleapis.com/calendar/v3/channels/stop";
 
-    mockFetch.mockResolvedValueOnce({
-      ok: true,
-      json: () => Promise.resolve({ resourceId: "res-123", expiration: "1713000000000" }),
-    });
+const stopBodies = () =>
+  mockFetch.mock.calls
+    .filter((call) => call[0] === STOP_URL)
+    .map((call) => JSON.parse((call[1] as RequestInit).body as string));
 
-    const { sb, getInserted } = createMockSupabase();
-    await registerWatchChannel("user-1", "org-1", "access-token-123", sb);
-
-    expect(mockFetch).toHaveBeenCalledWith(
-      "https://www.googleapis.com/calendar/v3/calendars/primary/events/watch",
-      expect.objectContaining({
-        method: "POST",
-        headers: expect.objectContaining({
-          Authorization: "Bearer access-token-123",
-        }),
-      })
-    );
-
-    const inserted = getInserted("google_calendar_watch_channels");
-    expect(inserted.length).toBe(1);
-    expect(inserted[0].user_id).toBe("user-1");
-    expect(inserted[0].organization_id).toBe("org-1");
-    expect(inserted[0].is_active).toBe(true);
+const watchOk = () =>
+  mockFetch.mockResolvedValueOnce({
+    ok: true,
+    json: () => Promise.resolve({ resourceId: "res-new", expiration: "1713000000000" }),
   });
 
-  it("does not throw when Google API returns error", async () => {
-    setDenoEnv("SUPABASE_URL", "https://test.supabase.co");
+describe("registerWatchChannel", () => {
+  beforeEach(() => setDenoEnv("SUPABASE_URL", "https://test.supabase.co"));
 
+  it("happy path: watch → rpc → stops every replaced channel in Google", async () => {
+    watchOk();
+    const { sb, mockRpc, getRpcCalls, getInserted } = createMockSupabase();
+    mockRpc("replace_google_watch_channel", {
+      won: true,
+      stopped: [
+        { channel_id: "old-1", resource_id: "res-old-1" },
+        { channel_id: "old-2", resource_id: null },
+      ],
+    });
+
+    const result = await registerWatchChannel("user-1", "org-1", "access-token-123", sb);
+
+    expect(result).toEqual({ renewed: true });
+    expect(mockFetch.mock.calls[0][0]).toBe(WATCH_URL);
+    expect(mockFetch.mock.calls[0][1]).toEqual(
+      expect.objectContaining({
+        method: "POST",
+        headers: expect.objectContaining({ Authorization: "Bearer access-token-123" }),
+      }),
+    );
+    const watchedId = JSON.parse(mockFetch.mock.calls[0][1].body).id;
+
+    const calls = getRpcCalls();
+    expect(calls).toHaveLength(1);
+    expect(calls[0].name).toBe("replace_google_watch_channel");
+    expect(calls[0].params).toEqual({
+      p_user_id: "user-1",
+      p_org_id: "org-1",
+      p_calendar_id: "primary",
+      p_channel_id: watchedId,
+      p_resource_id: "res-new",
+      p_expiration: new Date(1713000000000).toISOString(),
+      p_expected_old_channel_id: null,
+    });
+
+    // Sem insert direto: a escrita é toda do RPC atômico.
+    expect(getInserted("google_calendar_watch_channels")).toHaveLength(0);
+    // Só o antigo com resource_id é parado; o novo nunca.
+    expect(stopBodies()).toEqual([{ id: "old-1", resourceId: "res-old-1" }]);
+  });
+
+  it("won=false: stops the just-created channel and none of the old ones", async () => {
+    watchOk();
+    const { sb, mockRpc } = createMockSupabase();
+    mockRpc("replace_google_watch_channel", { won: false, stopped: [] });
+
+    const result = await registerWatchChannel("user-1", "org-1", "tok", sb, "ch-old");
+
+    expect(result).toEqual({ renewed: false });
+    const watchedId = JSON.parse(mockFetch.mock.calls[0][1].body).id;
+    expect(stopBodies()).toEqual([{ id: watchedId, resourceId: "res-new" }]);
+  });
+
+  it("Google watch error: does not call the rpc and does not throw", async () => {
     mockFetch.mockResolvedValueOnce({
       ok: false,
       json: () => Promise.resolve({ error: { message: "Forbidden" } }),
     });
+    const { sb, getRpcCalls } = createMockSupabase();
 
+    await expect(registerWatchChannel("user-1", "org-1", "token", sb)).resolves.toEqual({
+      renewed: false,
+    });
+    expect(getRpcCalls()).toHaveLength(0);
+    expect(stopBodies()).toHaveLength(0);
+  });
+
+  it("network failure on watch: does not call the rpc and does not throw", async () => {
+    mockFetch.mockRejectedValueOnce(new Error("ECONNRESET"));
+    const { sb, getRpcCalls } = createMockSupabase();
+
+    await expect(registerWatchChannel("user-1", "org-1", "token", sb)).resolves.toEqual({
+      renewed: false,
+    });
+    expect(getRpcCalls()).toHaveLength(0);
+  });
+
+  it("forwards expectedOldChannelId to the rpc (compare-and-swap)", async () => {
+    watchOk();
+    const { sb, mockRpc, getRpcCalls } = createMockSupabase();
+    mockRpc("replace_google_watch_channel", {
+      won: true,
+      stopped: [{ channel_id: "ch-old", resource_id: "res-old" }],
+    });
+
+    await registerWatchChannel("user-1", "org-1", "tok", sb, "ch-old");
+
+    expect((getRpcCalls()[0].params as Record<string, unknown>).p_expected_old_channel_id).toBe("ch-old");
+    expect(stopBodies()).toEqual([{ id: "ch-old", resourceId: "res-old" }]);
+  });
+
+  it("rpc error WITH code (server answered, rolled back): stops the just-created channel", async () => {
+    watchOk();
     const { sb } = createMockSupabase();
-    // Should not throw — just logs the error
-    await expect(registerWatchChannel("user-1", "org-1", "token", sb)).resolves.toBeUndefined();
+    sb.rpc = () =>
+      Promise.resolve({ data: null, error: { code: "22P02", message: 'invalid input syntax for type uuid: ""' } });
+    const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    await expect(registerWatchChannel("user-1", "", "tok", sb)).resolves.toEqual({ renewed: false });
+    const watchedId = JSON.parse(mockFetch.mock.calls[0][1].body).id;
+    expect(stopBodies()).toEqual([{ id: watchedId, resourceId: "res-new" }]);
+    expect(errSpy).toHaveBeenCalled();
+    errSpy.mockRestore();
+  });
+
+  it("rpc error WITHOUT code (transport): logs, does not throw, stops nothing", async () => {
+    watchOk();
+    const { sb } = createMockSupabase();
+    sb.rpc = () => Promise.resolve({ data: null, error: { message: "TypeError: fetch failed" } });
+    const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    await expect(registerWatchChannel("user-1", "org-1", "tok", sb, "ch-old")).resolves.toEqual({
+      renewed: false,
+    });
+    expect(errSpy).toHaveBeenCalled();
+    expect(stopBodies()).toHaveLength(0);
+    errSpy.mockRestore();
+  });
+
+  it("a stop failure in Google does not break the renewal", async () => {
+    watchOk();
+    mockFetch.mockRejectedValueOnce(new Error("stop down"));
+    const { sb, mockRpc } = createMockSupabase();
+    mockRpc("replace_google_watch_channel", {
+      won: true,
+      stopped: [{ channel_id: "old-1", resource_id: "res-old-1" }],
+    });
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    await expect(registerWatchChannel("user-1", "org-1", "tok", sb)).resolves.toEqual({
+      renewed: true,
+    });
+    warnSpy.mockRestore();
+  });
+});
+
+// ── stopGoogleChannel ──
+describe("stopGoogleChannel", () => {
+  it("POSTs id + resourceId to channels/stop with the bearer token", async () => {
+    await stopGoogleChannel("tok", "ch-1", "res-1");
+    expect(mockFetch).toHaveBeenCalledWith(
+      STOP_URL,
+      expect.objectContaining({
+        method: "POST",
+        headers: expect.objectContaining({ Authorization: "Bearer tok" }),
+        body: JSON.stringify({ id: "ch-1", resourceId: "res-1" }),
+      }),
+    );
+  });
+
+  it("never throws", async () => {
+    mockFetch.mockRejectedValueOnce(new Error("down"));
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    await expect(stopGoogleChannel("tok", "ch-1", "res-1")).resolves.toBeUndefined();
+    warnSpy.mockRestore();
+  });
+});
+
+// ── watchChannelNeedsRenewal ──
+describe("watchChannelNeedsRenewal", () => {
+  const NOW = Date.parse("2026-11-16T12:00:00.000Z");
+
+  it("renews inside the 2-day window", () => {
+    expect(watchChannelNeedsRenewal(new Date(NOW + WATCH_RENEWAL_WINDOW_MS - 1).toISOString(), NOW)).toBe(true);
+  });
+
+  it("renews an already expired channel", () => {
+    expect(watchChannelNeedsRenewal(new Date(NOW - 1000).toISOString(), NOW)).toBe(true);
+  });
+
+  it("does not renew outside the window", () => {
+    expect(watchChannelNeedsRenewal(new Date(NOW + WATCH_RENEWAL_WINDOW_MS + 1).toISOString(), NOW)).toBe(false);
+  });
+
+  it("does not renew without a known expiration", () => {
+    expect(watchChannelNeedsRenewal(null, NOW)).toBe(false);
+    expect(watchChannelNeedsRenewal(undefined, NOW)).toBe(false);
+    expect(watchChannelNeedsRenewal("not-a-date", NOW)).toBe(false);
   });
 });
 
