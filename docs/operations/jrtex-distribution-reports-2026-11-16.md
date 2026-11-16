@@ -59,6 +59,8 @@ de triagem ficam disponíveis por atribuição real.
   proteção de carteira, prazo útil, tarefas, auditoria e triggers.
 - `20280112003000_regional_contact_capture_safety.sql`: dados em mensagens separadas.
 - `20280112004000_regional_capture_pipeline_scope.sql`: captura limitada aos funis comerciais.
+- `20280112005000_regional_handoff_guards.sql`: CNPJ obrigatório também em
+  responsáveis secundários/cards/co-donos; prazo novo na troca manual.
 - `scripts/sql/configure-jrtex-regional-sales.sql`: resolve referências existentes
   por organização/nome, configura expediente e cria o painel.
 - `scripts/prepare-jrtex-rollout.mjs`: gera SQL revisável a partir dos snapshots
@@ -74,17 +76,20 @@ Snapshots anteriores e SQL de ativação/pausa estão no diretório local
 Não há credenciais nesses scripts. O rollout verifica versão/revisão, workflow
 previamente ativo, ausência de execuções em curso e seed completo antes de mudar.
 
-O MCP gerou as versões 20261116132009, 20261116133813, 20261116134321 e
-20261116134532. Somente esses quatro registros do ledger foram reconciliados
+O MCP gerou as versões 20261116132009, 20261116133813, 20261116134321,
+20261116134532 e 20261116135305. Somente esses cinco registros do ledger foram reconciliados
 para os nomes ordenados do repositório acima, evitando reaplicação futura.
 O primeiro ciclo agendado terminou com sucesso às 10:45 de Brasília.
 
 ## Verificação
 
-- 20 testes de integração no PostgreSQL embarcado PGlite: regressão do erro de
+- 24 testes de integração no PostgreSQL embarcado PGlite: regressão do erro de
   relatório, escopos positivos/negativos, CNPJ, rodízio, relógio útil, carteiras,
   troca de todos os vínculos, membros inativos, qualificação enfileirada, captura
   de mensagens, histórico, outros funis e desativação do worker.
+  Incluem papéis reais `authenticated`/`anon` para o painel e negação de leitura,
+  escrita e execução nas tabelas/funções privadas, além dos caminhos secundários
+  de atribuição e da renovação do prazo em troca manual.
 - 26 testes Vitest: contrato de publicação do workflow, perguntas/saídas e
   exportação dos relatórios existentes. ESLint dos arquivos JS/TS sem erros.
 - Em produção: todos os oito indicadores responderam para Karine; `metrics.view`
@@ -96,6 +101,10 @@ O primeiro ciclo agendado terminou com sucesso às 10:45 de Brasília.
   por padrão para clientes); somente funções internas e service_role as acessam.
   Não foram criados endpoints públicos de atribuição.
 - Não foi feito login como Karine nem envio de mensagem de teste a cliente real.
+- Revisão independente de padrões: um achado de cobertura de RLS, corrigido.
+  Revisão de requisitos: dois achados (atribuição secundária sem CNPJ e prazo
+  herdado em troca manual), corrigidos na migration 050 e cobertos por regressão.
+  Reavaliação dos dois revisores: nenhum achado de código pendente.
 
 Para executar localmente, `npm ci`, `node --test tests/integration/regional-sales.test.mjs`
 e `npx vitest run tests/unit/jrtex-regional-workflow.test.ts src/modules/analytics/lib/metrics-studio-report.test.ts`.

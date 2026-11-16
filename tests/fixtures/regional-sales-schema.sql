@@ -9,6 +9,10 @@ CREATE TABLE organizations(id uuid PRIMARY KEY,name text,timezone text DEFAULT '
 CREATE TABLE team_members(id uuid PRIMARY KEY,organization_id uuid,user_id uuid,name text,role text,is_active boolean DEFAULT true);
 CREATE TABLE whatsapp_instances(id uuid PRIMARY KEY,organization_id uuid,name text);
 CREATE TABLE metrics_studio_panels(id uuid PRIMARY KEY,organization_id uuid,template_key text);
+ALTER TABLE metrics_studio_panels ENABLE ROW LEVEL SECURITY;
+CREATE POLICY baseline_org_panels ON metrics_studio_panels FOR SELECT TO authenticated USING(EXISTS(SELECT 1 FROM public.team_members t WHERE t.organization_id=metrics_studio_panels.organization_id AND t.user_id=auth.uid() AND t.is_active));
+GRANT USAGE ON SCHEMA public,private,auth TO authenticated,anon;
+GRANT SELECT ON metrics_studio_panels,team_members TO authenticated;
 CREATE TABLE pipelines(id uuid PRIMARY KEY,organization_id uuid,name text);
 CREATE TABLE leads(id uuid PRIMARY KEY,organization_id uuid,name text,phone text,normalized_phone text,origin text,origin_detail text,utm_campaign text,uf text,uf_source text,deleted_at timestamptz,is_shadow boolean,excluded_from_metrics boolean,metrics_period_at timestamptz,created_at timestamptz DEFAULT now(),updated_at timestamptz,pre_sale_responsible_id uuid,sale_responsible_id uuid,sdr_id uuid,closer_id uuid,responsible_id uuid,responsible_user_id uuid);
 CREATE TABLE deals(id uuid PRIMARY KEY,organization_id uuid,source_lead_id uuid,owner_id uuid,created_at timestamptz,deleted_at timestamptz,outcome text,last_activity_at timestamptz,metadata jsonb DEFAULT '{}');

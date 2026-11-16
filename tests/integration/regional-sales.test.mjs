@@ -25,9 +25,11 @@ before(async()=>{
  await assert.rejects(metric(),/Acesso restrito aos funis/); // original production symptom
  await db.exec(sql('supabase/migrations/20280112001000_regional_sales_reports.sql'));
  await db.exec(`INSERT INTO private.regional_sales_config(organization_id,pipeline_ids,report_user_ids,triage_member_id,instance_id) VALUES('${id(1)}',ARRAY['${id(40)}'::uuid],ARRAY['${id(110)}'::uuid],'${id(10)}','${id(30)}')`);
+ await query("INSERT INTO metrics_studio_panels VALUES($1,$2,'regional-sales'),($3,$2,null)",[id(90),id(1),id(91)]);
  await db.exec(sql('supabase/migrations/20280112002000_regional_sales_distribution.sql'));
  await db.exec(sql('supabase/migrations/20280112003000_regional_contact_capture_safety.sql'));
  await db.exec(sql('supabase/migrations/20280112004000_regional_capture_pipeline_scope.sql'));
+ await db.exec(sql('supabase/migrations/20280112005000_regional_handoff_guards.sql'));
  await db.exec('UPDATE private.regional_sales_config SET routing_enabled=true');
  await db.exec(`INSERT INTO private.regional_sales_cities VALUES('SC','blumenau','Blumenau',4202404),('AM','manaus','Manaus',1302603);
  INSERT INTO private.regional_sales_routes(organization_id,uf,member_ids,last_member_id) VALUES('${id(1)}','SC',ARRAY['${id(11)}'::uuid,'${id(12)}'::uuid],NULL);
@@ -54,6 +56,37 @@ test('removing manager or membership immediately revokes access',async()=>{
  await assert.rejects(metric(),/access_denied/);await db.exec(`UPDATE team_members SET is_active=true WHERE id='${id(10)}'`);
 });
 test('ratios use the same scoped, net-of-reversal sources',async()=>{await asUser(110);assert.equal((await metric(null,'total',{},1,{kind:'ratio',num:'receita',den:'num_vendas'})).value,150);});
+
+async function withRole(role,user,fn){
+ await db.exec('BEGIN');
+ try{
+   await asUser(user);
+   await db.exec(`SET LOCAL ROLE ${role}`);
+   return await fn();
+ }finally{await db.exec('ROLLBACK');}
+}
+test('actual authenticated role sees the management panel only for authorized Karine',async()=>{
+ for(const [user,expected] of [[110,1],[111,0],[112,0],[113,0],[120,0]]){
+   const found=await withRole('authenticated',user,()=>query("SELECT count(*)::int n FROM metrics_studio_panels WHERE template_key='regional-sales'"));
+   assert.equal(found.rows[0].n,expected);
+ }
+ assert.equal((await withRole('authenticated',110,()=>metric())).value,150);
+});
+test('actual client roles cannot read/write private scopes or call internal assignment',async()=>{
+ const forbidden=[
+   'SELECT * FROM private.regional_sales_config',
+   'SELECT * FROM private.regional_sales_routes',
+   'SELECT * FROM private.regional_sales_assignment_log',
+   'UPDATE private.regional_sales_config SET report_user_ids=ARRAY[auth.uid()]',
+   `INSERT INTO private.regional_sales_routes(organization_id,uf,member_ids) VALUES('${id(1)}','RJ','{}')`,
+   `SELECT private.regional_assign('${id(50)}')`,
+   'SELECT private.process_regional_sales()',
+ ];
+ for(const role of ['authenticated','anon'])for(const statement of forbidden){
+   await assert.rejects(withRole(role,111,()=>query(statement)),error=>error.code==='42501');
+ }
+ await assert.rejects(withRole('anon',111,()=>query('SELECT * FROM metrics_studio_panels')),error=>error.code==='42501');
+});
 
 async function contact(n,city='Blumenau',uf='SC',tax='11.222.333/0001-81'){
  await db.exec(`INSERT INTO leads(id,organization_id,name,uf,uf_source) VALUES('${id(n)}','${id(1)}','Contato teste','SC','ddd');
@@ -167,4 +200,22 @@ test('capture leaves leads outside the configured commercial pipelines untouched
  await query("insert into whatsapp_messages(organization_id,lead_id,instance_id,direction,content,timestamp,status) values($1,$2,$3,'incoming','Blumenau SC 11.222.333/0001-81',now(),'received')",[id(1),id(51),id(30)]);
  assert.equal((await query('select count(*)::int n from lead_custom_field_values where lead_id=$1',[id(51)])).rows[0].n,0);
  assert.equal((await query('select count(*)::int n from private.regional_sales_state where lead_id=$1',[id(51)])).rows[0].n,0);
+});
+
+test('qualification cannot be bypassed through a secondary owner, card or co-owner',async()=>{
+ await contact(215,null,null,null);
+ for(const field of ['pre_sale_responsible_id','sale_responsible_id','sdr_id','closer_id','responsible_id','responsible_user_id'])await assert.rejects(query(`UPDATE leads SET ${field}=$1 WHERE id=$2`,[id(11),id(215)]),/CNPJ válido/);
+ await assert.rejects(query('UPDATE pipeline_entries SET assigned_to=$1 WHERE lead_id=$2',[id(11),id(215)]),/CNPJ válido/);
+ await assert.rejects(query("UPDATE pipeline_entries SET metadata=jsonb_build_object('closer_id',$1::text) WHERE lead_id=$2",[id(11),id(215)]),/CNPJ válido/);
+ await assert.rejects(query("INSERT INTO lead_owners(organization_id,lead_id,team_member_id,role) VALUES($1,$2,$3,'co')",[id(1),id(215),id(11)]),/CNPJ válido/);
+});
+
+test('manual owner change resets an already-running response clock',async()=>{
+ await contact(216);const old=(await query('SELECT sale_responsible_id owner FROM leads WHERE id=$1',[id(216)])).rows[0].owner;
+ const next=old===id(11)?id(12):id(11);
+ await query("UPDATE private.regional_sales_state SET awaiting_since=now()-interval '7 days' WHERE lead_id=$1",[id(216)]);
+ await query('SELECT private.regional_set_owner($1,$2,$3,now())',[id(1),id(216),next]);
+ const s=(await query('SELECT assigned_to,awaiting_since>now()-interval \'1 minute\' fresh FROM private.regional_sales_state WHERE lead_id=$1',[id(216)])).rows[0];
+ assert.equal(s.assigned_to,next);assert.equal(s.fresh,true);
+ assert.equal((await query('SELECT private.regional_assign($1,true,now()) r',[id(216)])).rows[0].r.status,'not_due');
 });
