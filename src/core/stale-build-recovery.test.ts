@@ -1,6 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
 import {
+  RECOVERY_PERSISTENT_MS,
   RECOVERY_THROTTLE_MS,
+  failedAssetPath,
+  recoveredRecently,
   isStaleAssetLoadError,
   isStaleChunkError,
   missingStylesheets,
@@ -238,5 +241,39 @@ describe("missingStylesheets", () => {
       { href: "https://fonts.googleapis.com/css2?family=Inter", loaded: false },
     ]);
     expect(missingStylesheets(d)).toEqual([]);
+  });
+});
+
+describe("recoveredRecently", () => {
+  it("é falso sem recuperação anterior", () => {
+    expect(recoveredRecently(fakeEnv().env)).toBe(false);
+  });
+
+  it("é verdadeiro dentro da janela depois de recuperar e falso passada ela", async () => {
+    const { env, advance } = fakeEnv();
+    await recoverFromStaleBuild(env);
+    advance(RECOVERY_THROTTLE_MS + 1);
+    expect(recoveredRecently(env)).toBe(true);
+    advance(RECOVERY_PERSISTENT_MS);
+    expect(recoveredRecently(env)).toBe(false);
+  });
+
+  it("não conta tentativa que não rodou (servidor fora)", async () => {
+    const { env } = fakeEnv();
+    env.canReload = async () => false;
+    await recoverFromStaleBuild(env, { force: true });
+    expect(recoveredRecently(env)).toBe(false);
+  });
+});
+
+describe("failedAssetPath", () => {
+  it("devolve só o caminho, sem origem nem query", () => {
+    expect(failedAssetPath(chunkError)).toBe("/assets/Leads-abc123.js");
+    expect(failedAssetPath(new Error("Unable to preload CSS for /assets/a.css?v=9"))).toBe("/assets/a.css");
+  });
+
+  it("devolve null quando a mensagem não cita arquivo", () => {
+    expect(failedAssetPath(new Error("ChunkLoadError"))).toBeNull();
+    expect(failedAssetPath(undefined)).toBeNull();
   });
 });
