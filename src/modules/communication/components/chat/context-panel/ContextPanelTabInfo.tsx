@@ -10,6 +10,8 @@
  *
  * Exceção por org: onde `mostraNegocioNoChat` libera (hoje só a Riofix), entra
  * a seção "Negócios" logo abaixo dos funis — ver `lib/negocioNoChat.ts`.
+ * Com `chat_cadastros_do_numero` (Café Jurerê), os cadastros do número ficam
+ * antes dos funis, no mesmo scroll; o centro fica livre para as mensagens.
  *
  * Nada além disso. Sem Jornada, Copilot toggle ou CTA ficha — residem em
  * outros lugares do produto.
@@ -53,6 +55,7 @@ import { memberById, memberName, tierLabel } from "./contextPanelInfoHelpers";
 import { ContextPanelFunnels } from "./ContextPanelFunnels";
 import { ContextPanelNegocios } from "./ContextPanelNegocios";
 import { SemLeadVinculado } from "./SemLeadVinculado";
+import { CadastrosDoNumeroPainel } from "./CadastrosDoNumeroPainel";
 import { mostraNegocioNoChat } from "@/modules/communication/lib/negocioNoChat";
 import { notifyError } from "@/shared/errors";
 
@@ -120,19 +123,38 @@ export interface ContextPanelTabInfoProps {
   lead: LeadShape | null | undefined;
   activeLeadId: string | null;
   phoneNumber?: string;
+  isGroup?: boolean;
+}
+
+/** Mesma lista no painel desktop e no drawer móvel, com as ações já existentes. */
+export function ContextPanelCadastros({ phoneNumber, activeLeadId, isGroup = false }: Pick<ContextPanelTabInfoProps, "phoneNumber" | "activeLeadId" | "isGroup">) {
+  return (
+    <CadastrosDoNumeroPainel
+      telefone={phoneNumber}
+      leadIdDaConversa={activeLeadId}
+      isGroup={isGroup}
+      fallback={!activeLeadId && phoneNumber ? <SemLeadVinculado phoneNumber={phoneNumber} /> : null}
+      renderSemLead={phoneNumber ? (cadastros) => <SemLeadVinculado phoneNumber={phoneNumber} cadastrosDaConversa={cadastros} /> : undefined}
+    />
+  );
 }
 
 export function ContextPanelTabInfo({
   lead,
   activeLeadId,
   phoneNumber,
+  isGroup = false,
 }: ContextPanelTabInfoProps) {
   const { organizationId } = useOrganization();
   const comNegocios = mostraNegocioNoChat(organizationId);
 
   // Sem lead: diagnóstico + ação. Número em 2+ cadastros ganha a escolha do
   // cadastro (ver `SemLeadVinculado`).
-  if (!lead && phoneNumber) return <SemLeadVinculado phoneNumber={phoneNumber} />;
+  if (!lead && phoneNumber) return (
+    <ScrollArea className="h-full [&_[data-radix-scroll-area-viewport]>div]:!block">
+      <ContextPanelCadastros phoneNumber={phoneNumber} activeLeadId={null} isGroup={isGroup} />
+    </ScrollArea>
+  );
 
   if (!lead || !activeLeadId) return null;
 
@@ -145,6 +167,7 @@ export function ContextPanelTabInfo({
           como está marcado (tags, qualificação) → como falar com ele →
           o resto. Cada seção é um rótulo micro, sem régua entre elas. */}
       <div className="flex flex-col gap-5 px-4 pb-5 pt-2">
+        <ContextPanelCadastros phoneNumber={phoneNumber} activeLeadId={activeLeadId} isGroup={isGroup} />
         <Secao rotulo="Funis do lead">
           <ContextPanelFunnels leadId={activeLeadId} />
         </Secao>

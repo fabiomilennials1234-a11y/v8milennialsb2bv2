@@ -59,10 +59,10 @@ import { MobileChatThreadHeader } from "@/modules/communication/components/chat/
 import { MessageList } from "@/modules/communication/components/chat/view/MessageList";
 import { ChatComposer } from "@/modules/communication/components/chat/composer/ChatComposer";
 import { ScheduledMessagesBanner } from "@/modules/communication/components/chat/ScheduledMessagesBanner";
-import { CadastrosDoNumeroFaixa } from "@/modules/communication/components/chat/view/CadastrosDoNumeroFaixa";
+import { CadastrosDoNumeroAcesso } from "@/modules/communication/components/chat/context-panel/CadastrosDoNumeroPainel";
 import { LeadAgendaStrip } from "@/modules/communication/components/chat/LeadAgendaStrip";
 import { MobileComposerContextual } from "@/modules/communication/components/chat/composer/MobileComposerContextual";
-import { ContextPanel } from "@/modules/communication/components/chat/context-panel/ContextPanel";
+import { ContextPanel, ContextPanelCadastros } from "@/modules/communication/components/chat/context-panel/ContextPanel";
 import { LeadContactModal } from "@/modules/communication/components/chat/LeadContactModal";
 import { ImagePreviewModal } from "@/modules/communication/components/chat/media/ImagePreviewModal";
 import { SocialChatView } from "@/modules/communication/components/chat/social/SocialChatView";
@@ -377,6 +377,11 @@ function ChatView({
           leadId={effectiveLeadId ?? undefined}
           onBack={onBack}
           onTapContact={onOpenLeadModal}
+          extraActions={
+            <CadastrosDoNumeroAcesso telefone={phoneNumber} leadIdDaConversa={effectiveLeadId} isGroup={selectedContact?.is_group === true} somenteConsulta={!!onConversationEstablished}>
+              {!onConversationEstablished ? <ContextPanelCadastros phoneNumber={phoneNumber ?? undefined} activeLeadId={effectiveLeadId} isGroup={selectedContact?.is_group === true} /> : undefined}
+            </CadastrosDoNumeroAcesso>
+          }
         />
       ) : (
         <ChatHeader
@@ -392,6 +397,7 @@ function ChatView({
           organizationId={organizationId}
           onBack={onBack}
           onOpenLeadModal={onOpenLeadModal}
+          extraActions={onConversationEstablished ? <CadastrosDoNumeroAcesso telefone={phoneNumber} leadIdDaConversa={effectiveLeadId} isGroup={selectedContact?.is_group === true} somenteConsulta /> : undefined}
           onTransferToSzChatTeam={() => {
             // SZ.chat transfer — Onda 6
           }}
@@ -425,14 +431,6 @@ function ChatView({
           conversa e decidir responder, não no instante em que já está
           digitando. Só aparece na divergência. */}
       <AvisoDaAutomacao telefone={phoneNumber} caixaAberta={instanceId} />
-
-      {/* De quem é este número: 1+ cadastros, com ou sem negócio aberto — sem
-          clique (flag `chat_cadastros_do_numero`). */}
-      <CadastrosDoNumeroFaixa
-        telefone={phoneNumber}
-        leadIdDaConversa={effectiveLeadId}
-        isGroup={selectedContact?.is_group === true}
-      />
 
       <div className="flex-1 min-h-0 min-w-0 overflow-hidden flex flex-col">
         {threadState === "loading" ? (

@@ -26,6 +26,7 @@ import { useLeadById, useLeadsDeals } from "@/modules/leads";
 import { LeadContactModal } from "@/modules/communication/components/chat/LeadContactModal";
 import { negocioEmDestaque } from "@/modules/communication/lib/negocioEmDestaque";
 import { ContextPanelTabInfo } from "./ContextPanelTabInfo";
+export { ContextPanelCadastros } from "./ContextPanelTabInfo";
 import { ContextPanelTabHistory } from "./ContextPanelTabHistory";
 import { ContextPanelTabAI } from "./ContextPanelTabAI";
 import { telefoneParaExibicao } from "@/modules/communication/lib/identificadorOculto";
@@ -268,6 +269,7 @@ export function ContextPanel({
             lead={lead ?? null}
             activeLeadId={activeLeadId}
             phoneNumber={phoneNumber}
+            isGroup={ehGrupo}
           />
         </TabsContent>
 

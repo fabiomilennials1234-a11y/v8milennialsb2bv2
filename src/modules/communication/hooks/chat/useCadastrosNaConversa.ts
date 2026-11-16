@@ -36,9 +36,9 @@ export function ordenarCadastros(a: CadastroNaConversa, b: CadastroNaConversa): 
  * (`leads.normalized_phone`) ou em `lead_phones` — com os negócios abertos de
  * cada um. A RLS recorta o que o usuário enxerga.
  *
- * Existe para a faixa automática da conversa (Café Jurerê, 10/11): o número
+ * Alimenta os cadastros no painel lateral da conversa (Café Jurerê): o número
  * chama o vendedor sem negócio aberto, a conversa não sabe a qual cadastro se
- * ligar, e o vendedor precisa saber — sem clicar — com quem está falando.
+ * ligar, e o vendedor precisa consultar os cadastros sem cobrir as mensagens.
  */
 export function useCadastrosNaConversa(phone: string | null | undefined, enabled: boolean) {
   const { organizationId } = useOrganization();
@@ -117,11 +117,11 @@ export function useCadastrosNaConversa(phone: string | null | undefined, enabled
 }
 
 /**
- * A faixa aparece? Número em 2+ cadastros sempre (a conversa não tem como saber
+ * A lista aparece? Número em 2+ cadastros sempre (a conversa não tem como saber
  * de quem é); 1 cadastro só quando a conversa está sem lead (o vínculo falhou,
  * mas o número é de alguém). Grupo nunca.
  */
-export function deveMostrarFaixa(input: {
+export function deveMostrarCadastros(input: {
   cadastros: number;
   conversaTemLead: boolean;
   isGroup: boolean;
