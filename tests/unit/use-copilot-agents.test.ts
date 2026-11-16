@@ -90,6 +90,10 @@ import {
   useUpdateCopilotAgentFromWizard,
   type UpdatePipelinePayload,
 } from "@/modules/copilot/hooks/useCopilotAgents";
+import {
+  payloadToConexaoState,
+  type ConexaoState,
+} from "@/modules/copilot/components/playground/conexao-comportamento-mapping";
 
 // ---------------------------------------------------------------------------
 // Wrapper
@@ -138,6 +142,20 @@ const MOCK_AGENT = {
   auto_move_on_objective: false,
   move_rules: [],
 };
+
+const LINKED_AGENT = {
+  ...MOCK_AGENT,
+  whatsapp_instance_id: "inst-1",
+  retention_enabled: true,
+  retention_config: { max_frequency_days: 14, auto_approach: false, strategic_alert_only: true },
+  handoff_notify_phones: ["5511999990000"],
+  handoff_notify_instructions: "Avise o gerente",
+};
+
+/** Cada tabela responde as próprias linhas; as não listadas respondem vazio. */
+function routeByTable(rows: Record<string, unknown[]>) {
+  return (table: string) => createChainMock(rows[table] ?? []);
+}
 
 // ---------------------------------------------------------------------------
 // Tests — Query hooks
@@ -195,6 +213,127 @@ describe("useCopilotAgentForEdit", () => {
   it("is disabled when agentId is undefined", () => {
     const { result } = renderHook(() => useCopilotAgentForEdit(undefined), { wrapper: createWrapper() });
     expect(result.current.fetchStatus).toBe("idle");
+  });
+
+  // A tela de edição carrega Conexão e handoff de `editData.agent`. Sem esse
+  // campo a instância reabre vazia e o próximo save desvincula o agente.
+  it("exposes the agent's instance link, retention and handoff columns", async () => {
+    mockFrom.mockImplementation(routeByTable({ copilot_agents: [LINKED_AGENT] }));
+
+    const { result } = renderHook(() => useCopilotAgentForEdit("a1"), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    expect(result.current.data?.agent).toMatchObject({
+      whatsapp_instance_id: "inst-1",
+      retention_enabled: true,
+      retention_config: LINKED_AGENT.retention_config,
+      handoff_notify_phones: ["5511999990000"],
+      handoff_notify_instructions: "Avise o gerente",
+    });
+  });
+
+  it("loads the Conexão state from the exposed agent", async () => {
+    mockFrom.mockImplementation(routeByTable({ copilot_agents: [LINKED_AGENT] }));
+
+    const { result } = renderHook(() => useCopilotAgentForEdit("a1"), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    expect(payloadToConexaoState(result.current.data?.agent ?? {})).toEqual({
+      whatsappInstanceId: "inst-1",
+      retentionEnabled: true,
+      retentionConfig: LINKED_AGENT.retention_config,
+    });
+  });
+
+  // O efeito de carga da tela depende de `editData` e sobrescreve o formulário
+  // inteiro quando a referência muda. Mudança em coluna que a tela não usa não
+  // pode custar a edição não salva do usuário.
+  describe("editData reference across refetches", () => {
+    async function refetchAfterRowChange(changes: Record<string, unknown>) {
+      let row: Record<string, unknown> = { ...LINKED_AGENT, is_active: false, updated_at: "t0" };
+      mockFrom.mockImplementation(
+        (table: string) => createChainMock(table === "copilot_agents" ? [row] : []),
+      );
+
+      const { result } = renderHook(() => useCopilotAgentForEdit("a1"), { wrapper: createWrapper() });
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+      const before = result.current.data;
+
+      row = { ...row, ...changes };
+      // `result.current` só atualiza depois da notificação adiada do React Query;
+      // o retorno do refetch já é o dado após o structural sharing.
+      let after: typeof before;
+      await act(async () => { after = (await result.current.refetch()).data; });
+
+      return { before, after };
+    }
+
+    it("keeps the reference when only columns outside the form change", async () => {
+      const { before, after } = await refetchAfterRowChange({ is_active: true, updated_at: "t1" });
+
+      expect(after).toBe(before);
+    });
+
+    it("changes the reference when a column the form loads changes", async () => {
+      const { before, after } = await refetchAfterRowChange({ whatsapp_instance_id: "inst-2" });
+
+      expect(after).not.toBe(before);
+      expect(after?.agent.whatsapp_instance_id).toBe("inst-2");
+    });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Tests — Conexão round-trip: load → save
+// ---------------------------------------------------------------------------
+describe("Conexão round-trip through the edit hooks", () => {
+  beforeEach(() => { vi.clearAllMocks(); });
+
+  /** Carrega o agente e salva com a Conexão carregada, opcionalmente alterada. */
+  async function loadAndSave(changes: Partial<ConexaoState> = {}) {
+    const chains = {
+      copilot_agents: createChainMock([LINKED_AGENT]),
+      whatsapp_instances: createChainMock([]),
+    };
+    mockFrom.mockImplementation(
+      (table: string) => chains[table as keyof typeof chains] ?? createChainMock([]),
+    );
+
+    const load = renderHook(() => useCopilotAgentForEdit("a1"), { wrapper: createWrapper() });
+    await waitFor(() => expect(load.result.current.isSuccess).toBe(true));
+    const conexao = { ...payloadToConexaoState(load.result.current.data?.agent ?? {}), ...changes };
+
+    const save = renderHook(() => useUpdateCopilotAgentFromWizard(), { wrapper: createWrapper() });
+    await act(async () => {
+      await save.result.current.mutateAsync({
+        agentId: "a1",
+        data: { ...load.result.current.data?.wizardData, ...conexao } as any,
+        documentsToRemove: [],
+      });
+    });
+
+    return {
+      agentUpdate: chains.copilot_agents.update.mock.calls[0][0],
+      instanceUpdates: chains.whatsapp_instances.update.mock.calls.map(([patch]: [unknown]) => patch),
+    };
+  }
+
+  it("keeps the link and retention when the Conexão tab was not touched", async () => {
+    const { agentUpdate, instanceUpdates } = await loadAndSave();
+
+    expect(agentUpdate).toMatchObject({
+      whatsapp_instance_id: "inst-1",
+      retention_enabled: true,
+      retention_config: LINKED_AGENT.retention_config,
+    });
+    expect(instanceUpdates).toContainEqual({ copilot_agent_id: "a1" });
+  });
+
+  it("still unlinks when the user explicitly clicks Desvincular", async () => {
+    const { agentUpdate, instanceUpdates } = await loadAndSave({ whatsappInstanceId: null });
+
+    expect(agentUpdate.whatsapp_instance_id).toBeNull();
+    expect(instanceUpdates).toEqual([{ copilot_agent_id: null }]);
   });
 });
 
