@@ -268,6 +268,7 @@ export function ContextPanel({
             lead={lead ?? null}
             activeLeadId={activeLeadId}
             phoneNumber={phoneNumber}
+            isGroup={ehGrupo}
           />
         </TabsContent>
 

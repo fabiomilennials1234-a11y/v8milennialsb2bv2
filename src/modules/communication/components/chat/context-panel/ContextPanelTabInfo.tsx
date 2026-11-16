@@ -53,6 +53,7 @@ import { memberById, memberName, tierLabel } from "./contextPanelInfoHelpers";
 import { ContextPanelFunnels } from "./ContextPanelFunnels";
 import { ContextPanelNegocios } from "./ContextPanelNegocios";
 import { SemLeadVinculado } from "./SemLeadVinculado";
+import { CadastrosDoNumeroPainel } from "./CadastrosDoNumeroPainel";
 import { mostraNegocioNoChat } from "@/modules/communication/lib/negocioNoChat";
 import { notifyError } from "@/shared/errors";
 
@@ -120,19 +121,25 @@ export interface ContextPanelTabInfoProps {
   lead: LeadShape | null | undefined;
   activeLeadId: string | null;
   phoneNumber?: string;
+  isGroup?: boolean;
 }
 
 export function ContextPanelTabInfo({
   lead,
   activeLeadId,
   phoneNumber,
+  isGroup = false,
 }: ContextPanelTabInfoProps) {
   const { organizationId } = useOrganization();
   const comNegocios = mostraNegocioNoChat(organizationId);
 
   // Sem lead: diagnóstico + ação. Número em 2+ cadastros ganha a escolha do
   // cadastro (ver `SemLeadVinculado`).
-  if (!lead && phoneNumber) return <SemLeadVinculado phoneNumber={phoneNumber} />;
+  if (!lead && phoneNumber) return (
+    <ScrollArea className="h-full [&_[data-radix-scroll-area-viewport]>div]:!block">
+      <CadastrosDoNumeroPainel telefone={phoneNumber} leadIdDaConversa={null} isGroup={isGroup} fallback={<SemLeadVinculado phoneNumber={phoneNumber} />} />
+    </ScrollArea>
+  );
 
   if (!lead || !activeLeadId) return null;
 
@@ -145,6 +152,7 @@ export function ContextPanelTabInfo({
           como está marcado (tags, qualificação) → como falar com ele →
           o resto. Cada seção é um rótulo micro, sem régua entre elas. */}
       <div className="flex flex-col gap-5 px-4 pb-5 pt-2">
+        <CadastrosDoNumeroPainel telefone={phoneNumber} leadIdDaConversa={activeLeadId} isGroup={isGroup} />
         <Secao rotulo="Funis do lead">
           <ContextPanelFunnels leadId={activeLeadId} />
         </Secao>
