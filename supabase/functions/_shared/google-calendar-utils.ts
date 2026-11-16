@@ -214,6 +214,45 @@ export async function stopGoogleChannel(
   });
 }
 
+// ─── Token do watch channel ─────────────────────────────────────────────────
+//
+// O Google devolve o `token` do events/watch em X-Goog-Channel-Token a cada
+// notificação. Só o SHA-256 vai para o banco (o dono lê a própria linha).
+
+function toHex(bytes: ArrayBuffer | Uint8Array): string {
+  return Array.from(bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+}
+
+export function generateWatchChannelToken(): string {
+  return toHex(crypto.getRandomValues(new Uint8Array(32)));
+}
+
+export async function hashWatchChannelToken(token: string): Promise<string> {
+  return toHex(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(token)));
+}
+
+/**
+ * Valida o X-Goog-Channel-Token contra o hash gravado no canal.
+ * `storedHash` nulo = canal legado (registrado antes do token): aceito aqui; o
+ * webhook só chega a esta checagem se o legado ainda não expirou. A renovação
+ * grava o hash do canal novo. Com hash gravado, header ausente
+ * ou divergente é recusado. Comparação em tempo constante.
+ */
+export async function isWatchChannelTokenValid(
+  headerToken: string | null,
+  storedHash: string | null | undefined,
+): Promise<boolean> {
+  if (!storedHash) return true;
+  if (!headerToken) return false;
+  const got = await hashWatchChannelToken(headerToken);
+  if (got.length !== storedHash.length) return false;
+  let diff = 0;
+  for (let i = 0; i < got.length; i++) diff |= got.charCodeAt(i) ^ storedHash.charCodeAt(i);
+  return diff === 0;
+}
+
 interface ReplaceWatchChannelResult {
   won: boolean;
   stopped: Array<{ channel_id: string; resource_id: string | null }>;
@@ -240,6 +279,7 @@ export async function registerWatchChannel(
 ): Promise<{ renewed: boolean }> {
   const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
   const channelId = crypto.randomUUID();
+  const channelToken = generateWatchChannelToken();
   const webhookUrl = `${supabaseUrl}/functions/v1/google-calendar-webhook`;
 
   let data: { resourceId?: string; expiration?: string };
@@ -254,6 +294,7 @@ export async function registerWatchChannel(
         id: channelId,
         type: "web_hook",
         address: webhookUrl,
+        token: channelToken,
       }),
     });
 
@@ -305,6 +346,17 @@ export async function registerWatchChannel(
     // ativa no banco: para no Google para não virar mais uma fonte de webhook.
     if (resourceId) await stopGoogleChannel(accessToken, channelId, resourceId);
     return { renewed: false };
+  }
+
+  // Hash do token na linha recém-ativada. Fora da RPC para não mudar a
+  // assinatura de replace_google_watch_channel; a janela entre o INSERT e este
+  // UPDATE só aceita o canal como legado (hash NULL), nunca recusa o legítimo.
+  const { error: tokenError } = await supabase
+    .from("google_calendar_watch_channels")
+    .update({ channel_token_hash: await hashWatchChannelToken(channelToken) })
+    .eq("channel_id", channelId);
+  if (tokenError) {
+    console.error("[GoogleCalendar] Erro ao gravar hash do token do canal:", tokenError);
   }
 
   for (const old of outcome.stopped ?? []) {

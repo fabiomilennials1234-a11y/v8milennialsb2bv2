@@ -8997,6 +8997,7 @@ export type Database = {
         Row: {
           calendar_id: string
           channel_id: string
+          channel_token_hash: string | null
           created_at: string
           expiration: string | null
           id: string
@@ -9008,6 +9009,7 @@ export type Database = {
         Insert: {
           calendar_id?: string
           channel_id: string
+          channel_token_hash?: string | null
           created_at?: string
           expiration?: string | null
           id?: string
@@ -9019,6 +9021,7 @@ export type Database = {
         Update: {
           calendar_id?: string
           channel_id?: string
+          channel_token_hash?: string | null
           created_at?: string
           expiration?: string | null
           id?: string
