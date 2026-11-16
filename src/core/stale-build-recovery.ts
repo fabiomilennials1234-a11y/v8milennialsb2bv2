@@ -94,7 +94,31 @@ export interface RecoveryEnv {
     getRegistrations: () => Promise<ReadonlyArray<{ unregister: () => Promise<boolean> }>>;
   };
   caches?: { keys: () => Promise<string[]>; delete: (key: string) => Promise<boolean> };
+  /**
+   * Re-busca cada arquivo com `cache: "reload"`, que SUBSTITUI a entrada do
+   * cache HTTP do navegador. Um 404 de `/assets/*` sai `immutable` por 1 ano:
+   * depois que o chunk passa a existir, o navegador seguiria servindo o 404
+   * guardado — e SW/CacheStorage limpos não tocam nesse cache.
+   */
+  purgeHttpCache?: (urls: string[]) => Promise<void>;
   reload: () => void;
+}
+
+/** Só arquivos do build, da própria origem: nunca re-busca URL de terceiros. */
+export async function purgeHttpCacheOf(urls: string[]): Promise<void> {
+  await Promise.all(
+    urls.filter((u) => isBuildAsset(u)).map(async (u) => {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 5000);
+      try {
+        await fetch(u, { cache: "reload", credentials: "omit", signal: controller.signal });
+      } catch {
+        // Best-effort: sem rede o reload tenta de novo e a tela persistente avisa.
+      } finally {
+        clearTimeout(timeout);
+      }
+    }),
+  );
 }
 
 /** A failed origin must not destroy the cached app that can still be used. */
@@ -139,6 +163,7 @@ export function browserEnv(): RecoveryEnv {
     canReload: appServerAvailable,
     serviceWorker: typeof navigator !== "undefined" ? navigator.serviceWorker : undefined,
     caches: typeof caches !== "undefined" ? caches : undefined,
+    purgeHttpCache: purgeHttpCacheOf,
     reload: () => window.location.reload(),
   };
 }
@@ -172,17 +197,17 @@ let browserRecovery: Promise<boolean> | undefined;
 
 export function recoverFromStaleBuild(
   env?: RecoveryEnv,
-  { force = false }: { force?: boolean } = {},
+  { force = false, assetUrls = [] }: { force?: boolean; assetUrls?: string[] } = {},
 ): Promise<boolean> {
   // main, lazyRetry and the error boundary can observe the same failed chunk.
   if (!env && browserRecovery) return browserRecovery;
-  const recovery = recover(env ?? browserEnv(), force);
+  const recovery = recover(env ?? browserEnv(), force, assetUrls);
   if (env) return recovery;
   browserRecovery = recovery.finally(() => { browserRecovery = undefined; });
   return browserRecovery;
 }
 
-async function recover(env: RecoveryEnv, force: boolean): Promise<boolean> {
+async function recover(env: RecoveryEnv, force: boolean, assetUrls: string[]): Promise<boolean> {
   const now = env.now();
   const last = readLast(env);
   if (!force && last !== null && now - last < RECOVERY_THROTTLE_MS) return false;
@@ -200,6 +225,12 @@ async function recover(env: RecoveryEnv, force: boolean): Promise<boolean> {
   } catch {
     // Best-effort: a limpeza falhar não pode impedir o reload.
   }
+  // Depois do SW fora: a re-busca chega ao servidor, não a um worker velho.
+  try {
+    if (assetUrls.length > 0) await env.purgeHttpCache?.(assetUrls);
+  } catch {
+    // Idem: não impede o reload.
+  }
   env.reload();
   return true;
 }
@@ -213,8 +244,24 @@ export function recoveredRecently(env: RecoveryEnv = browserEnv()): boolean {
 }
 
 /**
- * Caminho do arquivo do build que falhou, tirado da mensagem do erro. Só o
- * caminho: sem origem e sem query, para ir ao relato sem dado do usuário.
+ * URL absoluta do arquivo do build que falhou, tirada da mensagem do erro.
+ * Só `/assets/*` da própria origem; o resto vira `null`.
+ */
+export function failedAssetUrl(reason: unknown): string | null {
+  const message = reason instanceof Error ? reason.message : typeof reason === "string" ? reason : "";
+  const match = message.match(/https?:\/\/[^\s"')]+|\/assets\/[^\s"')]+/i);
+  if (!match) return null;
+  try {
+    const u = new URL(match[0], document.baseURI);
+    return isBuildAsset(u.href) ? u.href : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Caminho do arquivo que falhou, para o relato: sem origem e sem query, para
+ * não levar dado do usuário.
  */
 export function failedAssetPath(reason: unknown): string | null {
   const message = reason instanceof Error ? reason.message : typeof reason === "string" ? reason : "";
@@ -227,9 +274,19 @@ export function failedAssetPath(reason: unknown): string | null {
   }
 }
 
+/** URL do `<link>`/`<script>` do build que falhou ao carregar (evento `error`). */
+export function staleAssetUrl(event: Event): string | null {
+  const el = event.target;
+  if (el instanceof HTMLLinkElement) return el.href || null;
+  if (el instanceof HTMLScriptElement) return el.src || null;
+  return null;
+}
+
 /** Handler global (`error` / `unhandledrejection`): só age em chunk velho. */
 export function handleStaleChunk(reason: unknown, env?: RecoveryEnv): void {
-  if (isStaleChunkError(reason)) void recoverFromStaleBuild(env);
+  if (!isStaleChunkError(reason)) return;
+  const url = failedAssetUrl(reason);
+  void recoverFromStaleBuild(env, { assetUrls: url ? [url] : [] });
 }
 
 /**

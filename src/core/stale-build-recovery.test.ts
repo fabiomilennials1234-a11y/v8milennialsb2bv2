@@ -3,6 +3,8 @@ import {
   RECOVERY_PERSISTENT_MS,
   RECOVERY_THROTTLE_MS,
   failedAssetPath,
+  failedAssetUrl,
+  purgeHttpCacheOf,
   recoveredRecently,
   isStaleAssetLoadError,
   isStaleChunkError,
@@ -275,5 +277,45 @@ describe("failedAssetPath", () => {
   it("devolve null quando a mensagem não cita arquivo", () => {
     expect(failedAssetPath(new Error("ChunkLoadError"))).toBeNull();
     expect(failedAssetPath(undefined)).toBeNull();
+  });
+});
+
+describe("purga do cache HTTP", () => {
+  const url = `${window.location.origin}/assets/Leads-abc123.js`;
+
+  it("re-busca o arquivo que falhou depois de limpar SW e caches e antes do reload", async () => {
+    const { env, log } = fakeEnv();
+    env.purgeHttpCache = async (urls) => void log.push(`purge:${urls.join(",")}`);
+    await recoverFromStaleBuild(env, { assetUrls: [url] });
+    expect(log.indexOf("unregister")).toBeLessThan(log.indexOf(`purge:${url}`));
+    expect(log.indexOf("delete:js-assets")).toBeLessThan(log.indexOf(`purge:${url}`));
+    expect(log.indexOf(`purge:${url}`)).toBeLessThan(log.indexOf("reload"));
+  });
+
+  it("sem arquivo conhecido não purga, e falha na purga não impede o reload", async () => {
+    const { env, log } = fakeEnv();
+    const purge = vi.fn().mockRejectedValue(new Error("rede"));
+    env.purgeHttpCache = purge;
+    await recoverFromStaleBuild(env);
+    expect(purge).not.toHaveBeenCalled();
+    const second = fakeEnv();
+    second.env.purgeHttpCache = purge;
+    expect(await recoverFromStaleBuild(second.env, { assetUrls: [url] })).toBe(true);
+    expect(second.log).toContain("reload");
+    void log;
+  });
+
+  it("purgeHttpCacheOf usa cache reload e ignora o que não é arquivo do build", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("ok"));
+    await purgeHttpCacheOf([url, "https://terceiro.example/assets/x.js", `${window.location.origin}/api/leads`]);
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    expect(fetchSpy).toHaveBeenCalledWith(url, expect.objectContaining({ cache: "reload", credentials: "omit" }));
+    fetchSpy.mockRestore();
+  });
+
+  it("failedAssetUrl só devolve arquivo do build da própria origem", () => {
+    expect(failedAssetUrl(new Error(`Failed to fetch dynamically imported module: ${url}`))).toBe(url);
+    expect(failedAssetUrl(new Error("Failed to fetch dynamically imported module: https://terceiro.example/assets/x.js"))).toBeNull();
+    expect(failedAssetUrl(new Error("ChunkLoadError"))).toBeNull();
   });
 });
