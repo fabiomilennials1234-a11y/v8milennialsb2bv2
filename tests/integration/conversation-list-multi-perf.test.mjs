@@ -402,7 +402,7 @@ test('f: forma de prod sem função de desvio — apply aborta (falha fechada)',
     await pg.exec(RB);
     await pg.exec(`DROP FUNCTION private.${fn}`);
     const antes = (await pg.query(`SELECT prosrc FROM pg_proc WHERE oid = '${SIG}'::regprocedure`)).rows[0].prosrc;
-    await assert.rejects(pg.exec(`BEGIN;\n${MIG}\nCOMMIT;`), new RegExp(`faltam .*private\\.${fn.replace(/[()]/g, '\\$&')}`));
+    await assert.rejects(pg.exec(`BEGIN;\n${MIG}\nCOMMIT;`), new RegExp(`faltam .*private\\.${fn.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`));
     await pg.exec('ROLLBACK');
     const depois = (await pg.query(`SELECT prosrc FROM pg_proc WHERE oid = '${SIG}'::regprocedure`)).rows[0].prosrc;
     assert.equal(depois, antes, `sem ${fn}: a função de antes fica intacta`);
