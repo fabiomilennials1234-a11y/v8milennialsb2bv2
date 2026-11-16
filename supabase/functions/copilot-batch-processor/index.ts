@@ -158,7 +158,7 @@ Deno.serve(withErrorBoundary('copilot-batch-processor', async (req: Request): Pr
     const messageIds = (claimedRows as { message_id: string }[]).map((r) => r.message_id);
     const { data: msgs } = await supabase
       .from("whatsapp_messages")
-      .select("id, content, timestamp, instance_id, normalized_phone")
+      .select("id, content, timestamp, instance_id, normalized_phone, message_type, media_url")
       .in("id", messageIds)
       .order("timestamp", { ascending: true }).order("id", { ascending: true });
 
@@ -167,7 +167,18 @@ Deno.serve(withErrorBoundary('copilot-batch-processor', async (req: Request): Pr
       .map((m: { content: string | null }) => m.content)
       .filter(Boolean)
       .join("\n");
-    if (!combinedContent.trim()) {
+
+    // Mídia do batch: a ÚLTIMA mensagem que trouxe anexo. `media_url` aqui já é
+    // a cópia no Storage — `downloadAndPersistMedia` reescreve a coluna antes da
+    // fila (whatsapp-media.ts:255). O `agent-message` transcreve a partir dela.
+    const comMidia = (msgs ?? [])
+      .filter((m: { media_url: string | null }) => Boolean(m.media_url))
+      .at(-1) as { media_url: string | null; message_type: string | null } | undefined;
+
+    // Só é "nada a processar" quando não há NEM texto NEM mídia. Antes, uma
+    // resposta só de áudio (content vazio) saía por aqui marcada como entregue:
+    // a lead falava e a IA ficava muda, sem erro em lugar nenhum.
+    if (!combinedContent.trim() && !comMidia) {
       await applyOutcome({ kind: "delivered" }); // nada a processar — não é falha
       return json({ ok: true, reason: "empty_content", batch_key: batchKey });
     }
@@ -192,6 +203,8 @@ Deno.serve(withErrorBoundary('copilot-batch-processor', async (req: Request): Pr
           phone,
           orgId,
           content: combinedContent,
+          mediaUrl: comMidia?.media_url ?? null,
+          incomingMessageType: comMidia?.message_type ?? "text",
           // A Instance da mensagem MAIS RECENTE do batch. O batch é agrupado
           // por telefone+org, então em tese pode misturar Instances; a última
           // é a que o lead acabou de usar, que é a resposta certa para
