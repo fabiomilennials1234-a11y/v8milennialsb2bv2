@@ -14,6 +14,8 @@
 export interface ComputeNeedsDeepLinkResolveArgs {
   /** `true` quando a URL trouxe `?phone=`. */
   hasDeepLinkPhone: boolean;
+  /** Consulta o histórico mesmo quando o link sugere uma caixa. */
+  preferHistory?: boolean;
   /** `true` depois que o deep-link já foi consumido (não rodar de novo). */
   deepLinkProcessed: boolean;
   /** Quantidade de instâncias permitidas ao usuário corrente. */
@@ -40,7 +42,7 @@ export function computeNeedsDeepLinkResolve(
   if (instancesCount === 0) return false;
 
   // URL trouxe instance válida → pula resolver.
-  if (deepLinkInstance && allowedInstanceIds.includes(deepLinkInstance)) {
+  if (!args.preferHistory && deepLinkInstance && allowedInstanceIds.includes(deepLinkInstance)) {
     return false;
   }
 
