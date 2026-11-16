@@ -24,14 +24,19 @@
 --    devolvido pelo Google em X-Goog-Channel-Token a cada notificação.
 --    Guardamos só o SHA-256 (hex) do token: o dono lê a própria linha
 --    (watch_channels_select_own), então o token em claro não fica no banco.
---    NULL = canal registrado antes desta mudança: o webhook tolera até a
---    renovação (≤ 7 dias), que grava o hash do canal novo.
+--    NULL = canal registrado antes desta mudança: o webhook o tolera só
+--    enquanto não expira (expiration > now()). A renovação grava o hash do
+--    canal novo; uma agenda parada deixa o legado expirar e ser recusado.
 --
 -- Ordem de deploy: ESTA migration antes das edge functions
 -- google-calendar-webhook / google-calendar-events / google-calendar-callback
 -- (o webhook passa a selecionar channel_token_hash e a fazer upsert em
 -- (user_id, id)). Só schema, nenhum DML.
 -- ════════════════════════════════════════════════════════════════════════════
+
+-- Tabelas pequenas, mas a troca de PK pega ACCESS EXCLUSIVE: não enfileirar
+-- escrita de produção atrás de uma transação longa.
+SET LOCAL lock_timeout = '3s';
 
 -- 1. Chave por usuário ────────────────────────────────────────────────────────
 ALTER TABLE public.google_calendar_events_cache

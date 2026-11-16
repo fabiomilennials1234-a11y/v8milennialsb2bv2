@@ -422,13 +422,27 @@ describe("watch channel token", () => {
     expect(google.list).toBe(1);
   });
 
-  it("legacy channel without hash is still accepted until renewal", async () => {
+  it("legacy channel without hash is still accepted while alive", async () => {
     await seedChannel("ch-legacy", USER_B, ORG_B, null);
 
     await notify("ch-legacy");
     await processed();
 
     expect(google.list).toBe(1);
+  });
+
+  it("legacy channel without hash is refused once expired (forged POST to a dead channel)", async () => {
+    await seedChannel("ch-legacy-dead", USER_B, ORG_B, null);
+    await db.query(
+      `UPDATE public.google_calendar_watch_channels SET expiration = now() - interval '1 hour' WHERE channel_id = $1`,
+      ["ch-legacy-dead"],
+    );
+
+    await notify("ch-legacy-dead");
+    await processed();
+
+    expect(getValidAccessToken).not.toHaveBeenCalled();
+    expect(google.list).toBe(0);
   });
 
   it("registerWatchChannel sends a token to Google and stores only its hash; webhook accepts it", async () => {

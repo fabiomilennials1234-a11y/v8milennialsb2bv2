@@ -251,8 +251,9 @@ export async function hashWatchChannelToken(token: string): Promise<string> {
 
 /**
  * Valida o X-Goog-Channel-Token contra o hash gravado no canal.
- * `storedHash` nulo = canal legado (registrado antes do token): aceito até a
- * renovação, que grava o hash do canal novo. Com hash gravado, header ausente
+ * `storedHash` nulo = canal legado (registrado antes do token): aceito aqui; o
+ * webhook só chega a esta checagem se o legado ainda não expirou. A renovação
+ * grava o hash do canal novo. Com hash gravado, header ausente
  * ou divergente é recusado. Comparação em tempo constante.
  */
 export async function isWatchChannelTokenValid(

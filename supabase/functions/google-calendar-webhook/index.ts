@@ -132,6 +132,18 @@ async function processNotification(params: {
     return;
   }
 
+  // Canal legado (sem hash) só é tolerado enquanto o Google o mantém vivo.
+  // Expirado, o Google não notifica mais por ele — POST chegando é forjado.
+  // Sem este corte, uma agenda parada deixaria o canal legado aceito para sempre
+  // (a renovação só acontece a partir de uma notificação).
+  if (!channel.channel_token_hash) {
+    const expMs = channel.expiration ? Date.parse(channel.expiration) : NaN;
+    if (!Number.isFinite(expMs) || expMs <= Date.now()) {
+      console.warn("[google-calendar-webhook] Canal legado expirado:", channelId);
+      return;
+    }
+  }
+
   // Token divergente/ausente num canal que tem hash: notificação forjada (o
   // channel_id sozinho não autentica). Para aqui, antes de token e Google.
   if (!(await isWatchChannelTokenValid(channelToken, channel.channel_token_hash))) {
