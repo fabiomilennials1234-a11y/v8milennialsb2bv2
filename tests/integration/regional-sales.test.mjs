@@ -30,6 +30,7 @@ before(async()=>{
  await db.exec(sql('supabase/migrations/20280112003000_regional_contact_capture_safety.sql'));
  await db.exec(sql('supabase/migrations/20280112004000_regional_capture_pipeline_scope.sql'));
  await db.exec(sql('supabase/migrations/20280112005000_regional_handoff_guards.sql'));
+ await db.exec(sql('supabase/migrations/20280112006000_regional_report_canonical_attribution.sql'));
  await db.exec('UPDATE private.regional_sales_config SET routing_enabled=true');
  await db.exec(`INSERT INTO private.regional_sales_cities VALUES('SC','blumenau','Blumenau',4202404),('AM','manaus','Manaus',1302603);
  INSERT INTO private.regional_sales_routes(organization_id,uf,member_ids,last_member_id) VALUES('${id(1)}','SC',ARRAY['${id(11)}'::uuid,'${id(12)}'::uuid],NULL);
@@ -56,6 +57,17 @@ test('removing manager or membership immediately revokes access',async()=>{
  await assert.rejects(metric(),/access_denied/);await db.exec(`UPDATE team_members SET is_active=true WHERE id='${id(10)}'`);
 });
 test('ratios use the same scoped, net-of-reversal sources',async()=>{await asUser(110);assert.equal((await metric(null,'total',{},1,{kind:'ratio',num:'receita',den:'num_vendas'})).value,150);});
+
+test('lead metrics use canonical owners while sales retain their event snapshot',async()=>{
+ await db.exec('BEGIN');
+ try{
+   await asUser(110);
+   await query('UPDATE leads SET sale_responsible_id=null,pre_sale_responsible_id=null,closer_id=$1,sdr_id=$1 WHERE id=$2',[id(11),id(50)]);
+   assert.deepEqual((await metric('leads_criados','closer')).series,[{key:null,label:'Não informado',value:1}]);
+   assert.deepEqual((await metric('leads_criados','sdr')).series,[{key:null,label:'Não informado',value:1}]);
+   assert.deepEqual((await metric('num_vendas','closer')).series,[{key:id(11),label:'Ivan',value:1}]);
+ }finally{await db.exec('ROLLBACK');}
+});
 
 async function withRole(role,user,fn){
  await db.exec('BEGIN');

@@ -61,6 +61,9 @@ de triagem ficam disponíveis por atribuição real.
 - `20280112004000_regional_capture_pipeline_scope.sql`: captura limitada aos funis comerciais.
 - `20280112005000_regional_handoff_guards.sql`: CNPJ obrigatório também em
   responsáveis secundários/cards/co-donos; prazo novo na troca manual.
+- `20280112006000_regional_report_canonical_attribution.sql`: contagem de leads
+  usa somente o responsável canônico de cada papel; vendas preservam o snapshot
+  do evento. Correção apontada pelo check de métricas antes do merge.
 - `scripts/sql/configure-jrtex-regional-sales.sql`: resolve referências existentes
   por organização/nome, configura expediente e cria o painel.
 - `scripts/prepare-jrtex-rollout.mjs`: gera SQL revisável a partir dos snapshots
@@ -83,7 +86,7 @@ O primeiro ciclo agendado terminou com sucesso às 10:45 de Brasília.
 
 ## Verificação
 
-- 24 testes de integração no PostgreSQL embarcado PGlite: regressão do erro de
+- 25 testes de integração no PostgreSQL embarcado PGlite: regressão do erro de
   relatório, escopos positivos/negativos, CNPJ, rodízio, relógio útil, carteiras,
   troca de todos os vínculos, membros inativos, qualificação enfileirada, captura
   de mensagens, histórico, outros funis e desativação do worker.
@@ -105,6 +108,11 @@ O primeiro ciclo agendado terminou com sucesso às 10:45 de Brasília.
   Revisão de requisitos: dois achados (atribuição secundária sem CNPJ e prazo
   herdado em troca manual), corrigidos na migration 050 e cobertos por regressão.
   Reavaliação dos dois revisores: nenhum achado de código pendente.
+- O check de métricas preserva as migrations aplicadas: seis exceções exatas
+  por arquivo/regra/linha documentam a definição histórica corrigida na 060 e
+  a resolução operacional de propriedade usada na distribuição e no prazo.
+  Nenhuma regra global foi desabilitada. Atribuição dos relatórios tem regressão
+  para responsável canônico ausente e snapshot de venda preservado.
 
 Para executar localmente, `npm ci`, `node --test tests/integration/regional-sales.test.mjs`
 e `npx vitest run tests/unit/jrtex-regional-workflow.test.ts src/modules/analytics/lib/metrics-studio-report.test.ts`.
