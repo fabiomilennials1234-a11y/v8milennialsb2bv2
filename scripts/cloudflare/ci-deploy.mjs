@@ -75,6 +75,20 @@ export const MAIN_REF = "refs/heads/main";
 export const RETRY = Object.freeze({ smokeA: 120_000, smokeB: 180_000, afterRollback: 180_000 });
 
 /**
+ * Esperas entre as tentativas de pôr a versão nova a 0 % (passo 3).
+ *
+ * Logo após o `versions upload`, a API da Cloudflare às vezes ainda não enxerga
+ * a versão recém-criada e o `versions deploy` responde `code: 100146` ("The
+ * requested Worker version could not be found") — consistência eventual do lado
+ * deles. Medido em 2026-11-16: duas execuções seguidas falharam assim e, minutos
+ * depois, as duas versões existiam. O passo 3 é idempotente e não promove nada
+ * (nova a 0 %, anterior a 100 %), então repetir é seguro.
+ */
+export const STAGE_BACKOFF_MS = Object.freeze([5_000, 15_000, 30_000]);
+
+const realSleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/**
  * Prazo de cada comando. Um wrangler pendurado é morto e conta como falha —
  * depois da promoção, isso vira rollback. `interrupt`: o rollback do
  * SIGINT/SIGTERM tem até a hora do SIGKILL do runner (≈ 10 s).
@@ -527,6 +541,8 @@ export async function runDeploy({
   assetsDir = ASSETS_DIR,
   remoteHead = () => remoteMainHead(),
   state = createDeployState(),
+  sleep = realSleep,
+  stageBackoffMs = STAGE_BACKOFF_MS,
 }) {
   const smoke = guardSmoke(rawSmoke);
   const report = createReport(drill ? "deploy (drill de rollback)" : "deploy");
@@ -574,16 +590,24 @@ export async function runDeploy({
   report.facts["Versão nova"] = next;
   state.next = next;
 
-  // 3. Nova a 0 %.
-  const staged = await attempt(report, log, `versions deploy ${next}@0% ${previous}@100%`, () =>
-    wrangler.deploy(
-      [
-        [next, 0],
-        [previous, 100],
-      ],
-      `ci ${short}: smoke A a 0%`,
-    ),
-  );
+  // 3. Nova a 0 %. Idempotente e sem promoção: repete enquanto a API ainda não
+  //    enxerga a versão recém-enviada (ver STAGE_BACKOFF_MS).
+  const stage = (label) =>
+    attempt(report, log, label, () =>
+      wrangler.deploy(
+        [
+          [next, 0],
+          [previous, 100],
+        ],
+        `ci ${short}: smoke A a 0%`,
+      ),
+    );
+  let staged = await stage(`versions deploy ${next}@0% ${previous}@100%`);
+  for (let i = 0; !staged && i < stageBackoffMs.length; i++) {
+    log(`nova ainda não aceita a 0 %; nova tentativa em ${stageBackoffMs[i] / 1000} s (${i + 2}/${stageBackoffMs.length + 1})`);
+    await sleep(stageBackoffMs[i]);
+    staged = await stage(`versions deploy ${next}@0% ${previous}@100% (tentativa ${i + 2})`);
+  }
   if (!staged) {
     // O comando pode ter falhado depois de aplicar; garantir o estado de partida.
     await attempt(report, log, `restaura ${previous}@100%`, () => wrangler.deploy([[previous, 100]], `ci ${short}: restaura`));

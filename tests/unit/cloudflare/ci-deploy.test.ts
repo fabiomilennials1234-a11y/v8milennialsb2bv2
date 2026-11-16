@@ -40,6 +40,7 @@ import {
   parseUploadOutput,
   renderSummary,
   runDeploy,
+  STAGE_BACKOFF_MS,
   runRollback,
 } from "../../../scripts/cloudflare/ci-deploy.mjs";
 
@@ -112,6 +113,7 @@ const deploy = (wrangler: ReturnType<typeof fakeWrangler>, smoke: ReturnType<typ
     message: "GitHub Actions run 1.1",
     assetsDir: "/tmp/assets",
     remoteHead: async () => SHA,
+    sleep: async () => {},
     ...extra,
   });
 
@@ -162,13 +164,32 @@ describe("runDeploy — smoke A falhou: a nova nunca recebe tráfego", () => {
     expect(w.calls.map(([op]) => op)).toEqual(["status", "upload"]);
   });
 
-  it("não deu para pôr a nova a 0 % → garante anterior@100 % e para", async () => {
+  it("não deu para pôr a nova a 0 % → tenta de novo com espera, depois garante anterior@100 % e para", async () => {
     const w = fakeWrangler({ fail: { deploy: (t) => t!.length === 2 } });
     const s = fakeSmoke();
-    const result = await deploy(w, s);
+    const waits: number[] = [];
+    const result = await deploy(w, s, { sleep: async (ms: number) => void waits.push(ms) });
     expect(result.exitCode).toBe(1);
-    expect(w.traffic()).toEqual(["2222@0 1111@100", "1111@100"]);
+    expect(waits).toEqual([...STAGE_BACKOFF_MS]);
+    expect(w.traffic()).toEqual([...Array(STAGE_BACKOFF_MS.length + 1).fill("2222@0 1111@100"), "1111@100"]);
     expect(s.calls).toHaveLength(0);
+  });
+
+  it("versão recém-enviada ainda invisível na API (code 100146): passa na 3ª tentativa e promove", async () => {
+    let refusals = 2;
+    const w = fakeWrangler({ fail: { deploy: (t) => t!.length === 2 && refusals-- > 0 } });
+    const s = fakeSmoke("PASS", "PASS");
+    const waits: number[] = [];
+    const result = await deploy(w, s, { sleep: async (ms: number) => void waits.push(ms) });
+    expect(result.exitCode).toBe(0);
+    expect(result.outcome).toMatch(/^PROMOVIDO/);
+    expect(waits).toEqual(STAGE_BACKOFF_MS.slice(0, 2));
+    expect(w.traffic()).toEqual(["2222@0 1111@100", "2222@0 1111@100", "2222@0 1111@100", "2222@100"]);
+  });
+
+  it("espera entre tentativas cresce e cabe no orçamento do job (≤ 60 s no total)", () => {
+    expect([...STAGE_BACKOFF_MS]).toEqual([...STAGE_BACKOFF_MS].sort((a, b) => a - b));
+    expect(STAGE_BACKOFF_MS.reduce((sum, ms) => sum + ms, 0)).toBeLessThanOrEqual(60_000);
   });
 
   it("deployment dividida entre versões (alguém no meio de algo) → não publica", async () => {
