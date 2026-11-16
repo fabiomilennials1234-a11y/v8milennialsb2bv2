@@ -35,6 +35,7 @@ import { useNomeDoLeadPrimeiro } from "@/modules/communication/hooks/chat/useNom
 import { useContatoDaConversa, useNomeCodContatoLead } from "@/modules/communication/hooks/chat/useNomeCodContatoLead";
 import { nomeComLeadPrimeiro, nomeDaConversa } from "@/modules/communication/lib/nomeDaConversa";
 import { useResolveChatDeepLink } from "@/modules/communication/hooks/chat/useResolveChatDeepLink";
+import { priorizarHistoricoDoLead, chaveDoHistoricoDoLead } from "@/modules/communication/lib/historicoDoLeadJrtex";
 import { computeNeedsDeepLinkResolve } from "@/modules/communication/lib/computeNeedsDeepLinkResolve";
 import { resolvePendingDeepLink } from "@/modules/communication/lib/resolvePendingDeepLink";
 import { escolherCaixaSemConversa } from "@/modules/communication/lib/escolherCaixaSemConversa";
@@ -706,22 +707,25 @@ export function ChatShellWithContext() {
   }, [deepLink.box, boxDeepLinkProcessed, boxes, setSelectedBoxId]);
 
 
+  const preferHistory = priorizarHistoricoDoLead(organizationId, leadDoLinkRef.current);
+
   // Caminho rápido: instance veio na URL e está na lista permitida → seleciona.
   // Caso contrário, ignoramos (defesa cross-tenant + restrição de membro).
   useEffect(() => {
     if (deepLinkProcessed) return;
     if (!instances.length) return;
-    if (!deepLink.instance) return;
+    if (!deepLink.instance || preferHistory) return;
     const allowed = instances.some((i) => i.id === deepLink.instance);
     if (allowed) {
       setSelectedBoxId(deepLink.instance);
     }
-  }, [deepLink.instance, deepLinkProcessed, instances]);
+  }, [deepLink.instance, deepLinkProcessed, instances, preferHistory, setSelectedBoxId]);
 
   // Resolver server-side: encontra instância permitida onde existe conversa
   // para o phone alvo. Só roda quando temos phone na URL e ainda não resolvemos.
   // Lógica extraída em `computeNeedsDeepLinkResolve` para ser pure-testable.
   const needsResolve = computeNeedsDeepLinkResolve({
+    preferHistory,
     hasDeepLinkPhone,
     deepLinkProcessed,
     instancesCount: instances.length,
@@ -729,11 +733,24 @@ export function ChatShellWithContext() {
     allowedInstanceIds: instances.map((i) => i.id),
   });
 
-  const { data: resolved, isFetched: resolveFetched } = useResolveChatDeepLink({
+  const { data: resolved, isFetched: resolveFetched, isError: resolveError, refetch: retryResolve } = useResolveChatDeepLink({
     phone: deepLink.phone,
     allowedInstances: instances,
     enabled: needsResolve,
   });
+
+  useEffect(() => {
+    if (!preferHistory) return;
+    if (!needsResolve || !resolveError) {
+      toast.dismiss("jrtex-historico-do-lead");
+      return;
+    }
+    toast.error("Não foi possível localizar o histórico da conversa.", {
+      id: "jrtex-historico-do-lead",
+      duration: Infinity,
+      action: { label: "Tentar novamente", onClick: () => { void retryResolve(); } },
+    });
+  }, [preferHistory, needsResolve, resolveError, retryResolve]);
 
   // Em paralelo ao resolver: se o lead não tiver conversa, a caixa sai daqui.
   const quemAtende = useCaixasDeQuemAtende(leadDoLinkRef.current, needsResolve);
@@ -746,7 +763,7 @@ export function ChatShellWithContext() {
 
     // Caminho A: instance da URL já foi setada acima — só precisamos achar o
     // phone real dentro dos contatos quando carregarem (handler abaixo).
-    if (deepLink.instance && instances.some((i) => i.id === deepLink.instance)) {
+    if (!preferHistory && deepLink.instance && instances.some((i) => i.id === deepLink.instance)) {
       // ⚠️ A CAIXA OFICIAL NÃO PASSA PELO `pendingDeepLinkPhone`. Aquele
       // caminho procura o telefone entre os contatos de `whatsapp_messages`, e
       // esta caixa lê `channel_messages` — quem nunca trocou mensagem não tem
@@ -766,20 +783,30 @@ export function ChatShellWithContext() {
     }
 
     // Caminho B: aguardando resolver server-side.
-    if (!resolveFetched) return;
+    if (!resolveFetched || (preferHistory && resolveError)) return;
     // Sem conversa, a caixa depende da preferência e do responsável. Decidir
     // antes de chegarem é cair na ordem alfabética (Chamado 52df972e).
     if (!resolved && sinaisDaCaixaCarregando) return;
 
     if (resolved) {
-      setSelectedBoxId(resolved.instanceId);
-      setPendingDeepLinkPhone(resolved.phoneNumber);
+      if (preferHistory) {
+        const key = chaveDoHistoricoDoLead(resolved, instances.map((i) => i.id));
+        if (!key) return;
+        // Seleção automática não altera a preferência pessoal, nem depende
+        // dos contatos da caixa anteriormente aberta.
+        marcarSomente(resolved.instanceId);
+        setSelectedKey(key);
+      } else {
+        setSelectedBoxId(resolved.instanceId);
+        setPendingDeepLinkPhone(resolved.phoneNumber);
+      }
     } else {
       // Lead sem mensagens: a caixa de quem atende, na mesma ordem do seletor
       // "Iniciar conversa por". `marcarSomente`, e não `setSelectedBoxId`: a
       // escolha automática não regrava a preferência do usuário — era assim
       // que a caixa de outra vendedora virava a preferida de quem só clicou.
       const escolhida =
+        (preferHistory ? instances.find((i) => i.id === deepLink.instance) : undefined) ??
         escolherCaixaSemConversa({
           instances,
           preferredInstanceId,
@@ -813,6 +840,9 @@ export function ChatShellWithContext() {
     deepLink.phone,
     instances,
     resolveFetched,
+    resolveError,
+    preferHistory,
+    setSelectedBoxId,
     resolved,
     sinaisDaCaixaCarregando,
     preferredInstanceId,
