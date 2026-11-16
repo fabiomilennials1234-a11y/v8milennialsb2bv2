@@ -126,6 +126,19 @@ export interface ContextPanelTabInfoProps {
   isGroup?: boolean;
 }
 
+/** Mesma lista no painel desktop e no drawer móvel, com as ações já existentes. */
+export function ContextPanelCadastros({ phoneNumber, activeLeadId, isGroup = false }: Pick<ContextPanelTabInfoProps, "phoneNumber" | "activeLeadId" | "isGroup">) {
+  return (
+    <CadastrosDoNumeroPainel
+      telefone={phoneNumber}
+      leadIdDaConversa={activeLeadId}
+      isGroup={isGroup}
+      fallback={!activeLeadId && phoneNumber ? <SemLeadVinculado phoneNumber={phoneNumber} /> : null}
+      renderSemLead={phoneNumber ? (cadastros) => <SemLeadVinculado phoneNumber={phoneNumber} cadastrosDaConversa={cadastros} /> : undefined}
+    />
+  );
+}
+
 export function ContextPanelTabInfo({
   lead,
   activeLeadId,
@@ -139,7 +152,7 @@ export function ContextPanelTabInfo({
   // cadastro (ver `SemLeadVinculado`).
   if (!lead && phoneNumber) return (
     <ScrollArea className="h-full [&_[data-radix-scroll-area-viewport]>div]:!block">
-      <CadastrosDoNumeroPainel telefone={phoneNumber} leadIdDaConversa={null} isGroup={isGroup} fallback={<SemLeadVinculado phoneNumber={phoneNumber} />} />
+      <ContextPanelCadastros phoneNumber={phoneNumber} activeLeadId={null} isGroup={isGroup} />
     </ScrollArea>
   );
 
@@ -154,7 +167,7 @@ export function ContextPanelTabInfo({
           como está marcado (tags, qualificação) → como falar com ele →
           o resto. Cada seção é um rótulo micro, sem régua entre elas. */}
       <div className="flex flex-col gap-5 px-4 pb-5 pt-2">
-        <CadastrosDoNumeroPainel telefone={phoneNumber} leadIdDaConversa={activeLeadId} isGroup={isGroup} />
+        <ContextPanelCadastros phoneNumber={phoneNumber} activeLeadId={activeLeadId} isGroup={isGroup} />
         <Secao rotulo="Funis do lead">
           <ContextPanelFunnels leadId={activeLeadId} />
         </Secao>

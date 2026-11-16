@@ -9,14 +9,14 @@ import {
   SheetTitle,
   SheetTrigger,
 } from "@/components/ui/sheet";
-import { useFeatureFlag } from "@/modules/platform";
+import { useFeatureFlag } from "@/modules/platform/feature-flags";
 import {
   FLAG_CADASTROS_DO_NUMERO,
   deveMostrarCadastros,
   useCadastrosNaConversa,
+  type CadastroNaConversa,
 } from "@/modules/communication/hooks/chat/useCadastrosNaConversa";
 import { CadastrosDoNumeroLista } from "./CadastrosDoNumeroLista";
-import { SemLeadVinculado } from "./SemLeadVinculado";
 
 interface Props {
   telefone: string | null | undefined;
@@ -25,6 +25,9 @@ interface Props {
   fallback?: ReactNode;
   /** Rascunho: consultar antes do primeiro envio, sem criar ou vincular. */
   somenteConsulta?: boolean;
+  /** A vinculação é fornecida pelo contexto existente, sem importar a ficha do lead. */
+  renderSemLead?: (cadastros: CadastroNaConversa[]) => ReactNode;
+  children?: ReactNode;
 }
 
 function useCadastrosVisiveis({
@@ -51,13 +54,12 @@ function useCadastrosVisiveis({
 export function CadastrosDoNumeroPainel(props: Props) {
   const { cadastros, visivel } = useCadastrosVisiveis(props);
   if (!visivel) return props.fallback ?? null;
-  if (!props.leadIdDaConversa && props.telefone && !props.somenteConsulta) {
-    return (
-      <SemLeadVinculado
-        phoneNumber={props.telefone}
-        cadastrosDaConversa={cadastros}
-      />
-    );
+  if (
+    !props.leadIdDaConversa &&
+    !props.somenteConsulta &&
+    props.renderSemLead
+  ) {
+    return props.renderSemLead(cadastros);
   }
   return (
     <CadastrosDoNumeroLista
@@ -91,7 +93,7 @@ export function CadastrosDoNumeroAcesso(props: Props) {
             Consulte os clientes e negócios relacionados a esta conversa.
           </SheetDescription>
         </SheetHeader>
-        <CadastrosDoNumeroPainel {...props} />
+        {props.children ?? <CadastrosDoNumeroPainel {...props} />}
       </SheetContent>
     </Sheet>
   );

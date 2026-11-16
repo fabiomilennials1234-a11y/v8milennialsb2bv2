@@ -36,7 +36,7 @@ vi.mock("@/modules/identity", () => ({
   useOrganization: () => ({ organizationId: h.org }),
   useCurrentTeamMember: () => ({ data: { organization_id: h.org } }),
 }));
-vi.mock("@/modules/platform", () => ({
+vi.mock("@/modules/platform/feature-flags", () => ({
   useFeatureFlag: () => ({ enabled: h.enabled }),
 }));
 vi.mock("@/modules/communication/components/chat/LeadContactModal", () => ({
@@ -49,9 +49,14 @@ import {
   CadastrosDoNumeroAcesso,
   CadastrosDoNumeroPainel,
 } from "./CadastrosDoNumeroPainel";
+import { SemLeadVinculado } from "./SemLeadVinculado";
+import type { CadastroNaConversa } from "@/modules/communication/hooks/chat/useCadastrosNaConversa";
 
 const PHONE = "5548999991234";
 const NORM = "48999991234";
+const renderSemLead = (cadastros: CadastroNaConversa[]) => (
+  <SemLeadVinculado phoneNumber={PHONE} cadastrosDaConversa={cadastros} />
+);
 const lead = (id: string, org = "cafe") => ({
   id,
   organization_id: org,
@@ -106,6 +111,7 @@ describe("cadastros no painel da conversa", () => {
         telefone={PHONE}
         leadIdDaConversa={null}
         somenteConsulta
+        renderSemLead={renderSemLead}
       />,
     );
     await screen.findByRole("region", { name: "Cadastros deste número" });
@@ -137,7 +143,13 @@ describe("cadastros no painel da conversa", () => {
   });
 
   it("sem lead, apresenta uma única lista e mantém a escolha pela RPC existente", async () => {
-    mount(<CadastrosDoNumeroPainel telefone={PHONE} leadIdDaConversa={null} />);
+    mount(
+      <CadastrosDoNumeroPainel
+        telefone={PHONE}
+        leadIdDaConversa={null}
+        renderSemLead={renderSemLead}
+      />,
+    );
     fireEvent.click(
       await screen.findByRole("button", {
         name: "Vincular esta conversa a Cliente 2",
@@ -160,7 +172,13 @@ describe("cadastros no painel da conversa", () => {
       data: null,
       error: { message: "access_denied" },
     });
-    mount(<CadastrosDoNumeroPainel telefone={PHONE} leadIdDaConversa={null} />);
+    mount(
+      <CadastrosDoNumeroPainel
+        telefone={PHONE}
+        leadIdDaConversa={null}
+        renderSemLead={renderSemLead}
+      />,
+    );
     fireEvent.click(
       await screen.findByRole("button", {
         name: "Vincular esta conversa a Cliente 1",
@@ -206,5 +224,29 @@ describe("cadastros no painel da conversa", () => {
     await waitFor(() =>
       expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
     );
+  });
+  it("o acesso móvel preserva a vinculação fornecida pelo contexto", async () => {
+    mount(
+      <CadastrosDoNumeroAcesso telefone={PHONE} leadIdDaConversa={null}>
+        <CadastrosDoNumeroPainel
+          telefone={PHONE}
+          leadIdDaConversa={null}
+          renderSemLead={renderSemLead}
+        />
+      </CadastrosDoNumeroAcesso>,
+    );
+    fireEvent.click(
+      await screen.findByRole("button", {
+        name: "Ver 2 cadastros deste número",
+      }),
+    );
+    const dialog = screen.getByRole("dialog");
+    fireEvent.click(
+      await within(dialog).findByRole("button", {
+        name: "Vincular esta conversa a Cliente 1",
+      }),
+    );
+    await waitFor(() => expect(h.success).toHaveBeenCalled());
+    expect(within(dialog).getAllByRole("list")).toHaveLength(1);
   });
 });
