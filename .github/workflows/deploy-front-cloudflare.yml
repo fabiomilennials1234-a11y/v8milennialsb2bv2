@@ -110,6 +110,14 @@ jobs:
           npm run cf:ci:check-env -- --sentry-token
           npm run build:dual
 
+      # Aba aberta durante o deploy ainda pede os chunks da build anterior; sem
+      # eles é 404 e a tela de "versão nova". Traz do prod (público, só GET) os
+      # chunks das builds recentes e grava o torque-builds.json. Sem segredo, e
+      # melhor esforço: o que falhar vira ::warning:: e o deploy segue. O
+      # cf:prepare a seguir varre também o que veio daqui.
+      - name: Reter chunks das builds anteriores
+        run: npm run cf:retain -- --dist dist --sha "$GITHUB_SHA"
+
       - name: cf:prepare (tira source map, recusa segredo, gera _headers)
         run: npm run cf:prepare -- --from dist
 

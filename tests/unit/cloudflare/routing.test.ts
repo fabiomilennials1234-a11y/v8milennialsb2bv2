@@ -18,6 +18,12 @@ import {
 const route = (path: string, method = "GET"): Route =>
   resolveRoute(new URL(`https://torque-front.example.workers.dev${path}`), method);
 
+describe("torque-builds.json (retenção de chunks)", () => {
+  it("cai na rota spa, que serve o arquivo exato sem cache; não precisa de rota própria", () => {
+    expect(route("/torque-builds.json")).toEqual({ kind: "spa", path: "/torque-builds.json" });
+  });
+});
+
 describe("interface única (V5, desde 2026-10-14) — o cookie não escolhe mais nada", () => {
   it("resolveRoute não recebe o header Cookie: a rota só depende de URL e método (com cookie: worker.test.ts)", () => {
     expect(resolveRoute.length).toBe(2);

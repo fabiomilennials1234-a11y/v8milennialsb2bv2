@@ -195,6 +195,17 @@ describe("deploy-front-cloudflare.yml", () => {
     expect(at("npm run cf:prepare -- --from dist")).toBeLessThan(at("actions/upload-artifact@"));
   });
 
+  it("build: a retenção de chunks roda entre a build e o cf:prepare, sem segredo", () => {
+    const build = jobSteps("build");
+    const at = (needle: string) => build.findIndex((s) => (s.run ?? "").includes(needle));
+    expect(at("npm run cf:retain")).toBeGreaterThan(-1);
+    expect(at("npm run build:dual")).toBeLessThan(at("npm run cf:retain"));
+    expect(at("npm run cf:retain")).toBeLessThan(at("npm run cf:prepare -- --from dist"));
+    // O commit chega por env do runner, nunca interpolado; o step não recebe env próprio (segredo).
+    expect(build[at("npm run cf:retain")]!.env).toBeUndefined();
+    expect(build[at("npm run cf:retain")]!.run).toContain('--sha "$GITHUB_SHA"');
+  });
+
   it("artifact = cloudflare/.assets (com os ocultos, 3 dias, erro se vazio) — nunca dist/", () => {
     const uploads = steps(w).filter((s) => s.uses?.startsWith("actions/upload-artifact@"));
     expect(uploads).toHaveLength(1);

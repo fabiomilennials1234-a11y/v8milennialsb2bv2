@@ -28,6 +28,7 @@
     "typecheck": "tsc -p tsconfig.app.json --noEmit",
     "cf:extract": "node scripts/cloudflare/extract-prod.mjs",
     "cf:prepare": "node scripts/cloudflare/prepare-assets.mjs",
+    "cf:retain": "node scripts/cloudflare/retain-previous.mjs",
     "cf:dev": "npm --prefix cloudflare run dev",
     "cf:deploy": "npm --prefix cloudflare run deploy",
     "cf:parity": "node scripts/cloudflare/parity.mjs",
