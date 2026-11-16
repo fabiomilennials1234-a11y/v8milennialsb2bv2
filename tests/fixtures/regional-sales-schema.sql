@@ -1,0 +1,38 @@
+CREATE SCHEMA private;
+CREATE SCHEMA auth;
+CREATE ROLE anon;
+CREATE ROLE authenticated;
+CREATE ROLE service_role;
+CREATE FUNCTION auth.uid() RETURNS uuid LANGUAGE sql STABLE AS $$ SELECT nullif(current_setting('request.jwt.claim.sub',true),'')::uuid $$;
+CREATE FUNCTION auth.role() RETURNS text LANGUAGE sql STABLE AS $$ SELECT coalesce(nullif(current_setting('request.jwt.claim.role',true),''),'authenticated') $$;
+CREATE TABLE organizations(id uuid PRIMARY KEY,name text,timezone text DEFAULT 'America/Sao_Paulo');
+CREATE TABLE team_members(id uuid PRIMARY KEY,organization_id uuid,user_id uuid,name text,role text,is_active boolean DEFAULT true);
+CREATE TABLE whatsapp_instances(id uuid PRIMARY KEY,organization_id uuid,name text);
+CREATE TABLE metrics_studio_panels(id uuid PRIMARY KEY,organization_id uuid,template_key text);
+CREATE TABLE pipelines(id uuid PRIMARY KEY,organization_id uuid,name text);
+CREATE TABLE leads(id uuid PRIMARY KEY,organization_id uuid,name text,phone text,normalized_phone text,origin text,origin_detail text,utm_campaign text,uf text,uf_source text,deleted_at timestamptz,is_shadow boolean,excluded_from_metrics boolean,metrics_period_at timestamptz,created_at timestamptz DEFAULT now(),updated_at timestamptz,pre_sale_responsible_id uuid,sale_responsible_id uuid,sdr_id uuid,closer_id uuid,responsible_id uuid,responsible_user_id uuid);
+CREATE TABLE deals(id uuid PRIMARY KEY,organization_id uuid,source_lead_id uuid,owner_id uuid,created_at timestamptz,deleted_at timestamptz,outcome text,last_activity_at timestamptz,metadata jsonb DEFAULT '{}');
+CREATE TABLE pipeline_entries(id uuid PRIMARY KEY,organization_id uuid,pipeline_id uuid,lead_id uuid,deal_id uuid,stage_id uuid,stage_key text,assigned_to uuid,metadata jsonb DEFAULT '{}',entered_at timestamptz,updated_at timestamptz);
+CREATE TABLE pipeline_stages(id uuid PRIMARY KEY,pipeline_id uuid,name text,key text,stage_role text);
+CREATE TABLE sale_events(id uuid PRIMARY KEY,organization_id uuid,lead_id uuid,pipeline_id uuid,event_type text,reversed_event_id uuid,sold_at timestamptz,sale_value numeric,sale_responsible_id uuid,pre_sale_responsible_id uuid,revenue_stream text);
+CREATE TABLE meeting_events(id uuid PRIMARY KEY,organization_id uuid,lead_id uuid,event_type text,source_entry_id uuid,pre_sale_responsible_id uuid,meeting_date timestamptz,occurred_at timestamptz);
+CREATE TABLE lead_custom_fields(id uuid PRIMARY KEY,organization_id uuid,field_name text,is_required boolean DEFAULT false);
+CREATE TABLE lead_custom_field_values(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),lead_id uuid,field_id uuid,value text,created_at timestamptz DEFAULT now(),updated_at timestamptz DEFAULT now(),UNIQUE(lead_id,field_id));
+CREATE TABLE lead_owners(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),organization_id uuid,lead_id uuid,team_member_id uuid,role text,is_primary boolean);
+CREATE TABLE tags(id uuid PRIMARY KEY,organization_id uuid,name text);
+CREATE TABLE lead_tags(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),lead_id uuid,tag_id uuid);
+CREATE TABLE follow_ups(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),organization_id uuid,lead_id uuid,assigned_to uuid,title text,description text,due_date timestamptz,completed_at timestamptz,archived_at timestamptz,is_automated boolean,priority text,pipeline_entry_id uuid,deal_id uuid);
+CREATE TABLE whatsapp_messages(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),organization_id uuid,lead_id uuid,instance_id uuid,normalized_phone text,direction text,content text,timestamp timestamptz,created_at timestamptz DEFAULT now(),sent_by_ai boolean,sent_source text,sent_by_team_member_id uuid,is_group boolean,deleted_at timestamptz,status text);
+CREATE TABLE private.jrtex_pipeline_accounts(user_id uuid PRIMARY KEY,suffix text);
+CREATE FUNCTION private.jrtex_pipeline_scoped() RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER AS $$ SELECT EXISTS(SELECT 1 FROM private.jrtex_pipeline_accounts WHERE user_id=auth.uid()) $$;
+CREATE FUNCTION private.jrtex_visible_pipeline_ids() RETURNS uuid[] LANGUAGE sql STABLE SECURITY DEFINER AS $$ SELECT ARRAY(SELECT p.id FROM public.pipelines p JOIN private.jrtex_pipeline_accounts a ON p.name ILIKE '%'||a.suffix WHERE a.user_id=auth.uid()) $$;
+CREATE FUNCTION assert_org_access(p uuid) RETURNS void LANGUAGE plpgsql STABLE SECURITY DEFINER AS $$ BEGIN IF NOT EXISTS(SELECT 1 FROM public.team_members WHERE organization_id=p AND user_id=auth.uid() AND is_active) THEN RAISE EXCEPTION 'access_denied'; END IF; END $$;
+CREATE FUNCTION metric_period_bounds(uuid,text,date,date,date) RETURNS tstzrange LANGUAGE sql STABLE AS $$ SELECT tstzrange(coalesce($4,date_trunc('month',$3)::date)::timestamp AT TIME ZONE 'America/Sao_Paulo',coalesce($5+1,(date_trunc('month',$3)+interval '1 month')::date)::timestamp AT TIME ZONE 'America/Sao_Paulo','[)') $$;
+CREATE FUNCTION public.fn_metric_measure(p_org_id uuid,p_measure_ref jsonb,p_recorte text,p_period text,p_ref date,p_start date,p_end date,p_filters jsonb) RETURNS jsonb LANGUAGE plpgsql STABLE SECURITY DEFINER AS $$
+BEGIN
+  IF private.jrtex_pipeline_scoped() THEN
+    RAISE EXCEPTION 'Acesso restrito aos funis do seu grupo' USING ERRCODE = '42501';
+  END IF;
+  PERFORM public.assert_org_access(p_org_id);
+  RETURN '{"legacy":true}';
+END $$;
