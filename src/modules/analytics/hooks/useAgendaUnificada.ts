@@ -104,7 +104,13 @@ export function useAgendaUnificada(periodo: Periodo) {
     itens,
     clientes: clientes.data ?? new Map<string, ClienteDaAgenda>(),
     isLoading: eventos.isLoading || contatos.isLoading,
-    isError: eventos.isError || contatos.isError,
+    // Uma fonte fora do ar não derruba a lista: só é erro quando AS DUAS falham.
+    // O que faltou vem em `indisponiveis`, para a tela avisar em vez de calar.
+    isError: eventos.isError && contatos.isError,
+    indisponiveis: {
+      eventos: eventos.isError && !contatos.isError,
+      contatos: contatos.isError && !eventos.isError,
+    },
     refetch: () => {
       void eventos.refetch();
       void contatos.refetch();

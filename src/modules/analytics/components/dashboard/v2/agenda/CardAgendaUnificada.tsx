@@ -109,6 +109,13 @@ export function CardAgendaUnificada({ periodo, onPeriodo, tipo, onTipo }: CardAg
               onValueChange={(v) => onTipo(v as FiltroTipo)}
             />
             <Legenda />
+            {(agenda.indisponiveis.eventos || agenda.indisponiveis.contatos) && (
+              <p role="status" className="w-full text-[11.5px] text-warning-strong">
+                {agenda.indisponiveis.contatos
+                  ? "Os próximos contatos não carregaram para este usuário. Reuniões e mensagens estão completas."
+                  : "Reuniões e mensagens não carregaram. Os próximos contatos estão completos."}
+              </p>
+            )}
           </div>
         }
       >
