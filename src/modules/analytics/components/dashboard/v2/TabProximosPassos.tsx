@@ -12,6 +12,9 @@ import { CardTarefasDoDia } from "./CardTarefasDoDia";
 import { CardMetas } from "./CardMetas";
 import { CardAgendaContatos } from "./agenda/CardAgendaContatos";
 import { CardResumoAgenda } from "./agenda/CardResumoAgenda";
+import { CardAgendaUnificada } from "./agenda/CardAgendaUnificada";
+import { FLAG_AGENDA_UNIFICADA } from "@/modules/engagement";
+import type { FiltroTipo, Periodo } from "@/modules/analytics/lib/agenda-unificada";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useFeatureFlag } from "@/modules/platform";
 import { useOrganization } from "@/modules/identity";
@@ -87,28 +90,54 @@ function useHojeDaOrg(): string {
 function ComandoComAgenda() {
   const hoje = useHojeDaOrg();
   const [filtro, setFiltro] = useState<FiltroAgenda>("todas");
+  const unificada = useFeatureFlag(FLAG_AGENDA_UNIFICADA);
+  const [periodo, setPeriodo] = useState<Periodo>("hoje");
+  const [tipo, setTipo] = useState<FiltroTipo>("todos");
   // Um escopo para a tela inteira: o toggle Meu/Todos do card muda a tabela, o
   // resumo e os dois indicadores de agenda juntos.
   const escopo = useEstadoEscopoAgenda();
 
+  // Os indicadores filtram a Agenda: na versão unificada o "hoje" e o
+  // "atrasada" deles são sempre do PRÓXIMO CONTATO, então levam para esse tipo.
+  const aoFiltrarPeloIndicador = (f: FiltroAgenda) => {
+    if (unificada.enabled) {
+      setPeriodo("hoje");
+      setTipo("contato");
+    } else {
+      setFiltro(f);
+    }
+  };
+
   return (
     <EscopoAgendaProvider value={escopo}>
     <div className="flex flex-col gap-4">
-      <LinhaDeIndicadoresAgenda onFiltro={setFiltro} />
+      <LinhaDeIndicadoresAgenda onFiltro={aoFiltrarPeloIndicador} />
       {/* A Agenda é o trabalho do dia: logo abaixo dos indicadores, acima das
           conversas (pedido do CTO, 10/11). Largura toda — é uma planilha:
           cliente, empresa, data, dados, contato e o X precisam caber sem
           rolagem lateral. */}
-      <CardAgendaContatos hoje={hoje} filtro={filtro} onFiltro={setFiltro} />
+      {unificada.isLoading ? (
+        <Skeleton className="h-[320px] rounded-card" />
+      ) : unificada.enabled ? (
+        <CardAgendaUnificada periodo={periodo} onPeriodo={setPeriodo} tipo={tipo} onTipo={setTipo} />
+      ) : (
+        <CardAgendaContatos hoje={hoje} filtro={filtro} onFiltro={setFiltro} />
+      )}
       <CardConversasAguardando />
-      <div className="grid items-start gap-4 lg:grid-cols-3">
-        <div className="min-w-0 lg:col-span-2">
-          <CardMetas />
+      {unificada.enabled ? (
+        // A faixa de 7 dias do resumo é do próximo contato; a Agenda unificada
+        // tem o próprio período (Hoje/Semana/Mês), então Metas ocupa a largura.
+        <CardMetas />
+      ) : (
+        <div className="grid items-start gap-4 lg:grid-cols-3">
+          <div className="min-w-0 lg:col-span-2">
+            <CardMetas />
+          </div>
+          <div className="min-w-0">
+            <CardResumoAgenda hoje={hoje} filtro={filtro} onFiltro={setFiltro} />
+          </div>
         </div>
-        <div className="min-w-0">
-          <CardResumoAgenda hoje={hoje} filtro={filtro} onFiltro={setFiltro} />
-        </div>
-      </div>
+      )}
     </div>
     </EscopoAgendaProvider>
   );

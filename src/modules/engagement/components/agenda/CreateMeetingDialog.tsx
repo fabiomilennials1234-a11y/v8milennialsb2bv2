@@ -5,7 +5,7 @@
  * with a richer internal meeting form that uses useCreateMeeting.
  */
 
-import { useState, useEffect } from "react";
+import { Suspense, lazy, useState, useEffect } from "react";
 import { format, addHours } from "date-fns";
 import {
   Plus,
@@ -30,6 +30,15 @@ import {
 import { useTeamMembers } from "@/modules/identity";
 import { LeadPorFunilPicker } from "./LeadPorFunilPicker";
 import { IconChip } from "@/components/ui/bento";
+import { useFeatureFlag } from "@/modules/platform/feature-flags";
+import type { AgendamentoExtras } from "../../lib/agendamento-tipos";
+import { FLAG_AGENDA_UNIFICADA } from "../../lib/agenda-unificada-flag";
+
+// Já dentro do chunk preguiçoso deste diálogo; o `lazy` mantém o formulário novo
+// como fronteira própria (e fora do grafo estático do dep-cruiser).
+const AgendamentoDialog = lazy(() =>
+  import("./AgendamentoDialog").then((m) => ({ default: m.AgendamentoDialog })),
+);
 
 // ─── Constants ─────────────────────────────────────────────────────────────────
 
@@ -152,7 +161,7 @@ function tituloSemeado(leadName: string | null | undefined): string {
 
 // ─── Component ─────────────────────────────────────────────────────────────────
 
-export function CreateMeetingDialog({
+function CreateMeetingDialogLegado({
   open,
   onOpenChange,
   initialStart,
@@ -500,4 +509,22 @@ export function CreateMeetingDialog({
       </DialogContent>
     </Dialog>
   );
+}
+
+/**
+ * Com a flag `agenda_unificada` (Café Jurerê) toda reunião nasce no formulário
+ * do "Nova agenda" do Comando; sem ela, o formulário de sempre. Mesmas props
+ * nos dois: nenhum dos cinco chamadores muda.
+ */
+export function CreateMeetingDialog({ tipos, onMarcarContato, ...props }: CreateMeetingDialogProps & AgendamentoExtras) {
+  const unificada = useFeatureFlag(FLAG_AGENDA_UNIFICADA);
+  // Sem a resposta da flag nada abre: abrir o formulário de sempre e trocá-lo
+  // por outro no meio da digitação é pior que esperar ~100 ms.
+  if (unificada.isLoading) return null;
+  if (unificada.enabled) return (
+      <Suspense fallback={null}>
+        <AgendamentoDialog tipos={tipos ?? ["reuniao"]} onMarcarContato={onMarcarContato} {...props} />
+      </Suspense>
+    );
+  return <CreateMeetingDialogLegado {...props} />;
 }

@@ -106,6 +106,11 @@ vi.mock("@/modules/leads", () => ({
   }),
 }));
 
+// A flag `agenda_unificada` troca o formulário; estes testes cobrem o de sempre.
+vi.mock("@/modules/platform/feature-flags", () => ({
+  useFeatureFlag: () => ({ enabled: false, isLoading: false }),
+}));
+
 vi.mock("@/modules/identity", () => ({
   useTeamMembers: () => ({ data: [] }),
 }));
