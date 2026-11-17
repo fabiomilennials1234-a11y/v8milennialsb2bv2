@@ -5,7 +5,18 @@ import { useOrganization } from "@/modules/identity";
 import { notifyError } from "@/shared/errors";
 import { useEscopoAgenda } from "@/modules/analytics/hooks/useEscopoAgenda";
 import { useIdentity } from "@/modules/identity";
-import { termoDeBusca, type AgendaContato, type ResumoAgendaLinha } from "@/modules/analytics/lib/agenda-contatos";
+import {
+  SELECT_BUSCA_CLIENTE,
+  filtrosDaBuscaCliente,
+  paraClienteAgenda,
+  termoDeBusca,
+  type AgendaContato,
+  type ClienteParaAgenda,
+  type LinhaBuscaCliente,
+  type ResumoAgendaLinha,
+} from "@/modules/analytics/lib/agenda-contatos";
+
+export type { ClienteParaAgenda };
 
 /**
  * Agenda de contatos do Comando (migration 20280110000000).
@@ -132,40 +143,30 @@ export function useConcluirAgendaContato() {
   });
 }
 
-export interface ClienteParaAgenda {
-  id: string;
-  name: string | null;
-  company: string | null;
-  phone: string | null;
-  erp_code: string | null;
-}
-
 /**
- * Busca de cliente para marcar agenda: nome, empresa, código do ERP ou
- * telefone — a Café acha cliente pelo código. A RLS de `leads` recorta o que a
- * pessoa pode ver; 20 é teto de UI.
+ * Busca de cliente para marcar agenda: nome, empresa ou código do ERP — a Café
+ * acha cliente pelo código. Telefone não busca (pedido da Café). A RLS de
+ * `leads` recorta o que a pessoa pode ver; 20 é teto de UI.
  */
 export function useBuscaClientesAgenda(termo: string) {
   const { organizationId } = useOrganization();
   const limpo = termoDeBusca(termo);
-  const digitos = limpo.replace(/\D/g, "");
   return useQuery({
     queryKey: [...CHAVE, "busca", organizationId, limpo],
     enabled: !!organizationId && limpo.length >= 2,
     staleTime: 30_000,
     queryFn: async (): Promise<ClienteParaAgenda[]> => {
-      const filtros = [`name.ilike.%${limpo}%`, `company.ilike.%${limpo}%`, `erp_code.ilike.%${limpo}%`];
-      if (digitos.length >= 4) filtros.push(`phone_digits.ilike.%${digitos}%`);
       const { data, error } = await supabase
         .from("leads")
-        .select("id, name, company, phone, erp_code")
+        .select(SELECT_BUSCA_CLIENTE)
         .eq("organization_id", organizationId as string)
         .is("deleted_at", null)
-        .or(filtros.join(","))
+        .is("lead_phones.deleted_at", null)
+        .or(filtrosDaBuscaCliente(limpo).join(","))
         .order("name", { ascending: true })
         .limit(20);
       if (error) throw error;
-      return (data ?? []) as ClienteParaAgenda[];
+      return ((data ?? []) as unknown as LinhaBuscaCliente[]).map(paraClienteAgenda);
     },
   });
 }
