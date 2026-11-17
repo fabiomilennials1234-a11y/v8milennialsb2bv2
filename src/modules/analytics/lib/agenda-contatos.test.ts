@@ -5,7 +5,9 @@ import {
   diasDeDistancia,
   distanciaRelativa,
   filtrarAgendas,
+  filtrosDaBuscaCliente,
   hojeNoFuso,
+  paraClienteAgenda,
   proximosDias,
   termoDeBusca,
   type AgendaContato,
@@ -93,5 +95,68 @@ describe("agenda de contatos — resumo e filtro", () => {
   it("termo de busca não quebra o filtro .or() do PostgREST", () => {
     expect(termoDeBusca("Café (Jurerê), 7001")).toBe("Café Jurerê 7001");
     expect(termoDeBusca("100%_*")).toBe("100");
+  });
+});
+
+describe("filtrosDaBuscaCliente", () => {
+  it("busca só por nome, empresa e código do ERP — nunca por telefone", () => {
+    expect(filtrosDaBuscaCliente("1234")).toEqual([
+      "name.ilike.%1234%",
+      "company.ilike.%1234%",
+      "erp_code.ilike.%1234%",
+    ]);
+  });
+
+  it("número longo digitado também não vira busca por telefone", () => {
+    expect(filtrosDaBuscaCliente("(48) 99999-1234").join(",")).not.toMatch(/phone/);
+  });
+
+  it("limpa o que quebraria o .or() do PostgREST", () => {
+    expect(filtrosDaBuscaCliente("a,b(c)")[0]).toBe("name.ilike.%a b c%");
+  });
+});
+
+describe("paraClienteAgenda", () => {
+  const base = { id: "l1", name: "Razão", company: "Fantasia", phone: null, erp_code: " 1042 ", uf: "SC" };
+
+  it("cidade, UF e representante vêm do cadastro do ERP; o UF do lead é só reserva", () => {
+    const c = paraClienteAgenda({
+      ...base,
+      upsell_clients: [{ erp_city: "Jurerê", erp_uf: "RS", erp_owner_name: "Rep", updated_at: "2026-11-01T00:00:00Z" }],
+    });
+    expect(c).toMatchObject({ erp_code: "1042", cidade: "Jurerê", uf: "RS", representante: "Rep" });
+    expect(paraClienteAgenda(base)).toMatchObject({ cidade: null, uf: "SC", representante: null });
+  });
+
+  it("aceita o embed como objeto único e usa o cadastro mais recente quando há mais de um", () => {
+    expect(
+      paraClienteAgenda({ ...base, upsell_clients: { erp_city: "A", erp_uf: null, erp_owner_name: null, updated_at: null } }).cidade,
+    ).toBe("A");
+    expect(
+      paraClienteAgenda({
+        ...base,
+        upsell_clients: [
+          { erp_city: "Velha", erp_uf: null, erp_owner_name: null, updated_at: "2026-01-01T00:00:00Z" },
+          { erp_city: "Nova", erp_uf: null, erp_owner_name: null, updated_at: "2026-06-01T00:00:00Z" },
+        ],
+      }).cidade,
+    ).toBe("Nova");
+  });
+
+  it("telefones: principal primeiro, sem repetir o do lead nem o mesmo número em outro formato", () => {
+    const c = paraClienteAgenda({
+      ...base,
+      phone: "5548999991234",
+      lead_phones: [
+        { phone: "554833334444", is_primary: false, created_at: "2026-02-01T00:00:00Z" },
+        { phone: "+55 48 99999-1234", is_primary: true, created_at: "2026-03-01T00:00:00Z" },
+        { phone: "  ", is_primary: false, created_at: null },
+      ],
+    });
+    expect(c.telefones).toEqual(["+55 48 99999-1234", "554833334444"]);
+  });
+
+  it("sem lead_phones, cai no telefone do próprio lead", () => {
+    expect(paraClienteAgenda({ ...base, phone: "5548999991234", lead_phones: null }).telefones).toEqual(["5548999991234"]);
   });
 });
