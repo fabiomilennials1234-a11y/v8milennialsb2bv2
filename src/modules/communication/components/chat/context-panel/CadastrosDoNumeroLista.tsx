@@ -8,6 +8,8 @@ interface Props {
   leadIdDaConversa: string | null;
   onVincular?: (cadastro: CadastroNaConversa) => void;
   vinculandoId?: string | null;
+  /** O resumo recolhido já diz quantos são: a lista aberta dispensa o título. */
+  semCabecalho?: boolean;
 }
 
 /** Lista vertical: rola com as informações do lead, nunca com as mensagens. */
@@ -16,12 +18,14 @@ export function CadastrosDoNumeroLista({
   leadIdDaConversa,
   onVincular,
   vinculandoId,
+  semCabecalho = false,
 }: Props) {
   return (
     <section
       aria-label="Cadastros deste número"
       className="flex min-w-0 flex-col gap-3"
     >
+      {!semCabecalho && (
       <header className="flex items-start gap-2">
         <Users className="mt-0.5 h-4 w-4 shrink-0 text-insights" aria-hidden />
         <div className="min-w-0">
@@ -38,6 +42,7 @@ export function CadastrosDoNumeroLista({
           )}
         </div>
       </header>
+      )}
       <ul className="flex min-w-0 flex-col gap-2">
         {cadastros.map((c) => {
           const aberto = c.negociosAbertos[0];
