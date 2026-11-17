@@ -24,7 +24,7 @@ vi.mock("@/shared/hooks/useDebounce", () => ({ useDebounce: <T,>(v: T) => v }));
 
 import { AgendamentoDialog } from "./AgendamentoDialog";
 
-const CLIENTE = { id: "l1", name: "Padaria Sol", company: "Sol Ltda", phone: "48999990000", erp_code: "123" };
+const CLIENTE = { id: "l1", name: "Padaria Sol", company: "Sol Ltda", erp_code: "123", uf: "SC", cidade: "Itajaí", representante: "Carlos", telefones: ["48999990000"] };
 
 function abrir(props: Partial<React.ComponentProps<typeof AgendamentoDialog>> = {}) {
   const onOpenChange = vi.fn();

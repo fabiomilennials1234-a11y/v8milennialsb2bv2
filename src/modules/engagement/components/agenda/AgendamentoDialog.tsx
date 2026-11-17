@@ -5,12 +5,13 @@ import { Check, Loader2, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card";
 import { Input } from "@/components/ui/input";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
-import { formatPhoneBR } from "@/shared/format/phone";
+import { ClienteAgendaInfo } from "@/shared/components/ClienteAgendaInfo";
 import { useDebounce } from "@/shared/hooks/useDebounce";
 import { useTeamMembers } from "@/modules/identity";
 import { isPipelineVisible, sortPipelinesForNavigation, usePipelines } from "@/modules/pipelines/funis-da-agenda";
@@ -113,7 +114,11 @@ export function AgendamentoDialog({
     const inicio = initialStart ?? proximaHoraCheia(new Date());
     setTipo(tipoInicial ?? tiposValidos[0] ?? "reuniao");
     setBusca("");
-    setCliente(initialLeadId ? { id: initialLeadId, name: initialLeadName ?? null, company: null, phone: null, erp_code: null } : null);
+    setCliente(
+      initialLeadId
+        ? { id: initialLeadId, name: initialLeadName ?? null, company: null, erp_code: null, uf: null, cidade: null, representante: null, telefones: [] }
+        : null,
+    );
     setDia(paraDia(inicio));
     setHora(`${p2(inicio.getHours())}:${p2(inicio.getMinutes())}`);
     setDuracao("60");
@@ -199,7 +204,7 @@ export function AgendamentoDialog({
                 autoFocus={!cliente}
                 value={busca}
                 onChange={(e) => setBusca(e.target.value)}
-                placeholder="Nome, empresa, código do ERP ou telefone"
+                placeholder="Nome, empresa ou código do ERP"
                 className="pl-9"
                 autoComplete="off"
               />
@@ -226,24 +231,35 @@ export function AgendamentoDialog({
                   const escolhido = cliente?.id === c.id;
                   return (
                     <li key={c.id} role="option" aria-selected={escolhido}>
-                      <button
-                        type="button"
-                        onClick={() => setCliente(c)}
-                        className={cn(
-                          "flex w-full items-center gap-3 border-b border-border/60 px-3 py-2 text-left last:border-b-0 hover:bg-muted/50 focus-visible:bg-muted/50 focus-visible:outline-none",
-                          escolhido && "bg-primary-soft/60 hover:bg-primary-soft/60",
-                        )}
-                      >
-                        <span className="min-w-0 flex-1">
-                          <span className="block truncate text-[13px] font-semibold">{c.name || "Sem nome"}</span>
-                          <span className="block truncate text-[11.5px] text-muted-foreground">
-                            {[c.company, c.erp_code ? `ERP ${c.erp_code}` : null, c.phone ? formatPhoneBR(c.phone) : null]
-                              .filter(Boolean)
-                              .join(" · ") || "Sem dados"}
-                          </span>
-                        </span>
-                        {escolhido && <Check aria-hidden className="h-4 w-4 shrink-0 text-primary-soft-foreground" />}
-                      </button>
+                      <HoverCard openDelay={200} closeDelay={80}>
+                        <HoverCardTrigger asChild>
+                          <button
+                            type="button"
+                            onClick={() => setCliente(c)}
+                            className={cn(
+                              "flex w-full items-center gap-3 border-b border-border/60 px-3 py-2 text-left last:border-b-0 hover:bg-muted/50 focus-visible:bg-muted/50 focus-visible:outline-none",
+                              escolhido && "bg-primary-soft/60 hover:bg-primary-soft/60",
+                            )}
+                          >
+                            <span
+                              className={cn(
+                                "shrink-0 rounded-md px-2 py-1 text-[13px] font-semibold tabular-nums",
+                                c.erp_code ? "bg-muted text-foreground" : "text-[11.5px] font-normal text-muted-foreground",
+                              )}
+                            >
+                              {c.erp_code ?? "s/ cód."}
+                            </span>
+                            <span className="min-w-0 flex-1">
+                              <span className="block truncate text-[13px] font-semibold">{c.name || "Sem nome"}</span>
+                              <span className="block truncate text-[11.5px] text-muted-foreground">{c.company || "Sem empresa"}</span>
+                            </span>
+                            {escolhido && <Check aria-hidden className="h-4 w-4 shrink-0 text-primary-soft-foreground" />}
+                          </button>
+                        </HoverCardTrigger>
+                        <HoverCardContent side="right" align="start" className="w-80">
+                          <ClienteAgendaInfo cliente={c} />
+                        </HoverCardContent>
+                      </HoverCard>
                     </li>
                   );
                 })

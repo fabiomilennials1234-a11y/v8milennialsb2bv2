@@ -142,6 +142,13 @@ export function filtrarAgendas(itens: AgendaContato[], filtro: FiltroAgenda): Ag
   return itens.filter((i) => i.situacao === filtro);
 }
 
-// A regra mora em `shared` porque a busca de cliente do modal de agendamento
-// (engagement) usa a mesma; aqui segue exportada para quem já importava daqui.
+// As regras de busca de cliente moram em `shared` (o modal de reunião, em
+// engagement, usa as mesmas); aqui seguem exportadas para quem já importava daqui.
+export {
+  SELECT_BUSCA_CLIENTE,
+  filtrosDaBuscaCliente,
+  paraClienteAgenda,
+  type ClienteParaAgenda,
+  type LinhaBuscaCliente,
+} from "@/shared/format/cliente-agenda";
 export { termoDeBusca } from "@/shared/format/termo-de-busca";
