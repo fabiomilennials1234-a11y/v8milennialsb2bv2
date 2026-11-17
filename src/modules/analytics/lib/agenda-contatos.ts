@@ -142,7 +142,6 @@ export function filtrarAgendas(itens: AgendaContato[], filtro: FiltroAgenda): Ag
   return itens.filter((i) => i.situacao === filtro);
 }
 
-/** Termo de busca seguro para `.or()` do PostgREST: vírgula e parêntese quebram o filtro. */
-export function termoDeBusca(termo: string): string {
-  return termo.replace(/[,()\\%_*]/g, " ").replace(/\s+/g, " ").trim();
-}
+// A regra mora em `shared` porque a busca de cliente do modal de agendamento
+// (engagement) usa a mesma; aqui segue exportada para quem já importava daqui.
+export { termoDeBusca } from "@/shared/format/termo-de-busca";

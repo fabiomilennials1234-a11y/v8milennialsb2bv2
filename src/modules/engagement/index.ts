@@ -142,3 +142,10 @@ export * from "./hooks/useCommissions";
 export { CreateMeetingDialog } from "./components/agenda/CreateMeetingDialogLazy";
 
 export { EditMeetingDialog } from "./components/agenda/EditMeetingDialogLazy";
+
+// Agendamento no formato do "Nova agenda" do Comando (flag `agenda_unificada`):
+// quem precisa dele usa o `CreateMeetingDialog` acima, que entrega o formulário
+// novo quando a flag está ligada. Um segundo export preguiçoso abriria outro
+// caminho dinâmico até `@/modules/pipelines` e reabriria ciclos do dep-cruiser.
+export type { TipoAgendamento } from "./lib/agendamento-tipos";
+export { FLAG_AGENDA_UNIFICADA } from "./lib/agenda-unificada-flag";

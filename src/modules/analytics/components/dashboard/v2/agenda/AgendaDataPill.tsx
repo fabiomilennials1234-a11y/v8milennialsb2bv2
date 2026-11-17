@@ -19,6 +19,11 @@ interface AgendaDataPillProps {
   /** Remarcar: a pílula vira gatilho do calendário. Sem isto, só leitura. */
   onRemarcar?: (dia: string) => void;
   disabled?: boolean;
+  /**
+   * Na Agenda unificada azul e amarelo são TIPO (mensagem e reunião), então a
+   * data do contato fica neutra — só o atrasado mantém o vermelho.
+   */
+  neutro?: boolean;
 }
 
 /**
@@ -26,9 +31,10 @@ interface AgendaDataPillProps {
  * atrasada — com o "há N dias" ao lado. Clicar remarca: na planilha da Café a
  * pessoa troca a data na própria célula; aqui é o mesmo gesto.
  */
-export function AgendaDataPill({ dia, situacao, hoje, onRemarcar, disabled }: AgendaDataPillProps) {
+export function AgendaDataPill({ dia, situacao, hoje, onRemarcar, disabled, neutro = false }: AgendaDataPillProps) {
   const [aberto, setAberto] = useState(false);
-  const tom = TOM_SITUACAO[situacao];
+  const base = TOM_SITUACAO[situacao];
+  const tom = neutro && situacao !== "atrasada" ? { ...base, pill: "bg-muted text-foreground/80 ring-1 ring-inset ring-border", dot: "bg-muted-foreground/60" } : base;
 
   const conteudo = (
     <>
