@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
-import { FaixaCadastros } from "./CadastrosDoNumeroFaixa";
+import { BlocoCadastros } from "../CadastrosDoNumero";
 import {
   deveMostrarFaixa,
   ordenarCadastros,
@@ -17,12 +17,15 @@ const cadastro = (over: Partial<CadastroNaConversa>): CadastroNaConversa => ({
   ...over,
 });
 
-const montar = (cadastros: CadastroNaConversa[], leadIdDaConversa: string | null = null) =>
-  render(
+const montar = (cadastros: CadastroNaConversa[], leadIdDaConversa: string | null = null, abrir = true) => {
+  const r = render(
     <MemoryRouter>
-      <FaixaCadastros cadastros={cadastros} leadIdDaConversa={leadIdDaConversa} />
+      <BlocoCadastros cadastros={cadastros} leadIdDaConversa={leadIdDaConversa} />
     </MemoryRouter>,
   );
+  if (abrir) fireEvent.click(screen.getByRole("button"));
+  return r;
+};
 
 describe("quando a faixa aparece", () => {
   it("número em 2+ cadastros: sempre, com ou sem lead na conversa", () => {
@@ -52,30 +55,52 @@ describe("ordem dos cadastros", () => {
   });
 });
 
-describe("FaixaCadastros", () => {
+describe("BlocoCadastros", () => {
+  it("recolhido: só a contagem, sem a lista", () => {
+    montar([cadastro({ id: "a", name: "Alfa" }), cadastro({ id: "b", name: "Beta" })], "a", false);
+    const botao = screen.getByRole("button");
+    expect(botao).toHaveTextContent("Este número está em 2 cadastros");
+    expect(botao).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByRole("link")).not.toBeInTheDocument();
+  });
+
+  it("clicar abre a lista e clicar de novo recolhe", () => {
+    montar([cadastro({ id: "a", name: "Alfa" }), cadastro({ id: "b", name: "Beta" })], "a", false);
+    fireEvent.click(screen.getByRole("button"));
+    expect(screen.getAllByRole("link")).toHaveLength(2);
+    fireEvent.click(screen.getByRole("button"));
+    expect(screen.queryByRole("link")).not.toBeInTheDocument();
+  });
+
   it("vários cadastros sem vínculo: diz quantos e que a conversa não está ligada", () => {
     montar([
       cadastro({ id: "pj", name: "GSC COMERCIO LTDA", erp_code: "14859", negociosAbertos: [{ pipeline_name: "Vendas", stage_name: "Negociação" }] }),
       cadastro({ id: "pf", name: "Gustavo Silva", erp_code: "15001" }),
     ]);
-    const faixa = screen.getByRole("status");
-    expect(faixa).toHaveTextContent("Este número está em 2 cadastros — a conversa não está ligada a nenhum deles.");
-    expect(within(faixa).getByText("GSC COMERCIO LTDA")).toBeInTheDocument();
-    expect(within(faixa).getByText("ERP 14859")).toBeInTheDocument();
-    expect(within(faixa).getByText("Vendas · Negociação")).toBeInTheDocument();
-    expect(within(faixa).getByText("sem negócio aberto")).toBeInTheDocument();
+    const bloco = screen.getByTestId("cadastros-do-numero");
+    expect(bloco).toHaveTextContent("Este número está em 2 cadastros");
+    expect(bloco).toHaveTextContent("A conversa não está ligada a nenhum deles.");
+    expect(within(bloco).getByText("GSC COMERCIO LTDA")).toBeInTheDocument();
+    expect(within(bloco).getByText("ERP 14859")).toBeInTheDocument();
+    expect(within(bloco).getByText("Vendas · Negociação")).toBeInTheDocument();
+    expect(within(bloco).getByText("sem negócio aberto")).toBeInTheDocument();
+  });
+
+  it("com vínculo: não avisa que a conversa está solta", () => {
+    montar([cadastro({ id: "a", name: "Alfa" }), cadastro({ id: "b", name: "Beta" })], "a", false);
+    expect(screen.getByTestId("cadastros-do-numero")).not.toHaveTextContent("não está ligada");
   });
 
   it("marca o cadastro a que a conversa já está ligada", () => {
     montar([cadastro({ id: "a", name: "Alfa" }), cadastro({ id: "b", name: "Beta" })], "b");
-    const beta = screen.getByRole("link", { name: /Beta/ });
-    expect(beta).toHaveTextContent("nesta conversa");
+    expect(screen.getByRole("link", { name: /Beta/ })).toHaveTextContent("nesta conversa");
     expect(screen.getByRole("link", { name: /Alfa/ })).not.toHaveTextContent("nesta conversa");
   });
 
-  it("um cadastro só: explica que o número é dele mas a conversa não está ligada", () => {
-    montar([cadastro({ id: "a", name: "Alfa" })]);
-    expect(screen.getByRole("status")).toHaveTextContent("Este número é do cadastro abaixo, mas a conversa não está ligada a ele.");
+  it("um cadastro só: diz que o número é dele e que a conversa não está ligada", () => {
+    montar([cadastro({ id: "a", name: "Alfa" })], null, false);
+    expect(screen.getByTestId("cadastros-do-numero")).toHaveTextContent("Este número é de 1 cadastro");
+    expect(screen.getByTestId("cadastros-do-numero")).toHaveTextContent("A conversa não está ligada a ele.");
   });
 
   it("cada cadastro leva à ficha do lead", () => {
