@@ -167,7 +167,6 @@ export function ContextPanelTabInfo({
           como está marcado (tags, qualificação) → como falar com ele →
           o resto. Cada seção é um rótulo micro, sem régua entre elas. */}
       <div className="flex flex-col gap-5 px-4 pb-5 pt-2">
-        <ContextPanelCadastros phoneNumber={phoneNumber} activeLeadId={activeLeadId} isGroup={isGroup} />
         <Secao rotulo="Funis do lead">
           <ContextPanelFunnels leadId={activeLeadId} />
         </Secao>

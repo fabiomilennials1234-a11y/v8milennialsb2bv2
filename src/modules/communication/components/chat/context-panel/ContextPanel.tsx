@@ -33,6 +33,7 @@ import { telefoneParaExibicao } from "@/modules/communication/lib/identificadorO
 import { nomeCodContatoLead, nomeDoPainelDeContexto } from "@/modules/communication/lib/nomeDaConversa";
 import { useContatoDaConversa, useNomeCodContatoLead } from "@/modules/communication/hooks/chat/useNomeCodContatoLead";
 import { FalandoCom } from "./FalandoCom";
+import { CadastrosDoNumeroResumo } from "./CadastrosDoNumeroResumo";
 
 export interface ContextPanelProps {
   leadId?: string;
@@ -227,6 +228,13 @@ export function ContextPanel({
           </FocusTile>
         )}
       </FocusCard>
+
+      {/* De quem é este número: recolhido (só a contagem) até clicar. Entre o
+          lead e o "Falando com". Sem lead, a lista segue na aba Infos, onde
+          mora a ação de vincular. */}
+      {activeLeadId && phoneNumber && (
+        <CadastrosDoNumeroResumo telefone={phoneNumber} leadIdDaConversa={activeLeadId} isGroup={ehGrupo} />
+      )}
 
       {nomeCodContato && activeLeadId && phoneNumber && (
         <FalandoCom leadId={activeLeadId} telefone={phoneNumber} />
