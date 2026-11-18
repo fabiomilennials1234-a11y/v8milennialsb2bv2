@@ -283,6 +283,13 @@ describe("registerWatchChannel", () => {
     });
     warnSpy.mockRestore();
   });
+
+  it("returns Google's HTTP status (204 stopped, 404 already gone)", async () => {
+    mockFetch.mockResolvedValueOnce(new Response(null, { status: 204 }));
+    await expect(stopGoogleChannel("tok", "ch-1", "res-1")).resolves.toBe(204);
+    mockFetch.mockResolvedValueOnce(new Response("{}", { status: 404 }));
+    await expect(stopGoogleChannel("tok", "ch-1", "res-1")).resolves.toBe(404);
+  });
 });
 
 // ── stopGoogleChannel ──
@@ -299,10 +306,10 @@ describe("stopGoogleChannel", () => {
     );
   });
 
-  it("never throws", async () => {
+  it("never throws: network failure resolves to null", async () => {
     mockFetch.mockRejectedValueOnce(new Error("down"));
     const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
-    await expect(stopGoogleChannel("tok", "ch-1", "res-1")).resolves.toBeUndefined();
+    await expect(stopGoogleChannel("tok", "ch-1", "res-1")).resolves.toBeNull();
     warnSpy.mockRestore();
   });
 });

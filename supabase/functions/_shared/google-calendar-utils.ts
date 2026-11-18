@@ -196,22 +196,32 @@ export function watchChannelNeedsRenewal(
   return expiresAt - nowMs < WATCH_RENEWAL_WINDOW_MS;
 }
 
-/** Para um canal no Google. Best-effort: nunca lança. */
+/**
+ * Para um canal no Google. Best-effort: nunca lança.
+ * Devolve o status HTTP do Google (204 = parado, 404 = já não existia) ou
+ * null em falha de rede — quem só quer "tentar" pode ignorar o retorno.
+ */
 export async function stopGoogleChannel(
   accessToken: string,
   channelId: string,
   resourceId: string,
-): Promise<void> {
-  await fetch(GOOGLE_STOP_URL, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({ id: channelId, resourceId }),
-  }).catch((err) => {
+): Promise<number | null> {
+  try {
+    const res = await fetch(GOOGLE_STOP_URL, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ id: channelId, resourceId }),
+    });
+    // Corpo descartado: libera a conexão sem segurar o buffer.
+    await res.body?.cancel().catch(() => {});
+    return res.status;
+  } catch (err) {
     console.warn("[GoogleCalendar] Falha ao parar watch channel:", channelId, err);
-  });
+    return null;
+  }
 }
 
 // ─── Token do watch channel ─────────────────────────────────────────────────

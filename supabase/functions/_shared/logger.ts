@@ -346,6 +346,8 @@ interface LogRuntimeParams {
 // `await flushRuntimeLogs()` significa "persistido".
 
 /** Teto da fila: chegou aqui, sai na hora, sem esperar a janela. */
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 const BATCH_MAX_ROWS = 100;
 /** Janela de agregação dentro do Edge Runtime. Fora dele, próximo tick. */
 const FLUSH_WINDOW_MS = 250;
@@ -773,8 +775,19 @@ export async function logRuntime(params: LogRuntimeParams): Promise<void> {
   try {
     if (!Deno.env.get("SUPABASE_URL") || !Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")) return;
 
-    const sanitizedPayload = params.payloadSnapshot
-      ? (redactSecrets(params.payloadSnapshot) as Record<string, unknown>)
+    // `triggered_by` é FK uuid para auth.users. Rótulo ("system", "user",
+    // "workflow") quebra o cast com 22P02 → o PostgREST recusa o POST inteiro
+    // com 400 e o LOTE todo (até 100 linhas de outros módulos) se perde. Em
+    // 18/11/2026 eram 46 mil POSTs perdidos por dia, metade das requisições
+    // das rajadas do webhook do Google Calendar. O rótulo sobrevive no payload.
+    const triggeredByLabel =
+      params.triggeredBy && !UUID_RE.test(params.triggeredBy) ? params.triggeredBy : undefined;
+    const payloadWithLabel = triggeredByLabel
+      ? { ...(params.payloadSnapshot ?? {}), triggered_by_label: triggeredByLabel }
+      : params.payloadSnapshot;
+
+    const sanitizedPayload = payloadWithLabel
+      ? (redactSecrets(payloadWithLabel) as Record<string, unknown>)
       : undefined;
 
     const row: RuntimeLogRow = {
@@ -786,7 +799,7 @@ export async function logRuntime(params: LogRuntimeParams): Promise<void> {
       error_message: params.errorMessage || null,
       entity_type: params.entityType || null,
       entity_id: params.entityId || null,
-      triggered_by: params.triggeredBy || null,
+      triggered_by: triggeredByLabel ? null : params.triggeredBy || null,
       duration_ms: params.durationMs ?? null,
       prompt_tokens: params.tokens?.prompt ?? null,
       completion_tokens: params.tokens?.completion ?? null,
