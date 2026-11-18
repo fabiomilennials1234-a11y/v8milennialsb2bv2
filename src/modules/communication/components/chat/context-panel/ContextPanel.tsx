@@ -26,12 +26,14 @@ import { useLeadById, useLeadsDeals } from "@/modules/leads";
 import { LeadContactModal } from "@/modules/communication/components/chat/LeadContactModal";
 import { negocioEmDestaque } from "@/modules/communication/lib/negocioEmDestaque";
 import { ContextPanelTabInfo } from "./ContextPanelTabInfo";
+export { ContextPanelCadastros } from "./ContextPanelTabInfo";
 import { ContextPanelTabHistory } from "./ContextPanelTabHistory";
 import { ContextPanelTabAI } from "./ContextPanelTabAI";
 import { telefoneParaExibicao } from "@/modules/communication/lib/identificadorOculto";
 import { nomeCodContatoLead, nomeDoPainelDeContexto } from "@/modules/communication/lib/nomeDaConversa";
 import { useContatoDaConversa, useNomeCodContatoLead } from "@/modules/communication/hooks/chat/useNomeCodContatoLead";
 import { FalandoCom } from "./FalandoCom";
+import { CadastrosDoNumeroResumo } from "./CadastrosDoNumeroResumo";
 
 export interface ContextPanelProps {
   leadId?: string;
@@ -227,6 +229,13 @@ export function ContextPanel({
         )}
       </FocusCard>
 
+      {/* De quem é este número: recolhido (só a contagem) até clicar. Entre o
+          lead e o "Falando com". Sem lead, a lista segue na aba Infos, onde
+          mora a ação de vincular. */}
+      {activeLeadId && phoneNumber && (
+        <CadastrosDoNumeroResumo telefone={phoneNumber} leadIdDaConversa={activeLeadId} isGroup={ehGrupo} />
+      )}
+
       {nomeCodContato && activeLeadId && phoneNumber && (
         <FalandoCom leadId={activeLeadId} telefone={phoneNumber} />
       )}
@@ -268,6 +277,7 @@ export function ContextPanel({
             lead={lead ?? null}
             activeLeadId={activeLeadId}
             phoneNumber={phoneNumber}
+            isGroup={ehGrupo}
           />
         </TabsContent>
 

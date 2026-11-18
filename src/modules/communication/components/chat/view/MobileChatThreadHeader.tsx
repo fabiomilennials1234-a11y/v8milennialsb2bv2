@@ -1,4 +1,5 @@
 import { ArrowLeft } from "lucide-react";
+import type { ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { ChatCallButton } from "@/modules/communication/components/voice/ChatCallButton";
@@ -15,6 +16,7 @@ export interface MobileChatThreadHeaderProps {
   leadId?: string;
   onBack: () => void;
   onTapContact?: () => void;
+  extraActions?: ReactNode;
 }
 
 export function MobileChatThreadHeader({
@@ -25,6 +27,7 @@ export function MobileChatThreadHeader({
   leadId,
   onBack,
   onTapContact,
+  extraActions,
 }: MobileChatThreadHeaderProps) {
   // `contactName` já vem tratado (`nomeDaConversa`); a queda para o telefone é
   // que precisava do mesmo cuidado — sem ela, o cabeçalho mobile se chamava
@@ -68,6 +71,7 @@ export function MobileChatThreadHeader({
         </div>
       </div>
 
+      {extraActions}
       {!isGroup && <ChatCallButton variant="icon" leadId={leadId} leadName={contactName} onOpenLead={onTapContact} />}
     </div>
   );

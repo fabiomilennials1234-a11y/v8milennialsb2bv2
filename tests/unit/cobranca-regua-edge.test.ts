@@ -34,6 +34,7 @@ describe("texto da régua: edge e prévia da tela dizem a mesma coisa", () => {
     primeiro_nome: "Joana", nome: "Joana Prates", empresa: "TorqueCRM", valor: "1840.5",
     vencimento: "2026-10-05", dias_atraso: 16, como_pagar: "", quando: "amanhã",
     parcela_valor: 460, parcela_vencimento: "2026-10-30",
+    prazo_data: "2026-11-20", prazo_horario: "18:00",
   };
   const casos: [string, string][] = [
     ["Olá, {primeiro_nome}! {valor} vence em {vencimento}.", "Olá, Joana! R$ 1.840,50 vence em 05/10/2026."],
@@ -42,6 +43,7 @@ describe("texto da régua: edge e prévia da tela dizem a mesma coisa", () => {
     ["{quando} ({parcela_vencimento}): {parcela_valor}", "amanhã (30/10/2026): R$ 460,00"],
     ["Oi {inexistente}  {primeiro_nome}", "Oi Joana"],
     ["  {como_pagar}  ", ""],
+    ["Retorne até {prazo_data}, às {prazo_horario}.", "Retorne até 20/11/2026, às 18:00."],
   ];
   it.each(casos)("%j", (modelo, esperado) => {
     expect(renderEdge(modelo, vars)).toBe(esperado);

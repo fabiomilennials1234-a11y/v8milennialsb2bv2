@@ -6,7 +6,17 @@ import { reaisCompacto, iniciais } from "./formato";
 import { camposFaltando, detectarColunas, lerData, lerValor, montarLinhas } from "./planilha";
 import { gerarParcelas, maisMeses } from "./parcelas";
 import { proximaAcao } from "./proxima-acao";
-import { marcaDoPasso, parseEnvio, parsePreviaDoEnvio, rotuloDaEntrada, tipoDaColuna } from "./regua";
+import {
+  VARIAVEIS_DA_REGUA,
+  formatarVariavel,
+  marcaDoPasso,
+  parseConfiguracao,
+  parseEnvio,
+  parsePreviaDoEnvio,
+  rotuloDaEntrada,
+  tipoDaColuna,
+  variaveisDesconhecidas,
+} from "./regua";
 import { parseEtapa, parseImportacao, parseMetricas, parseResumo, type InadimplenteResumo } from "./tipos";
 
 const HOJE = new Date(2026, 9, 21, 15, 0); // 21/10/2026, hora local
@@ -204,7 +214,31 @@ describe("colunas da régua", () => {
       entradaDias: null,
       mensagem: null,
       automacaoAtiva: true,
+      trilha: "unico",
+      personalizada: false,
     });
+  });
+
+  it("parseEtapa lê a trilha e a coluna manual criada pela organização", () => {
+    expect(
+      parseEtapa({ id: "e3", nome: "Múltiplos títulos", posicao: 5, papel: "aberta", cor: "#818cf8", pausa_regua: false, entrada_dias: 1, trilha: "multiplos" }),
+    ).toMatchObject({ trilha: "multiplos", personalizada: false });
+    expect(
+      parseEtapa({ id: "e4", nome: "Fluxo cartorial", posicao: 6, papel: "aberta", cor: "#818cf8", pausa_regua: true, personalizada: true, trilha: "qualquer" }),
+    ).toMatchObject({ trilha: "unico", personalizada: true, entradaDias: null });
+  });
+
+  it("parseConfiguracao lê o prazo em dias úteis e tolera banco sem a coluna", () => {
+    expect(parseConfiguracao({ prazo_dias_uteis: 3 }).prazoDiasUteis).toBe(3);
+    expect(parseConfiguracao({}).prazoDiasUteis).toBe(2);
+  });
+
+  it("prazo_data sai como data e prazo_horario como veio; a prévia lista as duas variáveis", () => {
+    expect(formatarVariavel("prazo_data", "2026-11-20")).toBe("20/11/2026");
+    expect(formatarVariavel("prazo_horario", "18:00")).toBe("18:00");
+    const chaves = VARIAVEIS_DA_REGUA.map((v) => v.chave);
+    expect(chaves).toEqual(expect.arrayContaining(["prazo_data", "prazo_horario"]));
+    expect(variaveisDesconhecidas("até {prazo_data} às {prazo_horario}")).toEqual([]);
   });
 
   it("tipo da coluna: dias, pausa (mesmo com dias, como o Jurídico) e entrada", () => {

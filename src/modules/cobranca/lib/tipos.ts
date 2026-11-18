@@ -7,6 +7,7 @@
  */
 
 export type Origem = "erp" | "planilha" | "manual";
+export type TrilhaDaColuna = "unico" | "multiplos";
 export type PapelDaEtapa = "aberta" | "recuperado" | "perdido" | "cancelado";
 export type Desfecho = "recuperado" | "perdido" | "cancelado";
 export type TipoDeCompromisso = "promessa" | "acordo";
@@ -26,6 +27,10 @@ export interface Etapa {
   mensagem: string | null;
   /** Liga/desliga a entrada automática (e a mensagem dela). Não afeta o envio à mão. */
   automacaoAtiva: boolean;
+  /** Coluna de dias: a régua de "um título vencido" ou a de "2 ou mais títulos vencidos". */
+  trilha: TrilhaDaColuna;
+  /** Coluna manual criada pela organização (sem dias; só envia no "Mover e enviar"). */
+  personalizada: boolean;
 }
 
 export interface InadimplenteResumo {
@@ -132,6 +137,8 @@ export function parseEtapa(r: Linha): Etapa {
     entradaDias: numOuNulo(r.entrada_dias),
     mensagem: str(r.mensagem),
     automacaoAtiva: r.automacao_ativa !== false,
+    trilha: r.trilha === "multiplos" ? "multiplos" : "unico",
+    personalizada: r.personalizada === true,
   };
 }
 

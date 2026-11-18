@@ -4,17 +4,18 @@ import { Check, Loader2, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { useDebounce } from "@/shared/hooks/useDebounce";
-import { formatPhoneBR } from "@/shared/format/phone";
 import {
   useBuscaClientesAgenda,
   useMarcarAgendaContato,
   type ClienteParaAgenda,
 } from "@/modules/analytics/hooks/useAgendaContatos";
 import { dataComSemana, diaLocal, paraDia } from "@/modules/analytics/lib/agenda-contatos";
+import { ClienteAgendaInfo } from "./ClienteAgendaInfo";
 
 interface NovaAgendaDialogProps {
   open: boolean;
@@ -72,7 +73,7 @@ export function NovaAgendaDialog({ open, onOpenChange, hoje }: NovaAgendaDialogP
                 autoFocus
                 value={busca}
                 onChange={(e) => setBusca(e.target.value)}
-                placeholder="Nome, empresa, código do ERP ou telefone"
+                placeholder="Nome, empresa ou código do ERP"
                 className="pl-9"
                 autoComplete="off"
               />
@@ -93,24 +94,35 @@ export function NovaAgendaDialog({ open, onOpenChange, hoje }: NovaAgendaDialogP
                   const escolhido = cliente?.id === c.id;
                   return (
                     <li key={c.id} role="option" aria-selected={escolhido}>
-                      <button
-                        type="button"
-                        onClick={() => setCliente(c)}
-                        className={cn(
-                          "flex w-full items-center gap-3 border-b border-border/60 px-3 py-2 text-left last:border-b-0 hover:bg-muted/50 focus-visible:bg-muted/50 focus-visible:outline-none",
-                          escolhido && "bg-primary-soft/60 hover:bg-primary-soft/60",
-                        )}
-                      >
-                        <span className="min-w-0 flex-1">
-                          <span className="block truncate text-[13px] font-semibold">{c.name || "Sem nome"}</span>
-                          <span className="block truncate text-[11.5px] text-muted-foreground">
-                            {[c.company, c.erp_code ? `ERP ${c.erp_code}` : null, c.phone ? formatPhoneBR(c.phone) : null]
-                              .filter(Boolean)
-                              .join(" · ") || "Sem dados"}
-                          </span>
-                        </span>
-                        {escolhido && <Check aria-hidden className="h-4 w-4 shrink-0 text-primary-soft-foreground" />}
-                      </button>
+                      <HoverCard openDelay={200} closeDelay={80}>
+                        <HoverCardTrigger asChild>
+                          <button
+                            type="button"
+                            onClick={() => setCliente(c)}
+                            className={cn(
+                              "flex w-full items-center gap-3 border-b border-border/60 px-3 py-2 text-left last:border-b-0 hover:bg-muted/50 focus-visible:bg-muted/50 focus-visible:outline-none",
+                              escolhido && "bg-primary-soft/60 hover:bg-primary-soft/60",
+                            )}
+                          >
+                            <span
+                              className={cn(
+                                "shrink-0 rounded-md px-2 py-1 text-[13px] font-semibold tabular-nums",
+                                c.erp_code ? "bg-muted text-foreground" : "text-[11.5px] font-normal text-muted-foreground",
+                              )}
+                            >
+                              {c.erp_code ?? "s/ cód."}
+                            </span>
+                            <span className="min-w-0 flex-1">
+                              <span className="block truncate text-[13px] font-semibold">{c.name || "Sem nome"}</span>
+                              <span className="block truncate text-[11.5px] text-muted-foreground">{c.company || "Sem empresa"}</span>
+                            </span>
+                            {escolhido && <Check aria-hidden className="h-4 w-4 shrink-0 text-primary-soft-foreground" />}
+                          </button>
+                        </HoverCardTrigger>
+                        <HoverCardContent side="right" align="start" className="w-80">
+                          <ClienteAgendaInfo cliente={c} />
+                        </HoverCardContent>
+                      </HoverCard>
                     </li>
                   );
                 })

@@ -25,6 +25,8 @@ export interface ConfiguracaoDaRegua {
   intervaloMaxSegundos: number;
   pausaAposRespostaDias: number;
   intervaloMinimoDias: number;
+  /** Dias úteis de folga em {prazo_data}/{prazo_horario}. */
+  prazoDiasUteis: number;
   comoPagar: string | null;
   etapaAposQuebraId: string | null;
   atualizadaEm: string | null;
@@ -100,6 +102,7 @@ export function parseConfiguracao(r: Linha): ConfiguracaoDaRegua {
     intervaloMaxSegundos: num(r.intervalo_max_segundos, 180),
     pausaAposRespostaDias: num(r.pausa_apos_resposta_dias, 3),
     intervaloMinimoDias: num(r.intervalo_minimo_dias, 2),
+    prazoDiasUteis: num(r.prazo_dias_uteis, 2),
     comoPagar: str(r.como_pagar),
     etapaAposQuebraId: str(r.etapa_apos_quebra_id),
     atualizadaEm: str(r.updated_at),
@@ -174,13 +177,15 @@ export const VARIAVEIS_DA_REGUA: { chave: string; rotulo: string; exemplo: unkno
   { chave: "dias_atraso", rotulo: "Dias de atraso", exemplo: 16 },
   { chave: "titulos", rotulo: "Títulos em aberto", exemplo: 2 },
   { chave: "como_pagar", rotulo: "Como pagar", exemplo: "PIX: financeiro@empresa.com.br" },
+  { chave: "prazo_data", rotulo: "Prazo para retorno (data)", exemplo: "2026-11-20" },
+  { chave: "prazo_horario", rotulo: "Prazo para retorno (horário)", exemplo: "18:00" },
   { chave: "parcela_valor", rotulo: "Valor da parcela", exemplo: 460, soLembrete: true },
   { chave: "parcela_vencimento", rotulo: "Vencimento da parcela", exemplo: "2026-10-30", soLembrete: true },
   { chave: "quando", rotulo: "Quando (hoje/amanhã)", exemplo: "amanhã", soLembrete: true },
 ];
 
 const DINHEIRO = new Set(["valor", "parcela_valor"]);
-const DATA = new Set(["vencimento", "parcela_vencimento"]);
+const DATA = new Set(["vencimento", "parcela_vencimento", "prazo_data"]);
 
 export function formatarVariavel(chave: string, valor: unknown): string {
   if (valor === null || valor === undefined) return "";

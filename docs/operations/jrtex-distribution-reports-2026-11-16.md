@@ -1,5 +1,18 @@
 # Jrtex: distribuição regional e relatórios da Karine
 
+> **Atualização 18/11/2026 — motor de distribuição desfeito.** A regra "CNPJ + cidade + UF antes
+> de encaminhar" vivia em triggers do banco e bloqueava a troca manual de responsável
+> (SQLSTATE 23514, toast genérico "Falha ao atualizar responsável") para qualquer usuário, inclusive
+> a Karine. Decisão do CTO: atribuição é automação e mora no workflow, não em migration.
+> Migration `20280118000000_desfaz_distribuicao_regional_jrtex` removeu 8 triggers, o cron
+> `regional-sales-distribution` e as 18 funções do motor (migrations 002/003/004/005 abaixo).
+> **Permanecem:** relatórios (001/006), `regional_sales_config` e as tabelas `regional_sales_state/
+> routes/cities/assignment_log` como dados inertes, e o workflow `b88c2b1a…` (que só conversa e avisa
+> a Karine). Responsáveis já trocados e follow-ups criados não foram desfeitos. Reversão:
+> `supabase/migrations/rollback/20280118000000_desfaz_distribuicao_regional_jrtex.sql` (ensaiada em prod:
+> recria os 28 objetos idênticos). `scripts/prepare-jrtex-rollout.mjs` foi removido.
+
+
 Primeira etapa do documento Call 10-11, autorizada pelo usuário na sessão.
 Ativada em produção em 2026-11-16 às 10:40:06, America/Sao_Paulo.
 

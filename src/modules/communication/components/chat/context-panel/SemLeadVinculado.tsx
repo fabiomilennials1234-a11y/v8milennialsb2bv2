@@ -23,20 +23,35 @@ import {
 } from "@/modules/communication/hooks/useCadastrosDoNumero";
 import { telefoneParaExibicao } from "@/modules/communication/lib/identificadorOculto";
 import { notifyError } from "@/shared/errors";
+import type { CadastroNaConversa } from "@/modules/communication/hooks/chat/useCadastrosNaConversa";
+import { CadastrosDoNumeroLista } from "./CadastrosDoNumeroLista";
 
-export function SemLeadVinculado({ phoneNumber }: { phoneNumber: string }) {
+export function SemLeadVinculado({
+  phoneNumber,
+  cadastrosDaConversa,
+}: {
+  phoneNumber: string;
+  cadastrosDaConversa?: CadastroNaConversa[];
+}) {
   const [leadModalOpen, setLeadModalOpen] = useState(false);
-  const { data } = useCadastrosDoNumero(phoneNumber);
+  const { data } = useCadastrosDoNumero(phoneNumber, !cadastrosDaConversa);
   const cadastros = data?.cadastros ?? [];
   const telefone = telefoneParaExibicao(phoneNumber) ?? phoneNumber;
 
   return (
     <div className="flex flex-col gap-4 px-4 pb-5 pt-3">
-      {cadastros.length >= 2 ? (
-        <CadastrosDoNumero phoneNumber={phoneNumber} telefone={telefone} cadastros={cadastros} />
+      {cadastrosDaConversa || cadastros.length >= 2 ? (
+        <CadastrosDoNumero
+          phoneNumber={phoneNumber}
+          telefone={telefone}
+          cadastros={cadastros}
+          cadastrosDaConversa={cadastrosDaConversa}
+        />
       ) : (
         <div className="pt-3 text-center">
-          <p className="mb-1 text-xs text-muted-foreground">Nenhum lead vinculado a</p>
+          <p className="mb-1 text-xs text-muted-foreground">
+            Nenhum lead vinculado a
+          </p>
           <p className="text-sm font-medium tabular-nums">{telefone}</p>
         </div>
       )}
@@ -49,7 +64,9 @@ export function SemLeadVinculado({ phoneNumber }: { phoneNumber: string }) {
       */}
       <div className="flex justify-center">
         <Button
-          variant={cadastros.length >= 2 ? "ghost" : "outline"}
+          variant={
+            cadastrosDaConversa || cadastros.length >= 2 ? "ghost" : "outline"
+          }
           size="sm"
           className="h-9 text-xs"
           onClick={() => setLeadModalOpen(true)}
@@ -72,18 +89,22 @@ function CadastrosDoNumero({
   phoneNumber,
   telefone,
   cadastros,
+  cadastrosDaConversa,
 }: {
   phoneNumber: string;
   telefone: string;
   cadastros: CadastroDoNumero[];
+  cadastrosDaConversa?: CadastroNaConversa[];
 }) {
   const vincular = useVincularConversaAoLead(phoneNumber);
   const emAndamento = vincular.isPending ? vincular.variables : null;
 
-  const escolher = (cadastro: CadastroDoNumero) =>
+  const escolher = (
+    cadastro: Pick<CadastroDoNumero, "id"> & { name: string | null },
+  ) =>
     vincular.mutate(cadastro.id, {
       onSuccess: (total) =>
-        toast.success(`Conversa vinculada a ${cadastro.name}`, {
+        toast.success(`Conversa vinculada a ${cadastro.name || "Sem nome"}`, {
           description:
             total > 0
               ? `${total} ${total === 1 ? "mensagem vinculada" : "mensagens vinculadas"}. As próximas seguem este cadastro.`
@@ -91,21 +112,39 @@ function CadastrosDoNumero({
         }),
       // A RPC recusa com frase em PT (cadastro sem o número) ou com código que o
       // catálogo traduz (access_denied → sem permissão). O fallback cobre o resto.
-      onError: (err) => notifyError(err, { fallback: "Não foi possível vincular a conversa." }),
+      onError: (err) =>
+        notifyError(err, { fallback: "Não foi possível vincular a conversa." }),
     });
 
+  if (cadastrosDaConversa) {
+    return (
+      <CadastrosDoNumeroLista
+        cadastros={cadastrosDaConversa}
+        leadIdDaConversa={null}
+        onVincular={escolher}
+        vinculandoId={emAndamento}
+      />
+    );
+  }
+
   return (
-    <section aria-labelledby="numero-em-varios-cadastros" className="flex flex-col gap-3">
+    <section
+      aria-labelledby="numero-em-varios-cadastros"
+      className="flex flex-col gap-3"
+    >
       <header className="flex flex-col gap-1">
         <span className="text-[11px] font-bold uppercase tracking-[.06em] text-muted-foreground">
           Número compartilhado
         </span>
-        <h3 id="numero-em-varios-cadastros" className="text-[15px] font-bold leading-snug tracking-[-0.01em]">
+        <h3
+          id="numero-em-varios-cadastros"
+          className="text-[15px] font-bold leading-snug tracking-[-0.01em]"
+        >
           Este número está em {cadastros.length} cadastros
         </h3>
         <p className="text-xs leading-relaxed text-muted-foreground">
-          <span className="tabular-nums text-foreground/80">{telefone}</span> pertence a mais de um cliente.
-          Escolha de quem é esta conversa.
+          <span className="tabular-nums text-foreground/80">{telefone}</span>{" "}
+          pertence a mais de um cliente. Escolha de quem é esta conversa.
         </p>
       </header>
 
@@ -124,7 +163,10 @@ function CadastrosDoNumero({
                   </AvatarFallback>
                 </Avatar>
                 <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-                  <span className="truncate text-sm font-semibold leading-tight" title={c.name}>
+                  <span
+                    className="truncate text-sm font-semibold leading-tight"
+                    title={c.name}
+                  >
                     {c.name}
                   </span>
                   {(c.company || c.erp_code) && (

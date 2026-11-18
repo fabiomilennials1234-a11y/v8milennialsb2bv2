@@ -18,10 +18,11 @@ export type VariaveisDaRegua = Record<string, unknown>;
 export const VARIAVEIS_DA_REGUA = [
   "nome", "primeiro_nome", "empresa", "valor", "vencimento", "dias_atraso",
   "titulos", "como_pagar", "parcela_valor", "parcela_vencimento", "quando",
+  "prazo_data", "prazo_horario",
 ] as const;
 
 const DINHEIRO = new Set(["valor", "parcela_valor"]);
-const DATA = new Set(["vencimento", "parcela_vencimento"]);
+const DATA = new Set(["vencimento", "parcela_vencimento", "prazo_data"]);
 
 function reais(n: number): string {
   return n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }).replace(/\u00a0/g, " ");
