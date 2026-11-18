@@ -152,9 +152,10 @@ function buildTimeline(
     ...unconfirmedFailures(failedMessages, messages).map((f) => ({
       ...f,
       _type: "message" as const,
-      message_type: "text",
+      message_type: f.mediaType ?? "text",
       content: f.message,
       media_url: f.mediaUrl ?? null,
+      failure_reason: f.error,
       id: f.id,
       organization_id: "",
       instance_id: null,

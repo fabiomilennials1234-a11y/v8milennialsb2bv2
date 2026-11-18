@@ -58,7 +58,7 @@ describe("friendlyWhatsAppSendError", () => {
     const raw =
       "Uazapi server error 500 on POST /send/text: the number 5514796612277@s.whatsapp.net is not on WhatsApp";
     expect(friendlyWhatsAppSendError(raw)).toBe(
-      "Esse número não tem WhatsApp. Confira o telefone no cadastro do lead.",
+      "O serviço de envio não reconheceu esse número no WhatsApp. Confira o telefone no cadastro do lead.",
     );
   });
 
@@ -86,7 +86,7 @@ describe("friendlyWhatsAppSendError", () => {
     const raw =
       "Uazapi server error 500 on POST /send/text: the number 5511994635555@s.whatsapp.net is not on WhatsApp";
     expect(friendlyWhatsAppSendError(raw)).toBe(
-      "Esse número não tem WhatsApp. Confira o telefone no cadastro do lead.",
+      "O serviço de envio não reconheceu esse número no WhatsApp. Confira o telefone no cadastro do lead.",
     );
   });
 
@@ -103,7 +103,7 @@ describe("whatsAppSendErrorMessage", () => {
       error: "Uazapi server error 500 on POST /send/text: the number 5514796612277@s.whatsapp.net is not on WhatsApp",
     });
     await expect(whatsAppSendErrorMessage(err)).resolves.toBe(
-      "Esse número não tem WhatsApp. Confira o telefone no cadastro do lead.",
+      "O serviço de envio não reconheceu esse número no WhatsApp. Confira o telefone no cadastro do lead.",
     );
   });
 
@@ -113,7 +113,7 @@ describe("whatsAppSendErrorMessage", () => {
       code: "recipient_not_on_whatsapp",
     });
     await expect(whatsAppSendErrorMessage(err)).resolves.toBe(
-      "Esse número não tem WhatsApp. Confira o telefone no cadastro do lead.",
+      "O serviço de envio não reconheceu esse número no WhatsApp. Confira o telefone no cadastro do lead.",
     );
   });
 

@@ -36,6 +36,22 @@ function setup() {
   const hook = renderHook(useSendWhatsAppMedia, { wrapper: ({ children }: { children: ReactNode }) => <QueryClientProvider client={client}>{children}</QueryClientProvider> });
   return { ...hook, client, close: () => { hook.unmount(); client.clear(); } };
 }
+it("preserves the translated provider rejection and local audio for preview and retry", async () => {
+  const reason = "O serviço de envio não reconheceu esse número no WhatsApp. Confira o telefone no cadastro do lead.";
+  mock.invoke.mockResolvedValueOnce({ data: null, error: {
+    message: "Edge Function returned a non-2xx status code",
+    context: new Response(JSON.stringify({ error: "the number 5511999999999@s.whatsapp.net is not on WhatsApp" }), { status: 422 }),
+  } });
+  const audio = { ...variables, mediaType: "audio" as const, media: "data:audio/mpeg;base64,SUQz", fileName: "audio.mp3" };
+  const { result, client, close } = setup();
+  await act(async () => { await expect(result.current.mutateAsync(audio)).rejects.toThrow(reason); });
+  expect(mock.invoke).toHaveBeenCalledOnce();
+  expect(mock.invoke.mock.calls[0][1].body.action).toBe("sendAudio");
+  expect(client.getQueryData<FailedMessage[]>(failedKey)).toEqual([
+    expect.objectContaining({ mediaUrl: audio.media, mediaType: "audio", error: reason, status: "failed" }),
+  ]);
+  close();
+});
 it("keeps the image visible during upload and after success without realtime or refetch", async () => {
   let finishUpload!: (value: unknown) => void;
   mock.fetch.mockReturnValueOnce(new Promise(resolve => { finishUpload = resolve; }));
