@@ -23,13 +23,14 @@ const iso = (ms: number) => new Date(NOW.getTime() + ms).toISOString();
 const H = 3_600_000;
 
 /** Dublê mínimo do query builder, com a semântica dos filtros usados. */
-function fakeDb(rows: Row[], connected: string[] = ["u1", "u2"]) {
+function fakeDb(rows: Row[], connected: string[] = ["u1", "u2"], disconnected: string[] = []) {
   const updates: string[][] = [];
   const client = {
     from(table: string) {
       if (table === "google_calendar_tokens") {
-        const data = connected.map((user_id) => ({ user_id, is_active: true }));
-        const t = { select: () => t, eq: () => t, then: (res: (v: unknown) => unknown) => Promise.resolve({ data, error: null }).then(res) };
+        let onlyActive = false;
+        const all = [...connected.map((user_id) => ({ user_id, is_active: true })), ...disconnected.map((user_id) => ({ user_id, is_active: false }))];
+        const t = { select: () => t, eq: () => { onlyActive = true; return t; }, then: (res: (v: unknown) => unknown) => Promise.resolve({ data: all.filter((o) => !onlyActive || o.is_active), error: null }).then(res) };
         return t;
       }
       const preds: Array<(r: Row) => boolean> = [];
@@ -157,6 +158,20 @@ describe("stopOrphanWatchChannels", () => {
     expect(out).toMatchObject({ found: 3, stopped: 3, failed: 0, unreachable: 5, remaining: false });
     expect(getAccessToken).toHaveBeenCalledWith("u1");
     expect(getAccessToken).not.toHaveBeenCalledWith("u-desconectado");
+  });
+
+  it("includeDisconnected: dono desconectado entra no lote e é parado com o token que sobrou", async () => {
+    const rows = [orphan("d1", "u-desc"), orphan("d2", "u-desc"), orphan("a1", "u1")];
+    const { client } = fakeDb(rows, ["u1"], ["u-desc"]);
+    const getAccessToken = vi.fn(async (u: string) => `tok-${u}`);
+    const stop = vi.fn().mockResolvedValue(204);
+
+    const off = await stopOrphanWatchChannels(client, { getAccessToken, stopChannel: stop, now: () => NOW });
+    expect(off).toMatchObject({ found: 1, stopped: 1, unreachable: 2 });
+
+    const on = await stopOrphanWatchChannels(client, { getAccessToken, stopChannel: stop, now: () => NOW, includeDisconnected: true });
+    expect(on).toMatchObject({ found: 2, stopped: 2, unreachable: 0, remaining: false });
+    expect(getAccessToken).toHaveBeenCalledWith("u-desc");
   });
 
   it("limite acima do max_rows do PostgREST é cortado em 999", async () => {

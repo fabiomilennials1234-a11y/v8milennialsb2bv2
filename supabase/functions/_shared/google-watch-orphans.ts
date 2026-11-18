@@ -22,6 +22,13 @@ export interface OrphanStopDeps {
   /** Status HTTP do channels.stop, ou null em falha de rede. */
   stopChannel: (accessToken: string, channelId: string, resourceId: string) => Promise<number | null>;
   now?: () => Date;
+  /**
+   * Inclui donos que desconectaram (token `is_active=false`). Desconectar NÃO
+   * para os canais no Google (medido 18/11: 1.136 seguiram notificando); se o
+   * revoke do disconnect falhou, o refresh token gravado ainda serve para o
+   * stop. `getAccessToken` precisa saber buscar o token inativo.
+   */
+  includeDisconnected?: boolean;
 }
 
 export interface OrphanStopResult {
@@ -63,10 +70,9 @@ export async function stopOrphanWatchChannels(
 
   // Só donos com Google conectado: sem credencial o Google recusa o stop, e
   // os órfãos de quem desconectou ocupariam o lote inteiro a cada passada.
-  const { data: owners, error: ownersErr } = await supabase
-    .from("google_calendar_tokens")
-    .select("user_id")
-    .eq("is_active", true);
+  let ownersQ = supabase.from("google_calendar_tokens").select("user_id");
+  if (!deps.includeDisconnected) ownersQ = ownersQ.eq("is_active", true);
+  const { data: owners, error: ownersErr } = await ownersQ;
   if (ownersErr) throw new Error(`select donos: ${ownersErr.message}`);
   const ownerIds = ((owners ?? []) as Array<{ user_id: string }>).map((o) => o.user_id);
 
