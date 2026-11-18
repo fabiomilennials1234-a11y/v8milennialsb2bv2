@@ -497,14 +497,28 @@ export async function forwardSessionAction(
 
   // Mesmo repasse de `code` de `createSession`: pairSession/logoutSession/
   // deleteSession/adoptSession passam pela mesma VPS e pelo mesmo VpsResult.
-  if (!res.ok) {
+  // A VPS guarda em memória a sessão que ainda não foi pareada: restart do
+  // container (deploy, queda, OOM) a apaga, e a linha de `voip_sessions` fica
+  // para trás apontando para um id que o servidor não conhece mais. Daí em
+  // diante toda ação sobre ela volta 404 ("no session <id>") para sempre — o
+  // QR não aparece, e nem desconectar/apagar pela tela limpa a linha, que
+  // segue ocupando vaga do teto.
+  //
+  // 404 da VPS aqui é fato, não erro: a sessão acabou. Desligar/apagar vira
+  // sucesso (o estado desejado já é o real) e a linha é fechada; parear/adotar
+  // fecha a linha e devolve `session_gone` para o cliente criar uma nova.
+  // O 404 de "sessão de outra org" já foi barrado acima por
+  // `sessionBelongsToOrg`, então não se confunde com este.
+  const sessionGone = !res.ok && res.status === 404;
+  if (!res.ok && !sessionGone) {
     return json(res.status, { error: res.error, ...(res.code ? { code: res.code } : {}) }, cors);
   }
+  const closesRow = action === "logoutSession" || action === "pairSession" || action === "adoptSession";
 
   // Desliga o número antes de a linha de voip_sessions sumir (deleteSession)
   // ou virar closed (logoutSession) — depois disso o vínculo com a instância
   // não é mais consultável aqui.
-  if (action === "logoutSession" || action === "deleteSession") {
+  if (action === "logoutSession" || action === "deleteSession" || (sessionGone && closesRow)) {
     const { data: sess } = await db
       .from("voip_sessions")
       .select("whatsapp_instance_id")
@@ -526,7 +540,7 @@ export async function forwardSessionAction(
   // tenancy — e é ele que o resto do produto lê.
   if (action === "deleteSession") {
     await db.from("voip_sessions").delete().eq("tc_session_id", sid).eq("organization_id", caller.orgId);
-  } else if (action === "logoutSession") {
+  } else if (action === "logoutSession" || (sessionGone && closesRow)) {
     await db.from("voip_sessions").update({ status: "closed", updated_at: new Date().toISOString() })
       .eq("tc_session_id", sid).eq("organization_id", caller.orgId);
   } else if (action === "pairSession") {
@@ -549,11 +563,19 @@ export async function forwardSessionAction(
     organizationId: caller.orgId,
     module: "voip",
     action: `session_${action}`,
-    status: "success",
+    status: sessionGone ? "error" : "success",
+    ...(sessionGone ? { errorMessage: "session_gone: a VPS não conhece a sessão (restart apagou a pendente)" } : {}),
     entityType: "voip_session",
     entityId: sid,
     triggeredBy: caller.userId,
   });
 
-  return json(200, { ok: true, ...(res.data as Record<string, unknown> ?? {}) }, cors);
+  if (sessionGone && (action === "pairSession" || action === "adoptSession")) {
+    return json(409, {
+      error: "O servidor de voz perdeu esta sessão. Gere o QR Code de novo.",
+      code: "session_gone",
+    }, cors);
+  }
+
+  return json(200, { ok: true, ...(res.ok ? (res.data as Record<string, unknown> ?? {}) : {}) }, cors);
 }

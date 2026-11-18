@@ -102,6 +102,26 @@ describe("useVoicePairing", () => {
     }
   });
 
+  it("sessão perdida no servidor (session_gone): cria uma sessão nova uma vez, sem mostrar erro", async () => {
+    vi.useFakeTimers();
+    try {
+      const { VoiceControlError } = await import("@/modules/communication/lib/torquecallsApi");
+      pairVoiceSession.mockRejectedValueOnce(new VoiceControlError("session_gone", "perdeu"));
+      createVoiceSession.mockResolvedValueOnce({ tcSessionId: "tc-nova" });
+      const { result } = renderHook(() => useVoicePairing(), { wrapper });
+      await act(async () => { await result.current.start("inst-1", "sessao-morta"); });
+      await act(async () => { vi.advanceTimersByTime(5_000); });
+      await act(async () => { await Promise.resolve(); });
+      expect(createVoiceSession).toHaveBeenCalledTimes(1);
+      expect(requestStreamToken).toHaveBeenLastCalledWith({ tcSessionId: "tc-nova", pair: true, organizationId: "org-1" });
+      expect(result.current.status).not.toBe("falhou");
+      act(() => emit({ type: "session-qr", sessionId: "tc-nova", qr: "qr-novo" }));
+      expect(result.current.qr).toBe("qr-novo");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("não pede outro código quando o inicial já está na tela", async () => {
     vi.useFakeTimers();
     try {
