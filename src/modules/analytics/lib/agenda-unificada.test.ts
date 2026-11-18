@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { AgendaContato } from "./agenda-contatos";
 import {
+  contarAtrasados,
   contarPorTipo,
   filtrarPorTipo,
   intervaloDoPeriodo,
@@ -164,5 +165,59 @@ describe("contagem e filtro por tipo", () => {
   it("filtra por tipo e 'todos' devolve tudo", () => {
     expect(filtrarPorTipo(itens, "mensagem")).toHaveLength(1);
     expect(filtrarPorTipo(itens, "todos")).toHaveLength(3);
+  });
+});
+
+describe("atrasados abertos no Hoje", () => {
+  const base = { hoje: "2026-11-17", timezone: TZ, contatos: [] as AgendaContato[] };
+  const ontem = (p: Partial<EventoDaAgenda> = {}) =>
+    evento({ id: "velha", start_at: "2026-11-14T17:00:00Z", status: "scheduled", ...p }); // 14/11 14:00
+
+  it("reunião de dia anterior sem desfecho entra no Hoje e fica marcada como atrasada", () => {
+    const itens = montarAgenda({ ...base, periodo: "hoje", eventos: [], atrasados: [ontem()] });
+    expect(itens).toHaveLength(1);
+    expect(itens[0]).toMatchObject({ tipo: "reuniao", atrasada: true, encerrada: false, origemId: "velha" });
+  });
+
+  it("mensagem agendada que não saiu também entra", () => {
+    const itens = montarAgenda({ ...base, periodo: "hoje", eventos: [], atrasados: [ontem({ source: "scheduled_message", id: "m" })] });
+    expect(itens[0]).toMatchObject({ tipo: "mensagem", atrasada: true });
+  });
+
+  it("com desfecho registrado (realizada, falta) ou enviada, não entra", () => {
+    const itens = montarAgenda({
+      ...base,
+      periodo: "hoje",
+      eventos: [],
+      atrasados: [ontem({ status: "completed" }), ontem({ id: "b", status: "no_show" }), ontem({ id: "c", source: "scheduled_message", status: "sent" })],
+    });
+    expect(itens).toHaveLength(0);
+  });
+
+  it("o de hoje não é atrasado, mesmo com a hora já passada", () => {
+    const itens = montarAgenda({ ...base, periodo: "hoje", eventos: [evento({ start_at: "2026-11-17T11:00:00Z" })] }); // 08:00
+    expect(itens[0].atrasada).toBe(false);
+  });
+
+  it("semana e mês não carregam atrasado de fora do período", () => {
+    const sem = montarAgenda({ ...base, periodo: "semana", eventos: [], atrasados: [ontem()] });
+    expect(sem).toHaveLength(0);
+  });
+
+  it("não duplica a reunião que veio nas duas buscas e ordena a mais antiga primeiro", () => {
+    const velha = ontem();
+    const mais = ontem({ id: "mais", start_at: "2026-10-20T17:00:00Z" });
+    const itens = montarAgenda({ ...base, periodo: "hoje", eventos: [velha], atrasados: [velha, mais] });
+    expect(itens.map((i) => i.origemId)).toEqual(["mais", "velha"]);
+  });
+
+  it("contato atrasado conta como atrasado; o futuro não", () => {
+    const itens = montarAgenda({
+      ...base,
+      periodo: "hoje",
+      eventos: [],
+      contatos: [contato({ id: "a", data_agenda: "2026-11-10", situacao: "atrasada" }), contato({ id: "b", data_agenda: "2026-11-17", situacao: "hoje" })],
+    });
+    expect(contarAtrasados(itens)).toBe(1);
   });
 });
