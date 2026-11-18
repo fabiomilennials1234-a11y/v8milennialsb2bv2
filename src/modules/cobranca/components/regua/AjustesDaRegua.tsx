@@ -125,6 +125,7 @@ interface Formulario {
   intervaloMax: string;
   pausaResposta: string;
   intervaloDias: string;
+  prazoDiasUteis: string;
   comoPagar: string;
   etapaQuebra: string;
 }
@@ -137,6 +138,7 @@ function doConfig(c: ConfiguracaoDaRegua): Formulario {
     intervaloMax: String(Math.round(c.intervaloMaxSegundos / 60) || 1),
     pausaResposta: String(c.pausaAposRespostaDias),
     intervaloDias: String(c.intervaloMinimoDias),
+    prazoDiasUteis: String(c.prazoDiasUteis),
     comoPagar: c.comoPagar ?? "",
     etapaQuebra: c.etapaAposQuebraId ?? SEM,
   };
@@ -162,6 +164,8 @@ export function AjustesDaRegua({ config, etapas, podeEditar }: { config: Configu
     if (!(pr >= 0 && pr <= 30)) e.pausaResposta = "De 0 a 30 dias.";
     const id = inteiro(f.intervaloDias);
     if (!(id >= 1 && id <= 30)) e.intervaloDias = "De 1 a 30 dias.";
+    const pz = inteiro(f.prazoDiasUteis);
+    if (!(pz >= 1 && pz <= 10)) e.prazoDiasUteis = "De 1 a 10 dias úteis.";
     if (f.comoPagar.length > 600) e.comoPagar = "Até 600 caracteres.";
     for (const faixa of Object.values(f.janela)) {
       if (faixa && !(faixa.inicio < faixa.fim)) e.janela = "Em cada dia, o início vem antes do fim.";
@@ -192,6 +196,7 @@ export function AjustesDaRegua({ config, etapas, podeEditar }: { config: Configu
         intervaloMaxSegundos: inteiro(f.intervaloMax) * 60,
         pausaAposRespostaDias: inteiro(f.pausaResposta),
         intervaloMinimoDias: inteiro(f.intervaloDias),
+        prazoDiasUteis: inteiro(f.prazoDiasUteis),
         comoPagar: f.comoPagar.trim() || null,
         etapaAposQuebraId: f.etapaQuebra === SEM ? null : f.etapaQuebra,
       },
@@ -251,6 +256,14 @@ export function AjustesDaRegua({ config, etapas, podeEditar }: { config: Configu
             </Campo>
             <Campo id="rg-dist" rotulo="Intervalo por devedor (dias)" erro={erros.intervaloDias} dica="Mínimo entre duas mensagens automáticas.">
               <Input id="rg-dist" inputMode="numeric" value={f.intervaloDias} onChange={(e) => setF({ ...f, intervaloDias: e.target.value.replace(/\D/g, "") })} />
+            </Campo>
+            <Campo
+              id="rg-prazo"
+              rotulo="Prazo para retorno (dias úteis)"
+              erro={erros.prazoDiasUteis}
+              dica="Usado nas variáveis {prazo_data} e {prazo_horario}: o horário é o fim da janela de envio daquele dia."
+            >
+              <Input id="rg-prazo" inputMode="numeric" value={f.prazoDiasUteis} onChange={(e) => setF({ ...f, prazoDiasUteis: e.target.value.replace(/\D/g, "") })} />
             </Campo>
             <Campo id="rg-quebra" rotulo="Compromisso quebrado volta para" className="sm:col-span-2">
               <Select value={f.etapaQuebra} onValueChange={(v) => setF({ ...f, etapaQuebra: v })}>

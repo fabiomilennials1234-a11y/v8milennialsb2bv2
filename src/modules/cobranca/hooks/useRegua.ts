@@ -197,6 +197,7 @@ export interface ConfiguracaoEditavel {
   intervaloMaxSegundos?: number;
   pausaAposRespostaDias?: number;
   intervaloMinimoDias?: number;
+  prazoDiasUteis?: number;
   comoPagar?: string | null;
   etapaAposQuebraId?: string | null;
 }
@@ -213,6 +214,7 @@ export function useSalvarRegua() {
       if (c.intervaloMaxSegundos !== undefined) dados.intervalo_max_segundos = c.intervaloMaxSegundos;
       if (c.pausaAposRespostaDias !== undefined) dados.pausa_apos_resposta_dias = c.pausaAposRespostaDias;
       if (c.intervaloMinimoDias !== undefined) dados.intervalo_minimo_dias = c.intervaloMinimoDias;
+      if (c.prazoDiasUteis !== undefined) dados.prazo_dias_uteis = c.prazoDiasUteis;
       if (c.comoPagar !== undefined) dados.como_pagar = c.comoPagar ?? "";
       if (c.etapaAposQuebraId !== undefined) dados.etapa_apos_quebra_id = c.etapaAposQuebraId ?? "";
       const { error } = await rpcCobranca("cobranca_regua_salvar", { p_org: organizationId as string, p_dados: dados as Json });
@@ -297,6 +299,9 @@ export interface ColunaEditavel {
   entradaDias?: number | null;
   mensagem?: string | null;
   automacaoAtiva?: boolean;
+  trilha?: "unico" | "multiplos";
+  /** Coluna nova manual: sem dias, só envia no "Mover e enviar". */
+  manual?: boolean;
 }
 
 /** Cria ou edita uma coluna do fluxo. Só manda o que mudou: o banco preserva o resto. */
@@ -310,6 +315,8 @@ export function useSalvarColuna() {
       if (c.entradaDias !== undefined) dados.entrada_dias = c.entradaDias;
       if (c.mensagem !== undefined) dados.mensagem = c.mensagem?.trim() ?? "";
       if (c.automacaoAtiva !== undefined) dados.automacao_ativa = c.automacaoAtiva;
+      if (c.trilha !== undefined) dados.trilha = c.trilha;
+      if (c.manual) dados.manual = true;
       const { data, error } = await rpcCobranca("cobranca_coluna_salvar", {
         p_org: organizationId as string,
         p_etapa: c.id,

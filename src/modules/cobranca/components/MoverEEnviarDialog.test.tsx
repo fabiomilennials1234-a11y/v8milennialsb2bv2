@@ -28,6 +28,8 @@ const destino: Etapa = {
   entradaDias: 7,
   mensagem: "Olá, {primeiro_nome}. O valor de {valor} segue em aberto.",
   automacaoAtiva: true,
+  trilha: "unico",
+  personalizada: false,
 };
 const pronta = (extra: Partial<PreviaDoEnvio> = {}): PreviaDoEnvio => ({
   mensagem: destino.mensagem,

@@ -41,7 +41,7 @@ export function ColunasDaRegua({
   empresa?: string;
   podeEditar: boolean;
 }) {
-  const [editando, setEditando] = useState<{ coluna: Etapa | null } | null>(null);
+  const [editando, setEditando] = useState<{ coluna: Etapa | null; manual?: boolean } | null>(null);
   const [removendo, setRemovendo] = useState<Etapa | null>(null);
   const salvar = useSalvarColuna();
   const remover = useRemoverColuna();
@@ -97,6 +97,14 @@ export function ColunasDaRegua({
           <div className="flex flex-wrap items-center gap-2">
             <EtapaPill nome={e.nome} cor={e.cor} className="bg-card" />
             {tipo === "pausa" && <span className="text-xs text-muted-foreground">pausa a régua</span>}
+            {automatica && e.trilha === "multiplos" && (
+              <span
+                className="rounded-full bg-sunken px-2 py-0.5 text-[11px] font-bold text-muted-foreground"
+                title="Só para quem tem 2 ou mais títulos vencidos"
+              >
+                2+ títulos
+              </span>
+            )}
             <span className="flex-1" />
             {podeEditar && (
               <>
@@ -117,7 +125,7 @@ export function ColunasDaRegua({
                     <DropdownMenuItem onSelect={() => setEditando({ coluna: e })}>
                       <Pencil className="mr-2 size-3.5" /> Editar
                     </DropdownMenuItem>
-                    {tipo === "dias" && (
+                    {(tipo === "dias" || e.personalizada) && (
                       <>
                         <DropdownMenuSeparator />
                         <DropdownMenuItem className="text-destructive" onSelect={() => setRemovendo(e)}>
@@ -136,7 +144,9 @@ export function ColunasDaRegua({
                 ? `${rotuloDaEntrada(e.entradaDias as number)}${texto ? " e recebe a mensagem" : ""}.`
                 : "Entrada automática desligada: só entra à mão."
               : tipo === "pausa"
-                ? "A régua não move nem manda nada sozinha aqui."
+                ? e.personalizada
+                  ? "Coluna manual: a régua não move nem manda nada sozinha aqui."
+                  : "A régua não move nem manda nada sozinha aqui."
                 : "Toda dívida nova começa aqui."}
           </p>
           {texto ? (
@@ -168,9 +178,19 @@ export function ColunasDaRegua({
           </p>
         </div>
         {podeEditar && (
-          <Button size="sm" variant="outline" className="rounded-full" onClick={() => setEditando({ coluna: null })}>
-            <Plus /> Coluna
-          </Button>
+          <>
+            <Button size="sm" variant="outline" className="rounded-full" onClick={() => setEditando({ coluna: null })}>
+              <Plus /> Coluna
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              className="rounded-full"
+              onClick={() => setEditando({ coluna: null, manual: true })}
+            >
+              <Hand /> Nova coluna manual
+            </Button>
+          </>
         )}
       </header>
       {abertas.length ? (
@@ -183,6 +203,7 @@ export function ColunasDaRegua({
         aberto={!!editando}
         onFechar={() => setEditando(null)}
         coluna={editando?.coluna ?? null}
+        manual={editando?.manual}
         comoPagar={comoPagar}
         empresa={empresa}
       />
