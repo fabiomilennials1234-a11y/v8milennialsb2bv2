@@ -1,20 +1,22 @@
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { CalendarClock, MessageCircle, Plus, X } from "lucide-react";
+import { CalendarClock, Check, MessageCircle, Plus, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { formatPhoneBR } from "@/shared/format/phone";
 import { AbrirConversaButton } from "@/modules/communication/components/chat/AbrirConversaButton";
-import { CreateMeetingDialog } from "@/modules/engagement";
+import { CreateMeetingDialog, useUpdateMeeting } from "@/modules/engagement";
 import { OPCOES_VISAO_AGENDA, useEscopoAgenda } from "@/modules/analytics/hooks/useEscopoAgenda";
 import { useConcluirAgendaContato, useMarcarAgendaContato } from "@/modules/analytics/hooks/useAgendaContatos";
 import { useAgendaUnificada, type ClienteDaAgenda } from "@/modules/analytics/hooks/useAgendaUnificada";
-import { dataComSemana } from "@/modules/analytics/lib/agenda-contatos";
+import { dataComSemana, distanciaRelativa } from "@/modules/analytics/lib/agenda-contatos";
 import {
   OPCOES_PERIODO,
+  TOM_ATRASADO,
   TOM_TIPO,
+  contarAtrasados,
   contarPorTipo,
   filtrarPorTipo,
   type FiltroTipo,
@@ -52,13 +54,15 @@ export function CardAgendaUnificada({ periodo, onPeriodo, tipo, onTipo }: CardAg
   const agenda = useAgendaUnificada(periodo);
   const marcar = useMarcarAgendaContato();
   const concluir = useConcluirAgendaContato();
+  const atualizarReuniao = useUpdateMeeting();
   const [novaAberta, setNovaAberta] = useState(false);
 
   const contagem = useMemo(() => contarPorTipo(agenda.itens), [agenda.itens]);
   const visiveis = useMemo(() => filtrarPorTipo(agenda.itens, tipo), [agenda.itens, tipo]);
-  const atrasados = useMemo(() => agenda.itens.filter((i) => i.situacao === "atrasada").length, [agenda.itens]);
+  const atrasados = useMemo(() => contarAtrasados(agenda.itens), [agenda.itens]);
   const ocupadaId =
     (concluir.isPending && concluir.variables?.id && `contato:${concluir.variables.id}`) ||
+    (atualizarReuniao.isPending && atualizarReuniao.variables?.id && `meeting:${atualizarReuniao.variables.id}`) ||
     (marcar.isPending && agenda.itens.find((i) => i.contato?.lead_id === marcar.variables?.leadId)?.chave) ||
     null;
 
@@ -109,11 +113,13 @@ export function CardAgendaUnificada({ periodo, onPeriodo, tipo, onTipo }: CardAg
               onValueChange={(v) => onTipo(v as FiltroTipo)}
             />
             <Legenda />
-            {(agenda.indisponiveis.eventos || agenda.indisponiveis.contatos) && (
+            {(agenda.indisponiveis.eventos || agenda.indisponiveis.contatos || agenda.indisponiveis.atrasados) && (
               <p role="status" className="w-full text-[11.5px] text-warning-strong">
                 {agenda.indisponiveis.contatos
                   ? "Os próximos contatos não carregaram para este usuário. Reuniões e mensagens estão completas."
-                  : "Reuniões e mensagens não carregaram. Os próximos contatos estão completos."}
+                  : agenda.indisponiveis.eventos
+                    ? "Reuniões e mensagens não carregaram. Os próximos contatos estão completos."
+                    : "Os atrasados de dias anteriores não carregaram. O que está marcado para hoje está completo."}
               </p>
             )}
           </div>
@@ -154,6 +160,7 @@ export function CardAgendaUnificada({ periodo, onPeriodo, tipo, onTipo }: CardAg
                     onAbrirLead={() => i.leadId && navigate(`/leads?lead=${i.leadId}`)}
                     onRemarcar={(dia) => i.contato && marcar.mutate({ leadId: i.contato.lead_id, dia, ownerId: i.contato.owner_id })}
                     onConcluir={() => i.contato && concluir.mutate({ id: i.contato.id, lead_name: i.contato.lead_name })}
+                    onDesfecho={(status) => atualizarReuniao.mutate({ id: i.origemId, status })}
                   />
                 ))}
               </tbody>
@@ -180,6 +187,10 @@ function Legenda() {
           {TOM_TIPO[t].rotulo}
         </li>
       ))}
+      <li className="inline-flex items-center gap-1.5">
+        <span aria-hidden className="h-2 w-2 rounded-full bg-gradient-to-b from-destructive to-warning" />
+        Atrasada
+      </li>
     </ul>
   );
 }
@@ -196,6 +207,7 @@ function Linha({
   onAbrirLead,
   onRemarcar,
   onConcluir,
+  onDesfecho,
 }: {
   item: ItemAgenda;
   cliente?: ClienteDaAgenda;
@@ -205,10 +217,16 @@ function Linha({
   onAbrirLead: () => void;
   onRemarcar: (dia: string) => void;
   onConcluir: () => void;
+  /** Reunião atrasada: registra o desfecho (`completed` | `no_show`). */
+  onDesfecho: (status: "completed" | "no_show") => void;
 }) {
   const celula = "border-b border-border/50 px-2.5 py-2.5 align-middle";
   const tom = TOM_TIPO[i.tipo];
   const c = i.contato;
+  // Reunião/mensagem atrasada: vermelho + a cor do tipo. O contato atrasado já
+  // se diz vermelho pela data (AgendaDataPill) e segue neutro no chip.
+  const atrasoDeEvento = i.atrasada && i.tipo !== "contato" ? TOM_ATRASADO[i.tipo] : null;
+  const reuniaoAberta = i.tipo === "reuniao" && i.atrasada;
   const codigo = c?.lead_erp_code ?? cliente?.erpCode ?? null;
   const telefone = c?.lead_phone ?? cliente?.phone ?? null;
   const cidade = c?.lead_cidade ?? cliente?.cidade ?? null;
@@ -219,9 +237,17 @@ function Linha({
   return (
     <tr className={cn("group transition-colors hover:bg-muted/30", (ocupada || i.encerrada) && "opacity-60")}>
       <td className={cn(celula, "relative pl-5")}>
-        <span aria-hidden className={cn("absolute inset-y-2 left-0 w-[3px] rounded-r-full", tom.filete)} />
-        <span className={cn("inline-flex h-6 items-center rounded-full px-2.5 text-[11px] font-semibold", tom.chip)}>
+        {atrasoDeEvento ? (
+          <span aria-hidden className="absolute inset-y-2 left-0 flex w-[3px] flex-col overflow-hidden rounded-r-full">
+            <span className={cn("flex-1", atrasoDeEvento.filete[0])} />
+            <span className={cn("flex-1", atrasoDeEvento.filete[1])} />
+          </span>
+        ) : (
+          <span aria-hidden className={cn("absolute inset-y-2 left-0 w-[3px] rounded-r-full", tom.filete)} />
+        )}
+        <span className={cn("inline-flex h-6 items-center gap-1 rounded-full px-2.5 text-[11px] font-semibold", atrasoDeEvento ? atrasoDeEvento.chip : tom.chip)}>
           {tom.rotulo}
+          {atrasoDeEvento && <span className="font-bold">· atrasada</span>}
         </span>
       </td>
       <td className={cn(celula, "text-[12px] font-semibold tabular-nums text-muted-foreground")}>{codigo || VAZIO}</td>
@@ -252,8 +278,9 @@ function Linha({
           <AgendaDataPill dia={c.data_agenda} situacao={c.situacao} hoje={hoje} onRemarcar={onRemarcar} disabled={ocupada} neutro />
         ) : (
           <span className="whitespace-nowrap text-[12px]">
-            <span className="font-semibold tabular-nums">{dataComSemana(i.dia)}</span>
+            <span className={cn("font-semibold tabular-nums", atrasoDeEvento && "text-destructive-strong")}>{dataComSemana(i.dia)}</span>
             {i.hora && <span className="text-muted-foreground"> · {i.hora}</span>}
+            {atrasoDeEvento && <span className="text-destructive-strong"> · {distanciaRelativa(i.dia, hoje)}</span>}
           </span>
         )}
       </td>
@@ -294,6 +321,38 @@ function Linha({
         )}
       </td>
       <td className="border-b border-border/50 py-2.5 pl-1 pr-4 text-right align-middle">
+        {reuniaoAberta && (
+          <span className="inline-flex items-center gap-1">
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  type="button"
+                  onClick={() => onDesfecho("completed")}
+                  disabled={ocupada}
+                  aria-label={`Compareceu: reunião com ${i.leadName || "cliente"}`}
+                  className="grid h-8 w-8 place-items-center rounded-full bg-success/15 text-emerald-800 ring-1 ring-inset ring-success/40 transition-colors hover:bg-success/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50 dark:text-emerald-200"
+                >
+                  <Check aria-hidden className="h-4 w-4" />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent>Compareceu</TooltipContent>
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  type="button"
+                  onClick={() => onDesfecho("no_show")}
+                  disabled={ocupada}
+                  aria-label={`Não compareceu: reunião com ${i.leadName || "cliente"}`}
+                  className="grid h-8 w-8 place-items-center rounded-full bg-destructive/15 text-red-800 ring-1 ring-inset ring-destructive/40 transition-colors hover:bg-destructive/30 dark:text-red-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
+                >
+                  <X aria-hidden className="h-4 w-4" />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent>Não compareceu</TooltipContent>
+            </Tooltip>
+          </span>
+        )}
         {c && (
           <Tooltip>
             <TooltipTrigger asChild>

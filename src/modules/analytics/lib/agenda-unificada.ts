@@ -48,6 +48,22 @@ export const TOM_TIPO: Record<TipoItem, { rotulo: string; chip: string; dot: str
   },
 };
 
+/**
+ * Atrasado e ainda aberto: VERMELHO com o amarelo (reunião) ou o azul (mensagem)
+ * do tipo. O vermelho diz "passou do dia", a outra cor diz "o que é" — por isso
+ * o chip e o filete carregam as duas, e o atrasado não vira um quarto tipo.
+ */
+export const TOM_ATRASADO: Record<"reuniao" | "mensagem", { chip: string; filete: [string, string] }> = {
+  reuniao: {
+    chip: "bg-warning/15 text-destructive-strong ring-1 ring-inset ring-destructive/45",
+    filete: ["bg-destructive", "bg-warning"],
+  },
+  mensagem: {
+    chip: "bg-scheduled/10 text-destructive-strong ring-1 ring-inset ring-destructive/45",
+    filete: ["bg-destructive", "bg-scheduled"],
+  },
+};
+
 /** Evento da Agenda (`get_agenda_events_scoped`) — só o que a máscara lê. */
 export interface EventoDaAgenda {
   id: string;
@@ -66,6 +82,8 @@ export interface EventoDaAgenda {
 
 export interface ItemAgenda {
   chave: string;
+  /** Id na tabela de origem (`meetings.id` na reunião) — o que as ações gravam. */
+  origemId: string;
   tipo: TipoItem;
   /** `YYYY-MM-DD` no fuso da org. */
   dia: string;
@@ -82,6 +100,8 @@ export interface ItemAgenda {
   /** Só do contato: a situação que o banco calculou. */
   situacao: SituacaoAgenda | null;
   contato: AgendaContato | null;
+  /** Passou do dia e segue aberto (reunião sem desfecho, mensagem não enviada, contato atrasado). */
+  atrasada: boolean;
   /** Status de origem: reunião `scheduled|completed|no_show`; mensagem `scheduled|sending|sent`. */
   status: string;
 }
@@ -137,15 +157,17 @@ const STATUS_ENCERRADOS = new Set(["completed", "no_show", "sent"]);
 const STATUS_FORA = new Set(["cancelled", "canceled", "failed"]);
 
 /** Evento da Agenda → item. `null` para o que a máscara não mostra. */
-export function itemDoEvento(e: EventoDaAgenda, timezone: string | null | undefined): ItemAgenda | null {
+export function itemDoEvento(e: EventoDaAgenda, timezone: string | null | undefined, hoje?: string): ItemAgenda | null {
   const tipo: TipoItem | null =
     e.source === "meeting" ? "reuniao" : e.source === "scheduled_message" ? "mensagem" : null;
   if (!tipo) return null;
   const status = (e.status ?? "").toLowerCase();
   if (STATUS_FORA.has(status)) return null;
   const { dia, hora } = partesNoFuso(e.start_at, timezone);
+  const encerrada = STATUS_ENCERRADOS.has(status);
   return {
     chave: `${e.source}:${e.id}`,
+    origemId: e.id,
     tipo,
     dia,
     hora,
@@ -154,7 +176,8 @@ export function itemDoEvento(e: EventoDaAgenda, timezone: string | null | undefi
     leadCompany: e.lead_company,
     detalhe: e.description?.trim() || e.title,
     ownerName: e.creator_name,
-    encerrada: STATUS_ENCERRADOS.has(status),
+    encerrada,
+    atrasada: !!hoje && !encerrada && dia < hoje,
     situacao: null,
     contato: null,
     status,
@@ -164,6 +187,7 @@ export function itemDoEvento(e: EventoDaAgenda, timezone: string | null | undefi
 export function itemDoContato(a: AgendaContato): ItemAgenda {
   return {
     chave: `contato:${a.id}`,
+    origemId: a.id,
     tipo: "contato",
     dia: a.data_agenda,
     hora: null,
@@ -173,6 +197,7 @@ export function itemDoContato(a: AgendaContato): ItemAgenda {
     detalhe: a.observacao,
     ownerName: a.owner_name,
     encerrada: false,
+    atrasada: a.situacao === "atrasada",
     situacao: a.situacao,
     contato: a,
     status: "open",
@@ -184,9 +209,16 @@ export function itemDoContato(a: AgendaContato): ItemAgenda {
  * intervalo. O próximo contato ABERTO entra também quando está ATRASADO: ele só
  * sai pelo X (regra da Café), então esconder o atrasado porque "hoje" mudou de
  * período seria perdê-lo de vista.
+ *
+ * No "Hoje" o mesmo vale para reunião e mensagem: o que passou do dia e segue
+ * aberto (`atrasados`, vindos de uma busca própria) fica na lista até ser
+ * encerrado. Semana e Mês já cobrem os próprios dias; não carregam atrasado de
+ * fora do período.
  */
 export function montarAgenda(input: {
   eventos: EventoDaAgenda[];
+  /** Eventos abertos de dias anteriores; só entram no período "hoje". */
+  atrasados?: EventoDaAgenda[];
   contatos: AgendaContato[];
   hoje: string;
   periodo: Periodo;
@@ -196,10 +228,18 @@ export function montarAgenda(input: {
   const itens: ItemAgenda[] = [];
   const vistos = new Set<string>();
   for (const e of input.eventos) {
-    const it = itemDoEvento(e, input.timezone);
+    const it = itemDoEvento(e, input.timezone, input.hoje);
     if (!it || it.dia < de || it.dia > ate || vistos.has(it.chave)) continue;
     vistos.add(it.chave);
     itens.push(it);
+  }
+  if (input.periodo === "hoje") {
+    for (const e of input.atrasados ?? []) {
+      const it = itemDoEvento(e, input.timezone, input.hoje);
+      if (!it || !it.atrasada || vistos.has(it.chave)) continue;
+      vistos.add(it.chave);
+      itens.push(it);
+    }
   }
   for (const a of input.contatos) {
     if (a.data_agenda > ate) continue;
@@ -228,4 +268,8 @@ export function contarPorTipo(itens: ItemAgenda[]): Record<FiltroTipo, number> {
 
 export function filtrarPorTipo(itens: ItemAgenda[], filtro: FiltroTipo): ItemAgenda[] {
   return filtro === "todos" ? itens : itens.filter((i) => i.tipo === filtro);
+}
+
+export function contarAtrasados(itens: ItemAgenda[]): number {
+  return itens.filter((i) => i.atrasada).length;
 }
