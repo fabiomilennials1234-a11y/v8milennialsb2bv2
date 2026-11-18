@@ -38,7 +38,7 @@ beforeEach(() => {
 describe("logRuntime — atribuição de ator (ADR-0021 §7)", () => {
   it("log de gestor grava actor_type='gestor' + gestor_id + triggered_by real", async () => {
     await logRuntime({
-      ...gestorRuntimeActor("user-real-123", "gestor-abc"),
+      ...gestorRuntimeActor("11111111-1111-4111-8111-111111111111", "gestor-abc"),
       organizationId: "org-A",
       module: "carteira",
       action: "carteira_bulk_message",
@@ -49,7 +49,7 @@ describe("logRuntime — atribuição de ator (ADR-0021 §7)", () => {
     expect(captured.lastInsert).toMatchObject({
       actor_type: "gestor",
       gestor_id: "gestor-abc",
-      triggered_by: "user-real-123",
+      triggered_by: "11111111-1111-4111-8111-111111111111",
       organization_id: "org-A",
     });
   });
@@ -60,13 +60,13 @@ describe("logRuntime — atribuição de ator (ADR-0021 §7)", () => {
       module: "pipe_dispatch",
       action: "dispatch",
       status: "success",
-      triggeredBy: "member-1",
+      triggeredBy: "22222222-2222-4222-8222-222222222222",
     });
     await flushRuntimeLogs();
 
     expect(captured.lastInsert).not.toHaveProperty("actor_type");
     expect(captured.lastInsert).not.toHaveProperty("gestor_id");
-    expect(captured.lastInsert).toMatchObject({ triggered_by: "member-1" });
+    expect(captured.lastInsert).toMatchObject({ triggered_by: "22222222-2222-4222-8222-222222222222" });
   });
 
   it("actorType sem gestorId grava actor_type mas omite gestor_id", async () => {
@@ -91,5 +91,36 @@ describe("gestorRuntimeActor — helper puro", () => {
       gestorId: "g-1",
       triggeredBy: "u-1",
     });
+  });
+});
+
+describe("logRuntime — triggered_by não-UUID", () => {
+  // Incidente 18/11/2026: triggeredBy "system" → 22P02 no cast para uuid →
+  // PostgREST 400 → o lote inteiro (até 100 linhas) perdido. 46 mil por dia.
+  it.each(["system", "user", "workflow", "master-virtual-6f5ef0f3-abb3-4a26-add8-a1f080df6df5"])(
+    "rótulo %s vira triggered_by null e sobrevive no payload",
+    async (label) => {
+      await logRuntime({
+        module: "calendar",
+        action: "sync",
+        status: "error",
+        triggeredBy: label,
+        payloadSnapshot: { channelId: "ch-1" },
+      });
+      await flushRuntimeLogs();
+
+      expect(captured.lastInsert).toMatchObject({
+        triggered_by: null,
+        payload_snapshot: { channelId: "ch-1", triggered_by_label: label },
+      });
+    },
+  );
+
+  it("uuid real passa intacto e não ganha rótulo", async () => {
+    const id = "33333333-3333-4333-8333-333333333333";
+    await logRuntime({ module: "calendar", action: "sync", status: "error", triggeredBy: id });
+    await flushRuntimeLogs();
+
+    expect(captured.lastInsert).toMatchObject({ triggered_by: id, payload_snapshot: null });
   });
 });

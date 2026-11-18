@@ -254,6 +254,21 @@ function notify(channelId: string, token?: string) {
 /** O handler responde 200 e processa em background; espera N processamentos. */
 const processed = (n = 1) => vi.waitFor(() => expect(logRuntime).toHaveBeenCalledTimes(n), { interval: 5 });
 
+/**
+ * Notificação recusada (token errado, legado expirado) não vira linha em
+ * runtime_logs — o sinal de fim é o console.warn do webhook.
+ */
+const refused = async (n = 1) => {
+  const warn = vi.mocked(console.warn);
+  await vi.waitFor(
+    () =>
+      expect(
+        warn.mock.calls.filter((c) => String(c[0]).startsWith("[google-calendar-webhook]")).length,
+      ).toBe(n),
+    { interval: 5 },
+  );
+};
+
 const leadDate = async (id: string) =>
   normalize((await db.query<Row>(`SELECT compromisso_date FROM public.leads WHERE id = $1`, [id])).rows[0])
     .compromisso_date;
@@ -286,7 +301,7 @@ beforeEach(async () => {
   }));
   h.client = makeClient();
   vi.spyOn(console, "log").mockImplementation(() => {});
-  vi.spyOn(console, "warn").mockImplementation(() => {});
+  vi.spyOn(console, "warn").mockImplementation(() => {}).mockClear();
   vi.spyOn(console, "error").mockImplementation(() => {});
   await freshDb();
 });
@@ -406,8 +421,9 @@ describe("watch channel token", () => {
 
     await notify("ch-b");
     await notify("ch-b", "wrong");
-    await processed(2);
+    await refused(2);
 
+    expect(logRuntime).not.toHaveBeenCalled();
     expect(getValidAccessToken).not.toHaveBeenCalled();
     expect(google.list).toBe(0);
   });
@@ -439,7 +455,9 @@ describe("watch channel token", () => {
     );
 
     await notify("ch-legacy-dead");
-    await processed();
+    await refused(1);
+
+    expect(logRuntime).not.toHaveBeenCalled();
 
     expect(getValidAccessToken).not.toHaveBeenCalled();
     expect(google.list).toBe(0);
@@ -462,7 +480,8 @@ describe("watch channel token", () => {
 
     await notify(id, token);
     await notify(id, "forged");
-    await processed(2);
+    await processed(1);
+    await refused(1);
     expect(google.list).toBe(1);
   });
 });

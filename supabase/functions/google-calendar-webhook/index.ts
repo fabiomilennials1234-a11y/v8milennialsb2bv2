@@ -61,7 +61,11 @@ Deno.serve(withErrorBoundary('google-calendar-webhook', async (req) => {
       channelId,
       resourceState,
       channelToken,
-    }).then(() => {
+    }).then((processed) => {
+      // Notificação ignorada (sync, canal inativo/desconhecido, token
+      // inválido) não vira linha em runtime_logs: numa rajada de canais
+      // mortos isso dobrava as requisições ao PostgREST (18/11/2026).
+      if (!processed) return;
       logRuntime({
         module: "calendar",
         action: "sync",
@@ -103,15 +107,15 @@ async function processNotification(params: {
   channelId: string | null;
   resourceState: string | null;
   channelToken: string | null;
-}): Promise<void> {
+}): Promise<boolean> {
   const { channelId, resourceState, channelToken } = params;
 
-  if (!channelId) return;
+  if (!channelId) return false;
 
   // "sync" é apenas uma confirmação de registro — não há evento para processar
   if (resourceState === "sync") {
     console.log("[google-calendar-webhook] Canal registrado:", channelId);
-    return;
+    return false;
   }
 
   const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
@@ -129,7 +133,7 @@ async function processNotification(params: {
 
   if (!channel) {
     console.warn("[google-calendar-webhook] Canal não encontrado:", channelId);
-    return;
+    return false;
   }
 
   // Canal legado (sem hash) só é tolerado enquanto o Google o mantém vivo.
@@ -140,7 +144,7 @@ async function processNotification(params: {
     const expMs = channel.expiration ? Date.parse(channel.expiration) : NaN;
     if (!Number.isFinite(expMs) || expMs <= Date.now()) {
       console.warn("[google-calendar-webhook] Canal legado expirado:", channelId);
-      return;
+      return false;
     }
   }
 
@@ -148,7 +152,7 @@ async function processNotification(params: {
   // channel_id sozinho não autentica). Para aqui, antes de token e Google.
   if (!(await isWatchChannelTokenValid(channelToken, channel.channel_token_hash))) {
     console.warn("[google-calendar-webhook] Token do canal inválido:", channelId);
-    return;
+    return false;
   }
 
   const { user_id: userId, organization_id: orgId, expiration } = channel;
@@ -157,7 +161,7 @@ async function processNotification(params: {
   const tokenData = await getValidAccessToken(userId, supabase);
   if (!tokenData) {
     console.warn("[google-calendar-webhook] Sem token para usuário:", userId);
-    return;
+    return true;
   }
 
   // Busca eventos modificados recentemente (últimos 5 minutos)
@@ -170,7 +174,7 @@ async function processNotification(params: {
 
   if (!eventsRes.ok) {
     console.error("[google-calendar-webhook] Erro ao buscar eventos:", await eventsRes.text());
-    return;
+    return true;
   }
 
   const data = await eventsRes.json();
@@ -188,6 +192,7 @@ async function processNotification(params: {
     console.log("[google-calendar-webhook] Renovando canal próximo do vencimento:", channelId);
     await registerWatchChannel(userId, orgId, tokenData.accessToken, supabase, channelId);
   }
+  return true;
 }
 
 // ─── Processa um evento individual ───────────────────────────────────────────

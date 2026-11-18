@@ -258,11 +258,14 @@ describe("rajada no canal ativo perto de expirar", () => {
     // não criam canal nenhum.
     google.watch = [];
     logRuntime.mockClear();
+    ops.selects = 0;
     await Promise.all([
       ...Array.from({ length: 25 }, () => notify("ch-old")),
       ...Array.from({ length: 25 }, () => notify(winner)),
     ]);
-    await processed(50);
+    // Só as 25 do canal vivo viram log; as 25 do morto param no SELECT.
+    await vi.waitFor(() => expect(ops.selects).toBeGreaterThanOrEqual(50), { timeout: 20_000, interval: 10 });
+    await processed(25);
     expect(google.watch).toHaveLength(0);
     expect(await actives()).toEqual([winner]);
   }, 30_000);
@@ -277,12 +280,16 @@ describe("tempestade de canais mortos", () => {
     const ids = Array.from({ length: N }, (_, i) => (i % 3 === 0 ? `unknown-${i}` : `dead-${i % 30}`));
 
     await Promise.all(ids.map((id) => notify(id)));
-    await processed(N, 60_000);
+    await vi.waitFor(() => expect(ops.selects).toBe(N), { timeout: 60_000, interval: 10 });
+    await new Promise((r) => setTimeout(r, 50));
 
     expect(ops.total).toBe(N);
     expect(ops.selects).toBe(N);
     expect(google.watch.length + google.stop.length + google.list).toBe(0);
     expect(getValidAccessToken).not.toHaveBeenCalled();
+    // Nenhuma linha em runtime_logs: cada log aqui era um POST extra (e 400)
+    // por notificação morta — metade da carga da rajada de 18/11/2026.
+    expect(logRuntime).not.toHaveBeenCalled();
     expect(await actives()).toEqual(["live"]);
   }, 60_000);
 });

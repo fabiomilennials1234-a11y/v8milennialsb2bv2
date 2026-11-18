@@ -92,6 +92,15 @@ function notify(channelId: string, headerExpirationMs?: number) {
 /** O handler responde 200 e processa em background; espera o fim do processamento. */
 const processed = () => vi.waitFor(() => expect(logRuntime).toHaveBeenCalled());
 
+/**
+ * Notificação ignorada não escreve em runtime_logs (18/11/2026: o log de cada
+ * canal morto dobrava as requisições da rajada). Espera o SELECT e drena a fila.
+ */
+const ignored = async () => {
+  await vi.waitFor(() => expect(h.fromCalls.length).toBeGreaterThan(0));
+  await new Promise((r) => setTimeout(r, 20));
+};
+
 beforeEach(() => {
   vi.clearAllMocks();
   h.fromCalls = [];
@@ -120,9 +129,10 @@ describe("google-calendar-webhook", () => {
 
     const res = await notify("ch-dead", Date.now() + 1000);
     expect(res.status).toBe(200);
-    await processed();
+    await ignored();
 
     expect(h.fromCalls).toEqual(["google_calendar_watch_channels"]);
+    expect(logRuntime).not.toHaveBeenCalled();
     expect(getValidAccessToken).not.toHaveBeenCalled();
     expect(mockFetch).not.toHaveBeenCalled();
     expect(registerWatchChannel).not.toHaveBeenCalled();
@@ -134,9 +144,10 @@ describe("google-calendar-webhook", () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
 
     await notify("ch-unknown");
-    await processed();
+    await ignored();
 
     expect(h.fromCalls).toEqual(["google_calendar_watch_channels"]);
+    expect(logRuntime).not.toHaveBeenCalled();
     expect(getValidAccessToken).not.toHaveBeenCalled();
     expect(mockFetch).not.toHaveBeenCalled();
     warn.mockRestore();

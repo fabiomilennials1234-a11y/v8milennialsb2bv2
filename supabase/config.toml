@@ -182,6 +182,9 @@ verify_jwt = false
 [functions.google-calendar-disconnect]
 verify_jwt = false
 
+[functions.google-calendar-stop-orphans]
+verify_jwt = false
+
 [functions.google-calendar-events]
 verify_jwt = false
 
