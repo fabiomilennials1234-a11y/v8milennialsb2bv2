@@ -305,6 +305,8 @@ export const VOICE_CONTROL_MESSAGES: Record<string, string> = {
     "A chamada de voz não está incluída no plano desta organização.",
   session_cap_reached:
     "Limite de números com voz atingido. Desconecte um número antes de ligar outro.",
+  session_gone:
+    "O servidor de voz perdeu esta sessão. Gere o QR Code de novo.",
   session_orphaned:
     "O número foi criado no servidor de voz mas não ficou registrado aqui. Tente de novo — o sistema vai adotar o que já existe.",
 };

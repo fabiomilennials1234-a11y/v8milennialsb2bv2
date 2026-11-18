@@ -523,3 +523,73 @@ Deno.test("createSession: sucesso não registra falha nenhuma de voice_calls_ena
   assertEquals(logs.find((l) => l.action === "voice_calls_enable_failed"), undefined);
   assert(logs.some((l) => l.action === "session_created"), "o log de sucesso continua saindo");
 });
+
+// ─── Sessão que a VPS não conhece mais ──────────────────────────────────────
+//
+// Restart do container apaga as sessões ainda não pareadas (vivem em memória),
+// e a linha de `voip_sessions` fica apontando para um id morto: QR nunca
+// aparece e nem desconectar limpava a linha (a VPS respondia 404 para tudo).
+
+Deno.test("pairSession: VPS 404 fecha a linha, desliga a voz e devolve session_gone", async () => {
+  const db = fakeDb({
+    "voip_sessions:maybeSingle": { data: { whatsapp_instance_id: "inst-1" } },
+    "rpc:org_get_features_and_limits": VOZ_LIBERADA,
+  });
+  const { deps } = fakeVoipDeps({ ok: false, status: 404, error: "no session tc-sess-1" });
+
+  const res = await forwardSessionAction(db, fakeCaller(), "pairSession", "tc-sess-1", {}, {}, deps);
+  const body = await res.json();
+
+  assertEquals(res.status, 409);
+  assertEquals(body.code, "session_gone");
+
+  const sessUpdate = db.calls.find((c) =>
+    c.table === "voip_sessions" && c.ops.some((o) => o.op === "update" && (o.args[0] as { status?: string }).status === "closed")
+  );
+  assert(sessUpdate, "esperava voip_sessions.update({status:'closed'})");
+  assert(hasOpWithArgs(sessUpdate, "eq", ["organization_id", "org-1"]), "update tem que filtrar por organization_id");
+
+  const flag = findCall(db.calls, "whatsapp_instances", "update");
+  assert(hasOpWithArgs(flag, "update", [{ voice_calls_enabled: false }]), "voz ligada provisoriamente tem que ser desligada");
+});
+
+Deno.test("logoutSession: VPS 404 vira sucesso e fecha a linha (a saída do cliente não trava)", async () => {
+  const db = fakeDb({
+    "voip_sessions:maybeSingle": { data: { whatsapp_instance_id: "inst-1" } },
+    "rpc:org_get_features_and_limits": VOZ_LIBERADA,
+  });
+  const { deps } = fakeVoipDeps({ ok: false, status: 404, error: "no session tc-sess-1" });
+
+  const res = await forwardSessionAction(db, fakeCaller(), "logoutSession", "tc-sess-1", {}, {}, deps);
+  assertEquals(res.status, 200);
+  assert(
+    db.calls.some((c) =>
+      c.table === "voip_sessions" && c.ops.some((o) => o.op === "update" && (o.args[0] as { status?: string }).status === "closed")
+    ),
+    "linha tem que fechar",
+  );
+});
+
+Deno.test("deleteSession: VPS 404 vira sucesso e apaga a linha", async () => {
+  const db = fakeDb({
+    "voip_sessions:maybeSingle": { data: { whatsapp_instance_id: "inst-1" } },
+    "rpc:org_get_features_and_limits": VOZ_LIBERADA,
+  });
+  const { deps } = fakeVoipDeps({ ok: false, status: 404, error: "no session tc-sess-1" });
+
+  const res = await forwardSessionAction(db, fakeCaller(), "deleteSession", "tc-sess-1", {}, {}, deps);
+  assertEquals(res.status, 200);
+  assert(findCall(db.calls, "voip_sessions", "delete"), "linha tem que ser apagada");
+});
+
+Deno.test("pairSession: erro da VPS que não é 404 segue repassado como antes", async () => {
+  const db = fakeDb({
+    "voip_sessions:maybeSingle": { data: { whatsapp_instance_id: "inst-1" } },
+    "rpc:org_get_features_and_limits": VOZ_LIBERADA,
+  });
+  const { deps } = fakeVoipDeps({ ok: false, status: 500, error: "boom" });
+
+  const res = await forwardSessionAction(db, fakeCaller(), "pairSession", "tc-sess-1", {}, {}, deps);
+  assertEquals(res.status, 500);
+  assert(!findCall(db.calls, "voip_sessions", "update"), "não pode mexer na linha em erro genérico");
+});

@@ -50,6 +50,9 @@ export function useVoicePairing() {
   // a geração; ao voltar de um `await`, uma geração desatualizada é sinal para
   // abandonar em silêncio, sem tocar em estado.
   const generationRef = useRef(0);
+  // `openStream` precisa recomeçar o fluxo (sessão perdida no servidor), mas
+  // `start` é declarado depois dele e depende dele — a referência quebra o ciclo.
+  const startRef = useRef<((instanceId: string, existingSessionId?: string) => Promise<void>) | null>(null);
 
   const cancel = useCallback(() => {
     generationRef.current += 1;
@@ -143,6 +146,15 @@ export function useVoicePairing() {
     const requestQr = () => {
       if (!isCurrent() || receivedQr) return;
       void pairVoiceSession({ tcSessionId, organizationId: organizationId ?? undefined }).catch((err) => {
+        // O servidor de voz perdeu a sessão (restart apaga a não pareada) e o
+        // CRM já fechou a linha: não há o que "tentar de novo" nela. Nasce uma
+        // nova, uma vez só — a sessão recém-criada não pode estar perdida, então
+        // não há laço.
+        if (err instanceof VoiceControlError && err.code === "session_gone" && instanceRef.current && !receivedQr && isCurrent()) {
+          controller.abort();
+          void startRef.current?.(instanceRef.current);
+          return;
+        }
         if (!receivedQr) fail(err instanceof VoiceControlError ? err.message : "Não foi possível gerar outro código.");
       });
     };
@@ -202,6 +214,8 @@ export function useVoicePairing() {
       );
     }
   }, [openStream, organizationId, queryClient]);
+
+  startRef.current = start;
 
   /**
    * Tentar de novo NÃO recria a sessão. Se recriasse, três tentativas
