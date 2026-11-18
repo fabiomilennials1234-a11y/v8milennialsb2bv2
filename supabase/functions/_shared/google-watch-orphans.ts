@@ -30,6 +30,8 @@ export interface OrphanStopResult {
   alreadyGone: number;
   failed: number;
   usersWithoutToken: number;
+  /** Órfãos cujo dono desconectou o Google: sem credencial, só expiram sozinhos. */
+  unreachable: number;
   remaining: boolean;
 }
 
@@ -39,6 +41,13 @@ interface OrphanRow {
   user_id: string;
 }
 
+/**
+ * Teto do lote. O PostgREST de prod trunca em max_rows=1000 sem erro; com
+ * limit+1 acima disso, `remaining` sairia falso com órfãos sobrando (medido
+ * na 1ª passada de 18/11: pediu 1501, voltaram 1000).
+ */
+export const MAX_BATCH = 999;
+
 /** Paralelismo contra o Google por execução. */
 const CONCURRENCY = 8;
 /** Linhas por UPDATE de expiration (cabe com folga na URL do PostgREST). */
@@ -47,9 +56,33 @@ const UPDATE_CHUNK = 200;
 export async function stopOrphanWatchChannels(
   supabase: SupabaseClient,
   deps: OrphanStopDeps,
-  limit = 1500,
+  limit = MAX_BATCH,
 ): Promise<OrphanStopResult> {
   const now = (deps.now ?? (() => new Date()))();
+  limit = Math.max(1, Math.min(limit, MAX_BATCH));
+
+  // Só donos com Google conectado: sem credencial o Google recusa o stop, e
+  // os órfãos de quem desconectou ocupariam o lote inteiro a cada passada.
+  const { data: owners, error: ownersErr } = await supabase
+    .from("google_calendar_tokens")
+    .select("user_id")
+    .eq("is_active", true);
+  if (ownersErr) throw new Error(`select donos: ${ownersErr.message}`);
+  const ownerIds = ((owners ?? []) as Array<{ user_id: string }>).map((o) => o.user_id);
+
+  let unreachableQ = supabase
+    .from("google_calendar_watch_channels")
+    .select("channel_id", { count: "exact", head: true })
+    .eq("is_active", false)
+    .gt("expiration", now.toISOString());
+  if (ownerIds.length > 0) unreachableQ = unreachableQ.not("user_id", "in", `(${ownerIds.join(",")})`);
+  const { count: unreachable, error: countErr } = await unreachableQ;
+  if (countErr) throw new Error(`count sem dono conectado: ${countErr.message}`);
+
+  if (ownerIds.length === 0) {
+    return { found: 0, stopped: 0, alreadyGone: 0, failed: 0, usersWithoutToken: 0,
+      unreachable: unreachable ?? 0, remaining: false };
+  }
 
   const { data, error } = await supabase
     .from("google_calendar_watch_channels")
@@ -57,6 +90,7 @@ export async function stopOrphanWatchChannels(
     .eq("is_active", false)
     .gt("expiration", now.toISOString())
     .not("resource_id", "is", null)
+    .in("user_id", ownerIds)
     .order("expiration", { ascending: false })
     .limit(limit + 1);
 
@@ -72,6 +106,7 @@ export async function stopOrphanWatchChannels(
     alreadyGone: 0,
     failed: 0,
     usersWithoutToken: 0,
+    unreachable: unreachable ?? 0,
     remaining,
   };
 

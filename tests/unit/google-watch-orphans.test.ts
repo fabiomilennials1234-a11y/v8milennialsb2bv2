@@ -23,20 +23,32 @@ const iso = (ms: number) => new Date(NOW.getTime() + ms).toISOString();
 const H = 3_600_000;
 
 /** Dublê mínimo do query builder, com a semântica dos filtros usados. */
-function fakeDb(rows: Row[]) {
+function fakeDb(rows: Row[], connected: string[] = ["u1", "u2"]) {
   const updates: string[][] = [];
   const client = {
-    from() {
+    from(table: string) {
+      if (table === "google_calendar_tokens") {
+        const data = connected.map((user_id) => ({ user_id, is_active: true }));
+        const t = { select: () => t, eq: () => t, then: (res: (v: unknown) => unknown) => Promise.resolve({ data, error: null }).then(res) };
+        return t;
+      }
       const preds: Array<(r: Row) => boolean> = [];
       let mode: "select" | "update" = "select";
       let patch: Partial<Row> = {};
       let lim = Infinity;
+      let head = false;
       const q = {
-        select: () => q,
+        select: (_c: string, o?: { head?: boolean }) => { head = !!o?.head; return q; },
         update: (p: Partial<Row>) => { mode = "update"; patch = p; return q; },
         eq: (c: keyof Row, v: unknown) => { preds.push((r) => r[c] === v); return q; },
         gt: (c: keyof Row, v: string) => { preds.push((r) => String(r[c]) > v); return q; },
-        not: (c: keyof Row, _op: string, _v: null) => { preds.push((r) => r[c] !== null); return q; },
+        not: (c: keyof Row, op: string, v: unknown) => {
+          if (op === "in") {
+            const ids = String(v).slice(1, -1).split(",");
+            preds.push((r) => !ids.includes(String(r[c])));
+          } else preds.push((r) => r[c] !== null);
+          return q;
+        },
         in: (c: keyof Row, vs: unknown[]) => { preds.push((r) => vs.includes(r[c])); return q; },
         order: () => q,
         limit: (n: number) => { lim = n; return q; },
@@ -47,6 +59,7 @@ function fakeDb(rows: Row[]) {
             hit.forEach((r) => Object.assign(r, patch));
             return Promise.resolve({ data: null, error: null }).then(res);
           }
+          if (head) return Promise.resolve({ data: null, count: hit.length, error: null }).then(res);
           return Promise.resolve({ data: hit.slice(0, lim), error: null }).then(res);
         },
       };
@@ -79,7 +92,7 @@ describe("stopOrphanWatchChannels", () => {
 
     const out = await stopOrphanWatchChannels(client, { getAccessToken, stopChannel: stop, now: () => NOW });
 
-    expect(out).toEqual({ found: 2, stopped: 2, alreadyGone: 0, failed: 0, usersWithoutToken: 0, remaining: false });
+    expect(out).toEqual({ found: 2, stopped: 2, alreadyGone: 0, failed: 0, usersWithoutToken: 0, unreachable: 0, remaining: false });
     expect(stop.mock.calls.map((c) => c.slice(0, 2)).sort()).toEqual([["tok-u1", "o1"], ["tok-u2", "o2"]]);
     expect(rows.find((r) => r.channel_id === "o1")!.expiration).toBe(NOW.toISOString());
     expect(rows.find((r) => r.channel_id === "active")!.expiration).toBe(iso(48 * H));
@@ -98,7 +111,7 @@ describe("stopOrphanWatchChannels", () => {
 
   it("404 conta como já parado; erro e falta de token deixam a linha para a próxima passada", async () => {
     const rows = [orphan("gone"), orphan("boom"), orphan("net"), orphan("notoken", "u-sem-token")];
-    const { client } = fakeDb(rows);
+    const { client } = fakeDb(rows, ["u1", "u-sem-token"]);
     const status: Record<string, number | null> = { gone: 404, boom: 500, net: null };
 
     const out = await stopOrphanWatchChannels(client, {
@@ -130,6 +143,31 @@ describe("stopOrphanWatchChannels", () => {
     expect(third).toMatchObject({ found: 0, remaining: false });
   });
 
+  it("órfãos de quem desconectou não entram no lote nem o travam: viram `unreachable`", async () => {
+    // 18/11: 941 de 1000 linhas eram de um dono desconectado e o lote todo falhava.
+    const rows = [
+      ...Array.from({ length: 5 }, (_, i) => ({ ...orphan(`gone-${i}`, "u-desconectado"), expiration: iso(96 * H) })),
+      ...Array.from({ length: 3 }, (_, i) => orphan(`ok-${i}`, "u1")),
+    ];
+    const { client } = fakeDb(rows, ["u1"]);
+    const getAccessToken = vi.fn(async () => "tok");
+
+    const out = await stopOrphanWatchChannels(client, { getAccessToken, stopChannel: async () => 204, now: () => NOW }, 3);
+
+    expect(out).toMatchObject({ found: 3, stopped: 3, failed: 0, unreachable: 5, remaining: false });
+    expect(getAccessToken).toHaveBeenCalledWith("u1");
+    expect(getAccessToken).not.toHaveBeenCalledWith("u-desconectado");
+  });
+
+  it("limite acima do max_rows do PostgREST é cortado em 999", async () => {
+    const rows = Array.from({ length: 1200 }, (_, i) => orphan(`c${i}`));
+    const { client } = fakeDb(rows);
+
+    const out = await stopOrphanWatchChannels(client, { getAccessToken: async () => "tok", stopChannel: async () => 204, now: () => NOW }, 1500);
+
+    expect(out).toMatchObject({ found: 999, remaining: true });
+  });
+
   it("UPDATE em blocos de no máximo 200 ids", async () => {
     const rows = Array.from({ length: 450 }, (_, i) => orphan(`c${i}`));
     const { client, updates } = fakeDb(rows);
@@ -137,5 +175,11 @@ describe("stopOrphanWatchChannels", () => {
     await stopOrphanWatchChannels(client, { getAccessToken: async () => "tok", stopChannel: async () => 204, now: () => NOW });
 
     expect(updates.map((u) => u.length)).toEqual([200, 200, 50]);
+  });
+
+  it("ninguém conectado: nada a fazer, tudo unreachable", async () => {
+    const { client } = fakeDb([orphan("a"), orphan("b")], []);
+    const out = await stopOrphanWatchChannels(client, { getAccessToken: async () => "tok", stopChannel: async () => 204, now: () => NOW });
+    expect(out).toMatchObject({ found: 0, unreachable: 2, remaining: false });
   });
 });
