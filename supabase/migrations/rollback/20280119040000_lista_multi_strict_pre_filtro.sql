@@ -1,62 +1,8 @@
--- ════════════════════════════════════════════════════════════════════════════
--- Lista de conversas (get_whatsapp_conversation_list_multi) em org com
--- strict_lead_owner_access: pré-filtro em conjunto antes do recorte por linha
--- ════════════════════════════════════════════════════════════════════════════
+-- Rollback de 20280119040000_lista_multi_strict_pre_filtro.sql
 --
--- SINTOMA: depois de 20280117000000 (aplicada), a lista abre em ~100–300 ms
--- nas orgs sem recorte, mas na JR Tex (strict) leva 10,7 s para um membro.
--- MEDIDO em prod em 16/11/2026, como `authenticated` com claims reais, em
--- transação com ROLLBACK.
---
--- CAUSA: o corpo lê `private.whatsapp_conversation_summary` (e
--- `private.whatsapp_conversations`) da org inteira — 703 linhas na JR Tex — e
--- cada view avalia `private.strict_phone_visible` POR LINHA: ~65 ms por
--- chamada no SQL de hoje (PG 17 replaneja a cadeia de funções SQL aninhadas a
--- cada chamada; ver 20280118000000), ~3,6 ms mesmo com a cadeia em plpgsql. O
--- membro vê 5 conversas: as outras ~700 pagam a verificação só para sumir.
---
--- CORREÇÃO (5): quando o usuário está sob o recorte NESTA org e cai no ramo
--- GENÉRICO dele, a função monta UMA vez o conjunto de leads dele com a
--- condição LITERAL do ramo genérico de `strict_lead_is_owned` (responsável,
--- co-dono, entrada de funil), e acrescenta às leituras das duas views uma
--- conjunção barata que o planner avalia ANTES da função da view (as views
--- private.* não são security_barrier):
---   resumo:   lead_id ∈ conjunto  (com lead)  |  telefone ∈ telefones do
---             conjunto (sem lead)
---   conversa: telefone ∈ telefones do conjunto
---
--- POR QUE A SAÍDA É A MESMA: no ramo genérico,
---   strict_phone_visible(org, lead, tel)
---     = org ∉ recorte  ∨  ∃ lead l da org: (l.id = lead | l.tel = tel) ∧
---                          strict_lead_is_owned(org, l.id)
---   e, com org ∈ recorte, strict_lead_is_owned(org, l) no ramo genérico é
---   exatamente "l ∈ conjunto". A conjunção é, portanto, IGUAL ao predicado da
---   view para essas linhas — e a view continua aplicada por cima: toda linha
---   que sai ainda passou pela view. A conjunção só poupa a chamada nas linhas
---   que a view já recusaria.
---
--- QUANDO NÃO LIGA (v_pref = false ⇒ corpo idêntico ao de 20280117000000):
---   * org fora do recorte para o usuário (admin, master, orgs sem o flag);
---   * balcão Riofix, escopo de funil JR Tex ou caixa da Izadora (ramos não
---     genéricos do recorte);
---   * qualquer um dos corpos de que a equivalência depende mudou —
---     strict_phone_visible, strict_lead_is_owned, jrtex_izadora_new_chat — md5
---     conferido a cada chamada contra o corpo revisado em 16/11/2026 (SQL vivo
---     ou a forma plpgsql de 20280118000000). Corpo mudou ⇒ caminho antigo,
---     correto e lento; nunca um filtro desatualizado escondendo conversa.
---
--- As leituras do pré-filtro vão nas TABELAS (nome entre aspas para o bloco DO
--- do fim não trocar por private.*), como a própria strict_lead_is_owned
--- (SECURITY DEFINER) faz.
---
--- BASE: o corpo VIVO de prod (= 20280117000000 aplicada; md5 conferido em
--- 16/11/2026) + (5). Mesmo mecanismo de forma de prod: o CREATE usa public.*
--- e o bloco DO do fim troca para private.* quando o recorte está instalado.
--- Mesma assinatura e mesmo retorno ⇒ CREATE OR REPLACE preserva a ACL.
---
--- Só schema: CREATE OR REPLACE FUNCTION + ACL + troca de prefixo. Nenhum DML.
--- Rollback: supabase/migrations/rollback/20280118040000_lista_multi_strict_pre_filtro.sql
--- NÃO APLICADA em nenhum banco remoto por esta entrega.
+-- Restaura o corpo VIVO de prod (= 20280117000000 aplicada, forma de prod
+-- com private.*), md5(prosrc) e7240b3db646e21669fffc51c0074f9c conferido
+-- contra prod em 18/11/2026 (inclui o ramo da Karine, hotfix fora do ledger). Mesma assinatura ⇒ CREATE OR REPLACE preserva a ACL.
 
 CREATE OR REPLACE FUNCTION public.get_whatsapp_conversation_list_multi(p_org uuid, p_instances uuid[] DEFAULT NULL::uuid[], p_limit integer DEFAULT 50, p_before timestamp with time zone DEFAULT NULL::timestamp with time zone, p_funnels uuid[] DEFAULT NULL::uuid[], p_stages text[] DEFAULT NULL::text[], p_tags uuid[] DEFAULT NULL::uuid[], p_tiers text[] DEFAULT NULL::text[], p_vendor_id uuid DEFAULT NULL::uuid, p_unassigned boolean DEFAULT NULL::boolean, p_lead_presence text DEFAULT NULL::text, p_needs_human boolean DEFAULT NULL::boolean, p_unread boolean DEFAULT NULL::boolean, p_waiting boolean DEFAULT NULL::boolean, p_source text DEFAULT NULL::text, p_include_groups boolean DEFAULT false, p_before_box uuid DEFAULT NULL::uuid, p_before_phone text DEFAULT NULL::text)
  RETURNS TABLE(instance_id uuid, phone_number text, normalized_phone text, push_name text, last_message text, last_message_time timestamp with time zone, last_message_direction text, last_message_sent_source text, lead_id uuid, is_group boolean, conversation_id uuid, archived_at timestamp with time zone, unread_count integer, tags jsonb)
@@ -77,11 +23,10 @@ DECLARE
   v_iso_tm       uuid;
   v_iso_unassign boolean;
   v_balcao       boolean;
-  -- (5) Pré-filtro do recorte strict — ver o cabeçalho.
-  v_strict       boolean := false;
-  v_pref         boolean := false;
-  v_pref_ids     uuid[];
-  v_pref_np      text[];
+  v_karine_principal_without_funnel_filter boolean :=
+    p_funnels IS NULL
+    AND v_uid = '85f5c2cd-dbf9-4de5-9d35-24ebd9da71ea'::uuid
+    AND p_org = '30bb5c27-88f4-4f91-9493-835405ae2e11'::uuid;
 BEGIN
   -- Escopo de funil da JR Tex. Existe só em prod (aplicado fora do ledger);
   -- chamado por EXECUTE para a função continuar executável num banco montado
@@ -89,7 +34,7 @@ BEGIN
   -- existam e troca a guarda abaixo por `true` — em prod o EXECUTE sempre roda
   -- e função ausente vira erro, como no corpo vivo. A guarda só sobrevive onde
   -- o recorte strict não está instalado (repo/PGlite).
-  IF to_regprocedure('private.jrtex_pipeline_scoped()') IS NOT NULL THEN
+  IF true THEN
     EXECUTE 'SELECT CASE WHEN private.jrtex_pipeline_scoped()
                  THEN ARRAY(SELECT unnest(private.jrtex_visible_pipeline_ids())
                             INTERSECT
@@ -161,7 +106,7 @@ BEGIN
   -- de não-lida está ligado. Mesma leitura de
   -- `is_conversation_marked_unread` (tabela pública, chave pela CAIXA).
   -- O nome entre aspas é DE PROPÓSITO: o bloco DO do fim troca
-  -- `public.conversation_read_state` pela view private.* em prod, e esta
+  -- `private.conversation_read_state` pela view private.* em prod, e esta
   -- leitura tem de continuar na TABELA, como a função que ela substitui.
   IF p_unread IS TRUE THEN
     v_marked := ARRAY(
@@ -210,67 +155,6 @@ BEGIN
       v_iso_bypass := true;
     END IF;
   END IF;
-
-  -- (5) Pré-filtro do recorte strict_lead_owner_access — ver o cabeçalho.
-  -- Só para quem está sob o recorte NESTA org e cai no ramo GENÉRICO dele (sem
-  -- balcão Riofix, sem escopo de funil JR Tex, sem a caixa da Izadora), e só
-  -- enquanto os corpos de que a equivalência depende são os revisados (md5
-  -- do corpo SQL ou da forma plpgsql de 20280118000000). Qualquer outra coisa
-  -- → v_pref fica false e a lista roda exatamente como antes.
-  -- Por EXECUTE: o recorte existe só em prod; num banco montado só do repo a
-  -- guarda deixa o pré-filtro desligado (sem recorte, não há o que filtrar).
-  IF to_regprocedure('private.strict_lead_member_orgs()') IS NOT NULL THEN
-    EXECUTE 'SELECT $1 = ANY(private.strict_lead_member_orgs())' INTO v_strict USING p_org;
-    IF COALESCE(v_strict, false) AND NOT COALESCE(v_balcao, false) THEN
-      EXECUTE $pre$
-        SELECT
-          -- ramo genérico do recorte para este usuário nesta org
-          auth.uid() IS NOT NULL
-          AND private.riofix_balcao_scope_for_user(auth.uid(), $1) IS NULL
-          AND private.jrtex_lead_scope_for_user(auth.uid(), $1) IS NULL
-          AND NOT COALESCE(private.jrtex_izadora_inbox_scope(auth.uid(), $1), false)
-          -- corpos revisados (16/11/2026): SQL vivo ou a forma plpgsql gerada
-          AND (SELECT md5(p.prosrc) FROM pg_catalog.pg_proc p
-                WHERE p.oid = to_regprocedure('private.strict_phone_visible(uuid,uuid,text)'))
-              IN ('6c5792c8e7cc8cbb6b6a7019a3cb6be1', '064009e38a55d6389051594c4e27a976')
-          AND (SELECT md5(p.prosrc) FROM pg_catalog.pg_proc p
-                WHERE p.oid = to_regprocedure('private.strict_lead_is_owned(uuid,uuid)'))
-              IN ('d6e9b67bd2be794aa0cf130d515e5a1f', '5282f9c0c1563d9bf269f4aaf8e7fe14')
-          AND (SELECT md5(p.prosrc) FROM pg_catalog.pg_proc p
-                WHERE p.oid = to_regprocedure('private.jrtex_izadora_new_chat(uuid,uuid,uuid,text)'))
-              = '76d54226fcad6ee83d2766c14957cab1',
-          -- Leads do usuário: a condição do ramo genérico de
-          -- strict_lead_is_owned, LITERAL, avaliada em conjunto.
-          ARRAY(
-            SELECT l.id FROM public."leads" l
-            JOIN public."team_members" tm ON tm.organization_id = l.organization_id
-              AND tm.user_id = auth.uid() AND tm.is_active
-            WHERE l.organization_id = $1 AND l.deleted_at IS NULL
-              AND (
-                tm.id IN (l.pre_sale_responsible_id, l.sale_responsible_id, l.sdr_id, l.closer_id)
-                OR EXISTS (
-                  SELECT 1 FROM public."lead_owners" own
-                  WHERE own.lead_id = l.id AND own.organization_id = $1
-                    AND own.team_member_id = tm.id AND own.role = 'co'
-                )
-                OR EXISTS (
-                  SELECT 1 FROM public."pipeline_entries" pe
-                  WHERE pe.lead_id = l.id AND pe.organization_id = $1
-                    AND (pe.assigned_to = tm.id OR tm.id::text IN (
-                      pe.metadata->>'pre_sale_responsible_id', pe.metadata->>'sale_responsible_id',
-                      pe.metadata->>'sdr_id', pe.metadata->>'closer_id', pe.metadata->>'responsible_id'
-                    ))
-                )
-              ))
-      $pre$ INTO v_pref, v_pref_ids USING p_org;
-      v_pref := COALESCE(v_pref, false);
-      IF v_pref THEN
-        v_pref_np := ARRAY(
-          SELECT DISTINCT l.normalized_phone FROM public."leads" l
-          WHERE l.id = ANY(v_pref_ids) AND l.normalized_phone IS NOT NULL);
-      END IF;
-    END IF;
-  END IF;
   RETURN QUERY
   WITH boxes AS (
     SELECT u.box, u.member
@@ -291,15 +175,11 @@ BEGIN
   conv AS (
     SELECT bx.box AS box, c.normalized_phone AS np, c.id, c.archived_at,
            c.deleted_at, c.instance_id AS inst, c.created_at
-    FROM public.whatsapp_conversations c
+    FROM private.whatsapp_conversations c
     JOIN boxes bx ON bx.member = c.instance_id
     WHERE c.organization_id = p_org
       AND c.instance_id = ANY(v_members)
       AND c.normalized_phone IS NOT NULL
-      -- (5) Pré-filtro: a view avalia strict_phone_visible(org, NULL,
-      -- telefone) — no ramo genérico, verdade ⇔ telefone de um lead do
-      -- usuário. Conjunção barata, avaliada antes da função da view.
-      AND (NOT v_pref OR c.normalized_phone = ANY(v_pref_np))
   ),
   conv_pick AS (
     SELECT DISTINCT ON (c2.box, c2.np)
@@ -314,22 +194,16 @@ BEGIN
            s.phone_number, s.normalized_phone, s.last_push_name, s.last_message,
            s.last_message_time, s.last_message_direction, s.last_message_sent_source,
            s.lead_id AS lid, s.is_group AS grp
-    FROM public.whatsapp_conversation_summary s
+    FROM private.whatsapp_conversation_summary s
     JOIN boxes bx ON bx.member = s.instance_id
     WHERE s.organization_id = p_org
       AND s.instance_id = ANY(v_members)
       AND (p_include_groups OR s.is_group = false)
-      -- (5) Pré-filtro: a view avalia strict_phone_visible(org, lead_id,
-      -- telefone) — no ramo genérico, verdade ⇔ o lead é do usuário (com
-      -- lead) ou o telefone é de um lead dele (sem lead).
-      AND (NOT v_pref OR COALESCE(CASE WHEN s.lead_id IS NOT NULL
-                                        THEN s.lead_id = ANY(v_pref_ids)
-                                        ELSE s.normalized_phone = ANY(v_pref_np) END, false))
       AND (
         v_iso_bypass
         OR (s.is_group AND COALESCE(v_iso_unassign, false))
         OR EXISTS (
-          SELECT 1 FROM public.leads l
+          SELECT 1 FROM private.leads l
           WHERE l.organization_id  = p_org
             AND l.normalized_phone = s.normalized_phone
             AND l.deleted_at IS NULL
@@ -411,7 +285,7 @@ BEGIN
                        now() - interval '30 days',
                        COALESCE((
                          SELECT max(rs.last_read_at)
-                         FROM public.conversation_read_state rs
+                         FROM private.conversation_read_state rs
                          WHERE rs.organization_id = p_org
                            AND rs.user_id = v_uid
                            AND rs.conversation_key IN (
@@ -422,7 +296,7 @@ BEGIN
             WHERE s.last_message_time > c.cut
               AND EXISTS (
                 SELECT 1
-                FROM public.whatsapp_messages m
+                FROM private.whatsapp_messages m
                 WHERE m.organization_id  = p_org
                   AND m.instance_id IN (SELECT bb.member FROM boxes bb WHERE bb.box = s.box)
                   AND m.normalized_phone = s.normalized_phone
@@ -438,7 +312,7 @@ BEGIN
       AND (
         p_needs_human IS NOT TRUE
         OR (s.lid IS NOT NULL AND EXISTS (
-              SELECT 1 FROM public.conversations cv
+              SELECT 1 FROM private.conversations cv
               WHERE cv.organization_id = p_org AND cv.lead_id = s.lid
                 AND cv.state = 'WAITING_HUMAN'))
       )
@@ -446,7 +320,7 @@ BEGIN
       AND (
         p_tiers IS NULL
         OR (s.lid IS NOT NULL AND EXISTS (
-              SELECT 1 FROM public.leads l
+              SELECT 1 FROM private.leads l
               WHERE l.id = s.lid AND l.organization_id = p_org
                 AND l.qualification_tier::text = ANY(p_tiers)))
       )
@@ -455,22 +329,38 @@ BEGIN
         p_unassigned IS NOT TRUE
         OR s.lid IS NULL
         OR EXISTS (
-              SELECT 1 FROM public.leads l
+              SELECT 1 FROM private.leads l
               WHERE l.id = s.lid AND l.organization_id = p_org
                 AND l.responsible_id IS NULL)
       )
       AND (
         p_vendor_id IS NULL
         OR (s.lid IS NOT NULL AND EXISTS (
-              SELECT 1 FROM public.leads l
+              SELECT 1 FROM private.leads l
               WHERE l.id = s.lid AND l.organization_id = p_org
                 AND l.responsible_id = p_vendor_id))
       )
 
       AND (
         p_funnels IS NULL
+        OR CASE
+             WHEN v_karine_principal_without_funnel_filter
+                  AND s.box = '859ee852-2102-4a5d-b249-98a6fe0b601c'::uuid
+                  AND s.lid IS NULL
+                  AND NOT s.grp
+             THEN private.jrtex_karine_orphan_chat(v_uid, p_org, NULL::uuid, s.normalized_phone)
+                  AND NOT EXISTS (
+                    SELECT 1 FROM private.lead_phones lp
+                    JOIN private.leads l ON l.id = lp.lead_id AND l.organization_id = lp.organization_id
+                    WHERE lp.organization_id = p_org
+                      AND lp.normalized_phone = s.normalized_phone
+                      AND lp.deleted_at IS NULL
+                      AND l.deleted_at IS NULL
+                  )
+             ELSE false
+           END
         OR (s.lid IS NOT NULL AND EXISTS (
-              SELECT 1 FROM public.pipeline_entries pe
+              SELECT 1 FROM private.pipeline_entries pe
               WHERE pe.organization_id = p_org AND pe.lead_id = s.lid
                 AND pe.pipeline_id = ANY(p_funnels)))
       )
@@ -478,7 +368,7 @@ BEGIN
       AND (
         p_stages IS NULL
         OR (s.lid IS NOT NULL AND EXISTS (
-              SELECT 1 FROM public.pipeline_entries pe
+              SELECT 1 FROM private.pipeline_entries pe
               WHERE pe.organization_id = p_org AND pe.lead_id = s.lid
                 AND pe.stage_key = ANY(p_stages)
                 AND (p_funnels IS NULL OR pe.pipeline_id = ANY(p_funnels))))
@@ -487,7 +377,7 @@ BEGIN
       AND (
         p_tags IS NULL
         OR (s.lid IS NOT NULL AND EXISTS (
-              SELECT 1 FROM public.lead_tags lt
+              SELECT 1 FROM private.lead_tags lt
               WHERE lt.lead_id = s.lid AND lt.tag_id = ANY(p_tags)))
         OR EXISTS (
               SELECT 1 FROM conv c3
@@ -508,7 +398,7 @@ BEGIN
   -- mais um JOIN repetido por mensagem.
   LEFT JOIN LATERAL (
     SELECT max(rs.last_read_at) AS last_read_at
-    FROM public.conversation_read_state rs
+    FROM private.conversation_read_state rs
     WHERE rs.organization_id = p_org
       AND rs.user_id = v_uid
       AND rs.conversation_key IN (
@@ -523,7 +413,7 @@ BEGIN
   -- quase tudo leitura de disco).
   LEFT JOIN LATERAL (
     SELECT count(*)::integer AS cnt
-    FROM public.whatsapp_messages m
+    FROM private.whatsapp_messages m
     WHERE m.organization_id  = p_org
       AND m.instance_id IN (SELECT bb.member FROM boxes bb WHERE bb.box = p.box)
       AND m.normalized_phone = p.normalized_phone
@@ -542,8 +432,8 @@ BEGIN
       SELECT DISTINCT ON (t.id) t.id, t.name, t.color, e.origem
       FROM (
         SELECT lt.tag_id, 0 AS origem
-        FROM public.lead_tags lt
-        JOIN public.leads l ON l.id = lt.lead_id
+        FROM private.lead_tags lt
+        JOIN private.leads l ON l.id = lt.lead_id
         WHERE lt.lead_id = p.lid
           AND l.organization_id = p_org
           AND l.deleted_at IS NULL
@@ -559,97 +449,10 @@ BEGIN
   WHERE cp.deleted_at IS NULL
   ORDER BY p.last_message_time DESC, p.box DESC, p.normalized_phone DESC;
 END;
-$function$;
+$function$
+;
 
 REVOKE ALL ON FUNCTION public.get_whatsapp_conversation_list_multi(uuid, uuid[], integer, timestamp with time zone, uuid[], text[], uuid[], text[], uuid, boolean, text, boolean, boolean, boolean, text, boolean, uuid, text) FROM PUBLIC, anon, service_role;
 GRANT EXECUTE ON FUNCTION public.get_whatsapp_conversation_list_multi(uuid, uuid[], integer, timestamp with time zone, uuid[], text[], uuid[], text[], uuid, boolean, text, boolean, boolean, boolean, text, boolean, uuid, text) TO authenticated;
-
--- ── FORMA DE PROD: public.* → private.* nas 8 relações do recorte strict ──
--- Mesmo mecanismo de 20271203000000_etiquetas_na_lista_multi.sql: em prod o
--- corpo lê as views `private.<relação>` (security_invoker, aplicadas fora do
--- repo), que aplicam o recorte strict_lead_owner_access pelo JWT. O repo não
--- tem essas views, então o CREATE acima usa public.*, e este bloco reescreve
--- para a forma de prod quando o recorte está instalado — falha FECHADA se
--- faltar alguma view, e confere o resultado.
---   * desvios de prod com FALHA FECHADA: as três funções de que o corpo
---     depende (escopo JR Tex e balcão Riofix) TÊM de existir; faltou uma →
---     RAISE. E a guarda `to_regprocedure('private.jrtex_pipeline_scoped()') IS
---     NOT NULL` do corpo vira `true` (exatamente 1 troca, conferida): em prod o
---     EXECUTE do escopo JR Tex sempre roda, e função sumida ou com assinatura
---     trocada vira ERRO no chat — como no corpo vivo —, nunca escopo aberto em
---     silêncio. O pg_depend não enxerga corpo plpgsql; esta é a única trava.
---   * esperado depois da troca: zero `public.<8 rels>` e exatamente 32
---     ocorrências de `private.` no corpo (17 referências às 8 relações, 5 nos
---     blocos JR Tex / Riofix, 7 no pré-filtro (5), 3 em comentários do corpo).
---   * `public."conversation_read_state"`, `public."leads"`,
---     `public."lead_owners"`, `public."pipeline_entries"` e
---     `public."team_members"` (com aspas) NÃO são trocados — ver o
---     comentário no corpo.
-DO $troca$
-DECLARE
-  v_sig regprocedure := 'public.get_whatsapp_conversation_list_multi(uuid,uuid[],integer,timestamp with time zone,uuid[],text[],uuid[],text[],uuid,boolean,text,boolean,boolean,boolean,text,boolean,uuid,text)'::regprocedure;
-  v_rels text[] := ARRAY[
-    'conversation_read_state', 'conversations', 'lead_tags', 'leads',
-    'pipeline_entries', 'whatsapp_conversation_summary', 'whatsapp_conversations',
-    'whatsapp_messages'
-  ];
-  v_esperado constant integer := 32;
-  v_guarda constant text := 'to_regprocedure(''private.jrtex_pipeline_scoped()'') IS NOT NULL';
-  v_trocas integer;
-  v_def text;
-  v_rel text;
-  v_faltando text[];
-  v_sobra integer;
-  v_private integer;
-BEGIN
-  IF to_regprocedure('private.strict_lead_member_orgs()') IS NULL THEN
-    RETURN;
-  END IF;
-
-  SELECT array_agg(r ORDER BY r) INTO v_faltando
-    FROM unnest(v_rels) AS r
-   WHERE NOT EXISTS (
-     SELECT 1 FROM pg_catalog.pg_class c
-     JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
-     WHERE n.nspname = 'private' AND c.relname = r AND c.relkind = 'v');
-  IF v_faltando IS NOT NULL THEN
-    RAISE EXCEPTION 'forma de prod incompleta: strict instalado, mas faltam as views private.% — abortado para não ler sem o recorte',
-      array_to_string(v_faltando, ', private.');
-  END IF;
-
-  SELECT array_agg(f ORDER BY f) INTO v_faltando
-    FROM unnest(ARRAY['private.jrtex_pipeline_scoped()',
-                      'private.jrtex_visible_pipeline_ids()',
-                      'private.riofix_balcao_current_scope()']) AS f
-   WHERE to_regprocedure(f) IS NULL;
-  IF v_faltando IS NOT NULL THEN
-    RAISE EXCEPTION 'forma de prod incompleta: strict instalado, mas faltam % — abortado para o escopo não abrir em silêncio',
-      array_to_string(v_faltando, ', ');
-  END IF;
-
-  v_def := pg_get_functiondef(v_sig);
-  v_trocas := (length(v_def) - length(replace(v_def, v_guarda, ''))) / length(v_guarda);
-  IF v_trocas <> 1 THEN
-    RAISE EXCEPTION 'forma de prod divergente: guarda do escopo JR Tex aparece % vez(es) (esperado 1)', v_trocas;
-  END IF;
-  v_def := replace(v_def, v_guarda, 'true');
-  FOREACH v_rel IN ARRAY v_rels LOOP
-    v_def := regexp_replace(v_def, 'public\.' || v_rel || '\M', 'private.' || v_rel, 'g');
-  END LOOP;
-  EXECUTE v_def;
-
-  v_def := pg_get_functiondef(v_sig);
-  SELECT count(*) INTO v_sobra
-    FROM regexp_matches(v_def, 'public\.(' || array_to_string(v_rels, '|') || ')\M', 'g');
-  SELECT count(*) INTO v_private FROM regexp_matches(v_def, 'private\.', 'g');
-  IF position(v_guarda IN v_def) > 0 THEN
-    RAISE EXCEPTION 'forma de prod divergente: guarda do escopo JR Tex sobreviveu à troca';
-  END IF;
-  IF v_sobra <> 0 OR v_private <> v_esperado THEN
-    RAISE EXCEPTION 'forma de prod divergente: % referência(s) public.* às 8 relações e % private.* (esperado 0 e %)',
-      v_sobra, v_private, v_esperado;
-  END IF;
-END
-$troca$;
 
 NOTIFY pgrst, 'reload schema';

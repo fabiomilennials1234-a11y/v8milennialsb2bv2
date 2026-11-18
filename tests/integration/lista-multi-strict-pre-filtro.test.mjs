@@ -1,5 +1,5 @@
 // get_whatsapp_conversation_list_multi com pré-filtro do recorte strict
-// (20280118040000_lista_multi_strict_pre_filtro.sql).
+// (20280119040000_lista_multi_strict_pre_filtro.sql).
 //
 // O recorte aqui é o de PROD, com os corpos EXATOS (md5 conferido) de
 // strict_phone_visible, strict_lead_is_owned, strict_lead_member_orgs e
@@ -17,11 +17,11 @@
 //      invisível, não-lida, etiqueta de conversa;
 //   b. o pré-filtro LIGA e poupa: strict_phone_visible avaliada bem menos
 //      vezes para o membro, e o mesmo tanto para quem fica fora dele;
-//   c. com o recorte em plpgsql (forma de 20280118000000) o pré-filtro segue
+//   c. com o recorte em plpgsql (forma de 20280119000000) o pré-filtro segue
 //      ligado e a saída igual;
 //   d. corpo do recorte mudou (drift) → pré-filtro DESLIGA sozinho, saída
 //      igual à do corpo novo;
-//   e. forma de prod (32 `private.`, leituras do pré-filtro na TABELA) e
+//   e. forma de prod (35 `private.`, leituras do pré-filtro na TABELA) e
 //      forma do repo (aplica e roda, pré-filtro desligado);
 //   f. gate de org 42501 e ACL nas duas versões.
 import { test } from 'node:test';
@@ -31,8 +31,8 @@ import { createHash } from 'node:crypto';
 import { PGlite } from '@electric-sql/pglite';
 
 const read = (path) => readFileSync(new URL(path, import.meta.url), 'utf8');
-const MIG = read('../../supabase/migrations/20280118040000_lista_multi_strict_pre_filtro.sql');
-const RB = read('../../supabase/migrations/rollback/20280118040000_lista_multi_strict_pre_filtro.sql');
+const MIG = read('../../supabase/migrations/20280119040000_lista_multi_strict_pre_filtro.sql');
+const RB = read('../../supabase/migrations/rollback/20280119040000_lista_multi_strict_pre_filtro.sql');
 const md5 = (s) => createHash('md5').update(s).digest('hex');
 
 const SIG = 'public.get_whatsapp_conversation_list_multi(uuid,uuid[],integer,timestamp with time zone,uuid[],text[],uuid[],text[],uuid,boolean,text,boolean,boolean,boolean,text,boolean,uuid,text)';
@@ -42,8 +42,8 @@ const RELS = ['conversation_read_state', 'conversations', 'lead_tags', 'leads', 
 // Corpos VIVOS de prod (prosrc), 16/11/2026 — byte a byte, inclusive CRLF.
 const SRC = {
   member_orgs: "SELECT ARRAY(SELECT DISTINCT x FROM unnest((\r\n SELECT ARRAY(SELECT DISTINCT org FROM unnest(( SELECT ARRAY(\r\n    SELECT o.id FROM public.organizations o\r\n    WHERE o.feature_flags @> '{\"strict_lead_owner_access\":true}'::jsonb\r\n      AND COALESCE(auth.role(), '') <> 'service_role'\r\n      AND (auth.uid() IS NOT NULL OR COALESCE(auth.role(), '') IN ('authenticated', 'anon'))\r\n      AND NOT COALESCE(public.is_master_user(), false)\r\n      AND NOT EXISTS (\r\n        SELECT 1 FROM public.team_members tm\r\n        WHERE tm.organization_id = o.id AND tm.user_id = auth.uid()\r\n          AND tm.is_active AND tm.role = 'admin'\r\n      )\r\n  ) ) || CASE WHEN private.riofix_balcao_current_scope() IS NOT NULL THEN ARRAY['36971ff5-fd73-4f30-a733-04bf8c90e5b6'::uuid] ELSE '{}'::uuid[] END) org)\r\n) || CASE WHEN private.jrtex_caller_lead_scoped() THEN ARRAY['30bb5c27-88f4-4f91-9493-835405ae2e11'::uuid] ELSE '{}'::uuid[] END) x)",
-  is_owned: "SELECT CASE WHEN private.jrtex_lead_scope_for_user(auth.uid(),p_org) IS NOT NULL THEN private.jrtex_caller_lead(p_org,p_lead) ELSE (\r\n SELECT CASE WHEN private.riofix_balcao_scope_for_user(auth.uid(),p_org) IS NOT NULL THEN private.riofix_balcao_caller_lead(p_org,p_lead) ELSE (SELECT auth.uid() IS NOT NULL AND EXISTS (\r\n    SELECT 1 FROM public.leads l\r\n    JOIN public.team_members tm ON tm.organization_id = l.organization_id\r\n      AND tm.user_id = auth.uid() AND tm.is_active\r\n    WHERE l.id = p_lead AND l.organization_id = p_org AND l.deleted_at IS NULL\r\n      AND (\r\n        tm.id IN (l.pre_sale_responsible_id, l.sale_responsible_id, l.sdr_id, l.closer_id)\r\n        OR EXISTS (\r\n          SELECT 1 FROM public.lead_owners own\r\n          WHERE own.lead_id = l.id AND own.organization_id = p_org\r\n            AND own.team_member_id = tm.id AND own.role = 'co'\r\n        )\r\n        OR EXISTS (\r\n          SELECT 1 FROM public.pipeline_entries pe\r\n          WHERE pe.lead_id = l.id AND pe.organization_id = p_org\r\n            AND (pe.assigned_to = tm.id OR tm.id::text IN (\r\n              pe.metadata->>'pre_sale_responsible_id', pe.metadata->>'sale_responsible_id',\r\n              pe.metadata->>'sdr_id', pe.metadata->>'closer_id', pe.metadata->>'responsible_id'\r\n            ))\r\n        )\r\n      )\r\n  )) END\r\n) END",
-  phone_visible: "\r\n SELECT CASE WHEN private.jrtex_izadora_new_chat(auth.uid(),p_org,p_lead,p_phone) THEN true WHEN private.riofix_balcao_scope_for_user(auth.uid(),p_org) IS NOT NULL THEN private.riofix_balcao_caller_chat(p_org,p_lead,p_phone) ELSE (SELECT NOT (p_org=ANY((SELECT private.strict_lead_member_orgs())::uuid[]))\r\n    OR EXISTS (\r\n      SELECT 1 FROM public.leads l WHERE l.organization_id=p_org\r\n        AND ((p_lead IS NOT NULL AND l.id=p_lead)\r\n          OR (p_lead IS NULL AND l.normalized_phone=p_phone))\r\n        AND private.strict_lead_is_owned(p_org,l.id)\r\n    )) END\r\n",
+  is_owned: "SELECT CASE WHEN private.jrtex_karine_pending_lead(p_org,p_lead) THEN true WHEN private.jrtex_lead_scope_for_user(auth.uid(),p_org) IS NOT NULL THEN private.jrtex_caller_lead(p_org,p_lead) ELSE (\r\n SELECT CASE WHEN private.riofix_balcao_scope_for_user(auth.uid(),p_org) IS NOT NULL THEN private.riofix_balcao_caller_lead(p_org,p_lead) ELSE (SELECT auth.uid() IS NOT NULL AND EXISTS (\r\n    SELECT 1 FROM public.leads l\r\n    JOIN public.team_members tm ON tm.organization_id = l.organization_id\r\n      AND tm.user_id = auth.uid() AND tm.is_active\r\n    WHERE l.id = p_lead AND l.organization_id = p_org AND l.deleted_at IS NULL\r\n      AND (\r\n        tm.id IN (l.pre_sale_responsible_id, l.sale_responsible_id, l.sdr_id, l.closer_id)\r\n        OR EXISTS (\r\n          SELECT 1 FROM public.lead_owners own\r\n          WHERE own.lead_id = l.id AND own.organization_id = p_org\r\n            AND own.team_member_id = tm.id AND own.role = 'co'\r\n        )\r\n        OR EXISTS (\r\n          SELECT 1 FROM public.pipeline_entries pe\r\n          WHERE pe.lead_id = l.id AND pe.organization_id = p_org\r\n            AND (pe.assigned_to = tm.id OR tm.id::text IN (\r\n              pe.metadata->>'pre_sale_responsible_id', pe.metadata->>'sale_responsible_id',\r\n              pe.metadata->>'sdr_id', pe.metadata->>'closer_id', pe.metadata->>'responsible_id'\r\n            ))\r\n        )\r\n      )\r\n  )) END\r\n) END",
+  phone_visible: "\r\n SELECT CASE WHEN private.jrtex_karine_orphan_chat(auth.uid(),p_org,p_lead,p_phone) THEN true WHEN private.jrtex_izadora_new_chat(auth.uid(),p_org,p_lead,p_phone) THEN true WHEN private.riofix_balcao_scope_for_user(auth.uid(),p_org) IS NOT NULL THEN private.riofix_balcao_caller_chat(p_org,p_lead,p_phone) ELSE (SELECT NOT (p_org=ANY((SELECT private.strict_lead_member_orgs())::uuid[]))\r\n    OR EXISTS (\r\n      SELECT 1 FROM public.leads l WHERE l.organization_id=p_org\r\n        AND ((p_lead IS NOT NULL AND l.id=p_lead)\r\n          OR (p_lead IS NULL AND l.normalized_phone=p_phone))\r\n        AND private.strict_lead_is_owned(p_org,l.id)\r\n    )) END\r\n",
   izadora_new_chat: "\n SELECT CASE WHEN private.jrtex_izadora_inbox_scope(p_user,p_org) THEN\n EXISTS(\n SELECT 1 FROM public.whatsapp_conversation_summary s\n WHERE s.organization_id=p_org\n AND s.instance_id='45149134-35d6-4be2-8668-81d6210542c0'::uuid\n AND NOT s.is_group\n AND s.normalized_phone=coalesce(nullif(p_phone,''),(SELECT l.normalized_phone FROM public.leads l WHERE l.id=p_lead AND l.organization_id=p_org AND l.deleted_at IS NULL))\n AND (p_lead IS NULL OR EXISTS(SELECT 1 FROM public.leads l WHERE l.id=p_lead AND l.organization_id=p_org AND l.deleted_at IS NULL AND l.normalized_phone=s.normalized_phone))\n AND NOT EXISTS(\n SELECT 1 FROM public.leads l JOIN public.pipeline_entries pe ON pe.lead_id=l.id AND pe.organization_id=l.organization_id\n WHERE l.organization_id=p_org AND l.deleted_at IS NULL\n AND (l.normalized_phone=s.normalized_phone OR l.id=p_lead OR l.id=s.lead_id)\n )\n ) ELSE false END\n",
 };
 
@@ -53,9 +53,9 @@ const RIOFIX = '36971ff5-fd73-4f30-a733-04bf8c90e5b6';
 const IZADORA_BOX = '45149134-35d6-4be2-8668-81d6210542c0';
 const ORG = JRTEX; // a org strict de verdade, para os ramos JR Tex/Izadora existirem
 const ORG2 = id('0a', 2); // outra org strict
-const U = { mem: id('0b', 1), adm: id('0b', 2), jr: id('0b', 3), iza: '1aa02af4-0540-46f1-94ad-7c43eef3e66a', rf: id('0b', 5), vazio: id('0b', 6) };
+const U = { mem: id('0b', 1), adm: id('0b', 2), jr: id('0b', 3), iza: '1aa02af4-0540-46f1-94ad-7c43eef3e66a', rf: id('0b', 5), vazio: id('0b', 6), kar: '85f5c2cd-dbf9-4de5-9d35-24ebd9da71ea' };
 const U_FORA = id('0b', 9);
-const TM = { mem: id('0c', 1), adm: id('0c', 2), jr: id('0c', 3), iza: id('0c', 4), rf: id('0c', 5), vazio: id('0c', 6) };
+const TM = { mem: id('0c', 1), adm: id('0c', 2), jr: id('0c', 3), iza: id('0c', 4), rf: id('0c', 5), vazio: id('0c', 6), kar: id('0c', 7) };
 const A = IZADORA_BOX, B = id('0d', 2);
 const L = { dono: id('0e', 1), co: id('0e', 2), pipe: id('0e', 3), meta: id('0e', 4), alheio: id('0e', 5), apagado: id('0e', 6), semDono: id('0e', 7) };
 const P = Object.fromEntries(Array.from({ length: 10 }, (_, i) => [`p${i + 1}`, `55479000000${String(i + 1).padStart(2, '0')}`]));
@@ -85,6 +85,7 @@ CREATE TABLE public.leads (id uuid PRIMARY KEY, organization_id uuid, normalized
   pre_sale_responsible_id uuid, sale_responsible_id uuid, sdr_id uuid, closer_id uuid, responsible_id uuid,
   qualification_tier text);
 CREATE TABLE public.lead_owners (lead_id uuid, organization_id uuid, team_member_id uuid, role text);
+CREATE TABLE public.lead_phones (organization_id uuid, lead_id uuid, normalized_phone text, deleted_at timestamptz);
 CREATE TABLE public.pipeline_entries (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), organization_id uuid, lead_id uuid,
   pipeline_id uuid, stage_key text, assigned_to uuid, metadata jsonb NOT NULL DEFAULT '{}');
 CREATE TABLE public.conversations (organization_id uuid, lead_id uuid, state text);
@@ -138,7 +139,7 @@ INSERT INTO public.organizations(id, feature_flags) VALUES
 INSERT INTO public.team_members(id, user_id, organization_id, role) VALUES
   ('${TM.mem}', '${U.mem}', '${ORG}', 'member'), ('${TM.adm}', '${U.adm}', '${ORG}', 'admin'),
   ('${TM.jr}', '${U.jr}', '${ORG}', 'member'), ('${TM.iza}', '${U.iza}', '${ORG}', 'member'),
-  ('${TM.rf}', '${U.rf}', '${ORG}', 'member'), ('${TM.vazio}', '${U.vazio}', '${ORG}', 'member'),
+  ('${TM.rf}', '${U.rf}', '${ORG}', 'member'), ('${TM.vazio}', '${U.vazio}', '${ORG}', 'member'), ('${TM.kar}', '${U.kar}', '${ORG}', 'member'),
   ('${id('0c', 9)}', '${U_FORA}', '${ORG2}', 'admin');
 INSERT INTO public.whatsapp_instances VALUES ('${A}', '${ORG}', '5547999990001'), ('${B}', '${ORG}', '5547999990002');
 INSERT INTO public.leads(id, organization_id, normalized_phone, deleted_at, sale_responsible_id, sdr_id) VALUES
@@ -184,7 +185,7 @@ INSERT INTO public.tags VALUES ('${TAG}', '${ORG}', 'quente', '#f00');
 INSERT INTO public.whatsapp_conversation_tags VALUES ('${id('0f', 11)}', '${TAG}'), ('${id('0f', 12)}', '${TAG}');
 INSERT INTO public.conversation_read_state(organization_id, user_id, conversation_key, last_read_at, marked_unread)
 SELECT '${ORG}', u, 'whatsapp:${A}:${P.p2}', now(), false
-  FROM unnest(ARRAY['${U.mem}', '${U.adm}', '${U.jr}', '${U.iza}', '${U.rf}', '${U.vazio}']::uuid[]) u;
+  FROM unnest(ARRAY['${U.mem}', '${U.adm}', '${U.jr}', '${U.iza}', '${U.rf}', '${U.vazio}', '${U.kar}']::uuid[]) u;
 `;
 
 // O recorte de PROD: corpos exatos + views private.* com o predicado de prod.
@@ -230,6 +231,12 @@ CREATE FUNCTION private.jrtex_visible_pipeline_ids() RETURNS uuid[] LANGUAGE sql
 CREATE TABLE private.whatsapp_user_instance_restrictions (organization_id uuid, user_id uuid, enabled boolean,
   allowed_instance_ids uuid[]);
 
+-- Ramos hard-wired de prod para a usuária da Karine (JR Tex): neutros aqui
+-- (false), exceto a trava do pré-filtro, que tira o usuário dela do atalho.
+CREATE FUNCTION private.jrtex_karine_pending_lead(p_org uuid, p_lead uuid) RETURNS boolean LANGUAGE sql STABLE
+  SECURITY DEFINER SET search_path TO '' AS $$ SELECT false $$;
+CREATE FUNCTION private.jrtex_karine_orphan_chat(p_user uuid, p_org uuid, p_lead uuid, p_phone text) RETURNS boolean
+  LANGUAGE sql STABLE SECURITY DEFINER SET search_path TO '' AS $$ SELECT false $$;
 CREATE FUNCTION private.strict_lead_member_orgs() RETURNS uuid[] LANGUAGE sql STABLE SECURITY DEFINER
   SET search_path TO '' AS $body$${SRC.member_orgs}$body$;
 CREATE FUNCTION private.strict_lead_is_owned(p_org uuid, p_lead uuid) RETURNS boolean LANGUAGE sql STABLE
@@ -259,6 +266,7 @@ CREATE VIEW private.leads WITH (security_invoker = true) AS
 CREATE VIEW private.conversation_read_state WITH (security_invoker = true) AS SELECT * FROM public.conversation_read_state;
 CREATE VIEW private.conversations WITH (security_invoker = true) AS SELECT * FROM public.conversations;
 CREATE VIEW private.lead_tags WITH (security_invoker = true) AS SELECT * FROM public.lead_tags;
+CREATE VIEW private.lead_phones WITH (security_invoker = true) AS SELECT * FROM public.lead_phones;
 CREATE VIEW private.pipeline_entries WITH (security_invoker = true) AS SELECT * FROM public.pipeline_entries;
 GRANT SELECT ON ALL TABLES IN SCHEMA public TO authenticated;
 `;
@@ -323,11 +331,11 @@ const linhas = (out) => Object.fromEntries(Object.entries(out).filter(([k]) => !
 const fones = (rows) => rows.map((r) => `${r.instance_id === A ? 'A' : 'B'}:${r.normalized_phone}`).sort();
 
 test('corpos do teste são os de prod (md5 travado na migration)', () => {
-  assert.equal(md5(SRC.phone_visible), '6c5792c8e7cc8cbb6b6a7019a3cb6be1');
-  assert.equal(md5(SRC.is_owned), 'd6e9b67bd2be794aa0cf130d515e5a1f');
+  assert.equal(md5(SRC.phone_visible), '042c6dcd662f6e188868d0f62c031d35');
+  assert.equal(md5(SRC.is_owned), 'cd65d7ad967b5ace6704eb948ada4cd3');
   assert.equal(md5(SRC.izadora_new_chat), '76d54226fcad6ee83d2766c14957cab1');
   assert.equal(md5(SRC.member_orgs), '422ec5d40d1a0574efd6f2786e1a118e');
-  for (const h of ['6c5792c8e7cc8cbb6b6a7019a3cb6be1', 'd6e9b67bd2be794aa0cf130d515e5a1f', '76d54226fcad6ee83d2766c14957cab1',
+  for (const h of ['042c6dcd662f6e188868d0f62c031d35', 'cd65d7ad967b5ace6704eb948ada4cd3', '76d54226fcad6ee83d2766c14957cab1',
     md5(`BEGIN RETURN (${SRC.phone_visible}); END`), md5(`BEGIN RETURN (${SRC.is_owned}); END`)]) {
     assert.ok(MIG.includes(h), `migration aceita ${h}`);
   }
@@ -364,7 +372,7 @@ test('a+b: mesma saída da função viva; o pré-filtro liga só para o ramo gen
     }
     // Fora do ramo genérico: mesmas avaliações (+1 no máximo: a própria
     // checagem do pré-filtro consulta o escopo da Izadora, que é o contador).
-    for (const who of ['adm', 'jr', 'iza', 'rf']) {
+    for (const who of ['adm', 'jr', 'iza', 'rf', 'kar']) {
       const d = depois[`${who}/${name}#chamadas`] - antes[`${who}/${name}#chamadas`];
       assert.ok(d === 0 || d === 1, `${who}/${name}: pré-filtro desligado (Δ ${d})`);
     }
@@ -378,7 +386,7 @@ test('a+b: mesma saída da função viva; o pré-filtro liga só para o ramo gen
   assert.ok(depois['vazio/padrao#chamadas'] <= 1, 'sem leads: nenhuma linha chega ao recorte (só a checagem)');
 });
 
-test('c: recorte em plpgsql (forma de 20280118000000) — pré-filtro segue ligado, mesma saída', async () => {
+test('c: recorte em plpgsql (forma de 20280119000000) — pré-filtro segue ligado, mesma saída', async () => {
   const pg = await db();
   await pg.exec(RB);
   const antes = await snapshot(pg);
@@ -408,14 +416,16 @@ test('d: corpo do recorte mudou → pré-filtro desliga e a saída segue o corpo
   assert.ok((await chamadas(pg)) - c0 - 1 >= 10, 'pré-filtro desligado: recorte avaliado em toda linha');
 });
 
-test('e: forma de prod (32 private., pré-filtro na tabela) e forma do repo', async () => {
+test('e: forma de prod (35 private., ramo da Karine, pré-filtro na tabela) e forma do repo', async () => {
   const pg = await db();
   await pg.exec(RB);
   await pg.exec(MIG);
   const def = (await pg.query(`SELECT pg_get_functiondef('${SIG}'::regprocedure) AS d`)).rows[0].d;
   const sobra = def.match(new RegExp(`public\\.(${RELS.join('|')})(?![A-Za-z0-9_"])`, 'g')) ?? [];
   assert.deepEqual(sobra, []);
-  assert.equal((def.match(/private\./g) ?? []).length, 32);
+  assert.equal((def.match(/private\./g) ?? []).length, 35);
+  assert.ok(def.includes('private.jrtex_karine_orphan_chat(v_uid, p_org, NULL::uuid, s.normalized_phone)'), 'ramo da Karine do corpo vivo');
+  assert.ok(!def.includes('KARINE_ORPHAN'), 'marcador substituído');
   for (const t of ['leads', 'team_members', 'lead_owners', 'pipeline_entries']) {
     assert.ok(def.includes(`public."${t}"`), `pré-filtro lê public."${t}"`);
   }
