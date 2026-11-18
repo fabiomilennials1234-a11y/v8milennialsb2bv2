@@ -14,7 +14,10 @@ import { cn } from "@/lib/utils";
 import { VARIAVEIS_DA_REGUA, renderizarMensagem, variaveisDeExemplo, variaveisDesconhecidas } from "../../lib/regua";
 import { Campo } from "../dialogos";
 
-export const LIMITE_DA_MENSAGEM = 1000;
+/** Mensagem de coluna do fluxo. */
+export const LIMITE_DA_MENSAGEM = 2000;
+/** Lembrete de promessa/parcela. */
+export const LIMITE_DO_LEMBRETE = 1000;
 
 export function EditorDeMensagem({
   id,
@@ -49,7 +52,8 @@ export function EditorDeMensagem({
     () => renderizarMensagem(valor, variaveisDeExemplo(comoPagar, empresa, diasDeAtraso)),
     [valor, comoPagar, empresa, diasDeAtraso],
   );
-  const longa = valor.length > LIMITE_DA_MENSAGEM;
+  const limite = lembrete ? LIMITE_DO_LEMBRETE : LIMITE_DA_MENSAGEM;
+  const longa = valor.length > limite;
 
   const inserir = (chave: string) => {
     const el = texto.current;
@@ -68,7 +72,7 @@ export function EditorDeMensagem({
     <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_minmax(0,300px)]">
       <div className="space-y-4">
         {acima}
-        <Campo id={id} rotulo={rotulo} erro={longa ? `Passa de ${LIMITE_DA_MENSAGEM} caracteres.` : undefined}>
+        <Campo id={id} rotulo={rotulo} erro={longa ? `Passa de ${limite} caracteres.` : undefined}>
           <Textarea
             id={id}
             ref={texto}
@@ -111,7 +115,7 @@ export function EditorDeMensagem({
           )}
         </div>
         <p className={cn("text-right text-[11px] tabular-nums text-muted-foreground", longa && "text-destructive")}>
-          {valor.length}/{LIMITE_DA_MENSAGEM} · exemplo com dados fictícios
+          {valor.length}/{limite} · exemplo com dados fictícios
         </p>
       </div>
     </div>

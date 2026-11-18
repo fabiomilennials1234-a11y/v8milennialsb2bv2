@@ -3626,7 +3626,9 @@ export type Database = {
           organization_id: string
           papel: string
           pausa_regua: boolean
+          personalizada: boolean
           posicao: number
+          trilha: string
           updated_at: string
         }
         Insert: {
@@ -3640,7 +3642,9 @@ export type Database = {
           organization_id: string
           papel?: string
           pausa_regua?: boolean
+          personalizada?: boolean
           posicao: number
+          trilha?: string
           updated_at?: string
         }
         Update: {
@@ -3654,7 +3658,9 @@ export type Database = {
           organization_id?: string
           papel?: string
           pausa_regua?: boolean
+          personalizada?: boolean
           posicao?: number
+          trilha?: string
           updated_at?: string
         }
         Relationships: []
@@ -3802,6 +3808,7 @@ export type Database = {
           janela: Json
           organization_id: string
           pausa_apos_resposta_dias: number
+          prazo_dias_uteis: number
           proximo_envio_apos: string | null
           teto_diario: number
           updated_at: string
@@ -3817,6 +3824,7 @@ export type Database = {
           janela?: Json
           organization_id: string
           pausa_apos_resposta_dias?: number
+          prazo_dias_uteis?: number
           proximo_envio_apos?: string | null
           teto_diario?: number
           updated_at?: string
@@ -3832,6 +3840,7 @@ export type Database = {
           janela?: Json
           organization_id?: string
           pausa_apos_resposta_dias?: number
+          prazo_dias_uteis?: number
           proximo_envio_apos?: string | null
           teto_diario?: number
           updated_at?: string

@@ -3,8 +3,11 @@
  * dias de atraso o caso entra sozinho e a mensagem que sai quando ele entra
  * (pela régua, ou à mão com "Mover e enviar").
  *
- * Três tipos de coluna aberta, e o diálogo só mostra o que cada uma aceita:
- *  - de dias ("7 dias de atraso"): dias obrigatórios, entrada liga/desliga;
+ * Quatro tipos de coluna aberta, e o diálogo só mostra o que cada uma aceita:
+ *  - de dias ("7 dias de atraso"): dias obrigatórios, entrada liga/desliga e a
+ *    trilha (devedor com um título vencido ou com dois ou mais);
+ *  - manual (criada pela organização, sem dias): nome obrigatório, só envia
+ *    quando alguém move o card para cá e confirma;
  *  - que pausa a régua (Em negociação, Jurídico): dias opcionais (Jurídico
  *    entra com 60), mensagem opcional — só sai à mão, a menos que tenha dias;
  *  - de entrada (Vencido): só a mensagem, para o movimento à mão.
@@ -22,12 +25,13 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { notifyError } from "@/shared/errors";
 
 import { recusaDaCobranca } from "../../lib/erros";
 import { type TipoDeColuna, marcaDoPasso, rotuloDoPasso, tipoDaColuna } from "../../lib/regua";
-import type { Etapa } from "../../lib/tipos";
+import type { Etapa, TrilhaDaColuna } from "../../lib/tipos";
 import { useSalvarColuna } from "../../hooks/useRegua";
 import { Campo } from "../dialogos";
 import { EditorDeMensagem, LIMITE_DA_MENSAGEM } from "./EditorDeMensagem";
@@ -38,20 +42,25 @@ export function ColunaDialog({
   coluna,
   comoPagar,
   empresa,
+  manual = false,
 }: {
   aberto: boolean;
   onFechar: () => void;
-  /** null = nova coluna de dias de atraso. */
+  /** null = nova coluna (de dias de atraso, ou manual quando `manual`). */
   coluna: Etapa | null;
   comoPagar: string | null;
   empresa?: string;
+  /** Só vale com `coluna` null: coluna nova sem dias, que só envia à mão. */
+  manual?: boolean;
 }) {
   const salvar = useSalvarColuna();
-  const tipo: TipoDeColuna = coluna ? tipoDaColuna(coluna) : "dias";
+  const tipo: TipoDeColuna = coluna ? tipoDaColuna(coluna) : manual ? "pausa" : "dias";
+  const colunaManualNova = !coluna && manual;
   const [nome, setNome] = useState("");
   const [dias, setDias] = useState("");
   const [mensagem, setMensagem] = useState("");
   const [ativa, setAtiva] = useState(true);
+  const [trilha, setTrilha] = useState<TrilhaDaColuna>("unico");
 
   useEffect(() => {
     if (!aberto) return;
@@ -59,6 +68,7 @@ export function ColunaDialog({
     setDias(coluna?.entradaDias != null ? String(coluna.entradaDias) : "");
     setMensagem(coluna?.mensagem ?? "");
     setAtiva(coluna?.automacaoAtiva ?? true);
+    setTrilha(coluna?.trilha ?? "unico");
   }, [aberto, coluna]);
 
   // Nome padrão acompanha os dias ("7 dias de atraso" → "8 dias de atraso"); nome próprio fica.
@@ -72,7 +82,7 @@ export function ColunaDialog({
   const diasObrigatorios = tipo === "dias";
   const diasValidos = dias === "" ? !diasObrigatorios : Number.isInteger(nDias) && nDias >= 1 && nDias <= 365;
   const temDias = dias !== "" && diasValidos;
-  const nomeValido = nome.trim().length <= 60 && (!coluna || nome.trim().length > 0);
+  const nomeValido = nome.trim().length <= 60 && (!(coluna || colunaManualNova) || nome.trim().length > 0);
   const valido = diasValidos && nomeValido && mensagem.length <= LIMITE_DA_MENSAGEM;
 
   const enviar = (e: FormEvent) => {
@@ -83,9 +93,11 @@ export function ColunaDialog({
         id: coluna?.id ?? null,
         // Coluna nova sem nome ganha "N dias de atraso" no banco.
         nome: nome.trim() || undefined,
-        entradaDias: tipo === "entrada" ? undefined : temDias ? nDias : null,
+        entradaDias: tipo === "entrada" || colunaManualNova ? undefined : temDias ? nDias : null,
         mensagem: mensagem.trim() || null,
         automacaoAtiva: ativa,
+        trilha: tipo === "dias" && temDias ? trilha : undefined,
+        manual: colunaManualNova || undefined,
       },
       {
         onSuccess: onFechar,
@@ -102,7 +114,9 @@ export function ColunaDialog({
   const descricao =
     tipo === "dias"
       ? "O caso entra sozinho nesta coluna quando completa os dias de atraso — só para a frente, uma vez por dívida. A mensagem sai quando ele entra."
-      : tipo === "pausa"
+      : colunaManualNova
+        ? "Só envia quando alguém move o card para cá e confirma. A régua não move nem manda nada sozinha enquanto o caso estiver aqui."
+        : tipo === "pausa"
         ? "Enquanto o caso está aqui, a régua não o move nem manda mensagem sozinha. A mensagem desta coluna sai quando alguém move o card para cá e escolhe enviar."
         : "Toda dívida nova começa aqui. A mensagem, se houver, sai só quando alguém move o card para cá e escolhe enviar.";
 
@@ -111,7 +125,7 @@ export function ColunaDialog({
       <DialogContent className="sm:max-w-[760px]">
         <form onSubmit={enviar} className="space-y-4">
           <DialogHeader>
-            <DialogTitle>{coluna ? `Editar “${coluna.nome}”` : "Nova coluna de atraso"}</DialogTitle>
+            <DialogTitle>{coluna ? `Editar “${coluna.nome}”` : colunaManualNova ? "Nova coluna manual" : "Nova coluna de atraso"}</DialogTitle>
             <DialogDescription>{descricao}</DialogDescription>
           </DialogHeader>
 
@@ -136,10 +150,10 @@ export function ColunaDialog({
                     id="col-nome"
                     value={nome}
                     onChange={(e) => setNome(e.target.value)}
-                    placeholder="Ex.: 10 dias de atraso"
+                    placeholder={colunaManualNova ? "Ex.: Fluxo cartorial" : "Ex.: 10 dias de atraso"}
                   />
                 </Campo>
-                {tipo !== "entrada" && (
+                {tipo !== "entrada" && !colunaManualNova && (
                   <Campo
                     id="col-dias"
                     rotulo={diasObrigatorios ? "Entra com" : "Entra com (opcional)"}
@@ -158,6 +172,24 @@ export function ColunaDialog({
                         {temDias ? marcaDoPasso({ gatilho: "atraso", dias: nDias }) : "—"}
                       </span>
                     </div>
+                  </Campo>
+                )}
+                {tipo === "dias" && (
+                  <Campo
+                    id="col-trilha"
+                    rotulo="Quando o inadimplente tem"
+                    dica="Quem tem 2 ou mais títulos vencidos segue a régua dos múltiplos títulos."
+                    className="sm:col-span-2"
+                  >
+                    <Select value={trilha} onValueChange={(v) => setTrilha(v as TrilhaDaColuna)}>
+                      <SelectTrigger id="col-trilha">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="unico">Um título vencido</SelectItem>
+                        <SelectItem value="multiplos">2 ou mais títulos vencidos</SelectItem>
+                      </SelectContent>
+                    </Select>
                   </Campo>
                 )}
               </div>

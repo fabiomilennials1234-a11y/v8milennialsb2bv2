@@ -22,7 +22,7 @@ import { recusaDaCobranca } from "../../lib/erros";
 import { type PassoDaRegua, marcaDoPasso } from "../../lib/regua";
 import { useSalvarPasso } from "../../hooks/useRegua";
 import { Campo } from "../dialogos";
-import { EditorDeMensagem, LIMITE_DA_MENSAGEM } from "./EditorDeMensagem";
+import { EditorDeMensagem, LIMITE_DO_LEMBRETE } from "./EditorDeMensagem";
 
 export function PassoDialog({
   aberto,
@@ -51,7 +51,7 @@ export function PassoDialog({
 
   const nDias = Number(dias);
   const diasValidos = dias !== "" && Number.isInteger(nDias) && nDias >= 0 && nDias <= 7;
-  const valido = diasValidos && !!mensagem.trim() && mensagem.length <= LIMITE_DA_MENSAGEM;
+  const valido = diasValidos && !!mensagem.trim() && mensagem.length <= LIMITE_DO_LEMBRETE;
 
   const enviar = (e: FormEvent) => {
     e.preventDefault();
