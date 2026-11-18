@@ -330,7 +330,7 @@ function Linha({
                   onClick={() => onDesfecho("completed")}
                   disabled={ocupada}
                   aria-label={`Compareceu: reunião com ${i.leadName || "cliente"}`}
-                  className="grid h-8 w-8 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-success/15 hover:text-emerald-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50 dark:hover:text-emerald-200"
+                  className="grid h-8 w-8 place-items-center rounded-full bg-success/15 text-emerald-800 ring-1 ring-inset ring-success/40 transition-colors hover:bg-success/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50 dark:text-emerald-200"
                 >
                   <Check aria-hidden className="h-4 w-4" />
                 </button>
@@ -344,7 +344,7 @@ function Linha({
                   onClick={() => onDesfecho("no_show")}
                   disabled={ocupada}
                   aria-label={`Não compareceu: reunião com ${i.leadName || "cliente"}`}
-                  className="grid h-8 w-8 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
+                  className="grid h-8 w-8 place-items-center rounded-full bg-destructive/15 text-red-800 ring-1 ring-inset ring-destructive/40 transition-colors hover:bg-destructive/30 dark:text-red-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
                 >
                   <X aria-hidden className="h-4 w-4" />
                 </button>
