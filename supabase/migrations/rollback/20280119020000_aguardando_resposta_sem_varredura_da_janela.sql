@@ -1,4 +1,4 @@
--- Rollback de 20280118020000_aguardando_resposta_sem_varredura_da_janela.sql
+-- Rollback de 20280119020000_aguardando_resposta_sem_varredura_da_janela.sql
 --
 -- Restaura o corpo VIVO de prod lido em 16/11/2026 com pg_get_functiondef
 -- (forma de prod: lê private.whatsapp_messages, private.leads,

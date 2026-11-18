@@ -1,5 +1,5 @@
 // get_official_whatsapp_conversation_list_multi com página preguiçosa
-// (20280118010000_lista_oficial_pagina_antes_do_escopo.sql).
+// (20280119010000_lista_oficial_pagina_antes_do_escopo.sql).
 //
 // Provado aqui, como `authenticated` COM claims:
 //   a. equivalência: a função viva de prod (o rollback, md5 conferido) e a
@@ -22,8 +22,8 @@ import { readFileSync } from 'node:fs';
 import { PGlite } from '@electric-sql/pglite';
 
 const read = (path) => readFileSync(new URL(path, import.meta.url), 'utf8');
-const MIG = read('../../supabase/migrations/20280118010000_lista_oficial_pagina_antes_do_escopo.sql');
-const RB = read('../../supabase/migrations/rollback/20280118010000_lista_oficial_pagina_antes_do_escopo.sql');
+const MIG = read('../../supabase/migrations/20280119010000_lista_oficial_pagina_antes_do_escopo.sql');
+const RB = read('../../supabase/migrations/rollback/20280119010000_lista_oficial_pagina_antes_do_escopo.sql');
 
 const SIG = 'public.get_official_whatsapp_conversation_list_multi(uuid,uuid[],integer,timestamp with time zone,uuid,text)';
 const RELS = ['channel_messages', 'conversation_read_state', 'leads'];

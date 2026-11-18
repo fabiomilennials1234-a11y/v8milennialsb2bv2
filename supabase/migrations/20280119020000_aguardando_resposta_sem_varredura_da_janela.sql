@@ -60,7 +60,7 @@
 -- a guarda por `true` — falha FECHADA, como no corpo vivo.
 --
 -- Só schema: CREATE OR REPLACE FUNCTION + ACL + troca de prefixo. Nenhum DML.
--- Rollback: supabase/migrations/rollback/20280118020000_aguardando_resposta_sem_varredura_da_janela.sql
+-- Rollback: supabase/migrations/rollback/20280119020000_aguardando_resposta_sem_varredura_da_janela.sql
 -- NÃO APLICADA em nenhum banco remoto por esta entrega.
 
 CREATE OR REPLACE FUNCTION public.get_conversations_awaiting_human_reply_multi(p_org uuid, p_instances uuid[] DEFAULT NULL::uuid[], p_limit integer DEFAULT 30, p_window_days integer DEFAULT 7)

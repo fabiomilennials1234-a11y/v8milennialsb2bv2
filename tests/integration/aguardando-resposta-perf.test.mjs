@@ -1,6 +1,6 @@
 // get_conversations_awaiting_human_reply_multi sem varredura da janela
-// (20280118020000_aguardando_resposta_sem_varredura_da_janela.sql) e o
-// autovacuum por inserção de whatsapp_messages (20280118030000).
+// (20280119020000_aguardando_resposta_sem_varredura_da_janela.sql) e o
+// autovacuum por inserção de whatsapp_messages (20280119030000).
 //
 // Provado aqui, como `authenticated` COM claims:
 //   a. equivalência: a função viva de prod (o rollback, md5 conferido) e a
@@ -25,10 +25,10 @@ import { readFileSync } from 'node:fs';
 import { PGlite } from '@electric-sql/pglite';
 
 const read = (path) => readFileSync(new URL(path, import.meta.url), 'utf8');
-const MIG = read('../../supabase/migrations/20280118020000_aguardando_resposta_sem_varredura_da_janela.sql');
-const RB = read('../../supabase/migrations/rollback/20280118020000_aguardando_resposta_sem_varredura_da_janela.sql');
-const VAC = read('../../supabase/migrations/20280118030000_whatsapp_messages_autovacuum_por_insercao.sql');
-const VAC_RB = read('../../supabase/migrations/rollback/20280118030000_whatsapp_messages_autovacuum_por_insercao.sql');
+const MIG = read('../../supabase/migrations/20280119020000_aguardando_resposta_sem_varredura_da_janela.sql');
+const RB = read('../../supabase/migrations/rollback/20280119020000_aguardando_resposta_sem_varredura_da_janela.sql');
+const VAC = read('../../supabase/migrations/20280119030000_whatsapp_messages_autovacuum_por_insercao.sql');
+const VAC_RB = read('../../supabase/migrations/rollback/20280119030000_whatsapp_messages_autovacuum_por_insercao.sql');
 
 const SIG = 'public.get_conversations_awaiting_human_reply_multi(uuid,uuid[],integer,integer)';
 const RELS = ['leads', 'whatsapp_conversation_summary', 'whatsapp_conversations', 'whatsapp_messages'];

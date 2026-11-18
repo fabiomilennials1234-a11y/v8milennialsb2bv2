@@ -1,4 +1,4 @@
--- Rollback de 20280118000000_recorte_strict_em_plpgsql.sql
+-- Rollback de 20280119000000_recorte_strict_em_plpgsql.sql
 --
 -- Desembrulha as quatro funções: `BEGIN RETURN (<SELECT original>); END` volta
 -- a ser `LANGUAGE sql` com o SELECT original, byte a byte, e confere o md5
@@ -11,8 +11,8 @@ DO $desembrulha$
 DECLARE
   v_alvos constant text[][] := ARRAY[
     ARRAY['private.strict_lead_member_orgs()',                       '422ec5d40d1a0574efd6f2786e1a118e'],
-    ARRAY['private.strict_lead_is_owned(uuid,uuid)',                 'd6e9b67bd2be794aa0cf130d515e5a1f'],
-    ARRAY['private.strict_phone_visible(uuid,uuid,text)',            '6c5792c8e7cc8cbb6b6a7019a3cb6be1'],
+    ARRAY['private.strict_lead_is_owned(uuid,uuid)',                 'cd65d7ad967b5ace6704eb948ada4cd3'],
+    ARRAY['private.strict_phone_visible(uuid,uuid,text)',            '042c6dcd662f6e188868d0f62c031d35'],
     ARRAY['private.strict_channel_visible(uuid,uuid,text,text,text)','bb9688439b7d01049b7adfc4e95faee5']
   ];
   v_i    integer;
@@ -35,7 +35,7 @@ BEGIN
       CONTINUE;
     END IF;
     IF v_lang <> 'plpgsql' OR left(v_src, 14) <> 'BEGIN RETURN (' OR right(v_src, 6) <> '); END' THEN
-      RAISE EXCEPTION '% não está na forma gerada por 20280118000000 — abortado', v_alvos[v_i][1];
+      RAISE EXCEPTION '% não está na forma gerada por 20280119000000 — abortado', v_alvos[v_i][1];
     END IF;
 
     v_orig := substr(v_src, 15, length(v_src) - 20);

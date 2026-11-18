@@ -56,7 +56,7 @@
 -- REVOKE/GRANT é só para torná-la explícita.
 --
 -- Só schema: CREATE OR REPLACE FUNCTION + ACL + troca de prefixo. Nenhum DML.
--- Rollback: supabase/migrations/rollback/20280118010000_lista_oficial_pagina_antes_do_escopo.sql
+-- Rollback: supabase/migrations/rollback/20280119010000_lista_oficial_pagina_antes_do_escopo.sql
 -- NÃO APLICADA em nenhum banco remoto por esta entrega.
 
 CREATE OR REPLACE FUNCTION public.get_official_whatsapp_conversation_list_multi(p_org uuid, p_instances uuid[] DEFAULT NULL::uuid[], p_limit integer DEFAULT 50, p_before timestamp with time zone DEFAULT NULL::timestamp with time zone, p_before_instance uuid DEFAULT NULL::uuid, p_before_contact text DEFAULT NULL::text)

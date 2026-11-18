@@ -48,7 +48,7 @@
 -- acontece.
 --
 -- Só schema: CREATE OR REPLACE FUNCTION via EXECUTE. Nenhum DML.
--- Rollback: supabase/migrations/rollback/20280118000000_recorte_strict_em_plpgsql.sql
+-- Rollback: supabase/migrations/rollback/20280119000000_recorte_strict_em_plpgsql.sql
 -- NÃO APLICADA em nenhum banco remoto por esta entrega.
 
 DO $plpgsql$
@@ -56,8 +56,8 @@ DECLARE
   -- assinatura → md5(prosrc) do corpo SQL vivo revisado em 16/11/2026.
   v_alvos constant text[][] := ARRAY[
     ARRAY['private.strict_lead_member_orgs()',                       '422ec5d40d1a0574efd6f2786e1a118e'],
-    ARRAY['private.strict_lead_is_owned(uuid,uuid)',                 'd6e9b67bd2be794aa0cf130d515e5a1f'],
-    ARRAY['private.strict_phone_visible(uuid,uuid,text)',            '6c5792c8e7cc8cbb6b6a7019a3cb6be1'],
+    ARRAY['private.strict_lead_is_owned(uuid,uuid)',                 'cd65d7ad967b5ace6704eb948ada4cd3'],
+    ARRAY['private.strict_phone_visible(uuid,uuid,text)',            '042c6dcd662f6e188868d0f62c031d35'],
     ARRAY['private.strict_channel_visible(uuid,uuid,text,text,text)','bb9688439b7d01049b7adfc4e95faee5']
   ];
   v_i       integer;

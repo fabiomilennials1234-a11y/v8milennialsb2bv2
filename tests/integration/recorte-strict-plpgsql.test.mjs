@@ -1,5 +1,5 @@
 // Recorte strict_lead_owner_access em plpgsql
-// (20280118000000_recorte_strict_em_plpgsql.sql).
+// (20280119000000_recorte_strict_em_plpgsql.sql).
 //
 // A migration troca a LINGUAGEM de quatro funções do recorte (sql → plpgsql)
 // gerando o corpo novo a partir do `prosrc` vivo: `BEGIN RETURN (<SELECT>); END`.
@@ -22,21 +22,21 @@ import { createHash } from 'node:crypto';
 import { PGlite } from '@electric-sql/pglite';
 
 const read = (path) => readFileSync(new URL(path, import.meta.url), 'utf8');
-const MIG = read('../../supabase/migrations/20280118000000_recorte_strict_em_plpgsql.sql');
-const RB = read('../../supabase/migrations/rollback/20280118000000_recorte_strict_em_plpgsql.sql');
+const MIG = read('../../supabase/migrations/20280119000000_recorte_strict_em_plpgsql.sql');
+const RB = read('../../supabase/migrations/rollback/20280119000000_recorte_strict_em_plpgsql.sql');
 const md5 = (s) => createHash('md5').update(s).digest('hex');
 
 // Corpos VIVOS de prod (prosrc), 16/11/2026 — byte a byte, inclusive CRLF.
 const SRC = {
   member_orgs: "SELECT ARRAY(SELECT DISTINCT x FROM unnest((\r\n SELECT ARRAY(SELECT DISTINCT org FROM unnest(( SELECT ARRAY(\r\n    SELECT o.id FROM public.organizations o\r\n    WHERE o.feature_flags @> '{\"strict_lead_owner_access\":true}'::jsonb\r\n      AND COALESCE(auth.role(), '') <> 'service_role'\r\n      AND (auth.uid() IS NOT NULL OR COALESCE(auth.role(), '') IN ('authenticated', 'anon'))\r\n      AND NOT COALESCE(public.is_master_user(), false)\r\n      AND NOT EXISTS (\r\n        SELECT 1 FROM public.team_members tm\r\n        WHERE tm.organization_id = o.id AND tm.user_id = auth.uid()\r\n          AND tm.is_active AND tm.role = 'admin'\r\n      )\r\n  ) ) || CASE WHEN private.riofix_balcao_current_scope() IS NOT NULL THEN ARRAY['36971ff5-fd73-4f30-a733-04bf8c90e5b6'::uuid] ELSE '{}'::uuid[] END) org)\r\n) || CASE WHEN private.jrtex_caller_lead_scoped() THEN ARRAY['30bb5c27-88f4-4f91-9493-835405ae2e11'::uuid] ELSE '{}'::uuid[] END) x)",
-  is_owned: "SELECT CASE WHEN private.jrtex_lead_scope_for_user(auth.uid(),p_org) IS NOT NULL THEN private.jrtex_caller_lead(p_org,p_lead) ELSE (\r\n SELECT CASE WHEN private.riofix_balcao_scope_for_user(auth.uid(),p_org) IS NOT NULL THEN private.riofix_balcao_caller_lead(p_org,p_lead) ELSE (SELECT auth.uid() IS NOT NULL AND EXISTS (\r\n    SELECT 1 FROM public.leads l\r\n    JOIN public.team_members tm ON tm.organization_id = l.organization_id\r\n      AND tm.user_id = auth.uid() AND tm.is_active\r\n    WHERE l.id = p_lead AND l.organization_id = p_org AND l.deleted_at IS NULL\r\n      AND (\r\n        tm.id IN (l.pre_sale_responsible_id, l.sale_responsible_id, l.sdr_id, l.closer_id)\r\n        OR EXISTS (\r\n          SELECT 1 FROM public.lead_owners own\r\n          WHERE own.lead_id = l.id AND own.organization_id = p_org\r\n            AND own.team_member_id = tm.id AND own.role = 'co'\r\n        )\r\n        OR EXISTS (\r\n          SELECT 1 FROM public.pipeline_entries pe\r\n          WHERE pe.lead_id = l.id AND pe.organization_id = p_org\r\n            AND (pe.assigned_to = tm.id OR tm.id::text IN (\r\n              pe.metadata->>'pre_sale_responsible_id', pe.metadata->>'sale_responsible_id',\r\n              pe.metadata->>'sdr_id', pe.metadata->>'closer_id', pe.metadata->>'responsible_id'\r\n            ))\r\n        )\r\n      )\r\n  )) END\r\n) END",
-  phone_visible: "\r\n SELECT CASE WHEN private.jrtex_izadora_new_chat(auth.uid(),p_org,p_lead,p_phone) THEN true WHEN private.riofix_balcao_scope_for_user(auth.uid(),p_org) IS NOT NULL THEN private.riofix_balcao_caller_chat(p_org,p_lead,p_phone) ELSE (SELECT NOT (p_org=ANY((SELECT private.strict_lead_member_orgs())::uuid[]))\r\n    OR EXISTS (\r\n      SELECT 1 FROM public.leads l WHERE l.organization_id=p_org\r\n        AND ((p_lead IS NOT NULL AND l.id=p_lead)\r\n          OR (p_lead IS NULL AND l.normalized_phone=p_phone))\r\n        AND private.strict_lead_is_owned(p_org,l.id)\r\n    )) END\r\n",
+  is_owned: "SELECT CASE WHEN private.jrtex_karine_pending_lead(p_org,p_lead) THEN true WHEN private.jrtex_lead_scope_for_user(auth.uid(),p_org) IS NOT NULL THEN private.jrtex_caller_lead(p_org,p_lead) ELSE (\r\n SELECT CASE WHEN private.riofix_balcao_scope_for_user(auth.uid(),p_org) IS NOT NULL THEN private.riofix_balcao_caller_lead(p_org,p_lead) ELSE (SELECT auth.uid() IS NOT NULL AND EXISTS (\r\n    SELECT 1 FROM public.leads l\r\n    JOIN public.team_members tm ON tm.organization_id = l.organization_id\r\n      AND tm.user_id = auth.uid() AND tm.is_active\r\n    WHERE l.id = p_lead AND l.organization_id = p_org AND l.deleted_at IS NULL\r\n      AND (\r\n        tm.id IN (l.pre_sale_responsible_id, l.sale_responsible_id, l.sdr_id, l.closer_id)\r\n        OR EXISTS (\r\n          SELECT 1 FROM public.lead_owners own\r\n          WHERE own.lead_id = l.id AND own.organization_id = p_org\r\n            AND own.team_member_id = tm.id AND own.role = 'co'\r\n        )\r\n        OR EXISTS (\r\n          SELECT 1 FROM public.pipeline_entries pe\r\n          WHERE pe.lead_id = l.id AND pe.organization_id = p_org\r\n            AND (pe.assigned_to = tm.id OR tm.id::text IN (\r\n              pe.metadata->>'pre_sale_responsible_id', pe.metadata->>'sale_responsible_id',\r\n              pe.metadata->>'sdr_id', pe.metadata->>'closer_id', pe.metadata->>'responsible_id'\r\n            ))\r\n        )\r\n      )\r\n  )) END\r\n) END",
+  phone_visible: "\r\n SELECT CASE WHEN private.jrtex_karine_orphan_chat(auth.uid(),p_org,p_lead,p_phone) THEN true WHEN private.jrtex_izadora_new_chat(auth.uid(),p_org,p_lead,p_phone) THEN true WHEN private.riofix_balcao_scope_for_user(auth.uid(),p_org) IS NOT NULL THEN private.riofix_balcao_caller_chat(p_org,p_lead,p_phone) ELSE (SELECT NOT (p_org=ANY((SELECT private.strict_lead_member_orgs())::uuid[]))\r\n    OR EXISTS (\r\n      SELECT 1 FROM public.leads l WHERE l.organization_id=p_org\r\n        AND ((p_lead IS NOT NULL AND l.id=p_lead)\r\n          OR (p_lead IS NULL AND l.normalized_phone=p_phone))\r\n        AND private.strict_lead_is_owned(p_org,l.id)\r\n    )) END\r\n",
   channel_visible: "\n SELECT NOT(p_org=ANY((SELECT private.strict_lead_member_orgs())::uuid[]))\n OR EXISTS (\n   SELECT 1 FROM public.messaging_channels mc JOIN public.lead_social_identities si\n     ON si.organization_id=mc.organization_id AND si.channel_type=mc.channel_type\n   WHERE mc.id::text=p_channel AND mc.organization_id=p_org AND si.external_user_id=p_external\n     AND private.strict_lead_is_owned(p_org,si.lead_id)\n )\n OR (NOT EXISTS(SELECT 1 FROM public.messaging_channels mc WHERE mc.id::text=p_channel\n       AND mc.organization_id=p_org AND mc.channel_type IN('instagram','facebook','messenger'))\n   AND private.strict_phone_visible(p_org,p_lead,public.normalize_brazilian_phone(COALESCE(p_phone,p_external))))\n",
 };
 const MD5 = {
   member_orgs: '422ec5d40d1a0574efd6f2786e1a118e',
-  is_owned: 'd6e9b67bd2be794aa0cf130d515e5a1f',
-  phone_visible: '6c5792c8e7cc8cbb6b6a7019a3cb6be1',
+  is_owned: 'cd65d7ad967b5ace6704eb948ada4cd3',
+  phone_visible: '042c6dcd662f6e188868d0f62c031d35',
   channel_visible: 'bb9688439b7d01049b7adfc4e95faee5',
 };
 const SIG = {
@@ -105,6 +105,13 @@ CREATE FUNCTION private.jrtex_caller_lead(p_org uuid, p_lead uuid) RETURNS boole
 CREATE FUNCTION private.jrtex_caller_lead_scoped() RETURNS boolean LANGUAGE sql STABLE
   SECURITY DEFINER SET search_path TO '' AS $$
   SELECT private.jrtex_lead_scope_for_user(auth.uid(), '${JRTEX}') IS NOT NULL $$;
+-- Ramos hard-wired de prod para a usuária da Karine (JR Tex). Neutros aqui:
+-- para qualquer outro usuário eles são false, que é o que os corpos novos
+-- de strict_phone_visible / strict_lead_is_owned supõem antes do ramo genérico.
+CREATE FUNCTION private.jrtex_karine_pending_lead(p_org uuid, p_lead uuid) RETURNS boolean LANGUAGE sql STABLE
+  SECURITY DEFINER SET search_path TO '' AS $$ SELECT false $$;
+CREATE FUNCTION private.jrtex_karine_orphan_chat(p_user uuid, p_org uuid, p_lead uuid, p_phone text) RETURNS boolean
+  LANGUAGE sql STABLE SECURITY DEFINER SET search_path TO '' AS $$ SELECT false $$;
 CREATE FUNCTION private.jrtex_izadora_new_chat(p_user uuid, p_org uuid, p_lead uuid, p_phone text) RETURNS boolean
   LANGUAGE sql STABLE SECURITY DEFINER SET search_path TO '' AS $$
   SELECT p_user = (SELECT jr_user FROM private.knobs) AND p_lead IS NULL

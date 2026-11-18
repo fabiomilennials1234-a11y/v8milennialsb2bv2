@@ -1,4 +1,4 @@
--- Rollback de 20280118010000_lista_oficial_pagina_antes_do_escopo.sql
+-- Rollback de 20280119010000_lista_oficial_pagina_antes_do_escopo.sql
 --
 -- Restaura o corpo VIVO de prod lido em 16/11/2026 com pg_get_functiondef
 -- (forma de prod: lê private.channel_messages, private.conversation_read_state

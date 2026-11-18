@@ -42,7 +42,7 @@
 --
 -- Só schema: ALTER TABLE … SET (reloptions). Não reescreve a tabela, não
 -- bloqueia leitura/escrita além de um ShareUpdateExclusiveLock instantâneo.
--- Rollback: supabase/migrations/rollback/20280118030000_whatsapp_messages_autovacuum_por_insercao.sql
+-- Rollback: supabase/migrations/rollback/20280119030000_whatsapp_messages_autovacuum_por_insercao.sql
 -- NÃO APLICADA em nenhum banco remoto por esta entrega.
 
 ALTER TABLE public.whatsapp_messages SET (
