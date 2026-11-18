@@ -31,7 +31,7 @@ const ANTES = [
   '20271213000000_cobranca_regua',
   '20271214000000_cobranca_colunas_da_regua',
 ];
-const NOVA = '20280118000000_cobranca_trilhas_colunas_manuais_e_prazo';
+const NOVA = '20280118010000_cobranca_trilhas_colunas_manuais_e_prazo';
 
 async function setup() {
   const db = new PGlite();

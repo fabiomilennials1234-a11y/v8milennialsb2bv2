@@ -1,29 +1,78 @@
--- Rollback de 20280118000000_cobranca_trilhas_colunas_manuais_e_prazo.sql
+-- 20280118010000_cobranca_trilhas_colunas_manuais_e_prazo.sql
 --
--- Restaura as funções da régua como estavam e remove trilha, coluna manual e
--- prazo. ANTES de rodar: o que existir de coluna 'multiplos' ou personalizada
--- é desfeito (casos nelas voltam para a coluna de entrada; envios na fila
--- dessas colunas são cancelados). Mensagens longas (> 1.000) são cortadas.
+-- Cobrança · régua por tipo de caso, colunas manuais e prazo de retorno
+-- (novo processo da Agilsul: Manual de Cobrança MANUAL-COB-001/002).
+-- ROLLBACK pareado: rollback/20280118010000_cobranca_trilhas_colunas_manuais_e_prazo.sql
+--
+-- ── O QUE MUDA ──────────────────────────────────────────────────────────────
+--  · trilha da coluna de dias: 'unico' (um título vencido) ou 'multiplos'
+--    (2 ou mais). O caso entra na coluna da SUA trilha; quando a trilha dele
+--    ainda não tem coluna para aquele atraso, cai na de título único (o dia
+--    continua único por org, então a chave de idempotência dos envios não muda).
+--  · coluna manual (personalizada): sem dias, pausa a régua, só envia no
+--    "Mover e enviar". É onde moram as mensagens que AFIRMAM um fato (cartório,
+--    negativação, notificação): quem confirma o fato é a equipe, não o relógio.
+--  · prazo de retorno: variáveis {prazo_data} e {prazo_horario}, calculadas na
+--    hora do envio como N dias úteis (segunda a sexta com janela de envio) à frente, no
+--    horário em que a janela daquele dia fecha. Feriado não é descontado.
+--  · mensagem de coluna até 2.000 caracteres (lembrete segue em 1.000).
 
 BEGIN;
 
 SET LOCAL lock_timeout = '3s';
 
-UPDATE public.cobranca_regua_envios SET status = 'cancelado', motivo = 'rollback_trilhas'
- WHERE status = 'pendente'
-   AND etapa_id IN (SELECT id FROM public.cobranca_etapas WHERE personalizada OR trilha = 'multiplos');
+ALTER TABLE public.cobranca_etapas
+  ADD COLUMN trilha        text    NOT NULL DEFAULT 'unico' CHECK (trilha IN ('unico', 'multiplos')),
+  ADD COLUMN personalizada boolean NOT NULL DEFAULT false,
+  ADD CONSTRAINT cobranca_etapas_trilha_so_com_dias
+    CHECK (trilha = 'unico' OR entrada_dias IS NOT NULL),
+  ADD CONSTRAINT cobranca_etapas_personalizada_sem_dias
+    CHECK (NOT personalizada OR (entrada_dias IS NULL AND papel = 'aberta'));
 
-UPDATE public.cobranca_casos c
-   SET etapa_id = (SELECT e.id FROM public.cobranca_etapas e
-                    WHERE e.organization_id = c.organization_id AND e.papel = 'aberta'
-                      AND e.entrada_dias IS NULL AND NOT e.pausa_regua
-                    ORDER BY e.posicao LIMIT 1)
- WHERE c.encerrado_em IS NULL
-   AND c.etapa_id IN (SELECT id FROM public.cobranca_etapas WHERE personalizada OR trilha = 'multiplos');
+ALTER TABLE public.cobranca_etapas DROP CONSTRAINT cobranca_etapas_mensagem_check;
+ALTER TABLE public.cobranca_etapas
+  ADD CONSTRAINT cobranca_etapas_mensagem_check
+  CHECK (length(btrim(mensagem)) BETWEEN 1 AND 2000);
 
-DELETE FROM public.cobranca_etapas WHERE personalizada OR trilha = 'multiplos';
+ALTER TABLE public.cobranca_regua
+  ADD COLUMN prazo_dias_uteis integer NOT NULL DEFAULT 2 CHECK (prazo_dias_uteis BETWEEN 1 AND 10);
 
-UPDATE public.cobranca_etapas SET mensagem = left(mensagem, 1000) WHERE length(mensagem) > 1000;
+-- Prazo de retorno: N dias úteis à frente (segunda a sexta com janela de
+-- envio), e o horário em que a janela daquele dia fecha. Sem janela: calendário.
+CREATE FUNCTION private.cobranca_prazo(p_janela jsonb, p_tz text, p_agora timestamptz, p_dias integer)
+RETURNS jsonb
+LANGUAGE plpgsql
+STABLE
+SET search_path = ''
+AS $fn$
+DECLARE
+  v_dia   date := (p_agora AT TIME ZONE p_tz)::date;
+  v_n     integer := 0;
+  v_alvo  integer := COALESCE(p_dias, 2);
+  v_faixa jsonb;
+  v_guard integer := 0;
+BEGIN
+  IF p_janela IS NULL OR p_janela = '{}'::jsonb THEN
+    RETURN jsonb_build_object('data', v_dia + v_alvo, 'horario', '18:00');
+  END IF;
+  WHILE v_n < v_alvo AND v_guard < 60 LOOP
+    v_dia := v_dia + 1;
+    v_guard := v_guard + 1;
+    v_faixa := p_janela -> extract(isodow FROM v_dia)::int::text;
+    -- Dia útil = segunda a sexta com janela de envio (o sábado da janela padrão não conta).
+    IF extract(isodow FROM v_dia) <= 5 AND v_faixa IS NOT NULL THEN
+      v_n := v_n + 1;
+    END IF;
+  END LOOP;
+  IF v_n < v_alvo THEN
+    RETURN jsonb_build_object('data', (p_agora AT TIME ZONE p_tz)::date + v_alvo, 'horario', '18:00');
+  END IF;
+  RETURN jsonb_build_object('data', v_dia, 'horario', left(COALESCE(v_faixa ->> 'fim', '18:00'), 5));
+END
+$fn$;
+
+REVOKE ALL ON FUNCTION private.cobranca_prazo(jsonb, text, timestamptz, integer) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION private.cobranca_prazo(jsonb, text, timestamptz, integer) TO service_role;
 
 CREATE OR REPLACE FUNCTION private.cobranca_regua_variaveis(p_caso uuid, p_gatilho text, p_referencia date, p_agora timestamptz)
 RETURNS jsonb
@@ -32,7 +81,7 @@ STABLE
 SET search_path = ''
 AS $fn$
   WITH base AS (
-    SELECT i.nome, o.name AS empresa, o.timezone, r.como_pagar,
+    SELECT i.nome, o.name AS empresa, o.timezone, r.como_pagar, r.janela, r.prazo_dias_uteis,
            (p_agora AT TIME ZONE o.timezone)::date AS hoje,
            s.saldo, s.venc, s.titulos
       FROM public.cobranca_casos c
@@ -64,6 +113,8 @@ AS $fn$
     'dias_atraso',        CASE WHEN b.venc IS NULL THEN NULL ELSE b.hoje - b.venc END,
     'titulos',            COALESCE(b.titulos, 0),
     'como_pagar',         COALESCE(b.como_pagar, ''),
+    'prazo_data',         private.cobranca_prazo(b.janela, b.timezone, p_agora, b.prazo_dias_uteis) ->> 'data',
+    'prazo_horario',      private.cobranca_prazo(b.janela, b.timezone, p_agora, b.prazo_dias_uteis) ->> 'horario',
     'parcela_valor',      (SELECT valor FROM parcela),
     'parcela_vencimento', (SELECT vencimento FROM parcela),
     'quando',             CASE
@@ -90,7 +141,7 @@ BEGIN
                   WHEN entrada_dias IS NOT NULL AND NOT pausa_regua THEN 1
                   WHEN entrada_dias IS NULL THEN 2
                   ELSE 3 END,
-             entrada_dias NULLS LAST, posicao) AS nova
+             CASE WHEN trilha = 'multiplos' THEN 1 ELSE 0 END, entrada_dias NULLS LAST, posicao) AS nova
       FROM public.cobranca_etapas
      WHERE organization_id = p_org
   )
@@ -115,7 +166,7 @@ AS $fn$
      WHERE r.organization_id = p_org
   ), casos AS (
     SELECT c.id AS caso_id, c.inadimplente_id, e.posicao AS etapa_posicao, e.papel, e.pausa_regua,
-           i.telefone, i.nao_contatar, s.venc, COALESCE(s.saldo, 0) AS saldo,
+           i.telefone, i.nao_contatar, s.venc, COALESCE(s.saldo, 0) AS saldo, COALESCE(s.n_titulos, 0) AS n_titulos,
            EXISTS (SELECT 1 FROM public.cobranca_compromissos co
                     WHERE co.caso_id = c.id AND co.status = 'ativo') AS tem_compromisso,
            EXISTS (SELECT 1 FROM public.cobranca_eventos ev
@@ -129,7 +180,8 @@ AS $fn$
       JOIN public.cobranca_etapas e ON e.id = c.etapa_id
       JOIN public.cobranca_inadimplentes i ON i.id = c.inadimplente_id AND i.arquivado_em IS NULL
       LEFT JOIN LATERAL (
-        SELECT min(ts.vencimento) FILTER (WHERE ts.saldo > 0) AS venc, sum(ts.saldo) AS saldo
+        SELECT min(ts.vencimento) FILTER (WHERE ts.saldo > 0) AS venc, sum(ts.saldo) AS saldo,
+               count(*) FILTER (WHERE ts.saldo > 0) AS n_titulos
           FROM public.cobranca_titulos_saldo ts
          WHERE ts.inadimplente_id = c.inadimplente_id
       ) s ON true
@@ -149,7 +201,9 @@ AS $fn$
         SELECT e.* FROM public.cobranca_etapas e
          WHERE e.organization_id = cfg.organization_id AND e.papel = 'aberta' AND e.automacao_ativa
            AND e.entrada_dias IS NOT NULL AND e.entrada_dias <= cfg.hoje - ca.venc
-         ORDER BY e.entrada_dias DESC
+           AND (e.trilha = 'unico' OR ca.n_titulos >= 2)
+         ORDER BY (e.trilha = CASE WHEN ca.n_titulos >= 2 THEN 'multiplos' ELSE 'unico' END) DESC,
+                  e.entrada_dias DESC
          LIMIT 1
       ) t
      WHERE ca.papel = 'aberta' AND NOT ca.pausa_regua AND NOT ca.tem_compromisso
@@ -218,7 +272,9 @@ BEGIN
     SELECT co.id, co.caso_id, c.inadimplente_id, d.devido, COALESCE(pg.pago, 0) AS pago,
            i.telefone, i.nao_contatar,
            (SELECT min(ts.vencimento) FILTER (WHERE ts.saldo > 0)
-              FROM public.cobranca_titulos_saldo ts WHERE ts.inadimplente_id = c.inadimplente_id) AS venc
+              FROM public.cobranca_titulos_saldo ts WHERE ts.inadimplente_id = c.inadimplente_id) AS venc,
+           (SELECT count(*) FILTER (WHERE ts.saldo > 0)
+              FROM public.cobranca_titulos_saldo ts WHERE ts.inadimplente_id = c.inadimplente_id) AS n_titulos
       FROM public.cobranca_compromissos co
       JOIN public.cobranca_casos c ON c.id = co.caso_id AND c.encerrado_em IS NULL
       JOIN public.cobranca_inadimplentes i ON i.id = c.inadimplente_id
@@ -248,7 +304,9 @@ BEGIN
       SELECT e.* INTO v_col FROM public.cobranca_etapas e
        WHERE e.organization_id = p_org AND e.papel = 'aberta' AND e.automacao_ativa
          AND e.entrada_dias IS NOT NULL AND e.entrada_dias <= p_hoje - r.venc
-       ORDER BY e.entrada_dias DESC LIMIT 1;
+         AND (e.trilha = 'unico' OR r.n_titulos >= 2)
+       ORDER BY (e.trilha = CASE WHEN r.n_titulos >= 2 THEN 'multiplos' ELSE 'unico' END) DESC,
+                e.entrada_dias DESC LIMIT 1;
       v_volta := v_col.id;
     END IF;
     IF v_volta IS NULL THEN
@@ -290,6 +348,8 @@ DECLARE
   v_dias  integer;
   v_msg   text := NULLIF(btrim(COALESCE(p_dados ->> 'mensagem', '')), '');
   v_nome  text := NULLIF(btrim(COALESCE(p_dados ->> 'nome', '')), '');
+  v_manual boolean := COALESCE((p_dados ->> 'manual')::boolean, false);
+  v_trilha text := NULLIF(btrim(COALESCE(p_dados ->> 'trilha', '')), '');
 BEGIN
   PERFORM private.cobranca_exigir(p_org, 'edit');
   PERFORM private.cobranca_semear_etapas(p_org);
@@ -302,25 +362,47 @@ BEGIN
   IF v_dias IS NOT NULL AND v_dias NOT BETWEEN 1 AND 365 THEN
     RAISE EXCEPTION 'Dias de atraso de 1 a 365.' USING ERRCODE = 'PT422', DETAIL = 'dias_invalidos';
   END IF;
-  IF v_msg IS NOT NULL AND length(v_msg) > 1000 THEN
-    RAISE EXCEPTION 'A mensagem passa de 1.000 caracteres.' USING ERRCODE = 'PT422', DETAIL = 'mensagem_longa';
+  IF v_msg IS NOT NULL AND length(v_msg) > 2000 THEN
+    RAISE EXCEPTION 'A mensagem passa de 2.000 caracteres.' USING ERRCODE = 'PT422', DETAIL = 'mensagem_longa';
+  END IF;
+  IF v_trilha IS NOT NULL AND v_trilha NOT IN ('unico', 'multiplos') THEN
+    RAISE EXCEPTION 'Tipo de caso inválido.' USING ERRCODE = 'PT422', DETAIL = 'trilha_invalida';
+  END IF;
+  IF v_manual AND (v_dias IS NOT NULL OR v_trilha = 'multiplos') THEN
+    RAISE EXCEPTION 'Coluna manual não tem dias de atraso.' USING ERRCODE = 'PT422', DETAIL = 'manual_sem_dias';
+  END IF;
+  IF v_trilha = 'multiplos' AND v_dias IS NULL AND (p_etapa IS NULL OR NOT EXISTS (
+       SELECT 1 FROM public.cobranca_etapas WHERE id = p_etapa AND entrada_dias IS NOT NULL)) THEN
+    RAISE EXCEPTION '2 ou mais títulos só vale em coluna com dias de atraso.' USING ERRCODE = 'PT422', DETAIL = 'trilha_sem_dias';
   END IF;
   IF v_nome IS NOT NULL AND length(v_nome) > 60 THEN
     RAISE EXCEPTION 'Nome até 60 caracteres.' USING ERRCODE = 'PT422', DETAIL = 'nome_longo';
   END IF;
 
   BEGIN
-    IF p_etapa IS NULL THEN
+    IF p_etapa IS NULL AND v_manual THEN
+      IF v_nome IS NULL THEN
+        RAISE EXCEPTION 'Coluna manual precisa de um nome.' USING ERRCODE = 'PT422', DETAIL = 'nome_obrigatorio';
+      END IF;
+      -- Fora do ritmo da régua: só envia quando alguém move o card e confirma.
+      INSERT INTO public.cobranca_etapas
+        (organization_id, nome, posicao, papel, cor, pausa_regua, mensagem, personalizada)
+      VALUES
+        (p_org, v_nome,
+         40000 + (SELECT count(*) FROM public.cobranca_etapas WHERE organization_id = p_org),
+         'aberta', '#94a3b8', true, v_msg, true)
+      RETURNING id INTO v_id;
+    ELSIF p_etapa IS NULL THEN
       IF v_dias IS NULL THEN
         RAISE EXCEPTION 'Coluna nova precisa dos dias de atraso em que o caso entra.'
           USING ERRCODE = 'PT422', DETAIL = 'dias_obrigatorios';
       END IF;
       INSERT INTO public.cobranca_etapas
-        (organization_id, nome, posicao, papel, cor, pausa_regua, entrada_dias, mensagem, automacao_ativa)
+        (organization_id, nome, posicao, papel, cor, pausa_regua, entrada_dias, mensagem, automacao_ativa, trilha)
       VALUES
         (p_org, COALESCE(v_nome, private.cobranca_rotulo_de_dias(v_dias)), 30000 + v_dias, 'aberta',
          private.cobranca_cor_de_dias(v_dias), false, v_dias, v_msg,
-         COALESCE((p_dados ->> 'automacao_ativa')::boolean, true))
+         COALESCE((p_dados ->> 'automacao_ativa')::boolean, true), COALESCE(v_trilha, 'unico'))
       RETURNING id INTO v_id;
     ELSE
       SELECT * INTO v_atual FROM public.cobranca_etapas WHERE id = p_etapa AND organization_id = p_org;
@@ -338,11 +420,14 @@ BEGIN
          SET nome = CASE WHEN p_dados ? 'nome' THEN COALESCE(v_nome, nome) ELSE nome END,
              entrada_dias = CASE WHEN p_dados ? 'entrada_dias' THEN v_dias ELSE entrada_dias END,
              mensagem = CASE WHEN p_dados ? 'mensagem' THEN v_msg ELSE mensagem END,
-             automacao_ativa = COALESCE((p_dados ->> 'automacao_ativa')::boolean, automacao_ativa)
+             automacao_ativa = COALESCE((p_dados ->> 'automacao_ativa')::boolean, automacao_ativa),
+             trilha = COALESCE(v_trilha, trilha)
        WHERE id = p_etapa
       RETURNING id INTO v_id;
     END IF;
-  EXCEPTION WHEN unique_violation THEN
+  EXCEPTION WHEN check_violation THEN
+    RAISE EXCEPTION 'Valores fora do permitido para esta coluna.' USING ERRCODE = 'PT422', DETAIL = 'coluna_invalida';
+  WHEN unique_violation THEN
     RAISE EXCEPTION 'Já existe uma coluna com esse nome ou com esses dias de atraso.'
       USING ERRCODE = 'PT409', DETAIL = 'coluna_duplicada';
   END;
@@ -366,8 +451,9 @@ BEGIN
     RAISE EXCEPTION 'Coluna não encontrada.' USING ERRCODE = 'PT404', DETAIL = 'coluna_inexistente';
   END IF;
   PERFORM private.cobranca_exigir(v_etapa.organization_id, 'edit');
-  IF v_etapa.papel <> 'aberta' OR v_etapa.entrada_dias IS NULL OR v_etapa.pausa_regua THEN
-    RAISE EXCEPTION 'Só colunas de dias de atraso podem ser removidas.' USING ERRCODE = 'PT422', DETAIL = 'coluna_fixa';
+  IF v_etapa.papel <> 'aberta'
+     OR NOT (v_etapa.personalizada OR (v_etapa.entrada_dias IS NOT NULL AND NOT v_etapa.pausa_regua)) THEN
+    RAISE EXCEPTION 'Só colunas de dias de atraso e colunas manuais criadas por você podem ser removidas.' USING ERRCODE = 'PT422', DETAIL = 'coluna_fixa';
   END IF;
   IF EXISTS (SELECT 1 FROM public.cobranca_casos WHERE etapa_id = p_etapa AND encerrado_em IS NULL) THEN
     RAISE EXCEPTION 'Há casos nesta coluna. Mova-os antes de remover.' USING ERRCODE = 'PT409', DETAIL = 'coluna_com_casos';
@@ -410,31 +496,17 @@ BEGIN
       intervalo_max_segundos   = COALESCE((p_dados ->> 'intervalo_max_segundos')::int, intervalo_max_segundos),
       pausa_apos_resposta_dias = COALESCE((p_dados ->> 'pausa_apos_resposta_dias')::int, pausa_apos_resposta_dias),
       intervalo_minimo_dias    = COALESCE((p_dados ->> 'intervalo_minimo_dias')::int, intervalo_minimo_dias),
+      prazo_dias_uteis         = COALESCE((p_dados ->> 'prazo_dias_uteis')::int, prazo_dias_uteis),
       como_pagar               = CASE WHEN p_dados ? 'como_pagar'
                                       THEN NULLIF(btrim(p_dados ->> 'como_pagar'), '') ELSE como_pagar END,
       etapa_apos_quebra_id     = CASE WHEN p_dados ? 'etapa_apos_quebra_id' THEN v_etapa ELSE etapa_apos_quebra_id END,
       updated_at = now(), updated_by = auth.uid()
      WHERE organization_id = p_org;
   EXCEPTION WHEN check_violation THEN
-    RAISE EXCEPTION 'Valores fora do permitido: teto de 1 a 300 por dia, intervalo de 30 s a 30 min (mínimo até o máximo), pausas de até 30 dias, "como pagar" até 600 caracteres.'
+    RAISE EXCEPTION 'Valores fora do permitido: teto de 1 a 300 por dia, intervalo de 30 s a 30 min (mínimo até o máximo), pausas de até 30 dias, prazo de retorno de 1 a 10 dias úteis, "como pagar" até 600 caracteres.'
       USING ERRCODE = 'PT422', DETAIL = 'valores_fora_do_permitido';
   END;
 END
 $fn$;
-
-DROP FUNCTION private.cobranca_prazo(jsonb, text, timestamptz, integer);
-
-ALTER TABLE public.cobranca_regua DROP COLUMN prazo_dias_uteis;
-
-ALTER TABLE public.cobranca_etapas DROP CONSTRAINT cobranca_etapas_mensagem_check;
-ALTER TABLE public.cobranca_etapas
-  ADD CONSTRAINT cobranca_etapas_mensagem_check
-  CHECK (length(btrim(mensagem)) BETWEEN 1 AND 1000);
-
-ALTER TABLE public.cobranca_etapas
-  DROP CONSTRAINT cobranca_etapas_trilha_so_com_dias,
-  DROP CONSTRAINT cobranca_etapas_personalizada_sem_dias,
-  DROP COLUMN trilha,
-  DROP COLUMN personalizada;
 
 COMMIT;
