@@ -23,10 +23,13 @@ import { logRuntime } from "../_shared/logger.ts";
 import { trackEvent } from "../_shared/track.ts";
 import {
   isPipelineResolutionError,
+  getPipeEntry,
   resolvePipeline,
+  updatePipeEntryById,
   upsertPipeEntryDetailed,
   type ResolvedPipeline,
 } from "../_shared/pipeline-adapter.ts";
+import { buildExistingEntryUpdates } from "./existing-entry.ts";
 import { unauthorizedResponse } from "../_shared/auth.ts";
 import { applyImportTags, resolveImportTagIds, type ImportTagsReport } from "./import-tags.ts";
 import { withNameFallback } from "./import-name.ts";
@@ -1130,6 +1133,34 @@ async function importToPipeline(
         if (semFunil) {
           if (formattedPhone) processedPhones.add(formattedPhone);
           continue;
+        }
+
+        // Lead que já existia e já tem card neste funil: a planilha não desfaz
+        // trabalho feito (incidente Calçados SCORE, 18/11 — 26 cards voltaram
+        // para Novo Lead e perderam o responsável). Só escreve o que a linha
+        // pede de forma explícita; ver existing-entry.ts.
+        if (existingLead) {
+          const currentEntry = await getPipeEntry(supabase, leadId, organizationId, pipeline!.id);
+          if (currentEntry) {
+            const entryUpdates = buildExistingEntryUpdates({
+              rowStage: lead.stage,
+              resolvedStageKey: stageKeyForLead,
+              currentStageKey: currentEntry.stage_key,
+              assignedTo: entryAssignedTo,
+              notes: entryNotes,
+              metadata: entryMetadata,
+            });
+            if (Object.keys(entryUpdates).length > 0) {
+              const ok = await updatePipeEntryById(supabase, currentEntry.id, entryUpdates);
+              if (!ok) {
+                report.rejected++;
+                report.errors.push({ row: rowIndex + 1, reason: motivoFalhaDeFunil("write_failed", funnelLabel) });
+                continue;
+              }
+            }
+            if (formattedPhone) processedPhones.add(formattedPhone);
+            continue;
+          }
         }
 
         // Escrita da entry — choke único (adapter, por pipeline_id).
