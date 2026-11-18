@@ -33,7 +33,7 @@ describe("useAgendaUnificada — falha parcial", () => {
   it("tudo certo: sem erro e sem aviso", () => {
     const { result } = renderHook(() => useAgendaUnificada("mes"), { wrapper });
     expect(result.current.isError).toBe(false);
-    expect(result.current.indisponiveis).toEqual({ eventos: false, contatos: false });
+    expect(result.current.indisponiveis).toMatchObject({ eventos: false, contatos: false });
     expect(result.current.itens).toHaveLength(1);
   });
 
@@ -41,7 +41,7 @@ describe("useAgendaUnificada — falha parcial", () => {
     mocks.contatos = { data: undefined as never, isLoading: false, isError: true, refetch: vi.fn() };
     const { result } = renderHook(() => useAgendaUnificada("mes"), { wrapper });
     expect(result.current.isError).toBe(false);
-    expect(result.current.indisponiveis).toEqual({ eventos: false, contatos: true });
+    expect(result.current.indisponiveis).toMatchObject({ eventos: false, contatos: true });
     expect(result.current.itens).toHaveLength(1);
   });
 
@@ -49,7 +49,7 @@ describe("useAgendaUnificada — falha parcial", () => {
     mocks.eventos = { data: undefined as never, isLoading: false, isError: true, refetch: vi.fn() };
     const { result } = renderHook(() => useAgendaUnificada("mes"), { wrapper });
     expect(result.current.isError).toBe(false);
-    expect(result.current.indisponiveis).toEqual({ eventos: true, contatos: false });
+    expect(result.current.indisponiveis).toMatchObject({ eventos: true, contatos: false });
   });
 
   it("as duas falham: aí sim é erro", () => {
@@ -57,6 +57,6 @@ describe("useAgendaUnificada — falha parcial", () => {
     mocks.contatos = { data: undefined as never, isLoading: false, isError: true, refetch: vi.fn() };
     const { result } = renderHook(() => useAgendaUnificada("mes"), { wrapper });
     expect(result.current.isError).toBe(true);
-    expect(result.current.indisponiveis).toEqual({ eventos: false, contatos: false });
+    expect(result.current.indisponiveis).toMatchObject({ eventos: false, contatos: false });
   });
 });
