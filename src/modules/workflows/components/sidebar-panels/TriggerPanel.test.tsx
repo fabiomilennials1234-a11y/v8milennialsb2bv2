@@ -594,3 +594,57 @@ describe("TriggerPanel — qualification_changed", () => {
     expect(screen.getByText("Configuração inválida. Revise a seleção antes de ativar.")).toBeInTheDocument();
   });
 });
+
+// ── company_no_reply ("Cliente aguardando resposta") ─────────────────────
+describe("TriggerPanel — Cliente aguardando resposta (company_no_reply)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockPipelines.mockReturnValue({ data: PIPELINES });
+    mockStages.mockReturnValue({ data: ETAPAS });
+    mockInstances.mockReturnValue({ data: [] });
+    mockHasFeature.mockImplementation((key: string) => key === "deals");
+  });
+
+  it("mostra o prazo com padrão de 3 horas e explica o que não conta como resposta", () => {
+    renderPanel({}, "company_no_reply");
+    expect(screen.getByLabelText("Sem resposta há (horas)")).toHaveValue(3);
+    expect(screen.getByText(/automação, da IA ou que falhou no envio não conta/)).toBeInTheDocument();
+  });
+
+  it("grava timeout_hours fracionário (180 min = 3h; 30 min = 0,5h)", () => {
+    const { onUpdate } = renderPanel({ timeout_hours: 3 }, "company_no_reply");
+    fireEvent.change(screen.getByLabelText("Sem resposta há (horas)"), { target: { value: "0.5" } });
+    expect(onUpdate).toHaveBeenLastCalledWith({ config: { timeout_hours: 0.5 } });
+  });
+
+  it("ligar horário comercial grava a janela padrão seg–sex 08–18 em São Paulo", () => {
+    const { onUpdate } = renderPanel({ timeout_hours: 3 }, "company_no_reply");
+    fireEvent.click(screen.getByRole("switch", { name: "Contar só horário comercial" }));
+    expect(onUpdate).toHaveBeenLastCalledWith({
+      config: {
+        timeout_hours: 3,
+        business_hours_only: true,
+        business_hours: { days: ["seg", "ter", "qua", "qui", "sex"], startTime: "08:00", endTime: "18:00", timezone: "America/Sao_Paulo" },
+      },
+    });
+  });
+
+  it("marcar sábado mantém a ordem da semana", () => {
+    const { onUpdate } = renderPanel({ business_hours_only: true }, "company_no_reply");
+    fireEvent.click(screen.getByRole("checkbox", { name: "Sáb" }));
+    const config = onUpdate.mock.calls.at(-1)?.[0].config;
+    expect(config.business_hours.days).toEqual(["seg", "ter", "qua", "qui", "sex", "sab"]);
+  });
+
+  it("janela inválida avisa que a automação não dispara", () => {
+    renderPanel({ business_hours_only: true, business_hours: { days: [], startTime: "18:00", endTime: "08:00" } }, "company_no_reply");
+    expect(screen.getByRole("alert")).toHaveTextContent("a automação não dispara");
+  });
+
+  it("filtro de funil grava pipeline_ids (uuids) e esconde funil desativado não marcado", () => {
+    const { onUpdate } = renderPanel({}, "company_no_reply");
+    expect(screen.queryByText("Funil Antigo")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByText("Orçamentos"));
+    expect(onUpdate).toHaveBeenLastCalledWith({ config: { pipeline_ids: [PROPOSTAS] } });
+  });
+});

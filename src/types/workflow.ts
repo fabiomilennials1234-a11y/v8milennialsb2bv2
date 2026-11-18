@@ -34,6 +34,10 @@ export type WorkflowTriggerType =
   // Novos triggers
   | "lead_replied"
   | "lead_no_reply"
+  // Cliente escreveu e a empresa não respondeu por mão humana dentro do prazo.
+  // Avaliado pelo cron (process-workflow-executions) com a RPC
+  // find_leads_company_no_reply (20280120010000).
+  | "company_no_reply"
   // ⚠️ MORTOS. Nunca dispararam: a função de banco foi escrita para
   // `pipe_confirmacao.is_confirmed` e `pipe_confirmacao` virou VIEW compat, então
   // nenhum trigger jamais esteve anexado. Medido em prod: 0 workflows usando os
@@ -1267,6 +1271,7 @@ export const TRIGGER_LABELS: Record<WorkflowTriggerType, string> = {
   cron: "Agendamento (Cron)",
   lead_replied: "Lead Respondeu",
   lead_no_reply: "Lead Não Respondeu",
+  company_no_reply: "Cliente Aguardando Resposta",
   meeting_confirmed: "Reunião Confirmada",
   meeting_not_confirmed: "Reunião Não Confirmada",
   meeting_held: "Compareceu à Reunião",
@@ -1521,7 +1526,7 @@ export const TRIGGER_CATEGORIES: TriggerCategory[] = [
   },
   {
     label: "Comunicação",
-    triggers: ["lead_replied", "lead_no_reply"],
+    triggers: ["lead_replied", "lead_no_reply", "company_no_reply"],
   },
   {
     label: "Funil",

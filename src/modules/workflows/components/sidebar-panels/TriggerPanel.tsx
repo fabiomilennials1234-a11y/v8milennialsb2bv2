@@ -83,6 +83,7 @@ export function TriggerPanel({ data, onUpdate }: TriggerPanelProps) {
                      t === "cron" ? "Agendamento (Cron)" :
                      t === "lead_replied" ? "Lead Respondeu" :
                      t === "lead_no_reply" ? "Lead Não Respondeu" :
+                     t === "company_no_reply" ? "Cliente Aguardando Resposta" :
                      t === "meeting_confirmed" ? "Reunião Confirmada" :
                      t === "meeting_not_confirmed" ? "Reunião Não Confirmada" :
                      t === "meeting_held" ? "Compareceu à Reunião" :
@@ -212,6 +213,11 @@ export function TriggerPanel({ data, onUpdate }: TriggerPanelProps) {
             </Select>
           </div>
         </>
+      )}
+
+      {/* ── company_no_reply ── */}
+      {data.triggerType === "company_no_reply" && (
+        <CompanyNoReplyConfig cfg={cfg} updateConfig={updateConfig} />
       )}
 
       {/* Compatibilidade visual para definitions antigas. Estes dois tipos
@@ -1378,6 +1384,187 @@ function ScheduledDateConfig({
         <Button type="button" variant="outline" size="sm" onClick={addDispatch} className="w-full">
           <Plus className="h-4 w-4 mr-1" /> Adicionar disparo
         </Button>
+      </div>
+    </>
+  );
+}
+
+/** Dias da semana na ordem de leitura do Brasil (seg → dom). */
+const DIAS_UTEIS: { key: string; label: string }[] = [
+  { key: "seg", label: "Seg" },
+  { key: "ter", label: "Ter" },
+  { key: "qua", label: "Qua" },
+  { key: "qui", label: "Qui" },
+  { key: "sex", label: "Sex" },
+  { key: "sab", label: "Sáb" },
+  { key: "dom", label: "Dom" },
+];
+
+const HORARIO_COMERCIAL_PADRAO = {
+  days: ["seg", "ter", "qua", "qui", "sex"],
+  startTime: "08:00",
+  endTime: "18:00",
+  timezone: "America/Sao_Paulo",
+};
+
+/**
+ * "Cliente aguardando resposta" — espelho do "Lead Não Respondeu" do lado da
+ * empresa. A config é lida no servidor por `parseCompanyNoReplyConfig`
+ * (supabase/functions/_shared/company-no-reply.ts), que FALHA FECHADO em
+ * config incoerente: este painel só grava formas que aquele parser aceita.
+ */
+function CompanyNoReplyConfig({
+  cfg,
+  updateConfig,
+}: {
+  cfg: Record<string, unknown>;
+  updateConfig: (updates: Record<string, unknown>) => void;
+}) {
+  const { data: pipelines } = useFunisDaOrg();
+  const selectedIds = Array.isArray(cfg.pipeline_ids) ? (cfg.pipeline_ids as string[]) : [];
+  const visiblePipelines = sortPipelinesForNavigation(pipelines || []).filter(
+    (p) => (p.is_active && isPipelineVisible(p)) || selectedIds.includes(p.id),
+  );
+  const businessOnly = cfg.business_hours_only === true;
+  const bh = {
+    ...HORARIO_COMERCIAL_PADRAO,
+    ...((cfg.business_hours && typeof cfg.business_hours === "object"
+      ? cfg.business_hours
+      : {}) as Partial<typeof HORARIO_COMERCIAL_PADRAO>),
+  };
+  const horarioInvalido = businessOnly && (bh.days.length === 0 || bh.startTime >= bh.endTime);
+
+  const togglePipeline = (pipelineId: string, checked: boolean) => {
+    updateConfig({
+      pipeline_ids: checked
+        ? [...selectedIds, pipelineId]
+        : selectedIds.filter((id) => id !== pipelineId),
+    });
+  };
+  const updateHours = (patch: Partial<typeof HORARIO_COMERCIAL_PADRAO>) =>
+    updateConfig({ business_hours: { ...bh, ...patch } });
+  const toggleDay = (day: string, checked: boolean) =>
+    updateHours({
+      days: checked
+        ? DIAS_UTEIS.map((d) => d.key).filter((k) => k === day || bh.days.includes(k))
+        : bh.days.filter((d) => d !== day),
+    });
+
+  return (
+    <>
+      <div className="space-y-2">
+        <Label htmlFor="company-no-reply-timeout">Sem resposta há (horas)</Label>
+        <Input
+          id="company-no-reply-timeout"
+          type="number"
+          min={0.25}
+          step={0.25}
+          value={(cfg.timeout_hours as number) ?? 3}
+          onChange={(e) => updateConfig({ timeout_hours: Number(e.target.value) })}
+        />
+        <p className="text-xs text-muted-foreground">
+          Dispara quando o cliente escreveu e ninguém da equipe respondeu nesse
+          prazo. Mensagem de automação, da IA ou que falhou no envio não conta
+          como resposta. Se o cliente escrever de novo depois de respondido,
+          começa uma nova espera.
+        </p>
+      </div>
+
+      <div className="flex items-start justify-between gap-3 rounded-md border p-3">
+        <div className="space-y-1">
+          <Label htmlFor="company-no-reply-business">Contar só horário comercial</Label>
+          <p className="text-xs text-muted-foreground">
+            O prazo corre só dentro da janela abaixo. Ex.: 3h úteis a partir de
+            sexta 17h vencem segunda 10h.
+          </p>
+        </div>
+        <Switch
+          id="company-no-reply-business"
+          checked={businessOnly}
+          onCheckedChange={(checked) =>
+            updateConfig({
+              business_hours_only: checked,
+              ...(checked && !cfg.business_hours ? { business_hours: HORARIO_COMERCIAL_PADRAO } : {}),
+            })
+          }
+        />
+      </div>
+
+      {businessOnly && (
+        <div className="space-y-3 rounded-md border p-3">
+          <div className="flex flex-wrap gap-1.5" role="group" aria-label="Dias de atendimento">
+            {DIAS_UTEIS.map((d) => (
+              <label
+                key={d.key}
+                className="flex items-center gap-1.5 text-xs cursor-pointer rounded px-1.5 py-1 hover:bg-muted/50"
+              >
+                <Checkbox
+                  checked={bh.days.includes(d.key)}
+                  onCheckedChange={(checked) => toggleDay(d.key, checked === true)}
+                  aria-label={d.label}
+                />
+                {d.label}
+              </label>
+            ))}
+          </div>
+          <div className="flex items-end gap-3">
+            <div className="space-y-1">
+              <Label htmlFor="company-no-reply-start" className="text-xs">Das</Label>
+              <Input
+                id="company-no-reply-start"
+                type="time"
+                className="w-28"
+                value={bh.startTime}
+                onChange={(e) => updateHours({ startTime: e.target.value })}
+              />
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="company-no-reply-end" className="text-xs">Até</Label>
+              <Input
+                id="company-no-reply-end"
+                type="time"
+                className="w-28"
+                value={bh.endTime}
+                onChange={(e) => updateHours({ endTime: e.target.value })}
+              />
+            </div>
+          </div>
+          {horarioInvalido && (
+            <p className="text-xs text-destructive" role="alert">
+              Marque ao menos um dia e um horário de início antes do fim — com a
+              janela inválida a automação não dispara.
+            </p>
+          )}
+        </div>
+      )}
+
+      <div className="space-y-2">
+        <Label>Funis (opcional)</Label>
+        <p className="text-xs text-muted-foreground">
+          Dispara só para leads com card em um dos funis marcados. Nenhum
+          marcado = qualquer funil.
+        </p>
+        {visiblePipelines.length > 0 ? (
+          <div className="space-y-1 max-h-48 overflow-y-auto rounded-md border p-3">
+            {visiblePipelines.map((p) => (
+              <label
+                key={p.id}
+                className="flex items-center gap-2 text-sm cursor-pointer hover:bg-muted/50 rounded px-1 py-0.5"
+              >
+                <Checkbox
+                  checked={selectedIds.includes(p.id)}
+                  onCheckedChange={(checked) => togglePipeline(p.id, checked === true)}
+                />
+                {p.label}
+                {!p.is_active && (
+                  <span className="text-xs text-muted-foreground">(desativado)</span>
+                )}
+              </label>
+            ))}
+          </div>
+        ) : (
+          <p className="text-xs text-muted-foreground">Nenhum funil encontrado.</p>
+        )}
       </div>
     </>
   );

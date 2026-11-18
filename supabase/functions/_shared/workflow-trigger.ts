@@ -4,6 +4,7 @@
  * Used by edge functions that need to fire triggers not handled by PG triggers:
  * - lead_replied (from agent-message)
  * - lead_no_reply (from pg_cron check)
+ * - company_no_reply (from pg_cron check — see _shared/company-no-reply.ts)
  * - meeting_not_confirmed (from pg_cron check)
  * - followup_overdue (from pg_cron check)
  * - webhook_received (from process-webhook-deliveries)
@@ -848,6 +849,20 @@ export function matchesTriggerConfig(
 
     case "lead_no_reply": {
       // Timeout is checked by the caller; config match is always true
+      return true;
+    }
+
+    case "company_no_reply": {
+      // Prazo e "resposta humana" são decididos no disparo (RPC
+      // find_leads_company_no_reply + process-workflow-executions). Aqui só o
+      // filtro de funil, revalidado contra a lista CONGELADA no context —
+      // mesma semântica e mesmo fail-closed do `lead_replied`.
+      const wantedPipelines = normalizePipelineIds(config.pipeline_ids);
+      if (wantedPipelines.length > 0) {
+        const leadPipelines = context.lead_pipeline_ids;
+        if (!Array.isArray(leadPipelines)) return false;
+        if (!leadPipelines.some((id) => wantedPipelines.includes(String(id)))) return false;
+      }
       return true;
     }
 
