@@ -30,7 +30,33 @@ interface AudioPlayerProps {
   whatsappMessageId?: string | null;
 }
 
-export function AudioPlayer({ src, isOutgoing: _isOutgoing, instanceId, whatsappMessageId }: AudioPlayerProps) {
+export function AudioPlayer({ src: source, isOutgoing: _isOutgoing, instanceId, whatsappMessageId }: AudioPlayerProps) {
+  const [localPreview, setLocalPreview] = useState<{ source: string; url: string } | null>(null);
+  const isAudioDataUrl = /^data:audio\/[\w.+-]+;base64,/i.test(source);
+  const preparingPreview = isAudioDataUrl && localPreview?.source !== source;
+  const src = isAudioDataUrl ? (localPreview?.source === source ? localPreview.url : "") : source;
+
+  // O envio otimista e o retry guardam o FileReader data URL. A CSP permite
+  // blob: para mídia, mas não data:; decodificar localmente evita ampliar a CSP
+  // ou fazer fetch(data:), que também seria bloqueado por connect-src.
+  useEffect(() => {
+    if (!isAudioDataUrl) {
+      setLocalPreview(null);
+      return;
+    }
+    let url = "";
+    try {
+      const separator = source.indexOf(",");
+      const mime = source.slice(5, source.indexOf(";"));
+      const bytes = Uint8Array.from(atob(source.slice(separator + 1)), (char) => char.charCodeAt(0));
+      url = URL.createObjectURL(new Blob([bytes], { type: mime }));
+    } catch {
+      // Base64 inválido segue para o estado de URL inválida, sem quebrar o chat.
+    }
+    setLocalPreview({ source, url });
+    return () => { if (url) URL.revokeObjectURL(url); };
+  }, [source, isAudioDataUrl]);
+
   const [error, setError] = useState(false);
   const [blobUrl, setBlobUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -259,7 +285,7 @@ export function AudioPlayer({ src, isOutgoing: _isOutgoing, instanceId, whatsapp
     };
   }, []);
 
-  if (!isValidSrc) {
+  if (!isValidSrc && !preparingPreview) {
     return (
       <div className="flex flex-col gap-1 min-w-[200px]">
         <p className="text-xs text-muted-foreground">URL do áudio inválida.</p>
@@ -275,7 +301,7 @@ export function AudioPlayer({ src, isOutgoing: _isOutgoing, instanceId, whatsapp
     );
   }
 
-  if (loading || (isStreamMediaUrl && !blobUrl)) {
+  if (preparingPreview || loading || (isStreamMediaUrl && !blobUrl)) {
     return (
       <div className="flex items-center gap-2 min-w-[200px]">
         <Loader2 className="w-5 h-5 animate-spin text-muted-foreground shrink-0" />

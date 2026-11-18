@@ -54,7 +54,7 @@ export function friendlyWhatsAppSendError(raw: string): string {
   const s = raw.toLowerCase();
 
   if (s.includes("is not on whatsapp") || s.includes("not on whatsapp")) {
-    return "Esse número não tem WhatsApp. Confira o telefone no cadastro do lead.";
+    return "O serviço de envio não reconheceu esse número no WhatsApp. Confira o telefone no cadastro do lead.";
   }
   if (s.includes("could not parse phone number") || s.includes("invalid number")) {
     return "Número de telefone inválido no cadastro do lead.";
