@@ -30,9 +30,11 @@ import {
 } from "../lib/planilha";
 import type { ResultadoDaImportacao } from "../lib/tipos";
 import { useImportarPlanilha } from "../hooks/useCobrancaMutacoes";
+import { BotaoPlanilhaModelo } from "./BotaoPlanilhaModelo";
 
 const ORDEM_DOS_CAMPOS: CampoDaPlanilha[] = [
   "nome", "documento", "telefone", "email", "valor", "vencimento", "numero", "descricao", "contato_nome", "cidade",
+  "responsavel", "observacoes",
 ];
 
 export function ImportarPlanilhaDialog({ aberto, onFechar }: { aberto: boolean; onFechar: () => void }) {
@@ -117,6 +119,8 @@ export function ImportarPlanilhaDialog({ aberto, onFechar }: { aberto: boolean; 
             reconhecer o devedor. Até {LIMITE_DE_LINHAS.toLocaleString("pt-BR")} linhas por vez.
           </DialogDescription>
         </DialogHeader>
+
+        {!planilha && <BotaoPlanilhaModelo dica={false} />}
 
         {!planilha && (
           <button

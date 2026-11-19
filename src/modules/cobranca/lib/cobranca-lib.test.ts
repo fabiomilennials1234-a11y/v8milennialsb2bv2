@@ -107,6 +107,36 @@ describe("planilha", () => {
     expect(camposFaltando(detectarColunas(["Cliente", "Telefone"]))).toEqual(["valor", "vencimento"]);
   });
 
+  it("'Responsável' é de quem cuida do caso e 'Observação' é do devedor", () => {
+    const mapa = detectarColunas(["Nome", "Telefone", "Valor", "Vencimento", "Responsável", "Observação", "Nome do contato", "Descrição"]);
+    expect(mapa).toMatchObject({ nome: 0, telefone: 1, valor: 2, vencimento: 3, responsavel: 4, observacoes: 5, contato_nome: 6, descricao: 7 });
+  });
+
+  it("'Contato' sozinho continua sendo a pessoa de contato; 'Contato - telefone' é o telefone", () => {
+    expect(detectarColunas(["Nome", "Contato"]).contato_nome).toBe(1);
+    const mapa = detectarColunas(["Nome (obrigatório)", "Contato - telefone com DDD (obrigatório)"]);
+    expect(mapa.telefone).toBe(1);
+    expect(mapa.contato_nome).toBe(-1);
+  });
+
+  it("monta responsável e observação para a RPC", () => {
+    const mapa = detectarColunas(["Nome", "Contato - telefone", "Valor", "Data de vencimento", "Responsável", "Observação"]);
+    const { linhas } = montarLinhas(
+      [["Padaria", "(48) 99999-0001", "1.234,56", "25/11/2026", "Maria Souza", "Pediu retorno depois do dia 10"]],
+      mapa,
+    );
+    expect(linhas).toEqual([
+      {
+        nome: "Padaria",
+        telefone: "(48) 99999-0001",
+        valor: 1234.56,
+        vencimento: "2026-11-25",
+        responsavel: "Maria Souza",
+        observacoes: "Pediu retorno depois do dia 10",
+      },
+    ]);
+  });
+
   it("lê valor brasileiro e internacional", () => {
     expect(lerValor("R$ 1.234,56")).toBe(1234.56);
     expect(lerValor("1234,5")).toBe(1234.5);

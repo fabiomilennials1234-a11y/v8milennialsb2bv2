@@ -43,6 +43,7 @@ import {
   useSalvarInadimplente,
 } from "../hooks/useCobrancaMutacoes";
 import { CampoDeReais } from "./atomos";
+import { BotaoPlanilhaModelo } from "./BotaoPlanilhaModelo";
 
 export function Campo({
   id,
@@ -202,6 +203,7 @@ export function InadimplenteDialog({
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={enviar} className="space-y-4" noValidate>
+          {!editando && <BotaoPlanilhaModelo />}
           <div className="grid gap-4 sm:grid-cols-[1.4fr_1fr]">
             <Campo id="cob-nome" rotulo="Nome ou razão social" erro={mostra("nome")}>
               <Input id="cob-nome" value={nome} onChange={(e) => setNome(e.target.value)} autoFocus aria-invalid={!!mostra("nome")} />
