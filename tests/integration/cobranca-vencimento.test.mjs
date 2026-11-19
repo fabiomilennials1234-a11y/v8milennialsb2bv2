@@ -1,4 +1,4 @@
-// Cobrança · "no dia do vencimento" (20280120020000) num Postgres real (PGlite).
+// Cobrança · "no dia do vencimento" (20280120030000) num Postgres real (PGlite).
 //
 // Cobre: a coluna de 0 dias (de entrada ou dedicada) recebe e envia sozinha ao
 // cadastrar um título que vence hoje; atraso maior cai na coluna certa e não
@@ -34,7 +34,7 @@ const MIGRATIONS = [
   '20271214000000_cobranca_colunas_da_regua',
   '20280118010000_cobranca_trilhas_colunas_manuais_e_prazo',
 ];
-const NOVA = '20280120020000_cobranca_entrada_no_vencimento';
+const NOVA = '20280120030000_cobranca_entrada_no_vencimento';
 const MSG0 = 'Olá {nome}, seu título de {valor} vence hoje ({vencimento}). Dias de atraso: {dias_atraso}.';
 
 async function setup() {

@@ -1,7 +1,7 @@
--- 20280120020000_cobranca_entrada_no_vencimento.sql
+-- 20280120030000_cobranca_entrada_no_vencimento.sql
 --
 -- Cobrança · "no dia do vencimento": a coluna entra com 0 dias de atraso.
--- ROLLBACK pareado: rollback/20280120020000_cobranca_entrada_no_vencimento.sql
+-- ROLLBACK pareado: rollback/20280120030000_cobranca_entrada_no_vencimento.sql
 --
 -- Pedido: ao cadastrar um inadimplente, ele cai sozinho na coluna do atraso dele
 -- e a mensagem sai sozinha. Com 1+ dias isso já era assim (o cron coloca na
