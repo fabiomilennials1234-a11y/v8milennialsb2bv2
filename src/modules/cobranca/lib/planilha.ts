@@ -14,9 +14,11 @@ export type CampoDaPlanilha =
   | "telefone"
   | "email"
   | "contato_nome"
+  | "responsavel"
   | "cidade"
   | "numero"
   | "descricao"
+  | "observacoes"
   | "valor"
   | "vencimento";
 
@@ -30,9 +32,11 @@ export const ROTULO_DO_CAMPO: Record<CampoDaPlanilha, string> = {
   telefone: "Telefone",
   email: "E-mail",
   contato_nome: "Pessoa de contato",
+  responsavel: "Responsável pelo caso",
   cidade: "Cidade",
   numero: "Nº do título",
   descricao: "Descrição",
+  observacoes: "Observações",
   valor: "Valor em aberto",
   vencimento: "Vencimento",
 };
@@ -42,6 +46,8 @@ export const ROTULO_DO_CAMPO: Record<CampoDaPlanilha, string> = {
  * as colunas: "Número do documento" é do título (numero vem antes de
  * documento), "Nome do contato" é da pessoa de contato (contato_nome vem antes
  * de nome), e nome fica por último porque "cliente"/"empresa" são genéricos.
+ * "Responsável" é de quem cuida do caso (não da pessoa de contato) e
+ * "Observação" é do inadimplente (não do título): ambos disputam antes.
  */
 const SINONIMOS: [CampoDaPlanilha, string[]][] = [
   ["numero", ["numero", "nº", "n titulo", "titulo", "nota fiscal", "nf", "fatura", "boleto", "duplicata"]],
@@ -51,8 +57,10 @@ const SINONIMOS: [CampoDaPlanilha, string[]][] = [
   ["vencimento", ["vencimento", "data de vencimento", "data vencimento", "venc", "vence em"]],
   ["valor", ["saldo", "valor em aberto", "valor atualizado", "valor", "montante", "total"]],
   ["cidade", ["cidade", "municipio"]],
-  ["contato_nome", ["nome do contato", "contato", "responsavel", "falar com"]],
-  ["descricao", ["descricao", "historico", "referencia", "observacao", "obs"]],
+  ["responsavel", ["responsavel pelo caso", "responsavel", "atendente", "cobrador"]],
+  ["contato_nome", ["nome do contato", "contato", "falar com"]],
+  ["observacoes", ["observacoes", "observacao", "anotacoes", "obs"]],
+  ["descricao", ["descricao", "historico", "referencia"]],
   ["nome", ["razao social", "nome fantasia", "nome", "cliente", "devedor", "sacado", "empresa", "razao"]],
 ];
 
@@ -170,9 +178,13 @@ export interface LinhaParaImportar {
   telefone?: string;
   email?: string;
   contato_nome?: string;
+  /** Nome ou e-mail de um membro ativo da org; o banco resolve (não achou = linha inválida). */
+  responsavel?: string;
   cidade?: string;
   numero?: string;
   descricao?: string;
+  /** Observações do inadimplente. */
+  observacoes?: string;
   /** Número com ponto decimal, ou o texto cru quando ilegível (o banco aponta a linha). */
   valor?: number | string;
   /** `aaaa-mm-dd`, ou o texto cru quando ilegível. */
@@ -200,9 +212,11 @@ export function montarLinhas(linhas: unknown[][], mapa: MapaDeColunas): LinhasMo
       telefone: texto(pega("telefone")),
       email: texto(pega("email")),
       contato_nome: texto(pega("contato_nome")),
+      responsavel: texto(pega("responsavel")),
       cidade: texto(pega("cidade")),
       numero: texto(pega("numero")),
       descricao: texto(pega("descricao")),
+      observacoes: texto(pega("observacoes")),
       valor: lerValor(valorBruto) ?? texto(valorBruto),
       vencimento: lerData(vencBruto) ?? texto(vencBruto),
     };
