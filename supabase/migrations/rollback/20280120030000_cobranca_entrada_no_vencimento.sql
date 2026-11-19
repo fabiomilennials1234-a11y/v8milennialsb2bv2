@@ -1,4 +1,4 @@
--- Rollback de 20280120020000_cobranca_entrada_no_vencimento.sql
+-- Rollback de 20280120030000_cobranca_entrada_no_vencimento.sql
 --
 -- Volta a faixa de 1..365 dias. A coluna que estiver com 0 dias perde a entrada
 -- no vencimento: a de entrada volta a não ter dias; uma coluna dedicada de 0
