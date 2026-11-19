@@ -33,6 +33,8 @@ export const TRIGGER_TYPES = [
   "cron",
   "lead_replied",
   "lead_no_reply",
+  // Cliente escreveu e a empresa não respondeu por mão humana (20280120010000).
+  "company_no_reply",
   // Mortos, mantidos para paridade com a união do front — ver a nota lá.
   "meeting_confirmed",
   "meeting_not_confirmed",

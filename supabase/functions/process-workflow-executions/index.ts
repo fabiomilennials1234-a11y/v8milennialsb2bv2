@@ -26,6 +26,13 @@ import { fireTrigger, processCronTriggers, processScheduledDateTriggers, matches
 import { tryResolvePipelineId } from "../_shared/pipeline-adapter.ts";
 import { getOrgDefaultPipelineRef } from "../_shared/pipeline-destination.ts";
 import { resolveWorkflowTriggerScope } from "../_shared/workflow-trigger-scope.ts";
+import {
+  COMPANY_NO_REPLY_TRIGGER,
+  LOOKBACK_DAYS,
+  isWaitOverdue,
+  parseCompanyNoReplyConfig,
+  waitedMinutes,
+} from "../_shared/company-no-reply.ts";
 import { requireCronAuth } from "../_shared/auth.ts";
 import { assertPlanFeature, PlanFeatureDeniedError } from "../_shared/plan-gate.ts";
 import {
@@ -524,6 +531,7 @@ async function processExecution(
 /**
  * Process periodic triggers that need time-based checks:
  * - lead_no_reply: leads that haven't replied within timeout_hours
+ * - company_no_reply: client wrote and no HUMAN reply within timeout_hours
  * - meeting_not_confirmed: meetings within hours_before without confirmation
  * - followup_overdue: follow_ups past due_date without completed_at
  */
@@ -578,6 +586,9 @@ async function processPeriodicTriggers(
         }
       }
     }
+
+    // ── company_no_reply ── (isolado: falha aqui não derruba os outros gatilhos)
+    count += await processCompanyNoReplyTriggers(supabase);
 
     // ── meeting_not_confirmed ──
     const { data: meetingWorkflows } = await supabase
@@ -693,6 +704,106 @@ async function processPeriodicTriggers(
     console.warn("[process-workflow-executions] Periodic triggers error:", err);
   }
 
+  return count;
+}
+
+/**
+ * "Cliente aguardando resposta" (`company_no_reply`).
+ *
+ * A RPC acha leads cuja espera (primeira mensagem do cliente sem resposta
+ * HUMANA da empresa) passou do prazo de RELÓGIO e devolve a chave da espera.
+ * Aqui: prazo útil (quando configurado), e a gravação da execução com
+ * `trigger_dedup_key` = chave da espera — o índice único
+ * (workflow_id, lead_id, trigger_dedup_key) faz o "uma vez por espera" atômico
+ * contra duas rodadas concorrentes do cron.
+ *
+ * Paginação por `p_after`: candidatos que ainda não venceram o prazo útil
+ * (ex.: fim de semana) voltam em toda rodada, e sem cursor poderiam ocupar a
+ * página inteira e esconder quem já venceu.
+ */
+const COMPANY_NO_REPLY_PAGE = 50;
+const COMPANY_NO_REPLY_MAX_PAGES = 6;
+
+async function processCompanyNoReplyTriggers(supabase: SupabaseClient): Promise<number> {
+  let count = 0;
+  const { data: workflows, error } = await supabase
+    .from("workflows")
+    .select("id, organization_id, trigger_config")
+    .eq("trigger_type", COMPANY_NO_REPLY_TRIGGER)
+    .eq("is_active", true);
+  if (error) {
+    console.warn("[process-workflow-executions] company_no_reply: falha ao listar workflows:", error.message);
+    return 0;
+  }
+
+  for (const wf of (workflows ?? []) as { id: string; organization_id: string; trigger_config: unknown }[]) {
+    try {
+      const cfg = parseCompanyNoReplyConfig(wf.trigger_config);
+      if (!cfg) {
+        console.warn(`[process-workflow-executions] company_no_reply: config inválida no workflow ${wf.id}, pulando`);
+        continue;
+      }
+      const nowMs = Date.now();
+      const cutoffMs = nowMs - cfg.timeoutHours * 3_600_000;
+      const sinceMs = cutoffMs - LOOKBACK_DAYS * 24 * 3_600_000;
+
+      let after: string | null = null;
+      for (let page = 0; page < COMPANY_NO_REPLY_MAX_PAGES; page++) {
+        const { data: candidates, error: rpcError } = await supabase.rpc("find_leads_company_no_reply", {
+          p_organization_id: wf.organization_id,
+          p_workflow_id: wf.id,
+          p_cutoff: new Date(cutoffMs).toISOString(),
+          p_since: new Date(sinceMs).toISOString(),
+          p_pipeline_ids: cfg.pipelineIds.length > 0 ? cfg.pipelineIds : null,
+          p_after: after,
+          p_limit: COMPANY_NO_REPLY_PAGE,
+        });
+        if (rpcError) {
+          console.warn(`[process-workflow-executions] company_no_reply: RPC falhou (workflow ${wf.id}):`, rpcError.message);
+          break;
+        }
+        const rows = (candidates ?? []) as {
+          lead_id: string; waiting_since: string; dedup_key: string; pipeline_ids: string[] | null;
+        }[];
+
+        const due = rows.filter((r) => isWaitOverdue(Date.parse(r.waiting_since), nowMs, cfg));
+        if (due.length > 0) {
+          const executions = due.map((r) => ({
+            workflow_id: wf.id,
+            organization_id: wf.organization_id,
+            lead_id: r.lead_id,
+            status: "running",
+            // Evidência CONGELADA no disparo: o executor revalida o matcher com
+            // este context, e o filtro de funil precisa achar os funis do lead
+            // aqui (fail-closed sem eles).
+            context: {
+              trigger_type: COMPANY_NO_REPLY_TRIGGER,
+              timeout_hours: cfg.timeoutHours,
+              business_hours_only: cfg.businessHoursOnly,
+              waiting_since: r.waiting_since,
+              waited_minutes: Math.floor(waitedMinutes(Date.parse(r.waiting_since), nowMs, cfg)),
+              lead_pipeline_ids: r.pipeline_ids ?? [],
+            },
+            trigger_dedup_key: r.dedup_key,
+          }));
+          const { data: inserted, error: insertError } = await supabase
+            .from("workflow_executions")
+            .upsert(executions, { onConflict: "workflow_id,lead_id,trigger_dedup_key", ignoreDuplicates: true })
+            .select("id");
+          if (insertError) {
+            console.warn(`[process-workflow-executions] company_no_reply: insert falhou (workflow ${wf.id}):`, insertError.message);
+            break;
+          }
+          count += inserted?.length ?? 0;
+        }
+
+        if (rows.length < COMPANY_NO_REPLY_PAGE) break;
+        after = rows[rows.length - 1].lead_id;
+      }
+    } catch (err) {
+      console.warn(`[process-workflow-executions] company_no_reply: erro no workflow ${wf.id}:`, err);
+    }
+  }
   return count;
 }
 
