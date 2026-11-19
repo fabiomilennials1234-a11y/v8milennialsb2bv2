@@ -57,6 +57,8 @@ export interface FuncoesDaCobranca {
   // Colunas do fluxo com automação (20271214000000_cobranca_colunas_da_regua.sql)
   cobranca_coluna_salvar: { Args: { p_org: string; p_etapa: string | null; p_dados: Json }; Returns: string };
   cobranca_coluna_remover: { Args: { p_etapa: string }; Returns: undefined };
+  // Ordem das colunas livres (p_para = posição 1-based dentro da zona livre)
+  cobranca_coluna_mover_ordem: { Args: { p_etapa: string; p_para: number }; Returns: undefined };
 }
 
 export type FuncaoDaCobranca = keyof FuncoesDaCobranca;

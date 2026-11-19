@@ -340,6 +340,18 @@ export function useRemoverColuna() {
   });
 }
 
+/** Muda a ordem de uma coluna da zona livre; `para` é a posição 1-based dentro dela. */
+export function useMoverColuna() {
+  const invalidar = useInvalidar();
+  return useMutation({
+    mutationFn: async ({ id, para }: { id: string; para: number }) => {
+      const { error } = await rpcCobranca("cobranca_coluna_mover_ordem", { p_etapa: id, p_para: para });
+      if (error) throw error;
+    },
+    onSuccess: invalidar,
+  });
+}
+
 export function useCancelarEnvio() {
   const invalidar = useInvalidar();
   return useMutation({

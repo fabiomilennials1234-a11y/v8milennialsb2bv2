@@ -7,7 +7,7 @@
  * Coluna que pausa a régua ou de entrada: a mensagem só sai à mão ("Mover e
  * enviar" no Fluxo), a não ser que ganhe dias (Jurídico entra com 60).
  */
-import { Hand, MoreHorizontal, Pause, Pencil, Plus, Trash2 } from "lucide-react";
+import { ChevronDown, ChevronUp, Hand, MoreHorizontal, Pause, Pencil, Plus, Trash2 } from "lucide-react";
 import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -23,9 +23,17 @@ import { notifyError } from "@/shared/errors";
 import { cn } from "@/lib/utils";
 
 import { recusaDaCobranca } from "../../lib/erros";
-import { marcaDoPasso, renderizarMensagem, rotuloDaEntrada, tipoDaColuna, variaveisDeExemplo } from "../../lib/regua";
+import {
+  colunaMovel,
+  marcaDoPasso,
+  renderizarMensagem,
+  rotuloDaEntrada,
+  tipoDaColuna,
+  variaveisDeExemplo,
+  zonaLivre,
+} from "../../lib/regua";
 import type { Etapa } from "../../lib/tipos";
-import { useRemoverColuna, useSalvarColuna } from "../../hooks/useRegua";
+import { useMoverColuna, useRemoverColuna, useSalvarColuna } from "../../hooks/useRegua";
 import { EtapaPill } from "../atomos";
 import { ConfirmarDialog } from "../dialogos";
 import { ColunaDialog } from "./ColunaDialog";
@@ -45,7 +53,9 @@ export function ColunasDaRegua({
   const [removendo, setRemovendo] = useState<Etapa | null>(null);
   const salvar = useSalvarColuna();
   const remover = useRemoverColuna();
+  const mover = useMoverColuna();
   const abertas = etapas.filter((e) => e.papel === "aberta").sort((a, b) => a.posicao - b.posicao);
+  const zona = zonaLivre(abertas);
 
   const alternar = (e: Etapa, ativa: boolean) =>
     salvar.mutate(
@@ -60,7 +70,22 @@ export function ColunasDaRegua({
       },
     );
 
-  const linha = (e: Etapa, ultimo: boolean) => {
+  const reordenar = (e: Etapa, para: number) =>
+    mover.mutate(
+      { id: e.id, para },
+      {
+        onError: (err) =>
+          notifyError(err, {
+            fallback: "Não foi possível mudar a ordem da coluna.",
+            message: recusaDaCobranca(err as { code?: string; message?: string }),
+            context: { feature: "cobranca" },
+          }),
+      },
+    );
+
+  const linha = (e: Etapa, ordem: number, ultimo: boolean) => {
+    const naZona = zona.findIndex((z) => z.id === e.id);
+    const movel = colunaMovel(e) && naZona >= 0;
     const tipo = tipoDaColuna(e);
     const automatica = e.entradaDias !== null;
     const ligada = automatica && e.automacaoAtiva;
@@ -96,6 +121,9 @@ export function ColunasDaRegua({
         >
           <div className="flex flex-wrap items-center gap-2">
             <EtapaPill nome={e.nome} cor={e.cor} className="bg-card" />
+            <span className="text-[11px] font-semibold tabular-nums text-muted-foreground" title="Posição no quadro do Fluxo">
+              nº {ordem}
+            </span>
             {tipo === "pausa" && <span className="text-xs text-muted-foreground">pausa a régua</span>}
             {automatica && e.trilha === "multiplos" && (
               <span
@@ -108,6 +136,32 @@ export function ColunasDaRegua({
             <span className="flex-1" />
             {podeEditar && (
               <>
+                {movel && (
+                  <span className="flex items-center">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="size-8 rounded-full"
+                      aria-label={`Subir a coluna ${e.nome}`}
+                      title="Subir"
+                      disabled={naZona === 0 || mover.isPending}
+                      onClick={() => reordenar(e, naZona)}
+                    >
+                      <ChevronUp />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="size-8 rounded-full"
+                      aria-label={`Descer a coluna ${e.nome}`}
+                      title="Descer"
+                      disabled={naZona === zona.length - 1 || mover.isPending}
+                      onClick={() => reordenar(e, naZona + 2)}
+                    >
+                      <ChevronDown />
+                    </Button>
+                  </span>
+                )}
                 {automatica && (
                   <Switch
                     checked={e.automacaoAtiva}
@@ -176,6 +230,11 @@ export function ColunasDaRegua({
             Conta do vencimento mais antigo em aberto. O caso entra sozinho só para a frente, uma vez por dívida — quem
             chega atrasado cai direto na coluna do dia em que está, nunca recebe a régua inteira.
           </p>
+          {podeEditar && zona.length > 0 && (
+            <p className="mt-1 text-xs text-muted-foreground">
+              As colunas de dias de atraso seguem a ordem dos dias. As demais você reordena com as setas.
+            </p>
+          )}
         </div>
         {podeEditar && (
           <>
@@ -194,7 +253,7 @@ export function ColunasDaRegua({
         )}
       </header>
       {abertas.length ? (
-        <ol>{abertas.map((e, i) => linha(e, i === abertas.length - 1))}</ol>
+        <ol>{abertas.map((e, i) => linha(e, i + 1, i === abertas.length - 1))}</ol>
       ) : (
         <p className="py-4 text-center text-xs text-muted-foreground">Nenhuma coluna.</p>
       )}

@@ -73,6 +73,9 @@ SELECT ok(has_function_privilege('authenticated', 'public.cobranca_regua_salvar(
 SELECT ok(NOT has_function_privilege('authenticated', 'private.cobranca_regua_mover(uuid, uuid, jsonb)', 'EXECUTE')
       AND NOT has_function_privilege('authenticated', 'private.cobranca_regua_candidatos(uuid, timestamptz, uuid)', 'EXECUTE')
       AND NOT has_function_privilege('authenticated', 'private.cobranca_regua_entrar_caso(uuid, timestamptz)', 'EXECUTE')
+      AND NOT has_function_privilege('authenticated', 'private.cobranca_coluna_mover_ordem(uuid, uuid, integer)', 'EXECUTE')
+      AND has_function_privilege('authenticated', 'public.cobranca_coluna_mover_ordem(uuid, integer)', 'EXECUTE')
+      AND NOT has_function_privilege('anon', 'public.cobranca_coluna_mover_ordem(uuid, integer)', 'EXECUTE')
       AND NOT has_function_privilege('anon', 'private.cobranca_regua_entrar_caso(uuid, timestamptz)', 'EXECUTE')
       AND NOT has_function_privilege('authenticated', 'private.cobranca_registrar_mensagem()', 'EXECUTE'),
   'GR6: internos da régua fechados para authenticated');

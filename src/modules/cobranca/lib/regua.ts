@@ -267,6 +267,21 @@ export function tipoDaColuna(e: Pick<Etapa, "pausaRegua" | "entradaDias">): Tipo
   return e.entradaDias !== null ? "dias" : "entrada";
 }
 
+/**
+ * Coluna cuja ordem a pessoa pode mudar: aberta, sem dias e que pausa a régua (Em
+ * negociação, Promessa ou acordo e as colunas manuais). As de dias seguem a ordem dos
+ * dias, a de entrada é sempre a primeira, as pausadas com dias (Jurídico) vêm depois
+ * da zona livre e os desfechos fecham o quadro.
+ */
+export function colunaMovel(e: Pick<Etapa, "papel" | "pausaRegua" | "entradaDias">): boolean {
+  return e.papel === "aberta" && e.pausaRegua && e.entradaDias === null;
+}
+
+/** As colunas móveis na ordem em que aparecem no quadro (a posição na zona livre é o índice + 1). */
+export function zonaLivre<T extends Pick<Etapa, "papel" | "pausaRegua" | "entradaDias" | "posicao">>(etapas: T[]): T[] {
+  return etapas.filter(colunaMovel).sort((a, b) => a.posicao - b.posicao);
+}
+
 /** "Entra com 7 dias de atraso" (ou "no dia do vencimento", com 0) — o rótulo da entrada automática de uma coluna. */
 export function rotuloDaEntrada(dias: number): string {
   if (dias === 0) return "Entra no dia do vencimento";
