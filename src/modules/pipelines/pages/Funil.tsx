@@ -41,6 +41,10 @@ import { toast } from "sonner";
 
 import { usePipelines } from "@/modules/pipelines/hooks/model/usePipelines";
 import { resolveFunil } from "@/modules/pipelines/lib/resolve-funil";
+import { EXTRAS_INICIAIS_DO_FUNIL, comporFiltrosDoFunil } from "@/modules/pipelines/lib/funil-filtros-estado";
+import { Espera, Osso, useFaseEspera } from "@/shared/espera";
+import { useMarcarUtil } from "@/core/perf/useMarcarUtil";
+import { CardDoFunilEmOsso } from "@/modules/pipelines/components/funis/FunilColunaSkeleton";
 import {
   useFunilStages,
   usePaginatedFunil,
@@ -169,9 +173,7 @@ type ExtraFilterState = {
 
 const DEFAULT_EXTRA_FILTERS: ExtraFilterState = {
   timeFilter: "all",
-  urgencyFilter: "all",
-  selectedStatuses: [],
-  productType: "all",
+  ...EXTRAS_INICIAIS_DO_FUNIL,
 };
 
 /**
@@ -184,6 +186,38 @@ type FunilBoardState = { [K in keyof FunilFilterState]: FunilFilterState[K] } &
     searchQuery: string;
     viewMode: FunilViewMode;
   };
+
+/** Forma do board enquanto o funil abre: cabeçalho + 4 colunas com cards em osso. */
+function FunilBoardEmOsso() {
+  return (
+    <div className="flex flex-col gap-4 pt-1">
+      <div className="flex items-end justify-between gap-4">
+        <div className="flex flex-col gap-2">
+          <Osso className="h-7 w-56 rounded-lg" />
+          <Osso className="h-3 w-40" />
+        </div>
+        <Osso className="h-10 w-36 rounded-full" />
+      </div>
+      <div className="flex gap-3 overflow-hidden">
+        {[3, 2, 3, 1].map((cards, i) => (
+          <div
+            key={i}
+            className="flex min-w-[272px] flex-[1_0_272px] flex-col gap-2.5 rounded-card border border-border/60 bg-sunken p-2.5"
+          >
+            <div className="flex items-center gap-2 px-1 py-1">
+              <Osso className="h-2 w-2 rounded-[3px]" />
+              <Osso className="h-3 w-24" />
+              <Osso className="h-5 w-5 rounded-full" />
+            </div>
+            {Array.from({ length: cards }, (_, j) => (
+              <CardDoFunilEmOsso key={j} />
+            ))}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 /**
  * `/funil/:slug` — a página ÚNICA de funil (SCRUM-632 → fechada na SCRUM-637).
@@ -351,18 +385,15 @@ function FunilPageInner() {
     return {};
   }, [extra.timeFilter, overdueDays]);
 
+  // Composição pura compartilhada com o prefetch do trilho (`usePrefetchPipes`):
+  // o board aquecido no hover tem de cair na MESMA chave que esta tela lê.
   const filters = useMemo<PaginatedFilters>(
-    () => ({
-      ...controller.paginatedFilters,
-      urgency: extra.urgencyFilter !== "all" ? extra.urgencyFilter : undefined,
-      statusKeys: extra.selectedStatuses.length ? extra.selectedStatuses : undefined,
-      productType: extra.productType !== "all" ? extra.productType : undefined,
-      // Âncora de período dos FECHADOS por stage_role (metrics_period_at →
-      // fallback updated_at) — a mesma âncora canônica do motor de métricas.
-      closedStatusKeys:
-        controller.metricsRange && closedStatusKeys.length ? closedStatusKeys : undefined,
-      ...timeParams,
-    }),
+    () =>
+      comporFiltrosDoFunil(controller.paginatedFilters, extra, {
+        closedStatusKeys,
+        temPeriodo: !!controller.metricsRange,
+        timeParams,
+      }),
     [controller.paginatedFilters, controller.metricsRange, extra, closedStatusKeys, timeParams],
   );
 
@@ -789,19 +820,20 @@ function FunilPageInner() {
     return (allItems as any[]).filter((it) => it.meeting_date && !closed.has(it.status));
   }, [allItems, closedStatusKeys]);
 
-  if (isLoading) {
-    return (
-      <div className="flex h-[60vh] items-center justify-center" aria-busy="true">
-        <Loader2 className="h-7 w-7 animate-spin text-muted-foreground" aria-label="Carregando funil" />
-      </div>
-    );
-  }
+  // ── Régua de espera (CX ①) ────────────────────────────────────────────────
+  // A página inteira só espera o funil e as etapas; depois disso cada coluna
+  // espera sozinha (`FunilColunaSkeleton`). O osso do board tem a forma real
+  // (colunas + cards) e cumpre os 300 ms mínimos — nada de spinner central.
+  const paginaEsperando = isLoading || (!pipeline && (precisaConferir || fetchingPipelines));
+  const esperaDaPagina = useFaseEspera(paginaEsperando);
+  // Útil = o board com a 1ª página das colunas na tela (não o skeleton).
+  useMarcarUtil("funil", !!pipeline && !paginaEsperando && !loadingBoard);
 
-  if (!pipeline && (precisaConferir || fetchingPipelines)) {
+  if (paginaEsperando || esperaDaPagina.segurando) {
     return (
-      <div className="flex items-center justify-center h-[60vh]">
-        <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
-      </div>
+      <Espera carregando forma={<FunilBoardEmOsso />} frase="Abrindo o funil…" rotulo="Carregando funil">
+        {null}
+      </Espera>
     );
   }
 

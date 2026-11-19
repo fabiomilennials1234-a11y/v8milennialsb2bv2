@@ -6,7 +6,7 @@ import { triggerFollowUpAutomation } from "@/modules/workflows/hooks/useAutoFoll
 import { useOrganization } from "@/modules/identity";
 import { useCanDo } from "@/modules/identity";
 import { OptimisticLockConflictError, isPostgrestNoRows } from "@/modules/platform/lib/optimistic-lock";
-import { optimisticMovePipelineEntry, rollbackPipelineEntryMove, type OptimisticMoveSnapshot } from "@/modules/pipelines/lib/optimistic-move";
+import { concluirMovePipelineEntry, optimisticMovePipelineEntry, rollbackPipelineEntryMove, type OptimisticMoveSnapshot } from "@/modules/pipelines/lib/optimistic-move";
 // Importa via o shim de path estável (`../usePipelineEntries`), não `../model/...`,
 // para preservar o module-id que mocks de teste interceptam (slice 7.3-bis).
 import { usePipelineEntries, usePipelineId, findOrCreatePipelineEntry } from "../model/usePipelineEntries";
@@ -217,6 +217,9 @@ export function useUpdatePipeWhatsapp() {
         toStage: status,
       });
       return { snapshot };
+    },
+    onSuccess: (_data, _vars, context) => {
+      if (context?.snapshot) concluirMovePipelineEntry(queryClient, context.snapshot);
     },
     onError: (_err, _vars, context) => {
       if (context?.snapshot) rollbackPipelineEntryMove(queryClient, context.snapshot);

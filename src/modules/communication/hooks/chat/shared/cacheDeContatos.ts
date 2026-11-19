@@ -35,6 +35,10 @@
  */
 import type { QueryClient } from "@tanstack/react-query";
 import type { ChatContact } from "../types";
+import { normalizePhone } from "@/lib/normalizePhone";
+import { sortContactsByRecency } from "@/modules/communication/lib/sortContactsByRecency";
+import { pedirReconciliacaoDaLista } from "../chatReconcile";
+import { MULTI_KEY_PREFIX } from "./queryKeys";
 
 /** O envelope da lista por conjunto de caixas. Espelha `useConversasUnificadas`. */
 interface ListaUnificadaEmCache {
@@ -107,4 +111,72 @@ export function zerarNaoLidas(
       atuais.map((c) => (casa(c) ? { ...c, unread_count: 0 } : c)),
     );
   });
+}
+
+/** O que um envio que SAIU muda na linha da conversa. */
+export interface EnvioParaALista {
+  organizationId: string;
+  instanceId: string | null;
+  phoneNumber: string;
+  /** Prévia: o texto, a legenda, ou `null` (mídia sem legenda → mantém a anterior). */
+  conteudo: string | null;
+  timestamp: string;
+}
+
+/** A entrada de cache (lista de UMA caixa ou `multi:`) mostra esta caixa? */
+function listaMostraACaixa(queryKey: readonly unknown[], instanceId: string): boolean {
+  const eixo = queryKey[2];
+  if (typeof eixo !== "string") return false;
+  if (!eixo.startsWith(MULTI_KEY_PREFIX)) return eixo === instanceId;
+  return eixo.slice(MULTI_KEY_PREFIX.length).split(",").includes(instanceId);
+}
+
+/**
+ * Reflete um envio na linha da conversa, em TODAS as listas em cache que
+ * mostram aquela caixa — no lugar, sem refetch.
+ *
+ * Substitui a invalidação da raiz `["whatsapp_contacts"]` que o envio fazia:
+ * aquela refazia a RPC de lista de toda variante em cache da org (filtros,
+ * caixas, bolha) a cada mensagem enviada. Aqui o custo é zero RPC no caso
+ * comum, e UMA invalidação EXATA — pelo teto de `chatReconcile.ts` — só na
+ * lista que ainda não tem a linha (primeira mensagem de uma conversa nova).
+ *
+ * Mesmo casamento do patch de realtime (`useWhatsAppRealtime.ts`): a linha é
+ * `(caixa, telefone)`. O eco do webhook chega depois e é descartado lá por
+ * `msgTime <= existingTime` quando não traz nada mais novo.
+ */
+export function registrarEnvioNaLista(queryClient: QueryClient, envio: EnvioParaALista): void {
+  if (!envio.instanceId) return;
+  const instanceId = envio.instanceId;
+  const telefone = normalizePhone(envio.phoneNumber) ?? envio.phoneNumber;
+  const raiz = ["whatsapp_contacts", envio.organizationId] as const;
+
+  for (const query of queryClient.getQueryCache().findAll({ queryKey: raiz })) {
+    if (!listaMostraACaixa(query.queryKey, instanceId)) continue;
+    const contatos = contatosDoCache(query.state.data);
+    if (!contatos) continue;
+    const casa = (c: ChatContact) =>
+      (normalizePhone(c.phone_number) ?? c.phone_number) === telefone &&
+      (c.instance_id == null || c.instance_id === instanceId);
+    if (!contatos.some(casa)) {
+      pedirReconciliacaoDaLista(queryClient, query.queryKey);
+      continue;
+    }
+    queryClient.setQueryData<CacheDeContatos>(query.queryKey, (anterior) => {
+      const atuais = contatosDoCache(anterior);
+      if (!atuais) return anterior;
+      const patched = atuais.map((c) =>
+        casa(c)
+          ? {
+              ...c,
+              last_message: envio.conteudo ?? c.last_message,
+              last_message_time: envio.timestamp,
+              last_message_direction: "outgoing" as const,
+              last_message_sent_source: "manual" as const,
+            }
+          : c,
+      );
+      return comContatos(anterior, sortContactsByRecency(patched));
+    });
+  }
 }

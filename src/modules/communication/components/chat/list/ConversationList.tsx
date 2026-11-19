@@ -13,7 +13,7 @@
  */
 import { useRef, useCallback, useMemo, useState } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { Loader2, Search, MessageSquare, Archive, Users, ArrowLeft, ChevronRight, SquarePen } from "lucide-react";
+import { Search, MessageSquare, Archive, Users, ArrowLeft, ChevronRight, SquarePen } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
@@ -55,6 +55,10 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { RIOFIX_ORG_ID } from "@/modules/communication/lib/negocioNoChat";
 import { useConversationSelection } from "@/modules/communication/hooks/chat/useConversationSelection";
 import { ConversationBulkToolbar } from "./ConversationBulkToolbar";
+import { useUmPrefetchPorVez } from "@/modules/communication/hooks/chat/useUmPrefetchPorVez";
+import { LinhaComIntencao } from "./LinhaComIntencao";
+import { Espera } from "@/shared/espera";
+import { ListaDeConversasSkeleton } from "../ChatSkeleton";
 import type { ReactNode } from "react";
 
 // ─── Config ───────────────────────────────────────────────────────────────────
@@ -176,6 +180,13 @@ interface ConversationListProps {
    */
   filterGate: InboxFilterGate;
   onRetryEnrichment: () => void;
+  /**
+   * Pré-carrega os dados da conversa quando o mouse PARA sobre a linha
+   * (intenção de 150 ms, nada em toque — `LinhaComIntencao`; um em voo —
+   * `useUmPrefetchPorVez`).
+   * Ausente = sem prefetch.
+   */
+  onPrefetchContact?: (contact: InboxContact) => Promise<unknown> | void;
 }
 
 // ─── Componente ───────────────────────────────────────────────────────────────
@@ -225,8 +236,17 @@ export function ConversationList({
   waitingHumanCount,
   filterGate,
   onRetryEnrichment,
+  onPrefetchContact,
 }: ConversationListProps) {
   const scrollAreaRef = useRef<HTMLDivElement | null>(null);
+  const preCarregar = useUmPrefetchPorVez(onPrefetchContact);
+  // Texto fixo da régua: só a contagem de números, nenhum dado de conversa.
+  const numerosNaLista = marcadas?.length || boxes?.length || 0;
+  const fraseDaEspera = numerosNaLista > 1
+    ? `Juntando conversas dos seus ${numerosNaLista} números…`
+    : "Juntando suas conversas…";
+  const intencaoDe = (contact: InboxContact) =>
+    onPrefetchContact ? () => preCarregar(contact) : undefined;
   const { isMobile } = useViewport();
   const nomeDoLeadPrimeiro = useNomeDoLeadPrimeiro();
   const nomeCodContato = useNomeCodContatoLead();
@@ -669,14 +689,16 @@ export function ConversationList({
       )}
       {/* Radix's table wrapper takes the preview's intrinsic width; block keeps long messages inside the sidebar. */}
       <ScrollArea ref={scrollAreaRef} className="flex-1 min-h-0 min-w-0 [&_[data-radix-scroll-area-viewport]>div]:!block">
-        {isLoading || filterGate === "pending" ? (
-          // `pending` conta como carregando: sem o enriquecimento a lista filtrada
-          // seria vazia por falta de dado, e "Total: 0" piscaria a cada troca de
-          // chip (queryKey nova = cache frio) em qualquer org.
-          <div className="flex items-center justify-center py-8">
-            <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
-          </div>
-        ) : filterGate === "error" ? (
+        {/* `pending` conta como carregando: sem o enriquecimento a lista filtrada
+            seria vazia por falta de dado, e "Total: 0" piscaria a cada troca de
+            chip (queryKey nova = cache frio) em qualquer org. A régua decide o
+            que aparece: nada < 100 ms, linhas-esqueleto, frase aos 1 s. */}
+        <Espera
+          carregando={isLoading || filterGate === "pending"}
+          forma={<ListaDeConversasSkeleton />}
+          frase={fraseDaEspera}
+        >
+        {filterGate === "error" ? (
           <InboxEnrichmentNotice onRetry={onRetryEnrichment} onClear={clearFilter} />
         ) : filteredContacts.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-12 px-4 text-center">
@@ -739,6 +761,7 @@ export function ConversationList({
                   }}
                   className="pb-0.5"
                 >
+                  <LinhaComIntencao aoIntencionar={intencaoDe(contact)}>
                   {selectableRow(contact, <ConversationListItem
                     contact={contact}
                     isSelected={selectedKey === contactKey(contact)}
@@ -762,6 +785,7 @@ export function ConversationList({
                     variasCaixas={modoUnificado}
                     daCobranca={daCobranca(contact)}
                   />)}
+                  </LinhaComIntencao>
                 </div>
               );
             })}
@@ -770,7 +794,7 @@ export function ConversationList({
           // ── Modo plain (≤50 contatos ou fallback) ─────────────────────────
           <div className={cn("flex flex-col gap-0.5 pb-2", !isMobile && "mx-2")}>
             {filteredContacts.map((contact) => (
-              <div key={contactKey(contact)}>
+              <LinhaComIntencao key={contactKey(contact)} aoIntencionar={isMobile ? undefined : intencaoDe(contact)}>
               {selectableRow(contact, isMobile ? (
                 <MobileConversationRow
                   key={contactKey(contact)}
@@ -809,10 +833,11 @@ export function ConversationList({
                     daCobranca={daCobranca(contact)}
                 />
               ))}
-              </div>
+              </LinhaComIntencao>
             ))}
           </div>
         )}
+        </Espera>
       </ScrollArea>
 
       {/* Arquivadas no rodapé da coluna, como no mockup: é um lugar que se

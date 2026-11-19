@@ -1,4 +1,4 @@
-import { Suspense, lazy, useEffect } from "react";
+import { Suspense, lazy, useEffect, type ComponentType } from "react";
 import { ThemeProvider } from "next-themes";
 import { ThemeTransitionProvider } from "@/contexts/ThemeTransitionContext";
 import { Toaster } from "@/components/ui/toaster";
@@ -38,106 +38,159 @@ import { TorqueLoader } from "@/components/ui/branding/TorqueLoader";
 import { ServiceWorkerUpdater } from "@/modules/platform/components/ServiceWorkerUpdater";
 import { PushPermissionPrompt } from "@/modules/platform/components/PushPermissionPrompt";
 import { lazyRetry } from "@/core/stale-build-recovery";
+import { rastrearCarga, registrarRotas } from "@/core/route-prefetch";
+import { definirOrgDaMedicao } from "@/core/perf/medicao";
 
-// lazyRetry: uma nova tentativa para falha passageira; chunk velho aciona a
-// recuperação de build (src/core/stale-build-recovery.ts).
-const Auth = lazy(() => lazyRetry(() => import("@/modules/identity/pages/Auth")));
-const Dashboard = lazy(() => lazyRetry(() => import("@/modules/analytics/pages/Dashboard")));
-const MetricsStudio = lazy(() => lazyRetry(() => import("@/modules/analytics/pages/MetricsStudio")));
-const Revisao = lazy(() => lazyRetry(() => import("@/modules/engagement/pages/Revisao")));
-const Performance = lazy(() => lazyRetry(() => import("@/modules/analytics/pages/Performance")));
-const Equipe = lazy(() => lazyRetry(() => import("@/modules/identity/org-team/pages/Equipe")));
-const Comissoes = lazy(() => lazyRetry(() => import("@/modules/engagement/pages/Comissoes")));
-const Leads = lazy(() => lazyRetry(() => import("@/modules/leads/pages/Leads")));
-const Carteira = lazy(() => lazyRetry(() => import("@/modules/leads/pages/Carteira")));
-const ListaFriaRevisar = lazy(() => lazyRetry(() => import("@/modules/lista-fria/pages/RevisarBusca")));
-const CobrancaInadimplentes = lazy(() => lazyRetry(() => import("@/modules/cobranca/pages/Inadimplentes")));
-const CobrancaFluxo = lazy(() => lazyRetry(() => import("@/modules/cobranca/pages/FluxoDeCobranca")));
-const CobrancaRegua = lazy(() => lazyRetry(() => import("@/modules/cobranca/pages/Regua")));
+/**
+ * Rota sob demanda. `lazyRetry`: uma nova tentativa para falha passageira; chunk
+ * velho aciona a recuperação de build (src/core/stale-build-recovery.ts).
+ * `rastrearCarga`: o BrowserRouter navega em transição e congela a tela antiga
+ * enquanto o chunk desce — o `IndicadorDePendencia` aparece passados 100 ms.
+ */
+// `any` é o que o próprio `React.lazy` exige do componente.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function rota<T extends ComponentType<any>>(importar: () => Promise<{ default: T }>) {
+  return lazy(() => rastrearCarga(lazyRetry(importar)));
+}
 
-const TrashPage = lazy(() => lazyRetry(() => import("@/modules/leads/pages/Trash")));
-const Duplicates = lazy(() => lazyRetry(() => import("@/modules/leads/pages/Duplicates")));
-const Contatos = lazy(() => lazyRetry(() => import("@/modules/leads/pages/Contatos")));
-const Configuracoes = lazy(() => lazyRetry(() => import("@/modules/platform/pages/Configuracoes")));
-const TVDashboard = lazy(() => lazyRetry(() => import("@/modules/analytics/pages/TVDashboard")));
-const TvRenderersDemo = lazy(() => lazyRetry(() => import("@/modules/analytics/pages/TvRenderersDemo")));
-const TvWallPreview = lazy(() => lazyRetry(() => import("@/modules/analytics/pages/TvWallPreview")));
-const DisparosPanel = lazy(() => lazyRetry(() => import("@/modules/campaigns/pages/DisparosPanel")));
-const NovoDisparo = lazy(() => lazyRetry(() => import("@/modules/campaigns/pages/NovoDisparo")));
-const FunisHub = lazy(() => lazyRetry(() => import("@/modules/pipelines/pages/FunisHub")));
+const Auth = rota(() => import("@/modules/identity/pages/Auth"));
+const importarDashboard = () => import("@/modules/analytics/pages/Dashboard");
+const Dashboard = rota(importarDashboard);
+const importarMetricsStudio = () => import("@/modules/analytics/pages/MetricsStudio");
+const MetricsStudio = rota(importarMetricsStudio);
+const Revisao = rota(() => import("@/modules/engagement/pages/Revisao"));
+const Performance = rota(() => import("@/modules/analytics/pages/Performance"));
+const Equipe = rota(() => import("@/modules/identity/org-team/pages/Equipe"));
+const Comissoes = rota(() => import("@/modules/engagement/pages/Comissoes"));
+const importarLeads = () => import("@/modules/leads/pages/Leads");
+const Leads = rota(importarLeads);
+const importarCarteira = () => import("@/modules/leads/pages/Carteira");
+const Carteira = rota(importarCarteira);
+const ListaFriaRevisar = rota(() => import("@/modules/lista-fria/pages/RevisarBusca"));
+const importarCobrancaInadimplentes = () => import("@/modules/cobranca/pages/Inadimplentes");
+const CobrancaInadimplentes = rota(importarCobrancaInadimplentes);
+const CobrancaFluxo = rota(() => import("@/modules/cobranca/pages/FluxoDeCobranca"));
+const CobrancaRegua = rota(() => import("@/modules/cobranca/pages/Regua"));
+
+const TrashPage = rota(() => import("@/modules/leads/pages/Trash"));
+const Duplicates = rota(() => import("@/modules/leads/pages/Duplicates"));
+const Contatos = rota(() => import("@/modules/leads/pages/Contatos"));
+const importarConfiguracoes = () => import("@/modules/platform/pages/Configuracoes");
+const Configuracoes = rota(importarConfiguracoes);
+const TVDashboard = rota(() => import("@/modules/analytics/pages/TVDashboard"));
+const TvRenderersDemo = rota(() => import("@/modules/analytics/pages/TvRenderersDemo"));
+const TvWallPreview = rota(() => import("@/modules/analytics/pages/TvWallPreview"));
+const importarDisparosPanel = () => import("@/modules/campaigns/pages/DisparosPanel");
+const DisparosPanel = rota(importarDisparosPanel);
+const NovoDisparo = rota(() => import("@/modules/campaigns/pages/NovoDisparo"));
+const importarFunisHub = () => import("@/modules/pipelines/pages/FunisHub");
+const FunisHub = rota(importarFunisHub);
 // Marketing and Analytics are unified in the Analytics tab — see TabAnalyticsV2.tsx
-const Produtos = lazy(() => lazyRetry(() => import("@/modules/carteira/pages/Produtos")));
-const Copilot = lazy(() => lazyRetry(() => import("@/modules/copilot/pages/Copilot")));
-const CopilotMetrics = lazy(() => lazyRetry(() => import("@/modules/copilot/pages/CopilotMetrics")));
-const Oraculo = lazy(() => lazyRetry(() => import("@/modules/copilot/pages/Oraculo")));
-const ChatWhatsApp = lazy(() => lazyRetry(() => import("@/modules/communication/pages/ChatWhatsApp")));
-const AtendimentoMeta = lazy(() => lazyRetry(() => import("@/modules/communication/pages/AtendimentoMeta")));
+const Produtos = rota(() => import("@/modules/carteira/pages/Produtos"));
+const importarCopilot = () => import("@/modules/copilot/pages/Copilot");
+const Copilot = rota(importarCopilot);
+const CopilotMetrics = rota(() => import("@/modules/copilot/pages/CopilotMetrics"));
+const importarOraculo = () => import("@/modules/copilot/pages/Oraculo");
+const Oraculo = rota(importarOraculo);
+const importarChatWhatsApp = () => import("@/modules/communication/pages/ChatWhatsApp");
+const ChatWhatsApp = rota(importarChatWhatsApp);
+const AtendimentoMeta = rota(() => import("@/modules/communication/pages/AtendimentoMeta"));
 // ChatSkeleton é eager (não lazy) — precisa estar disponível no instante
 // em que o chunk de ChatWhatsApp começa a ser baixado.
 import { ChatSkeleton } from "@/modules/communication/components/chat/ChatSkeleton";
 import { VoiceCallButton, VoiceCallProvider } from "@/modules/communication";
 import { LeadCallActionProvider, type LeadCallActionRenderer } from "@/shared/components/LeadCallActionSlot";
-const Upsell = lazy(() => lazyRetry(() => import("@/modules/carteira/pages/Upsell")));
-const ClienteDetail = lazy(() => lazyRetry(() => import("@/modules/carteira/components/client/ClienteDetailPage")));
+const Upsell = rota(() => import("@/modules/carteira/pages/Upsell"));
+const ClienteDetail = rota(() => import("@/modules/carteira/components/client/ClienteDetailPage"));
 // CustomPipeline saiu das rotas (redirect → /funil/:slug, SCRUM-632); o
 // arquivo segue no repo até a demolição (SCRUM-637).
 // SCRUM-632 (F4, expand-contract): a página ÚNICA de funil. Convive com as 4
 // páginas antigas atrás das rotas até a paridade fechar (morrem na SCRUM-637).
-const Funil = lazy(() => lazyRetry(() => import("@/modules/pipelines/pages/Funil")));
-const Agenda = lazy(() => lazyRetry(() => import("@/modules/engagement/pages/Agenda")));
-const Privacidade = lazy(() => lazyRetry(() => import("@/modules/platform/pages/Privacidade")));
-const Faq = lazy(() => lazyRetry(() => import("@/modules/platform/pages/Faq")));
-const Pitstop = lazy(() => lazyRetry(() => import("@/modules/platform/pages/Pitstop")));
+const importarFunil = () => import("@/modules/pipelines/pages/Funil");
+const Funil = rota(importarFunil);
+const importarAgenda = () => import("@/modules/engagement/pages/Agenda");
+const Agenda = rota(importarAgenda);
+const Privacidade = rota(() => import("@/modules/platform/pages/Privacidade"));
+const importarFaq = () => import("@/modules/platform/pages/Faq");
+const Faq = rota(importarFaq);
+const importarPitstop = () => import("@/modules/platform/pages/Pitstop");
+const Pitstop = rota(importarPitstop);
 // Área do Gestor (ADR-0021) — hub do Gestor de Portfólio + página master de gestores.
-const AreaGestor = lazy(() => lazyRetry(() => import("@/modules/identity/gestor/pages/AreaGestor")));
-const MasterGestores = lazy(() => lazyRetry(() => import("@/modules/identity/master/pages/MasterGestores")));
-const CopilotPlayground = lazy(() => lazyRetry(() => import("@/modules/copilot/components/playground").then(m => ({ default: m.CopilotPlayground }))));
-const MessageTemplates = lazy(() => lazyRetry(() => import("@/modules/communication/pages/MessageTemplates")));
-const Automacoes = lazy(() => lazyRetry(() => import("./modules/workflows/pages/Automacoes")));
-const AutomacoesEditor = lazy(() => lazyRetry(() => import("./modules/workflows/pages/AutomacoesEditor")));
-const AutomacoesExecucoes = lazy(() => lazyRetry(() => import("./modules/workflows/pages/AutomacoesExecucoes")));
+const AreaGestor = rota(() => import("@/modules/identity/gestor/pages/AreaGestor"));
+const MasterGestores = rota(() => import("@/modules/identity/master/pages/MasterGestores"));
+const CopilotPlayground = rota(() => import("@/modules/copilot/components/playground").then(m => ({ default: m.CopilotPlayground })));
+const MessageTemplates = rota(() => import("@/modules/communication/pages/MessageTemplates"));
+const importarAutomacoes = () => import("./modules/workflows/pages/Automacoes");
+const Automacoes = rota(importarAutomacoes);
+const AutomacoesEditor = rota(() => import("./modules/workflows/pages/AutomacoesEditor"));
+const AutomacoesExecucoes = rota(() => import("./modules/workflows/pages/AutomacoesExecucoes"));
 
 
-const NotFound = lazy(() => lazyRetry(() => import("@/modules/platform/pages/NotFound")));
-const Landing = lazy(() => lazyRetry(() => import("@/modules/marketing/pages/Landing")));
+const NotFound = rota(() => import("@/modules/platform/pages/NotFound"));
+const Landing = rota(() => import("@/modules/marketing/pages/Landing"));
 // #1223 — página de calibração da escala tipográfica da TV. Instrumento de
 // medição com valores estáticos, não tela de produto: sem auth e sem dado, para
 // que a escala possa ser julgada na parede sem depender de sessão ou seed.
 // Removível quando #1218–#1221 fecharem.
-const TvTypeScale = lazy(() => lazyRetry(() => import("@/modules/analytics/pages/TvTypeScale")));
-const Signup = lazy(() => lazyRetry(() => import("@/modules/identity/pages/Signup")));
-const ResetPassword = lazy(() => lazyRetry(() => import("@/modules/identity/pages/ResetPassword")));
-const MfaSetup = lazy(() => lazyRetry(() => import("@/modules/identity/pages/MfaSetup")));
+const TvTypeScale = rota(() => import("@/modules/analytics/pages/TvTypeScale"));
+const Signup = rota(() => import("@/modules/identity/pages/Signup"));
+const ResetPassword = rota(() => import("@/modules/identity/pages/ResetPassword"));
+const MfaSetup = rota(() => import("@/modules/identity/pages/MfaSetup"));
 
 // Master Admin — lazy loaded (com retry)
-const MasterDashboard = lazy(() => lazyRetry(() => import("@/modules/identity/master/pages/MasterDashboard")));
-const MasterOrganizations = lazy(() => lazyRetry(() => import("@/modules/identity/master/pages/MasterOrganizations")));
-const MasterUsers = lazy(() => lazyRetry(() => import("@/modules/identity/master/pages/MasterUsers")));
+const MasterDashboard = rota(() => import("@/modules/identity/master/pages/MasterDashboard"));
+const MasterOrganizations = rota(() => import("@/modules/identity/master/pages/MasterOrganizations"));
+const MasterUsers = rota(() => import("@/modules/identity/master/pages/MasterUsers"));
 // Usuários ativos por org — quem deu sinal de uso (auth.sessions), master-only
-const MasterUsuariosAtivos = lazy(() => lazyRetry(() => import("@/modules/identity/master/pages/MasterUsuariosAtivos")));
-const MasterPlans = lazy(() => lazyRetry(() => import("@/modules/identity/master/pages/MasterPlans")));
-const MasterPaymentLinks = lazy(() => lazyRetry(() => import("@/modules/identity/master/pages/MasterPaymentLinks")));
-const MasterFeatures = lazy(() => lazyRetry(() => import("@/modules/identity/master/pages/MasterFeatures")));
-const MasterAuditLogs = lazy(() => lazyRetry(() => import("@/modules/identity/master/pages/MasterAuditLogs")));
-const MasterOperations = lazy(() => lazyRetry(() => import("@/modules/identity/master/pages/MasterOperations")));
+const MasterUsuariosAtivos = rota(() => import("@/modules/identity/master/pages/MasterUsuariosAtivos"));
+const MasterPlans = rota(() => import("@/modules/identity/master/pages/MasterPlans"));
+const MasterPaymentLinks = rota(() => import("@/modules/identity/master/pages/MasterPaymentLinks"));
+const MasterFeatures = rota(() => import("@/modules/identity/master/pages/MasterFeatures"));
+const MasterAuditLogs = rota(() => import("@/modules/identity/master/pages/MasterAuditLogs"));
+const MasterOperations = rota(() => import("@/modules/identity/master/pages/MasterOperations"));
 // Área Dev — as 5 centrais (board "18 telas → 5 centrais"). As páginas antigas
 // continuam nas rotas de sempre, agora como abas das centrais.
-const OperacaoCentral = lazy(() => lazyRetry(() => import("@/modules/identity/master/pages/centrais/OperacaoCentral")));
-const MasterTasks = lazy(() => lazyRetry(() => import("@/modules/identity/master/pages/MasterTasks")));
-const ImplementacaoCentral = lazy(() => lazyRetry(() => import("@/modules/identity/master/pages/centrais/ImplementacaoCentral")));
-const MonitoramentoCentral = lazy(() => lazyRetry(() => import("@/modules/identity/master/pages/centrais/MonitoramentoCentral")));
-const TestesCentral = lazy(() => lazyRetry(() => import("@/modules/identity/master/pages/centrais/TestesCentral")));
-const MasterAutomationHealth = lazy(() => lazyRetry(() => import("@/modules/identity/master/pages/MasterAutomationHealth")));
-const MasterWhatsAppHealth = lazy(() => lazyRetry(() => import("@/modules/identity/master/pages/MasterWhatsAppHealth")));
-const MasterOraculoFeedback = lazy(() => lazyRetry(() => import("@/modules/identity/master/pages/MasterOraculoFeedback")));
-const CopilotReasoning = lazy(() => lazyRetry(() => import("@/modules/identity/master/pages/CopilotReasoning")));
-const CopilotToggleAudit = lazy(() => lazyRetry(() => import("@/modules/identity/master/pages/CopilotToggleAudit")));
-const MasterOnboarding = lazy(() => lazyRetry(() => import("@/modules/identity/master/pages/MasterOnboarding")));
-const MasterMetaAssets = lazy(() => lazyRetry(() => import("@/modules/identity/master/pages/MasterMetaAssets")));
+const OperacaoCentral = rota(() => import("@/modules/identity/master/pages/centrais/OperacaoCentral"));
+const MasterTasks = rota(() => import("@/modules/identity/master/pages/MasterTasks"));
+const ImplementacaoCentral = rota(() => import("@/modules/identity/master/pages/centrais/ImplementacaoCentral"));
+const MonitoramentoCentral = rota(() => import("@/modules/identity/master/pages/centrais/MonitoramentoCentral"));
+const TestesCentral = rota(() => import("@/modules/identity/master/pages/centrais/TestesCentral"));
+const MasterAutomationHealth = rota(() => import("@/modules/identity/master/pages/MasterAutomationHealth"));
+const MasterWhatsAppHealth = rota(() => import("@/modules/identity/master/pages/MasterWhatsAppHealth"));
+const MasterOraculoFeedback = rota(() => import("@/modules/identity/master/pages/MasterOraculoFeedback"));
+const CopilotReasoning = rota(() => import("@/modules/identity/master/pages/CopilotReasoning"));
+const CopilotToggleAudit = rota(() => import("@/modules/identity/master/pages/CopilotToggleAudit"));
+const MasterOnboarding = rota(() => import("@/modules/identity/master/pages/MasterOnboarding"));
+const MasterMetaAssets = rota(() => import("@/modules/identity/master/pages/MasterMetaAssets"));
 // Revisão master de stage_role won/lost (#991, ADR-0017 §1)
-const MasterStageRoleReview = lazy(() => lazyRetry(() => import("@/modules/identity/master/pages/MasterStageRoleReview")));
+const MasterStageRoleReview = rota(() => import("@/modules/identity/master/pages/MasterStageRoleReview"));
 // Insights — área master azul de unit economics (chrome próprio, fora do MasterLayout)
-const MasterInsights = lazy(() => lazyRetry(() => import("@/modules/identity/master/pages/MasterInsights")));
+const MasterInsights = rota(() => import("@/modules/identity/master/pages/MasterInsights"));
+// Pré-carregamento na intenção (hover/foco no trilho): o mapa mora aqui, onde
+// os imports dinâmicos já moram — `src/core/route-prefetch.ts` não conhece
+// módulo nenhum (senão o Sidebar fecharia ciclo com as páginas).
+registrarRotas({
+  "/dashboard": importarDashboard,
+  "/metricas": importarMetricsStudio,
+  "/chat-whatsapp": importarChatWhatsApp,
+  "/disparos": importarDisparosPanel,
+  "/funis": importarFunisHub,
+  "/funil/:slug": importarFunil,
+  "/leads": importarLeads,
+  "/lista-fria": importarLeads,
+  "/carteira": importarCarteira,
+  "/cobranca": importarCobrancaInadimplentes,
+  "/cobranca/inadimplentes": importarCobrancaInadimplentes,
+  "/copilot": importarCopilot,
+  "/automacoes": importarAutomacoes,
+  "/agenda": importarAgenda,
+  "/oraculo": importarOraculo,
+  "/pitstop": importarPitstop,
+  "/faq": importarFaq,
+  "/configuracoes": importarConfiguracoes,
+  "/configuracoes/:tab": importarConfiguracoes,
+});
+
 // Master route/layout — carregam sob demanda quando acessar /master
 import { MasterRoute } from "@/modules/identity/master/components/MasterRoute";
 import { MasterLayout } from "@/modules/identity/master/components/MasterLayout";
@@ -227,6 +280,16 @@ function ReportIdentityBridge() {
     setReportIdentity(userId ? { userId, organizationId, role: isMaster ? "master" : role } : null);
   }, [userId, organizationId, role, isMaster]);
 
+  return null;
+}
+
+// A medição de espera (src/core/perf) grava por organização: sem org, a linha
+// é descartada. Mesma ponte do relatório de erro, só o UUID.
+function MedicaoOrgBridge() {
+  const { organizationId } = useOrganization();
+  useEffect(() => {
+    definirOrgDaMedicao(organizationId ?? null);
+  }, [organizationId]);
   return null;
 }
 
@@ -1061,6 +1124,7 @@ const App = () => {
             <BrowserRouter>
               <AuthProvider>
                 <ReportIdentityBridge />
+                <MedicaoOrgBridge />
                 <TorqueIntro />
                 {/* Abertura de segunda-feira: o resumo da semana anterior, uma vez
                     por usuário por semana. Espera o TorqueIntro acabar; o chunk da

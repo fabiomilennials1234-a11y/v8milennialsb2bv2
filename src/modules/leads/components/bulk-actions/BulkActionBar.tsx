@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   ArrowRightLeft,
@@ -254,34 +254,48 @@ function BulkMoveDialog({
    */
   const podePerda = !!sourcePipelineId && (entryIds?.length ?? 0) > 0;
 
+  /**
+   * Trava síncrona do envio: o 2º clique (antes do re-render que desabilita o
+   * botão, ou durante o modal de motivo) retorna em silêncio. Sem ela, o 2º
+   * clique virava 2ª mutação, que falha na hora pela trava de `mutationFn` —
+   * `isPending` caía, o spinner sumia e o botão reabilitava com o 1º lote
+   * ainda correndo. A trava de `mutationFn` fica como rede.
+   */
+  const enviando = useRef(false);
   const handleSubmit = async () => {
-    if (!stageId || !effectivePipelineId) return;
-    const etapa = stages.find((s) => s.id === stageId);
-    if (isEtapaDePerda(etapa)) {
-      if (!podePerda || !entryIds) return; // defensivo — a opção nem aparece habilitada
-      // UM motivo para o lote, gravado em cada negócio antes do move.
-      const perda = await capturarMotivoDaPerda({
-        entryIds,
-        stageName: etapa?.name ?? null,
-        quantidade: entryIds.length,
-      });
-      if (!perda) return;
-    }
+    if (enviando.current) return;
+    enviando.current = true;
     try {
-      await move.mutateAsync({
-        lead_ids: leadIds,
-        pipeline_id: effectivePipelineId,
-        stage_id: stageId,
-        source_pipeline_id: sourcePipelineId,
-        entry_ids: entryIds,
-      });
-      toast.success(sourcePipelineId ? `${entryIds?.length ?? 0} negócios movidos` : `${leadIds.length} leads adicionados ao funil`);
-      onOpenChange(false);
-      onSuccess();
-    } catch (error) {
-      notifyError(error, {
-        fallback: sourcePipelineId ? "Não foi possível mover os negócios." : "Não foi possível adicionar ao funil.",
-      });
+      if (!stageId || !effectivePipelineId) return;
+      const etapa = stages.find((s) => s.id === stageId);
+      if (isEtapaDePerda(etapa)) {
+        if (!podePerda || !entryIds) return; // defensivo — a opção nem aparece habilitada
+        // UM motivo para o lote, gravado em cada negócio antes do move.
+        const perda = await capturarMotivoDaPerda({
+          entryIds,
+          stageName: etapa?.name ?? null,
+          quantidade: entryIds.length,
+        });
+        if (!perda) return;
+      }
+      try {
+        await move.mutateAsync({
+          lead_ids: leadIds,
+          pipeline_id: effectivePipelineId,
+          stage_id: stageId,
+          source_pipeline_id: sourcePipelineId,
+          entry_ids: entryIds,
+        });
+        toast.success(sourcePipelineId ? `${entryIds?.length ?? 0} negócios movidos` : `${leadIds.length} leads adicionados ao funil`);
+        onOpenChange(false);
+        onSuccess();
+      } catch (error) {
+        notifyError(error, {
+          fallback: sourcePipelineId ? "Não foi possível mover os negócios." : "Não foi possível adicionar ao funil.",
+        });
+      }
+    } finally {
+      enviando.current = false;
     }
   };
 

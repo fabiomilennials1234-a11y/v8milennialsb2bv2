@@ -37,6 +37,10 @@ vi.mock("@/modules/communication/components/chat/media/AudioRecorder", () => ({
   AudioRecorder: () => <div data-testid="audio-recorder" />,
 }));
 
+vi.mock("sonner", () => ({
+  toast: { success: vi.fn(), error: vi.fn(), info: vi.fn(), warning: vi.fn() },
+}));
+
 import { ChatBubbleComposer } from "@/modules/communication/components/chat/bubble/ChatBubbleComposer";
 import { ATTACHMENT_ACCEPT } from "@/modules/communication/lib/attachment-media-type";
 
@@ -195,21 +199,35 @@ describe("ChatBubbleComposer — anexos", () => {
     expect(mockMediaMutateAsync).not.toHaveBeenCalled();
   });
 
-  it("envio falho mantém anexo e legenda pra retry (não descarta antes do await)", async () => {
+  it("o anexo sai no clique (contrato da fila): falha vira bolha de reenvio, não preview preso", async () => {
     mockMediaMutateAsync.mockRejectedValueOnce(new Error("sessão morta"));
     render(<ChatBubbleComposer {...BASE_PROPS} />);
     attachFile(PDF_FILE);
     await waitFor(() => screen.getByText("proposta.pdf"));
-
     fireEvent.change(screen.getByLabelText("Legenda do anexo"), {
       target: { value: "Segue a proposta" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Enviar" }));
+    // Sai do composer antes do resultado: duplo clique não duplica o envio.
+    expect(screen.queryByText("proposta.pdf")).not.toBeInTheDocument();
+    await waitFor(() => expect(mockMediaMutateAsync).toHaveBeenCalledTimes(1));
+    expect(mockMediaMutateAsync).toHaveBeenCalledWith(expect.objectContaining({ caption: "Segue a proposta" }));
+  });
 
-    await waitFor(() => expect(mockMediaMutateAsync).toHaveBeenCalled());
-    // Preview + legenda intactos após falha
-    expect(screen.getByText("proposta.pdf")).toBeInTheDocument();
+  it("fila cheia devolve anexo e legenda, com o aviso da fila", async () => {
+    const { FilaCheiaError, MENSAGEM_DE_FILA_CHEIA } = await import("@/modules/communication/hooks/chat/shared/filaDeEnvio");
+    const { toast } = await import("sonner");
+    mockMediaMutateAsync.mockRejectedValueOnce(new FilaCheiaError());
+    render(<ChatBubbleComposer {...BASE_PROPS} />);
+    attachFile(PDF_FILE);
+    await waitFor(() => screen.getByText("proposta.pdf"));
+    fireEvent.change(screen.getByLabelText("Legenda do anexo"), {
+      target: { value: "Segue a proposta" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Enviar" }));
+    await waitFor(() => expect(screen.getByText("proposta.pdf")).toBeInTheDocument());
     expect(screen.getByLabelText("Legenda do anexo")).toHaveValue("Segue a proposta");
+    expect(toast.warning).toHaveBeenCalledWith(MENSAGEM_DE_FILA_CHEIA);
   });
 
   it("envio com sucesso limpa o anexo e dá toast de confirmação", async () => {

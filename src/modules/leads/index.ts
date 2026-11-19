@@ -362,3 +362,5 @@ export { CompareceuModal } from "./components/leads/funnel-contexts/modals/Compa
 export { useVentimaisExportDetails } from "./hooks/useVentimaisExportDetails";
 
 export { useCustomFieldCatalogue, useCustomFieldReferences } from './hooks/useCustomFieldCatalogue';
+// Régua de espera (CX ①): aquecer a ficha na intenção (hover do card do Funil).
+export { prefetchFicha, usePrefetchFicha } from "./lib/prefetchFicha";

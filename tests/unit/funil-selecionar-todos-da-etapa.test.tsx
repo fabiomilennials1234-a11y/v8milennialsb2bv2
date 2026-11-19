@@ -53,6 +53,7 @@ vi.mock("@/modules/pipelines/components/kanban/DraggableKanbanBoard", async (imp
   };
 });
 vi.mock("@/modules/leads", () => ({
+  usePrefetchFicha: () => () => {},
   LeadCard: ({ lead, onSelect }: { lead: LeadCardData; onSelect: (e: { shiftKey: boolean }) => void }) => (
     <button onClick={() => onSelect({ shiftKey: false })}>marcar {lead.leadId}</button>
   ),

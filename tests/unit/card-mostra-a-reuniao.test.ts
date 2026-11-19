@@ -52,6 +52,7 @@ vi.mock("@/modules/pipelines/components/kanban/DraggableKanbanBoard", () => ({
 }));
 
 vi.mock("@/modules/leads", () => ({
+  usePrefetchFicha: () => () => {},
   // Captura o shape que `transformToCard` produziu — é o contrato sob teste.
   LeadCard: (props: { lead: Record<string, unknown> }) => {
     cardsRenderizados.push(props.lead);

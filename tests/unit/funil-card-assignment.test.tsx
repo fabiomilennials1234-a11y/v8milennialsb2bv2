@@ -7,7 +7,7 @@ import { FunilKanban } from "@/modules/pipelines/components/funis/FunilKanban";
 vi.mock("@/modules/pipelines/components/kanban/DraggableKanbanBoard", () => ({
   DraggableKanbanBoard: ({ columns, renderCard }: { columns: { items: LeadCardData[] }[]; renderCard: (item: LeadCardData) => ReactNode }) => <>{columns.flatMap((c) => c.items.map((item) => <div key={item.id}>{renderCard(item)}</div>))}</>,
 }));
-vi.mock("@/modules/leads", () => ({ LeadCard: ({ lead }: { lead: LeadCardData }) => <output data-testid="card">{JSON.stringify(lead)}</output>, CardEffectsHost: () => null, useEntradasEmDesfecho: () => new Set() }));
+vi.mock("@/modules/leads", () => ({ LeadCard: ({ lead }: { lead: LeadCardData }) => <output data-testid="card">{JSON.stringify(lead)}</output>, CardEffectsHost: () => null, useEntradasEmDesfecho: () => new Set(), usePrefetchFicha: () => () => {} }));
 vi.mock("@/modules/identity", () => ({ useCanDo: () => ({ allowed: true }) }));
 // Estes cenários usam o resumo padrão, sem a flag de total filtrado por org.
 vi.mock("@/modules/platform/hooks/useFeatureFlag", () => ({

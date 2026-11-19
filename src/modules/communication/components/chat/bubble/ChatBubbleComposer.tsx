@@ -12,6 +12,11 @@ import { readMediaAsDataUrl } from "@/modules/communication/lib/media-operation"
  *
  * Anexos: mesma paridade do composer desktop (imagem, vídeo, PDF/documentos) —
  * accept/teto/derivação vêm de `lib/attachment-media-type`.
+ *
+ * Envio: SEM trava própria. Texto, anexo e áudio entram na fila da conversa
+ * (`shared/filaDeEnvio`), que garante ordem e um em voo; o desfecho é o mesmo
+ * do /chat (`tratarFalhaDoEnvio`): fila cheia devolve o rascunho, item
+ * interrompido não gera toast (a bolha de falha já diz).
  */
 import { useRef, useState, type ChangeEvent, type KeyboardEvent } from "react";
 import { Film, FileText, Mic, Paperclip, Send } from "lucide-react";
@@ -30,6 +35,7 @@ import {
 import { AudioRecorder } from "@/modules/communication/components/chat/media/AudioRecorder";
 import { notifyError } from "@/shared/errors";
 import { ComposerEmojiPicker } from "../composer/ComposerEmojiPicker";
+import { tratarFalhaDoEnvio } from "../composer/tratarFalhaDoEnvio";
 
 interface ChatBubbleComposerProps {
   phoneNumber: string;
@@ -61,17 +67,23 @@ export function ChatBubbleComposer({
 
   const sendMessage = useSendWhatsAppMessage();
   const sendMedia = useSendWhatsAppMedia();
+  // Rascunho/anexo atuais, para a devolução pós-"fila cheia" não pisar no novo.
+  const textRef = useRef(text);
+  textRef.current = text;
+  const attachmentRef = useRef(attachment);
+  attachmentRef.current = attachment;
 
   if (!canReply) return null;
 
   const trimmed = text.trim();
   const hasText = trimmed.length > 0;
-  const isSending = sendMessage.isPending || sendMedia.isPending;
 
   const handleSend = async () => {
-    if (!hasText || isSending) return;
+    if (!hasText) return;
     const message = trimmed;
+    // Limpa antes do await: quem digita a próxima não perde texto no resolve.
     setText("");
+    textRef.current = "";
     try {
       await sendMessage.mutateAsync({
         phoneNumber,
@@ -82,7 +94,9 @@ export function ChatBubbleComposer({
         leadId,
       });
     } catch (err) {
-      notifyError(err, { fallback: "Não foi possível enviar." });
+      tratarFalhaDoEnvio(err, "Não foi possível enviar.", () => {
+        if (textRef.current === "") setText(message);
+      });
     }
   };
 
@@ -117,8 +131,17 @@ export function ChatBubbleComposer({
   };
 
   const handleSendAttachment = async () => {
-    if (!attachment || isSending) return;
-    const kind = deriveAttachmentMediaType(attachment.mime);
+    if (!attachment) return;
+    const enviado = attachment;
+    const legenda = text;
+    const kind = deriveAttachmentMediaType(enviado.mime);
+    // O anexo sai do composer no clique (contrato do /chat): duplo clique não
+    // duplica, e a falha vira bolha de reenvio na conversa. Só "fila cheia"
+    // — o item nem entrou — devolve anexo e legenda.
+    setAttachment(null);
+    setText("");
+    attachmentRef.current = null;
+    textRef.current = "";
     try {
       await sendMedia.mutateAsync({
         phoneNumber,
@@ -126,16 +149,12 @@ export function ChatBubbleComposer({
         instanceName,
         instanceId,
         mediaType: kind,
-        media: attachment.data,
-        caption: trimmed || undefined,
-        fileName: attachment.name,
-        mimetype: attachment.mime,
+        media: enviado.data,
+        caption: legenda.trim() || undefined,
+        fileName: enviado.name,
+        mimetype: enviado.mime,
         leadId,
       });
-      // Limpa só no sucesso — em falha o preview fica intacto pra retry
-      // (mesmo contrato do composer desktop).
-      setAttachment(null);
-      setText("");
       toast({
         title:
           kind === "document" ? "Arquivo enviado!"
@@ -143,26 +162,30 @@ export function ChatBubbleComposer({
             : "Imagem enviada!",
       });
     } catch (err) {
-      notifyError(err, { fallback: "Não foi possível enviar arquivo." });
+      tratarFalhaDoEnvio(err, "Não foi possível enviar arquivo.", () => {
+        if (attachmentRef.current) return;
+        setAttachment(enviado);
+        if (textRef.current === "") setText(legenda);
+      });
     }
   };
 
   const handleAudioRecorded = async (blob: Blob) => {
     setIsRecording(false);
     try {
-      const dataUrl = await readMediaAsDataUrl(blob);
       await sendMedia.mutateAsync({
         phoneNumber,
         isGroup,
         instanceName,
         instanceId,
         mediaType: "audio",
-        media: dataUrl,
+        // Leitura na vez do item: a ordem é a do clique de parar a gravação.
+        media: { previa: null, preparar: () => readMediaAsDataUrl(blob) },
         fileName: `audio_${Date.now()}.mp3`,
         leadId,
       });
     } catch (err) {
-      notifyError(err, { fallback: "Não foi possível enviar áudio." });
+      tratarFalhaDoEnvio(err, "Não foi possível enviar áudio.");
     }
   };
 
@@ -213,7 +236,7 @@ export function ChatBubbleComposer({
           </div>
         </div>
         <div className="flex items-center justify-end gap-2 px-3 pb-2">
-          <ComposerEmojiPicker inputRef={inputRef} onChange={setText} disabled={isSending} className="mr-auto" />
+          <ComposerEmojiPicker inputRef={inputRef} onChange={setText} className="mr-auto" />
           <Button
             variant="ghost"
             size="sm"
@@ -221,12 +244,11 @@ export function ChatBubbleComposer({
               setAttachment(null);
               setText("");
             }}
-            disabled={isSending}
           >
             Cancelar
           </Button>
-          <Button size="sm" onClick={handleSendAttachment} disabled={isSending}>
-            {isSending ? "Enviando…" : "Enviar"}
+          <Button size="sm" onClick={handleSendAttachment}>
+            Enviar
           </Button>
         </div>
       </div>
@@ -251,7 +273,6 @@ export function ChatBubbleComposer({
         size="icon"
         className="h-9 w-9 shrink-0 text-muted-foreground hover:text-foreground"
         onClick={() => fileInputRef.current?.click()}
-        disabled={isSending}
         aria-label="Anexar arquivo"
         title="Anexar imagem, vídeo ou documento"
       >
@@ -283,7 +304,6 @@ export function ChatBubbleComposer({
           size="icon"
           className="h-9 w-9 shrink-0 rounded-full"
           onClick={handleSend}
-          disabled={isSending}
           aria-label="Enviar mensagem"
         >
           <Send className="w-4 h-4" aria-hidden />
@@ -295,7 +315,6 @@ export function ChatBubbleComposer({
           size="icon"
           className="h-9 w-9 shrink-0 rounded-full text-muted-foreground hover:text-foreground"
           onClick={() => setIsRecording(true)}
-          disabled={isSending}
           aria-label="Gravar áudio"
         >
           <Mic className="w-4 h-4" aria-hidden />

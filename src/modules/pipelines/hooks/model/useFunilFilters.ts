@@ -1,54 +1,22 @@
 import { useCallback, useMemo, useState } from "react";
 import { useFunnelVisibilityLevel, useResponsibleMembers } from "@/modules/identity";
 import { useTags } from "@/modules/leads";
+import { getDateRange, type DateRange } from "@/lib/metrics-period";
+import { getStalledBucket } from "@/modules/pipelines/lib/stalled-buckets";
 import {
-  createInitialPeriodState,
-  getDateRange,
-  type DateRange,
-  type MetricsPeriodState,
-} from "@/lib/metrics-period";
-import { getStalledBucket, STALLED_ALL } from "@/modules/pipelines/lib/stalled-buckets";
+  createInitialFunilFilterState,
+  paginatedFiltersDoEstado,
+  type FunilFilterState,
+} from "@/modules/pipelines/lib/funil-filtros-estado";
 import type { FilterSectionConfig } from "@/modules/pipelines/lib/kanban-filter-config";
 import type { PaginatedFilters } from "./usePaginatedPipeline";
 import type { PipelineLeadIdsParams } from "./usePipelineLeadIds";
 
-/**
- * Estado serializável do filtro de um board unificado (SCRUM-633).
- *
- * POJO de propósito: é o shape que a saved view (SCRUM-634) pode persistir e
- * re-hidratar. Único campo com pegadinha de serialização é `period`
- * (`MetricsPeriodState` carrega `Date` em custom range) — ao re-hidratar de
- * JSON, passe-o por `revivePeriodState` de `@/lib/metrics-period`.
- */
-export interface FunilFilterState {
-  /** team_members.id ou "all". */
-  responsibleId: string;
-  /** leads.origin ∈ lista; [] = sem filtro. */
-  origins: string[];
-  /** Interseção: lead precisa ter TODAS. [] = sem filtro. */
-  tagIds: string[];
-  qualificationTier: string[];
-  preQualificationTier: string[];
-  /** true → só leads com scheduled_user_message 'scheduled'. */
-  scheduled: boolean;
-  /** Data de criação do lead (entrada) — "Geral" = sem filtro. */
-  period: MetricsPeriodState;
-  /** Bucket "Parado há" (id de STALLED_BUCKETS) ou STALLED_ALL. */
-  stalled: string;
-}
-
-export function createInitialFunilFilterState(): FunilFilterState {
-  return {
-    responsibleId: "all",
-    origins: [],
-    tagIds: [],
-    qualificationTier: [],
-    preQualificationTier: [],
-    scheduled: false,
-    period: createInitialPeriodState(),
-    stalled: STALLED_ALL,
-  };
-}
+export {
+  createInitialFunilFilterState,
+  paginatedFiltersDoEstado,
+  type FunilFilterState,
+} from "@/modules/pipelines/lib/funil-filtros-estado";
 
 export interface FunilFiltersController {
   /** Estado bruto (serializável — contrato da saved view). */
@@ -172,19 +140,7 @@ export function useFunilFilters(
   const stalledBucket = useMemo(() => getStalledBucket(state.stalled), [state.stalled]);
 
   const paginatedFilters = useMemo<PaginatedFilters>(
-    () => ({
-      search,
-      responsibleId: responsibleIdEfetivo,
-      tagIds: state.tagIds,
-      origins: state.origins.length ? state.origins : undefined,
-      qualificationTier: state.qualificationTier,
-      preQualificationTier: state.preQualificationTier,
-      scheduled: state.scheduled || undefined,
-      periodAfter: metricsRange?.startStr ?? undefined,
-      periodBefore: metricsRange?.endStr ?? undefined,
-      stalledMinDays: stalledBucket?.minDays ?? null,
-      stalledMaxDays: stalledBucket?.maxDays ?? null,
-    }),
+    () => paginatedFiltersDoEstado(state, search, responsibleIdEfetivo, { metricsRange, stalledBucket }),
     [search, state, responsibleIdEfetivo, metricsRange, stalledBucket],
   );
 

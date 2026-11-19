@@ -27,7 +27,7 @@ import { ChatReplyProvider } from "./ReplyContext";
 import { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Loader2, WifiOff } from "lucide-react";
+import { WifiOff } from "lucide-react";
 import { toast } from "sonner";
 import { normalizePhone } from "@/lib/normalizePhone";
 import { definirConversaAberta, useFeatureFlag } from "@/modules/platform";
@@ -141,6 +141,11 @@ import type {
 } from "@/modules/communication/hooks/chat/types";
 import type { DensityMode } from "@/modules/communication/hooks/chat/useChatDensity";
 import { useNumerosDaCobranca } from "@/modules/communication/hooks/chat/useNumerosDaCobranca";
+import { prefetchChatData } from "@/modules/communication/lib/chatPrefetch";
+import { alvoDoPrefetchDaConversa } from "@/modules/communication/lib/alvoDoPrefetchDaConversa";
+import { ChatSkeleton, ThreadDeMensagensSkeleton } from "@/modules/communication/components/chat/ChatSkeleton";
+import { Espera, useSegurarEsqueleto } from "@/shared/espera";
+import { useMarcarUtil } from "@/core/perf/useMarcarUtil";
 
 // ─── Tipos internos ──────────────────────────────────────────────────────────
 
@@ -433,11 +438,15 @@ function ChatView({
       <AvisoDaAutomacao telefone={phoneNumber} caixaAberta={instanceId} />
 
       <div className="flex-1 min-h-0 min-w-0 overflow-hidden flex flex-col">
-        {threadState === "loading" ? (
-          <div className="flex items-center justify-center h-full">
-            <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
-          </div>
-        ) : threadState !== "list" ? (
+        {/* Régua de espera: a forma das bolhas (nada < 100 ms, frase aos 1 s,
+            mínimo de 300 ms) no lugar do spinner no meio do painel. */}
+        <Espera
+          carregando={threadState === "loading"}
+          forma={<ThreadDeMensagensSkeleton />}
+          frase="Abrindo a conversa…"
+          className="flex h-full min-h-0 flex-col"
+        >
+        {threadState === "loading" ? null : threadState !== "list" ? (
           <ChatThreadUnavailable
             reason={threadState}
             contactName={contactName}
@@ -472,6 +481,7 @@ function ChatView({
             mentionNames={mentionNames}
           />
         )}
+        </Espera>
       </div>
 
       {/* O que já está agendado para ESTA conversa, logo acima de onde se
@@ -1116,6 +1126,16 @@ export function ChatShellWithContext() {
     setSelectedKey(key);
   }, []);
 
+  // Hover com intenção na linha → a thread entra no cache pela MESMA chave e
+  // busca que o ChatView lê ao abrir (`alvoDoPrefetchDaConversa`).
+  const handlePrefetchContact = useCallback(
+    (contato: InboxContact) => {
+      const alvo = alvoDoPrefetchDaConversa(contato, boxes, caixasMarcadas, organizationId);
+      return alvo ? prefetchChatData(queryClient, alvo) : undefined;
+    },
+    [boxes, caixasMarcadas, organizationId, queryClient],
+  );
+
   const handleBack = useCallback(() => {
     setSelectedKey(null);
   }, []);
@@ -1491,13 +1511,33 @@ export function ChatShellWithContext() {
   // ── Viewport: mobile <768px usa MobileChatLayout (isMobile lido lá em cima) ──
   const ShellComponent = isMobile ? MobileChatLayout : ChatShell;
 
-  // ── Loading state ────────────────────────────────────────────────────────────
-  if (boxesLoading) {
-    return (
-      <div className="flex h-full items-center justify-center text-muted-foreground">
-        <Loader2 className="w-6 h-6 animate-spin" />
-      </div>
-    );
+  // ── Espera (régua de espera, CP-v2) ─────────────────────────────────────────
+  //
+  // Um esqueleto só, do chunk até a lista: o mesmo `ChatSkeleton` do Suspense
+  // segue na tela enquanto as caixas e a PRIMEIRA página de conversas chegam.
+  // Antes o shell trocava para um Loader2 de tela cheia e depois montava a
+  // lista com outro spinner — três estados para uma espera. Depois da primeira
+  // lista, recargas (trocar caixa, filtro com cache frio) ficam na própria
+  // lista (`Espera` na ConversationList), sem derrubar a tela.
+  const listaPronta = !boxesLoading && (boxes.length === 0 || !contactsLoading);
+  const [listaJaApareceu, setListaJaApareceu] = useState(false);
+  if (listaPronta && !listaJaApareceu) setListaJaApareceu(true);
+  // O esqueleto já nasce visível (é o do Suspense): quando a lista chega, ele
+  // cumpre os 300 ms da régua antes de dar lugar a ela — dado que pisca por
+  // 40 ms é pior que esperar (régua de espera, CP-v2).
+  const segurandoEsqueleto = useSegurarEsqueleto(!listaJaApareceu && !listaPronta);
+  // Útil = a lista de conversas NA TELA. Uma vez por montagem (régua).
+  useMarcarUtil("chat", listaPronta && !segurandoEsqueleto);
+
+  if ((!listaJaApareceu && !listaPronta) || segurandoEsqueleto) {
+    const numeros = marcadas.length || boxes.length;
+    // Texto fixo: só a contagem de números, nenhum dado de conversa.
+    const frase = boxesLoading || numeros === 0
+      ? "Juntando suas conversas…"
+      : numeros === 1
+        ? "Juntando as conversas do seu número…"
+        : `Juntando conversas dos seus ${numeros} números…`;
+    return <ChatSkeleton frase={frase} />;
   }
 
   // Não é mais "nenhuma instância WhatsApp": uma org pode ter só Instagram.
@@ -1522,6 +1562,7 @@ export function ChatShellWithContext() {
             contacts={contatosParaLista}
             selectedKey={selectedKey}
             onSelectContact={handleSelectContact}
+            onPrefetchContact={handlePrefetchContact}
             searchQuery={searchQuery}
             onSearchChange={setSearchQuery}
             isLoading={contactsLoading}

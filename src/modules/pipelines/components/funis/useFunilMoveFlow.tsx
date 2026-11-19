@@ -62,6 +62,7 @@ import {
   ECO_METADATA_TTL_MS,
   reconciliarMoveNoFunil,
   registrarEcoProprio,
+  concluirMoveOtimista,
   reverterMoveOtimista,
   type MoveOtimista,
 } from "@/modules/pipelines/lib/funil-move-cache";
@@ -119,6 +120,23 @@ interface UseFunilMoveFlowParams {
 }
 
 const roleDe = (stage: CustomPipelineStage): StageRole => stage.stage_role ?? "open";
+
+/**
+ * O ramo do `requestMove` termina num move SEM modal no meio (move simples ou
+ * destino em funil custom)? Espelha a ordem dos ramos do interceptador:
+ * venda (guarda de valor/pedido), destino `confirmacao`/`propostas` e
+ * reunião marcada abrem modal — esses não movem antes da confirmação.
+ */
+export function moveSimplesDepoisDaTarefa(
+  stage: CustomPipelineStage,
+  ctx: { stages: CustomPipelineStage[]; ehSystem: boolean; hasCustomTarget: boolean },
+): boolean {
+  if (isWonStageKey(stage.stage_key, ctx.stages)) return false;
+  if (stage.is_final_positive && ctx.hasCustomTarget) return true;
+  if (ctx.ehSystem && stage.is_final_positive) return false;
+  if (roleDe(stage) === "meeting_booked") return false;
+  return true;
+}
 
 export function useFunilMoveFlow({
   pipeline,
@@ -264,14 +282,22 @@ export function useFunilMoveFlow({
     async (
       entryId: string,
       stage: CustomPipelineStage,
-      opts: { metadataPatch?: Record<string, unknown>; successToast?: string } = {},
+      opts: {
+        metadataPatch?: Record<string, unknown>;
+        successToast?: string;
+        /**
+         * Otimismo já aplicado pelo `requestMove` (antes da checagem de
+         * tarefa). Este passo herda o rollback; não reaplica.
+         */
+        otimista?: MoveOtimista | null;
+      } = {},
     ) => {
       const entry = findEntry(entryId);
-      let otimista: MoveOtimista | null = null;
+      let otimista: MoveOtimista | null = opts.otimista ?? null;
       let moveConcluido = false;
       try {
         if (!movePermission.allowed) throw new Error("Sem permissão para mover registros no pipe");
-        if (pipeline) {
+        if (pipeline && !otimista) {
           await cancelarFetchDoMove(queryClient, {
             pipelineId: pipeline.id,
             stages: [entry?.stage_key, stage.stage_key],
@@ -313,6 +339,7 @@ export function useFunilMoveFlow({
             targetStageId: stage.target_stage_id,
           });
           moveConcluido = true;
+          if (otimista) concluirMoveOtimista(queryClient, otimista);
           reconciliar(entryId, entry.lead_id, otimista?.snapshot.fromStage ?? entry.stage_key, stage.stage_key);
           toast.success("Negócio movido para o funil de destino automaticamente!");
         } else {
@@ -323,6 +350,7 @@ export function useFunilMoveFlow({
             otimistaDoChamador: otimista ?? undefined,
           });
           moveConcluido = true;
+          if (otimista) concluirMoveOtimista(queryClient, otimista);
         }
         if (entry) posMoveSistema(entry, stage);
         if (opts.successToast) toast.success(opts.successToast);
@@ -411,17 +439,19 @@ export function useFunilMoveFlow({
   // registro de eco e o rollback deste fluxo — a ordem metadata → move é a
   // mesma.
   const moverParaPerda = useCallback(
-    async (entryId: string, stage: CustomPipelineStage) => {
+    async (entryId: string, stage: CustomPipelineStage, otimista: MoveOtimista | null = null) => {
       const perda = await requestLossReason({ stageName: stage.name });
       if (!perda) {
+        // Desistiu do motivo: o card que já tinha ido volta para a origem.
+        if (otimista) reverterMoveOtimista(queryClient, otimista);
         // Porta fechada (sem provider) já avisou — um toast só.
         if (portaAberta) toast("Operação cancelada");
         return;
       }
-      await completarMove(entryId, stage, { metadataPatch: patchDaPerda(perda) });
+      await completarMove(entryId, stage, { metadataPatch: patchDaPerda(perda), otimista });
       toast("Negócio marcado como perdido");
     },
-    [requestLossReason, portaAberta, completarMove],
+    [requestLossReason, portaAberta, completarMove, queryClient],
   );
 
   // ── Compareceu → Orçamentos (ADR-0023 d4: MOVE, não copia) ───────────────
@@ -497,11 +527,52 @@ export function useFunilMoveFlow({
         return;
       }
 
-      if (entry.stage_key !== stage.stage_key && !(await requestTaskMove(entryId))) return;
+      const mudaDeEtapa = entry.stage_key !== stage.stage_key;
+      const perda = isEtapaDePerda(stage);
+      const hasCustomTarget = !!(stage.target_pipeline_id && stage.target_stage_id);
+
+      // Régua de espera (CX ①): o card vai para a coluna ANTES da checagem de
+      // tarefa — que é uma ida ao servidor e, às vezes, um modal. Só nos
+      // ramos que terminam no `completarMove` sem outro modal no meio (ou na
+      // perda, que devolve sozinha se o motivo for cancelado); venda e reunião
+      // seguem movendo só depois de confirmadas, para o card não ir e voltar.
+      // Nada é GRAVADO antes da confirmação: o otimismo é só cache.
+      const vaiDireto =
+        mudaDeEtapa &&
+        movePermission.allowed &&
+        (perda || moveSimplesDepoisDaTarefa(stage, { stages, ehSystem, hasCustomTarget }));
+      let otimista: MoveOtimista | null = null;
+      if (vaiDireto) {
+        await cancelarFetchDoMove(queryClient, {
+          pipelineId: pipeline.id,
+          stages: [entry.stage_key, stage.stage_key],
+          entryId,
+        });
+        otimista = aplicarMoveOtimista(queryClient, {
+          pipelineId: pipeline.id,
+          entryId,
+          toStage: stage.stage_key,
+        });
+      }
+
+      if (mudaDeEtapa) {
+        let liberado = false;
+        try {
+          liberado = await requestTaskMove(entryId);
+        } catch (err) {
+          // Quem chama o move não espera a promessa (drop do kanban): uma
+          // exceção aqui viraria unhandled rejection. Avisa e trata como recusa.
+          notifyError(err, { fallback: "Não foi possível conferir as atividades obrigatórias." });
+        } finally {
+          // Cancelou o modal de tarefa (ou a checagem falhou): o card volta.
+          if (!liberado && otimista) reverterMoveOtimista(queryClient, otimista);
+        }
+        if (!liberado) return;
+      }
 
       // 1. Perdido — motivo obrigatório antes do move (SCRUM-369).
-      if (isEtapaDePerda(stage)) {
-        void moverParaPerda(entryId, stage);
+      if (perda) {
+        void moverParaPerda(entryId, stage, otimista);
         return;
       }
 
@@ -520,12 +591,11 @@ export function useFunilMoveFlow({
 
       // 3. Etapa de sucesso com destino declarado (família system; custom
       //    auto-transiciona dentro de useMoveLeadInCustomPipe).
-      const hasCustomTarget = !!(stage.target_pipeline_id && stage.target_stage_id);
       if (stage.is_final_positive && hasCustomTarget) {
         // Destino = funil customizado: move simples + auto-transição no
         // pós-move. Abrir modal de reunião aqui agendaria uma reunião que
         // ninguém pediu (mesma regra da página velha).
-        void completarMove(entryId, stage);
+        void completarMove(entryId, stage, { otimista });
         return;
       }
       if (ehSystem && stage.is_final_positive) {
@@ -555,9 +625,9 @@ export function useFunilMoveFlow({
       }
 
       // 5. Move simples.
-      void completarMove(entryId, stage);
+      void completarMove(entryId, stage, { otimista });
     },
-    [findEntry, pipeline, stages, saleGuard, continuarWon, ehSystem, temTrilhoDx, completarMove, moverParaPerda, requestTaskMove],
+    [findEntry, pipeline, stages, saleGuard, continuarWon, ehSystem, temTrilhoDx, completarMove, moverParaPerda, requestTaskMove, movePermission.allowed, queryClient],
   );
 
   // ── Diálogos (renderizados pela página) ──────────────────────────────────

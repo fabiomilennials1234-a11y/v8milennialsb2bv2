@@ -23,6 +23,7 @@ import { SupportRealtimeAnnouncement } from "@/modules/platform/components/suppo
 import { SessionDeadBanner } from "@/modules/communication/components/whatsapp/SessionDeadBanner";
 import { QuickBlastProgressPanel } from "@/modules/leads/components/bulk-actions/QuickBlastProgressPanel";
 import { FeatureSuggestionPrompt } from "@/modules/platform/components/feedback/FeatureSuggestionPrompt";
+import { IndicadorDePendencia } from "@/shared/components/IndicadorDePendencia";
 
 /**
  * Checklist flutuante de onboarding (canto sup. direito). DESLIGADO (2026-10-14,
@@ -129,6 +130,8 @@ function MainLayoutInner({ children }: MainLayoutProps) {
   // a gaveta cobre a navegação e o eixo continua vertical.
   const layout = (
     <div className="flex h-screen bg-background md:flex-row flex-col" data-layout="main">
+      {/* Troca de rota com chunk lento: fio de ouro no topo em vez de tela congelada. */}
+      <IndicadorDePendencia />
       {!isMobile && <Sidebar />}
 
       <div className="flex min-w-0 flex-1 flex-col">

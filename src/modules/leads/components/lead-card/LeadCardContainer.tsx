@@ -2,6 +2,9 @@ import { useCallback } from "react";
 import { toast } from "sonner";
 
 import { cn } from "@/lib/utils";
+import { Espera, useFaseEspera } from "@/shared/espera";
+import { MarcarUtil } from "@/core/perf/MarcarUtil";
+import { FichaSkeleton } from "./FichaSkeleton";
 import { useLeadCallAction } from "@/shared/components/LeadCallActionSlot";
 
 import { RegisterHistoricalSalesDialog } from "../lead-detail/modal/pipes/RegisterHistoricalSalesDialog";
@@ -227,229 +230,263 @@ export function LeadCardContainer({
   // Mesma chave de `LeadContatos`: uma leitura serve aos dois.
   const { data: telefones = [], isLoading: telefonesCarregando } = useLeadPhones(leadId, isOpen);
 
+  const fichaEsperando = isOpen && (isLoading || visibility === "loading");
+  const esperaDaFicha = useFaseEspera(fichaEsperando);
+
   if (!isOpen) return null;
 
-  // Na forma `coluna` a caixa de aviso tem de ocupar EXATAMENTE a largura da
-  // coluna: sem isso ela vira `flex-1` e empurra o negócio para fora da tela
-  // enquanto carrega, e o painel pisca de duas larguras a cada abertura.
-  const molduraAviso =
-    forma === "coluna"
-      ? "w-[32%] min-w-[300px] max-w-[480px] shrink-0 border-r border-border bg-sunken"
-      : "rounded-[inherit]";
-
   /**
-   * No modo `negocio` a pessoa é a moldura, não a condição: se ela ainda não
-   * carregou — ou não pode ser vista —, o negócio aparece mesmo assim, sem o
-   * cabeçalho dela. Esconder o negócio porque a ficha da pessoa falhou tiraria
-   * da tela justamente o que o cartão do funil pediu para abrir.
+   * "Tempo até útil" da ficha do lead (src/core/perf). Fica na MESMA posição
+   * de todo retorno abaixo, então só remonta quando a ficha fecha e reabre —
+   * uma medida por abertura. Na moldura do negócio quem mede é o painel dele.
    */
-  if (painelNegocios && (isLoading || visibility !== "exists" || !data)) {
-    const aviso =
-      isLoading || visibility === "loading"
-        ? null
-        : visibility === "deleted"
+  const medida =
+    !painelNegocios && modo !== "negocio" ? (
+      <MarcarUtil
+        tela="ficha_lead"
+        pronto={!fichaEsperando && !esperaDaFicha.segurando && !!data && visibility === "exists"}
+      />
+    ) : null;
+
+  const renderizar = (): React.ReactNode => {
+
+    // Na forma `coluna` a caixa de aviso tem de ocupar EXATAMENTE a largura da
+    // coluna: sem isso ela vira `flex-1` e empurra o negócio para fora da tela
+    // enquanto carrega, e o painel pisca de duas larguras a cada abertura.
+    const molduraAviso =
+      forma === "coluna"
+        ? "w-[32%] min-w-[300px] max-w-[480px] shrink-0 border-r border-border bg-sunken"
+        : "rounded-[inherit]";
+
+    /**
+     * No modo `negocio` a pessoa é a moldura, não a condição: se ela ainda não
+     * carregou — ou não pode ser vista —, o negócio aparece mesmo assim, sem o
+     * cabeçalho dela. Esconder o negócio porque a ficha da pessoa falhou tiraria
+     * da tela justamente o que o cartão do funil pediu para abrir.
+     */
+    if (painelNegocios && (isLoading || visibility !== "exists" || !data)) {
+      const aviso =
+        isLoading || visibility === "loading"
+          ? null
+          : visibility === "deleted"
+            ? "Este lead está na lixeira."
+            : visibility === "permission_denied"
+              ? "Você não tem acesso a este lead."
+              : "Lead não encontrado.";
+      return (
+        <div className="flex h-full min-h-0 flex-col overflow-y-auto overscroll-contain rounded-[inherit] bg-background px-4 pb-6 pt-4 sm:px-5">
+          {/* O aviso (ou o vão dele) ocupa a faixa do "×" da casca, para o
+              título do negócio não nascer embaixo do botão de fechar. */}
+          {aviso ? (
+            <p className="mb-3 mr-10 rounded-2xl border border-dashed border-border px-3 py-2 text-[12.5px] text-muted-foreground">
+              {aviso}
+            </p>
+          ) : (
+            <div className="h-10 shrink-0" aria-hidden="true" />
+          )}
+          {painelNegocios}
+        </div>
+      );
+    }
+
+    // Régua de espera (CX ①): a forma da ficha em osso, frase aos 1 s, e o osso
+    // que apareceu cumpre 300 ms — nada de "Carregando…" solto no meio do vazio.
+    if (fichaEsperando || esperaDaFicha.segurando) {
+      return (
+        <Espera
+          carregando
+          forma={<FichaSkeleton variante="lead" />}
+          frase="Abrindo a ficha…"
+          rotulo="Carregando ficha do lead"
+          className={cn("h-full overflow-hidden bg-card", molduraAviso)}
+        >
+          {null}
+        </Espera>
+      );
+    }
+
+    // Espelha o vocabulário de `can_view_lead`. Não colapsa os três casos numa
+    // mensagem só: "não existe", "está na lixeira" e "você não tem acesso" pedem
+    // reações diferentes de quem está lendo.
+    if (visibility !== "exists" || !data) {
+      const mensagem =
+        visibility === "deleted"
           ? "Este lead está na lixeira."
           : visibility === "permission_denied"
             ? "Você não tem acesso a este lead."
             : "Lead não encontrado.";
-    return (
-      <div className="flex h-full min-h-0 flex-col overflow-y-auto overscroll-contain rounded-[inherit] bg-background px-4 pb-6 pt-4 sm:px-5">
-        {/* O aviso (ou o vão dele) ocupa a faixa do "×" da casca, para o
-            título do negócio não nascer embaixo do botão de fechar. */}
-        {aviso ? (
-          <p className="mb-3 mr-10 rounded-2xl border border-dashed border-border px-3 py-2 text-[12.5px] text-muted-foreground">
-            {aviso}
-          </p>
-        ) : (
-          <div className="h-10 shrink-0" aria-hidden="true" />
-        )}
-        {painelNegocios}
-      </div>
-    );
-  }
+      return (
+        <div
+          className={cn(
+            "flex h-full items-center justify-center bg-card px-6 text-center",
+            molduraAviso,
+          )}
+        >
+          <span className="text-[13px] text-muted-foreground">{mensagem}</span>
+        </div>
+      );
+    }
 
-  if (isLoading || visibility === "loading") {
-    return (
-      <div className={cn("flex h-full items-center justify-center bg-card", molduraAviso)}>
-        <span className="text-[13px] text-muted-foreground">Carregando…</span>
-      </div>
-    );
-  }
+    if (forma === "coluna") {
+      /**
+       * Os ids vêm de `data.edicao`, e NÃO de um segundo `useLeadDetail`.
+       *
+       * Chamar o hook de novo aqui parecia grátis — react-query devolveria a
+       * mesma linha do cache — mas `useLeadDetail` monta `useTrackView`, que não
+       * deduplica: cada montagem dispara `track_recent_view`. Como o
+       * `useDealCardData` do painel já o chama, a segunda chamada gravaria DUAS
+       * visualizações a cada abertura do painel. Quem pegou foi
+       * `cards-nunca-empilham.test.tsx`.
+       *
+       * O `as` cobre o `types.ts` gerado, que ainda não conhece o enum de tier —
+       * mesmo motivo do cast em `QualificationSlot.tsx:37`.
+       */
+      const e = data.edicao;
+      const tier = (v: string | null | undefined): QualificationTier | null =>
+        v ? (v as QualificationTier) : null;
 
-  // Espelha o vocabulário de `can_view_lead`. Não colapsa os três casos numa
-  // mensagem só: "não existe", "está na lixeira" e "você não tem acesso" pedem
-  // reações diferentes de quem está lendo.
-  if (visibility !== "exists" || !data) {
-    const mensagem =
-      visibility === "deleted"
-        ? "Este lead está na lixeira."
-        : visibility === "permission_denied"
-          ? "Você não tem acesso a este lead."
-          : "Lead não encontrado.";
-    return (
-      <div
-        className={cn(
-          "flex h-full items-center justify-center bg-card px-6 text-center",
-          molduraAviso,
-        )}
-      >
-        <span className="text-[13px] text-muted-foreground">{mensagem}</span>
-      </div>
-    );
-  }
+      return (
+        <LeadCardAside
+          lead={data}
+          onSaveNote={salvarNota}
+          onSaveField={salvarCampo}
+          onSaveDocumentos={salvarLista}
+          onAbrirFicha={onAbrirFicha}
+          editorDeEtiquetas={
+            leadId ? (
+              <LeadCardEtiquetas
+                leadId={leadId}
+                podeCriar={podeCriarEtiqueta}
+                alinhamento="centro"
+              />
+            ) : undefined
+          }
+          controles={
+            leadId && e ? (
+              <LeadCardControles
+                leadId={leadId}
+                preVenda={e.preVenda}
+                venda={e.venda}
+                coDonos={e.coDonos}
+                preQualificacao={tier(e.preQualificacao)}
+                qualificacao={tier(e.qualificacao)}
+                atualizadoEm={e.atualizadoEm}
+              />
+            ) : undefined
+          }
+        />
+      );
+    }
 
-  if (forma === "coluna") {
-    /**
-     * Os ids vêm de `data.edicao`, e NÃO de um segundo `useLeadDetail`.
-     *
-     * Chamar o hook de novo aqui parecia grátis — react-query devolveria a
-     * mesma linha do cache — mas `useLeadDetail` monta `useTrackView`, que não
-     * deduplica: cada montagem dispara `track_recent_view`. Como o
-     * `useDealCardData` do painel já o chama, a segunda chamada gravaria DUAS
-     * visualizações a cada abertura do painel. Quem pegou foi
-     * `cards-nunca-empilham.test.tsx`.
-     *
-     * O `as` cobre o `types.ts` gerado, que ainda não conhece o enum de tier —
-     * mesmo motivo do cast em `QualificationSlot.tsx:37`.
-     */
-    const e = data.edicao;
-    const tier = (v: string | null | undefined): QualificationTier | null =>
+    const edicao = data.edicao;
+    const tierDoCard = (v: string | null | undefined): QualificationTier | null =>
       v ? (v as QualificationTier) : null;
 
+    const conversaDoTelefone = (telefone: string) =>
+      window.location.assign(
+        `/chat-whatsapp?phone=${encodeURIComponent(telefone.replace(/\D/g, ""))}&lead=${encodeURIComponent(data.id)}`,
+      );
+    const telefoneDoNegocio = telefoneDaConversa?.trim();
+    /**
+     * 2+ contatos e ninguém escolheu no negócio: PERGUNTA (Chamado b7941f5e).
+     * Antes caía em `?lead=`, que o chat traduz para o principal — o chute que
+     * `telefoneDoNegocio.ts` proíbe. Negócio que ainda precisa escolher fica de
+     * fora: lá a faixa "Com quem é este negócio" pergunta e GRAVA a resposta.
+     */
+    const conversaPorContato =
+      !conversaPrecisaEscolher && !telefoneDoNegocio && telefones.length >= 2
+        ? {
+            contatos: telefones.map((t) => ({
+              id: t.id,
+              nome: t.label,
+              numero: formatPhoneBR(t.phone),
+              telefone: t.phone,
+              principal: t.isPrimary,
+              whatsApp: t.isWhatsApp,
+            })),
+            abrir: conversaDoTelefone,
+          }
+        : undefined;
+
     return (
-      <LeadCardAside
+      <LeadCard
         lead={data}
+        modo={modo}
+        abaInicial={modo === "negocio" ? "negocios" : undefined}
+        painelNegocios={painelNegocios}
+        /* Responsáveis e qualificação, os MESMOS controles que a coluna do painel
+           do Negócio já montava — agora também na ficha, em grade (V5). */
+        controles={
+          leadId && edicao ? (
+            <LeadCardControles
+              forma="grade"
+              leadId={leadId}
+              preVenda={edicao.preVenda}
+              venda={edicao.venda}
+              coDonos={edicao.coDonos}
+              preQualificacao={tierDoCard(edicao.preQualificacao)}
+              qualificacao={tierDoCard(edicao.qualificacao)}
+              atualizadoEm={edicao.atualizadoEm}
+            />
+          ) : undefined
+        }
+        conversaPorContato={conversaPorContato}
+        onOpenChat={conversaPrecisaEscolher ? undefined : telefoneDoNegocio ? () => {
+          // Negócio com telefone escolhido: a conversa é a DESSE contato.
+          conversaDoTelefone(telefoneDoNegocio);
+        } : telefonesCarregando ? undefined : data.telefone?.trim() ? () => {
+          // Um contato só. Enquanto os contatos carregam o botão espera: abrir
+          // antes seria cair no principal sem saber se havia outro.
+          // O chat resolve o lead e a caixa acessível pelo deep-link canônico.
+          // Navegação de documento reinicia essa resolução mesmo quando a ficha
+          // foi aberta dentro do próprio chat, que guarda o link inicial em ref.
+          window.location.assign(`/chat-whatsapp?lead=${encodeURIComponent(data.id)}`);
+        } : undefined}
+        contatos={leadId ? <LeadContatos leadId={leadId} /> : undefined}
         onSaveNote={salvarNota}
+        onOpenDeal={onOpenDeal ? (entryId) => onOpenDeal(entryId, data.id) : undefined}
+        onNewDeal={onNewDeal}
+        registrarVenda={leadId ? <RegisterHistoricalSalesDialog key={leadId} leadId={leadId} /> : undefined}
         onSaveField={salvarCampo}
         onSaveDocumentos={salvarLista}
-        onAbrirFicha={onAbrirFicha}
+        // Sem org conhecida a caixa de escrever some: a policy de INSERT exige a
+        // org, e oferecer uma ação cujo gravar falharia é pior que não oferecer.
+        onComentar={leadId && organizacaoId ? comentar : undefined}
+        onEditarComentario={leadId ? editarComentario : undefined}
+        onApagarComentario={leadId ? apagarComentario : undefined}
+        comentando={criarComentario.isPending}
         editorDeEtiquetas={
           leadId ? (
-            <LeadCardEtiquetas
-              leadId={leadId}
-              podeCriar={podeCriarEtiqueta}
-              alinhamento="centro"
-            />
+            <LeadCardEtiquetas leadId={leadId} podeCriar={podeCriarEtiqueta} />
           ) : undefined
         }
-        controles={
-          leadId && e ? (
-            <LeadCardControles
-              leadId={leadId}
-              preVenda={e.preVenda}
-              venda={e.venda}
-              coDonos={e.coDonos}
-              preQualificacao={tier(e.preQualificacao)}
-              qualificacao={tier(e.qualificacao)}
-              atualizadoEm={e.atualizadoEm}
-            />
-          ) : undefined
+        // Vê o lead → pode ligar. Quem desenha o botão é a raiz (App.tsx), via
+        // LeadCallActionSlot; ele some sozinho sem número de voz ao alcance.
+        acaoLigar={leadId && renderLigar ? renderLigar({ id: leadId, nome: data.nome }) : undefined}
+        onToggleCopilot={(ativo) =>
+          leadId && toggleAI.mutate({ leadId, disabled: !ativo })
         }
+        onDelete={async () => {
+          if (!leadId || !data) return;
+          // Confirmação nativa, igual ao card antigo: exclusão de lead leva junto
+          // conversas, reuniões e follow-ups. Trocar por um diálogo bonito é
+          // trabalho de UI que não vale atrasar o fechamento do buraco.
+          if (!window.confirm(`Excluir "${data.nome}"? A ação vai para a lixeira.`)) return;
+          try {
+            await deleteLead.mutateAsync(leadId);
+            toast.success("Lead movido para a lixeira.");
+          } catch (e) {
+            notifyError(e, { fallback: "Não foi possível excluir o lead." });
+          }
+        }}
       />
     );
-  }
-
-  const edicao = data.edicao;
-  const tierDoCard = (v: string | null | undefined): QualificationTier | null =>
-    v ? (v as QualificationTier) : null;
-
-  const conversaDoTelefone = (telefone: string) =>
-    window.location.assign(
-      `/chat-whatsapp?phone=${encodeURIComponent(telefone.replace(/\D/g, ""))}&lead=${encodeURIComponent(data.id)}`,
-    );
-  const telefoneDoNegocio = telefoneDaConversa?.trim();
-  /**
-   * 2+ contatos e ninguém escolheu no negócio: PERGUNTA (Chamado b7941f5e).
-   * Antes caía em `?lead=`, que o chat traduz para o principal — o chute que
-   * `telefoneDoNegocio.ts` proíbe. Negócio que ainda precisa escolher fica de
-   * fora: lá a faixa "Com quem é este negócio" pergunta e GRAVA a resposta.
-   */
-  const conversaPorContato =
-    !conversaPrecisaEscolher && !telefoneDoNegocio && telefones.length >= 2
-      ? {
-          contatos: telefones.map((t) => ({
-            id: t.id,
-            nome: t.label,
-            numero: formatPhoneBR(t.phone),
-            telefone: t.phone,
-            principal: t.isPrimary,
-            whatsApp: t.isWhatsApp,
-          })),
-          abrir: conversaDoTelefone,
-        }
-      : undefined;
+  };
 
   return (
-    <LeadCard
-      lead={data}
-      modo={modo}
-      abaInicial={modo === "negocio" ? "negocios" : undefined}
-      painelNegocios={painelNegocios}
-      /* Responsáveis e qualificação, os MESMOS controles que a coluna do painel
-         do Negócio já montava — agora também na ficha, em grade (V5). */
-      controles={
-        leadId && edicao ? (
-          <LeadCardControles
-            forma="grade"
-            leadId={leadId}
-            preVenda={edicao.preVenda}
-            venda={edicao.venda}
-            coDonos={edicao.coDonos}
-            preQualificacao={tierDoCard(edicao.preQualificacao)}
-            qualificacao={tierDoCard(edicao.qualificacao)}
-            atualizadoEm={edicao.atualizadoEm}
-          />
-        ) : undefined
-      }
-      conversaPorContato={conversaPorContato}
-      onOpenChat={conversaPrecisaEscolher ? undefined : telefoneDoNegocio ? () => {
-        // Negócio com telefone escolhido: a conversa é a DESSE contato.
-        conversaDoTelefone(telefoneDoNegocio);
-      } : telefonesCarregando ? undefined : data.telefone?.trim() ? () => {
-        // Um contato só. Enquanto os contatos carregam o botão espera: abrir
-        // antes seria cair no principal sem saber se havia outro.
-        // O chat resolve o lead e a caixa acessível pelo deep-link canônico.
-        // Navegação de documento reinicia essa resolução mesmo quando a ficha
-        // foi aberta dentro do próprio chat, que guarda o link inicial em ref.
-        window.location.assign(`/chat-whatsapp?lead=${encodeURIComponent(data.id)}`);
-      } : undefined}
-      contatos={leadId ? <LeadContatos leadId={leadId} /> : undefined}
-      onSaveNote={salvarNota}
-      onOpenDeal={onOpenDeal ? (entryId) => onOpenDeal(entryId, data.id) : undefined}
-      onNewDeal={onNewDeal}
-      registrarVenda={leadId ? <RegisterHistoricalSalesDialog key={leadId} leadId={leadId} /> : undefined}
-      onSaveField={salvarCampo}
-      onSaveDocumentos={salvarLista}
-      // Sem org conhecida a caixa de escrever some: a policy de INSERT exige a
-      // org, e oferecer uma ação cujo gravar falharia é pior que não oferecer.
-      onComentar={leadId && organizacaoId ? comentar : undefined}
-      onEditarComentario={leadId ? editarComentario : undefined}
-      onApagarComentario={leadId ? apagarComentario : undefined}
-      comentando={criarComentario.isPending}
-      editorDeEtiquetas={
-        leadId ? (
-          <LeadCardEtiquetas leadId={leadId} podeCriar={podeCriarEtiqueta} />
-        ) : undefined
-      }
-      // Vê o lead → pode ligar. Quem desenha o botão é a raiz (App.tsx), via
-      // LeadCallActionSlot; ele some sozinho sem número de voz ao alcance.
-      acaoLigar={leadId && renderLigar ? renderLigar({ id: leadId, nome: data.nome }) : undefined}
-      onToggleCopilot={(ativo) =>
-        leadId && toggleAI.mutate({ leadId, disabled: !ativo })
-      }
-      onDelete={async () => {
-        if (!leadId || !data) return;
-        // Confirmação nativa, igual ao card antigo: exclusão de lead leva junto
-        // conversas, reuniões e follow-ups. Trocar por um diálogo bonito é
-        // trabalho de UI que não vale atrasar o fechamento do buraco.
-        if (!window.confirm(`Excluir "${data.nome}"? A ação vai para a lixeira.`)) return;
-        try {
-          await deleteLead.mutateAsync(leadId);
-          toast.success("Lead movido para a lixeira.");
-        } catch (e) {
-          notifyError(e, { fallback: "Não foi possível excluir o lead." });
-        }
-      }}
-    />
+    <>
+      {medida}
+      {renderizar()}
+    </>
   );
 }

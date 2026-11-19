@@ -20,10 +20,12 @@ import {
   cancelarFetchDoMove,
   colunaDoCardNoCache,
   reconciliarMoveNoFunil,
+  concluirMoveOtimista,
   reverterMoveOtimista,
   type MoveOtimista,
 } from "@/modules/pipelines/lib/funil-move-cache";
 import type { CustomPipelineStage } from "@/contracts/pipe";
+import { filtersKeyDe, pipelinePageKey } from "@/modules/pipelines/lib/pipeline-page-key";
 import {
   nextPipelinePageCursor,
   pipelinePageCursorArgs,
@@ -48,31 +50,37 @@ import {
  * Na W6 (demolição), `usePaginatedPipeline` colapsa neste hook.
  */
 
+/** Chave das etapas de um funil — a mesma da tela e do prefetch. */
+export const funilStagesKey = (pipelineId: string | undefined) => ["funil-stages", pipelineId] as const;
+
+/** Etapas ativas do funil, na ordem. Compartilhado com o prefetch do trilho. */
+export async function buscarEtapasDoFunil(pipelineId: string | undefined): Promise<CustomPipelineStage[]> {
+  if (!pipelineId) return [] as CustomPipelineStage[];
+
+  // Pós-F1 (20270906001000) toda etapa — de sistema ou custom — vive em
+  // `pipeline_stages` com FK real pro funil. Uma query serve as duas
+  // famílias; o shape devolvido é o contrato `CustomPipelineStage`, que os
+  // diálogos reaproveitados (settings/import/disparo) já consomem.
+  const { data, error } = await supabase
+    .from("pipeline_stages")
+    .select(
+      "id, organization_id, pipeline_id, stage_key, name, color, position, is_active, is_final_positive, is_final_negative, stage_role, requires_sale_value, target_pipeline_id, target_stage_id, target_pipe_type, target_stage_key, checklist_template_id, created_at, updated_at",
+    )
+    .eq("pipeline_id", pipelineId)
+    .eq("is_active", true)
+    .order("position", { ascending: true });
+
+  if (error) throw error;
+  return (data ?? []) as unknown as CustomPipelineStage[];
+}
+
 /** Etapas de QUALQUER funil, direto da fonte única `pipeline_stages` (F1). */
 export function useFunilStages(pipelineId: string | undefined) {
   useRealtimeSubscription("pipeline_stages", ["funil-stages"]);
 
   return useQuery({
-    queryKey: ["funil-stages", pipelineId],
-    queryFn: async () => {
-      if (!pipelineId) return [] as CustomPipelineStage[];
-
-      // Pós-F1 (20270906001000) toda etapa — de sistema ou custom — vive em
-      // `pipeline_stages` com FK real pro funil. Uma query serve as duas
-      // famílias; o shape devolvido é o contrato `CustomPipelineStage`, que os
-      // diálogos reaproveitados (settings/import/disparo) já consomem.
-      const { data, error } = await supabase
-        .from("pipeline_stages")
-        .select(
-          "id, organization_id, pipeline_id, stage_key, name, color, position, is_active, is_final_positive, is_final_negative, stage_role, requires_sale_value, target_pipeline_id, target_stage_id, target_pipe_type, target_stage_key, checklist_template_id, created_at, updated_at",
-        )
-        .eq("pipeline_id", pipelineId)
-        .eq("is_active", true)
-        .order("position", { ascending: true });
-
-      if (error) throw error;
-      return (data ?? []) as unknown as CustomPipelineStage[];
-    },
+    queryKey: funilStagesKey(pipelineId),
+    queryFn: () => buscarEtapasDoFunil(pipelineId),
     enabled: !!pipelineId,
     staleTime: 60_000,
   });
@@ -96,6 +104,27 @@ export function flattenRpcEntry(row: RpcPageRow) {
   return flattenMetadata({ ...row, lead });
 }
 
+/** Uma página de uma coluna — o queryFn da tela e do prefetch do trilho. */
+export async function buscarPaginaDoFunil(
+  pipelineId: string,
+  stageKey: string,
+  filterParams: ReturnType<typeof sharedRpcFilterParams>,
+  pageParam: PipelinePageCursor | null,
+) {
+  const { data, error } = await supabase.rpc(
+    "get_pipeline_page",
+    rpcArgs({
+      ...filterParams,
+      p_pipeline_id: pipelineId,
+      p_stage_id: stageKey,
+      p_page_size: PAGE_SIZE,
+      ...pipelinePageCursorArgs(pageParam),
+    }),
+  );
+  if (error) throw error;
+  return ((data ?? []) as RpcPageRow[]).map(flattenRpcEntry);
+}
+
 function useStageSlot(
   pipelineId: string | undefined,
   filterParams: ReturnType<typeof sharedRpcFilterParams>,
@@ -105,21 +134,8 @@ function useStageSlot(
   enabled: boolean,
 ) {
   return useInfiniteQuery({
-    queryKey: ["pipeline-page", pipelineId, stageKey ?? "__empty__", organizationId, filtersKey],
-    queryFn: async ({ pageParam }) => {
-      const { data, error } = await supabase.rpc(
-        "get_pipeline_page",
-        rpcArgs({
-          ...filterParams,
-          p_pipeline_id: pipelineId!,
-          p_stage_id: stageKey!,
-          p_page_size: PAGE_SIZE,
-          ...pipelinePageCursorArgs(pageParam),
-        }),
-      );
-      if (error) throw error;
-      return ((data ?? []) as RpcPageRow[]).map(flattenRpcEntry);
-    },
+    queryKey: pipelinePageKey(pipelineId, stageKey, organizationId, filtersKey),
+    queryFn: ({ pageParam }) => buscarPaginaDoFunil(pipelineId!, stageKey!, filterParams, pageParam),
     initialPageParam: null as PipelinePageCursor | null,
     // Cursor composto (created_at, id): empate de created_at na borda da página
     // não pula mais as irmãs (ver lib/pipeline-page-cursor).
@@ -178,7 +194,7 @@ export function usePaginatedFunil(
     ],
   );
 
-  const filtersKey = useMemo(() => JSON.stringify(filterParams), [filterParams]);
+  const filtersKey = useMemo(() => filtersKeyDe(filterParams), [filterParams]);
 
   // Chave/busca compartilhadas com o cabeçalho (`useFunilMetrics`): mesmo
   // recorte ⇒ mesma chave ⇒ uma ida só no mount (ver `stage-counts-query`).
@@ -400,6 +416,9 @@ export function useMoverCardNoFunil(pipeline: { id: string; type: "system" | "cu
 
       if (error) throw error;
       return data;
+    },
+    onSuccess: (_data, _vars, context) => {
+      if (context?.move) concluirMoveOtimista(queryClient, context.move);
     },
     onError: (_err, _vars, context) => {
       if (context?.move) reverterMoveOtimista(queryClient, context.move);

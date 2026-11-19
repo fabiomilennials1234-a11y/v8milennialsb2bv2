@@ -37,6 +37,9 @@ vi.mock("@/shared/components/UpgradeModal", () => ({
   },
 }));
 vi.mock("@/modules/pipelines", () => ({ usePrefetchPipes: () => vi.fn() }));
+vi.mock("@/modules/platform/hooks/useVisaoMeuTodos", () => ({
+  useVisaoMeuTodos: () => ({ disponivel: false, visao: "todos", setVisao: vi.fn(), donoForcado: null, pronto: true }),
+}));
 vi.mock("@/modules/identity", () => ({
   useMasterAuth: () => masterRef.current,
   useAuth: () => ({ user: { id: "user-1" } }),

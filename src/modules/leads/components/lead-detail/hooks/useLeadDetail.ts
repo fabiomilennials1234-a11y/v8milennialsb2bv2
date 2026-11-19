@@ -34,12 +34,14 @@ function normalizeRpcResponse(data: unknown): CanViewLeadRow | null {
   return data as CanViewLeadRow;
 }
 
-export function useLeadDetail(leadId: string | null, isOpen: boolean) {
-  const enabled = !!leadId && isOpen;
-
-  // 1. Gate every downstream fetch on the visibility RPC.
-  const visibilityQuery = useQuery({
-    queryKey: ["lead-visibility", leadId],
+/**
+ * Fábricas das duas primeiras idas da ficha (visibilidade → linha do lead).
+ * A ficha e o prefetch no hover do card (`lib/prefetchFicha`) usam as MESMAS:
+ * chave igual, função igual — o hover aquece exatamente o que a ficha lê.
+ */
+export function leadVisibilityQuery(leadId: string | null) {
+  return {
+    queryKey: ["lead-visibility", leadId] as const,
     queryFn: async (): Promise<CanViewLeadRow> => {
       const { data, error } = await supabase.rpc("can_view_lead", {
         p_lead_id: leadId,
@@ -53,21 +55,13 @@ export function useLeadDetail(leadId: string | null, isOpen: boolean) {
       }
       return row;
     },
-    enabled,
     staleTime: 30_000,
-  });
+  };
+}
 
-  const visibility: LeadVisibility = !enabled
-    ? "loading"
-    : visibilityQuery.isLoading
-      ? "loading"
-      : (visibilityQuery.data?.status ?? "loading");
-
-  const canFetchLead = visibility === "exists";
-
-  // 2. Real lead row — only fetched when allowed.
-  const leadQuery = useQuery({
-    queryKey: ["lead-detail", leadId],
+export function leadDetailQuery(leadId: string | null) {
+  return {
+    queryKey: ["lead-detail", leadId] as const,
     queryFn: async () => {
       if (!leadId) return null;
       const { data, error } = await supabase
@@ -88,6 +82,29 @@ export function useLeadDetail(leadId: string | null, isOpen: boolean) {
       if (error) throw error;
       return data;
     },
+  };
+}
+
+export function useLeadDetail(leadId: string | null, isOpen: boolean) {
+  const enabled = !!leadId && isOpen;
+
+  // 1. Gate every downstream fetch on the visibility RPC.
+  const visibilityQuery = useQuery({
+    ...leadVisibilityQuery(leadId),
+    enabled,
+  });
+
+  const visibility: LeadVisibility = !enabled
+    ? "loading"
+    : visibilityQuery.isLoading
+      ? "loading"
+      : (visibilityQuery.data?.status ?? "loading");
+
+  const canFetchLead = visibility === "exists";
+
+  // 2. Real lead row — only fetched when allowed.
+  const leadQuery = useQuery({
+    ...leadDetailQuery(leadId),
     enabled: enabled && canFetchLead,
   });
 

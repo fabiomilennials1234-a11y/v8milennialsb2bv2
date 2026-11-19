@@ -1,0 +1,739 @@
+<title>Régua de Espera Torque</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: documento de decisão em bancada V5 — tinta + ouro, demos vivas em molduras de tela. Dark-first. */
+:root{
+  color-scheme:dark;
+  --bg:#000; --grid:#0e0e0e; --card:#111; --card-2:#161616; --sunk:#0a0a0a; --line:rgba(255,255,255,.07);
+  --ink:#1b1b1b; --ink-2:#212121; --ink-3:#2b2b2b; --ink-line:#303030; --ink-fg:#f5f5f5; --ink-mute:#9e9e9e;
+  --fg:#f3f1ec; --mute:#9a978f; --faint:#5f5d58;
+  --gold:#ffcc00; --gold-soft:#332a0c; --gold-soft-fg:#f6cf4a; --gold-glow:rgba(255,204,0,.45);
+  --amber:#f5a524; --ok:#4ade80; --bad:#f87171;
+  --sk:#1d1d1d; --sk-hi:#2a2a2a;
+  --display:"Plus Jakarta Sans",Inter,system-ui,sans-serif;
+  --mono:"JetBrains Mono",ui-monospace,Menlo,monospace;
+}
+@media (prefers-color-scheme:light){:root:not([data-theme="dark"]){
+  color-scheme:light;
+  --bg:#f6f4ef; --grid:#e6e2d9; --card:#fff; --card-2:#faf8f4; --sunk:#f3f1ec; --line:rgba(30,25,10,.08);
+  --ink:#141210; --ink-2:#201d1a; --ink-3:#2c2925; --ink-line:#36322d; --ink-fg:#f7f5f0; --ink-mute:#a29c92;
+  --fg:#171512; --mute:#6b665c; --faint:#a39e94;
+  --gold:#ffcc00; --gold-soft:#fff3c4; --gold-soft-fg:#8a5a07; --gold-glow:rgba(255,204,0,.5);
+  --amber:#d97706; --ok:#15803d; --bad:#dc2626;
+  --sk:#ece8e0; --sk-hi:#f7f4ee;
+}}
+:root[data-theme="light"]{
+  color-scheme:light;
+  --bg:#f6f4ef; --grid:#e6e2d9; --card:#fff; --card-2:#faf8f4; --sunk:#f3f1ec; --line:rgba(30,25,10,.08);
+  --ink:#141210; --ink-2:#201d1a; --ink-3:#2c2925; --ink-line:#36322d; --ink-fg:#f7f5f0; --ink-mute:#a29c92;
+  --fg:#171512; --mute:#6b665c; --faint:#a39e94;
+  --gold:#ffcc00; --gold-soft:#fff3c4; --gold-soft-fg:#8a5a07; --gold-glow:rgba(255,204,0,.5);
+  --amber:#d97706; --ok:#15803d; --bad:#dc2626;
+  --sk:#ece8e0; --sk-hi:#f7f4ee;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font-family:var(--display);font-size:15px;line-height:1.55;
+  background-image:linear-gradient(var(--grid) 1px,transparent 1px),linear-gradient(90deg,var(--grid) 1px,transparent 1px);
+  background-size:28px 28px;-webkit-font-smoothing:antialiased}
+.wrap{max-width:1180px;margin:0 auto;padding-block:40px 96px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));display:flex;flex-direction:column;gap:72px}
+code{font-family:var(--mono);font-size:.86em;background:var(--sunk);padding:1px 6px;border-radius:6px;border:1px solid var(--line)}
+b{font-weight:700}
+h1,h2,h3{margin:0;letter-spacing:-.025em;text-wrap:balance}
+h1{font-size:clamp(34px,5.4vw,60px);font-weight:800;line-height:1.02}
+h2{font-size:clamp(26px,3.4vw,36px);font-weight:800;line-height:1.1}
+h3{font-size:17px;font-weight:700;letter-spacing:-.01em}
+.eyebrow{margin:0 0 10px;font:500 11.5px/1 var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--gold-soft-fg)}
+.lede{max-width:68ch;color:var(--mute);margin:14px 0 0;font-size:16px}
+.sec{display:flex;flex-direction:column;gap:28px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:22px;padding:24px}
+.foot{color:var(--mute);font-size:13px;margin:0;max-width:80ch}
+.num{font-variant-numeric:tabular-nums}
+
+/* HERO */
+.hero{display:grid;grid-template-columns:1.3fr 1fr;gap:28px;align-items:end}
+.hero .status{display:inline-flex;gap:8px;align-items:center;font:500 12px var(--mono);color:var(--gold-soft-fg);background:var(--gold-soft);padding:6px 12px;border-radius:999px;margin-bottom:18px}
+.hero .status i{width:7px;height:7px;border-radius:50%;background:var(--gold);box-shadow:0 0 0 4px var(--gold-glow);animation:pulse 1.6s ease-in-out infinite}
+.hero-k{background:var(--ink);color:var(--ink-fg);border-radius:28px;padding:22px 24px;display:grid;grid-template-columns:1fr 1fr;gap:18px}
+.hero-k div{display:flex;flex-direction:column;gap:2px}
+.hero-k .v{font-size:34px;font-weight:800;letter-spacing:-.03em;line-height:1}
+.hero-k .v small{font-size:15px;color:var(--ink-mute);font-weight:600}
+.hero-k .l{font-size:12.5px;color:var(--ink-mute)}
+.hero-k .gold{color:var(--gold)}
+
+/* TABLES */
+.tbl-wrap{overflow-x:auto;border-radius:22px;border:1px solid var(--line);background:var(--card)}
+table{border-collapse:collapse;width:100%;min-width:760px}
+th{font:500 11px var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--mute);text-align:left;padding:14px 16px;border-bottom:1px solid var(--line);background:var(--card-2)}
+td{padding:14px 16px;border-bottom:1px solid var(--line);vertical-align:top;font-size:14px}
+tr:last-child td{border-bottom:0}
+.rank{font:800 22px var(--display);letter-spacing:-.03em;color:var(--faint);width:40px}
+tr.hot .rank{color:var(--gold)}
+.bar{height:8px;border-radius:99px;background:var(--sunk);position:relative;overflow:hidden;min-width:120px;margin-top:8px}
+.bar i{position:absolute;inset:0 auto 0 0;border-radius:99px;background:var(--gold)}
+.bar i.tail{background:repeating-linear-gradient(90deg,var(--amber) 0 4px,transparent 4px 7px);opacity:.7}
+.t-big{font:800 20px var(--display);letter-spacing:-.02em}
+.t-sub{color:var(--mute);font-size:12.5px}
+.chip{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600;padding:3px 10px;border-radius:99px;white-space:nowrap}
+.chip.bad{background:color-mix(in srgb,var(--bad) 14%,transparent);color:var(--bad)}
+.chip.warn{background:color-mix(in srgb,var(--amber) 16%,transparent);color:var(--amber)}
+.chip.ok{background:color-mix(in srgb,var(--ok) 14%,transparent);color:var(--ok)}
+.chip.gold{background:var(--gold-soft);color:var(--gold-soft-fg)}
+.method{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+.method .card{padding:18px}
+.method p{margin:6px 0 0;color:var(--mute);font-size:13.5px}
+
+/* RÉGUA */
+.ruler{background:var(--ink);color:var(--ink-fg);border-radius:28px;padding:28px 28px 24px;display:flex;flex-direction:column;gap:20px}
+.ruler-track{display:grid;grid-template-columns:.7fr 1fr 1.2fr 1.5fr;gap:6px}
+.band{border-radius:16px;padding:16px;background:var(--ink-2);border:1px solid var(--ink-line);display:flex;flex-direction:column;gap:6px;min-width:0}
+.band .r{font:500 12px var(--mono);color:var(--ink-mute)}
+.band .n{font-weight:800;font-size:18px;letter-spacing:-.02em}
+.band p{margin:0;font-size:13px;color:var(--ink-mute)}
+.band code{background:var(--ink-3);border-color:var(--ink-line);color:var(--gold)}
+.band.b4{background:linear-gradient(160deg,var(--ink-3),var(--ink-2));border-color:color-mix(in srgb,var(--gold) 35%,var(--ink-line))}
+.ruler-axis{display:grid;grid-template-columns:.7fr 1fr 1.2fr 1.5fr;gap:6px;font:500 11px var(--mono);color:var(--ink-mute)}
+.ruler-axis span{border-top:1px solid var(--ink-line);padding-top:8px}
+.ruler .rule{font-size:13.5px;color:var(--ink-mute);border-top:1px solid var(--ink-line);padding-top:16px;max-width:90ch}
+.ruler .rule b{color:var(--ink-fg)}
+
+/* CASE TABLE */
+.case td:first-child{font:500 12px var(--mono);color:var(--mute);white-space:nowrap}
+.case td.before{color:var(--mute)}
+.case td.after{color:var(--fg)}
+
+/* DEMO FRAMES */
+.demos{display:grid;grid-template-columns:1fr 1fr;gap:20px}
+.demo{background:var(--card);border:1px solid var(--line);border-radius:22px;overflow:hidden;display:flex;flex-direction:column;min-width:0}
+.demo-h{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:16px 18px 12px}
+.demo-h .t{display:flex;flex-direction:column;gap:2px;min-width:0}
+.demo-h .t small{color:var(--mute);font-size:12.5px}
+.replay{flex:none;font:600 12.5px var(--display);color:var(--fg);background:var(--sunk);border:1px solid var(--line);padding:7px 12px;border-radius:99px;cursor:pointer;display:inline-flex;gap:6px;align-items:center}
+.replay:hover{border-color:var(--gold)}
+.replay:focus-visible,.seg button:focus-visible,.btn:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
+.stage{position:relative;margin:0 14px 14px;border-radius:16px;background:var(--bg);border:1px solid var(--line);min-height:250px;overflow:hidden}
+.clock{position:absolute;right:10px;top:10px;font:500 11px var(--mono);color:var(--mute);background:var(--card);border:1px solid var(--line);padding:3px 8px;border-radius:99px;z-index:5}
+.clock b{color:var(--gold-soft-fg);font-weight:500}
+.seg{display:inline-flex;background:var(--sunk);border:1px solid var(--line);border-radius:99px;padding:3px}
+.seg button{font:600 12px var(--display);border:0;background:transparent;color:var(--mute);padding:6px 12px;border-radius:99px;cursor:pointer}
+.seg button[aria-pressed="true"]{background:var(--ink);color:var(--gold)}
+
+/* skeleton primitive */
+.sk{background:var(--sk);border-radius:8px;position:relative;overflow:hidden}
+.sk::after{content:"";position:absolute;inset:0;background:linear-gradient(90deg,transparent,var(--sk-hi),transparent);transform:translateX(-100%);animation:shimmer 1.4s ease-in-out infinite}
+@keyframes shimmer{to{transform:translateX(100%)}}
+@keyframes pulse{50%{box-shadow:0 0 0 7px transparent}}
+@keyframes spin{to{transform:rotate(360deg)}}
+.spinner{width:22px;height:22px;border-radius:50%;border:2.5px solid var(--line);border-top-color:var(--mute);animation:spin .8s linear infinite}
+.center{position:absolute;inset:0;display:grid;place-items:center}
+
+/* phrase */
+.phrase{display:flex;align-items:center;gap:10px;font-size:13px;color:var(--mute);padding:10px 12px;opacity:0;transform:translateY(4px);transition:opacity .3s,transform .3s}
+.phrase.on{opacity:1;transform:none}
+.phrase .dot{width:6px;height:6px;border-radius:50%;background:var(--gold);animation:pulse 1.4s infinite;box-shadow:0 0 0 3px var(--gold-glow)}
+
+/* chat mock */
+.chat{display:grid;grid-template-columns:210px 1fr;height:250px}
+.chat .list{border-right:1px solid var(--line);display:flex;flex-direction:column;gap:2px;padding:8px}
+.c-row{display:grid;grid-template-columns:30px 1fr;gap:9px;align-items:center;padding:7px;border-radius:10px}
+.c-row .av{width:30px;height:30px;border-radius:50%}
+.c-row .ln{display:flex;flex-direction:column;gap:5px}
+.c-row.real .av{background:var(--ink-3);display:grid;place-items:center;font-size:11px;font-weight:700;color:var(--ink-fg)}
+.c-row.real .nm{font-size:12.5px;font-weight:700;line-height:1.1;display:flex;justify-content:space-between;gap:6px}
+.c-row.real .nm small{font-weight:500;color:var(--faint);font-size:10.5px}
+.c-row.real .pv{font-size:11.5px;color:var(--mute);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.c-row.sel{background:var(--gold-soft)}
+.c-row .badge{background:var(--gold);color:#1a1400;font-size:10px;font-weight:800;border-radius:99px;padding:0 6px}
+.thread{display:flex;flex-direction:column;justify-content:flex-end;gap:6px;padding:12px}
+.bub{max-width:70%;padding:7px 11px;border-radius:14px;font-size:12.5px}
+.bub.in{background:var(--card-2);border:1px solid var(--line);align-self:flex-start}
+.bub.out{background:var(--ink);color:var(--ink-fg);align-self:flex-end}
+.bub .st{font:500 10px var(--mono);color:var(--ink-mute);margin-left:6px}
+
+/* funil mock */
+.board{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;padding:12px;height:250px}
+.col{background:var(--card-2);border:1px solid var(--line);border-radius:14px;padding:8px;display:flex;flex-direction:column;gap:7px;min-width:0}
+.col-h{display:flex;justify-content:space-between;font-size:12px;font-weight:700;padding:2px 4px}
+.col-h span{color:var(--mute);font:500 11px var(--mono)}
+.kc{background:var(--card);border:1px solid var(--line);border-radius:11px;padding:8px 9px;display:flex;flex-direction:column;gap:4px;font-size:12px;transition:transform .25s cubic-bezier(.16,1,.3,1),box-shadow .25s}
+.kc b{font-size:12.5px}
+.kc small{color:var(--mute);font-size:11px;display:flex;justify-content:space-between}
+.kc.sk-card{gap:7px}
+.kc.flash{box-shadow:0 0 0 2px var(--gold),0 8px 24px -8px var(--gold-glow)}
+.kc.ghost{opacity:.35}
+.kc.lift{transform:rotate(-2.5deg) scale(1.03);box-shadow:0 18px 40px -14px rgba(0,0,0,.6);position:relative;z-index:3}
+.kc.fail{box-shadow:0 0 0 2px var(--bad)}
+
+/* comando mock */
+.cmd{padding:12px;display:flex;flex-direction:column;gap:10px;height:250px}
+.kpis{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.kpi{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px;display:flex;flex-direction:column;gap:4px}
+.kpi small{font-size:10.5px;color:var(--mute)}
+.kpi b{font-size:20px;letter-spacing:-.02em}
+.aw{background:var(--ink);color:var(--ink-fg);border-radius:14px;padding:10px;flex:1;display:flex;flex-direction:column;gap:6px;min-height:0}
+.aw-h{font-size:12px;font-weight:700;display:flex;justify-content:space-between}
+.aw-h span{color:var(--ink-mute);font-weight:500}
+.aw-row{display:flex;justify-content:space-between;font-size:12px;padding:6px 8px;border-radius:9px;background:var(--ink-2)}
+.aw-row span{color:var(--amber);font:500 11px var(--mono)}
+.aw .sk{background:var(--ink-2)}
+.aw .sk::after{background:linear-gradient(90deg,transparent,var(--ink-3),transparent)}
+.aw .phrase{color:var(--ink-mute);padding:4px 2px}
+
+/* narrated work */
+.narr{padding:16px;display:flex;flex-direction:column;gap:12px;height:100%}
+.n-top{display:flex;justify-content:space-between;align-items:flex-start;gap:12px}
+.n-title{font-weight:800;font-size:16px;letter-spacing:-.015em}
+.n-est{font:500 11.5px var(--mono);color:var(--mute)}
+.phases{display:flex;gap:6px}
+.ph{flex:1;display:flex;flex-direction:column;gap:6px;font-size:11.5px;color:var(--faint);min-width:0}
+.ph i{height:4px;border-radius:99px;background:var(--sunk);overflow:hidden;position:relative;border:1px solid var(--line)}
+.ph i b{position:absolute;inset:0 auto 0 0;width:0;background:var(--gold);transition:width .25s linear}
+.ph.on{color:var(--fg);font-weight:600}
+.ph.done{color:var(--mute)}
+.n-count{display:flex;align-items:baseline;gap:10px}
+.n-count .big{font:800 34px var(--display);letter-spacing:-.04em;font-variant-numeric:tabular-nums}
+.n-count .of{color:var(--mute);font-size:13px}
+.n-cur{display:flex;align-items:center;gap:10px;background:var(--sunk);border:1px solid var(--line);border-radius:12px;padding:9px 11px;font-size:12.5px;min-width:0}
+.n-cur .spark{width:8px;height:8px;border-radius:50%;background:var(--gold);flex:none;box-shadow:0 0 10px var(--gold)}
+.n-cur span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.n-log{display:flex;flex-direction:column;gap:3px;font:400 11.5px var(--mono);color:var(--mute);min-height:52px}
+.n-log div{animation:fadein .3s}
+.n-log .okk{color:var(--ok)}
+@keyframes fadein{from{opacity:0;transform:translateY(3px)}}
+.n-act{display:flex;gap:8px;margin-top:auto}
+.btn{font:700 12.5px var(--display);border-radius:99px;padding:8px 14px;border:1px solid var(--line);background:var(--card);color:var(--fg);cursor:pointer}
+.btn.stop{border-color:color-mix(in srgb,var(--bad) 40%,transparent);color:var(--bad)}
+.btn.gold{background:var(--gold);color:#1a1400;border-color:var(--gold)}
+.pill-bg{position:absolute;left:12px;bottom:12px;display:none;align-items:center;gap:10px;background:var(--ink);color:var(--ink-fg);border-radius:99px;padding:7px 8px 7px 12px;font-size:12px;box-shadow:0 18px 40px -16px rgba(0,0,0,.7);z-index:6}
+.pill-bg .ring{width:22px;height:22px;flex:none}
+.pill-bg .btn{padding:4px 10px;font-size:11px;background:var(--ink-3);color:var(--ink-fg);border-color:var(--ink-line)}
+.stage.bg .narr{filter:blur(2px);opacity:.25;pointer-events:none}
+.stage.bg .pill-bg{display:flex}
+
+/* before/after */
+.ba{display:grid;grid-template-columns:1fr 1fr;gap:20px}
+.ba .label{font:500 11px var(--mono);letter-spacing:.1em;text-transform:uppercase;padding:0 18px}
+.ba .label.b{color:var(--bad)} .ba .label.a{color:var(--ok)}
+.timeline{margin:0 14px 16px;display:flex;flex-direction:column;gap:5px;font-size:12.5px}
+.timeline div{display:grid;grid-template-columns:62px 1fr;gap:10px;color:var(--mute)}
+.timeline div span{font:500 11px var(--mono);color:var(--faint)}
+.timeline div.cur{color:var(--fg)}
+.timeline div.cur span{color:var(--gold-soft-fg)}
+
+/* clicks */
+.clicks td:nth-child(3){white-space:nowrap}
+
+/* CHARACTERS */
+.grammar{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+.g-item{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:16px;display:flex;flex-direction:column;gap:4px}
+.g-k{font:500 11px var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--gold-soft-fg)}
+.g-v{font-size:13.5px;color:var(--mute)}
+.cast-wrap{overflow-x:auto;border-radius:28px;background:var(--ink);border:1px solid var(--ink-line)}
+.cast{min-width:820px}
+.cast th{background:transparent;color:var(--ink-mute);border-color:var(--ink-line);text-align:center}
+.cast th:first-child{text-align:left}
+.cast td{border-color:var(--ink-line);text-align:center;vertical-align:middle;padding:16px 8px;color:var(--ink-fg)}
+.cast td.who{text-align:left;padding-left:22px;width:180px}
+.who b{display:block;font-size:15px;letter-spacing:-.01em}
+.who small{color:var(--ink-mute);font-size:12px;display:block;line-height:1.35;margin-top:2px}
+.bot{width:112px;height:112px;display:block;margin:0 auto;overflow:visible}
+.cap{display:block;font:500 10.5px var(--mono);color:var(--ink-mute);margin-top:6px}
+/* bot parts */
+.bot .body{fill:url(#bodyGrad);stroke:#3a3a3a;stroke-width:1}
+.bot .rim{fill:none;stroke:rgba(255,255,255,.10);stroke-width:1}
+.bot .socket{fill:#0b0b0b}
+.bot .lens{fill:#ffcc00}
+.bot .pupil{fill:#1a1400}
+.bot .lid{fill:#0b0b0b}
+.bot .tool{stroke:#ffcc00;fill:none;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}
+.bot .toolf{fill:#ffcc00}
+.bot .halo{fill:none}
+.bot .spark{fill:#ffcc00;opacity:0}
+.bot .badge{opacity:0}
+.bot g.all{transform-origin:56px 70px;transform-box:view-box}
+/* idle */
+.idle g.all{animation:breathe 4.2s ease-in-out infinite}
+.idle .lid{transform:translateY(-3px)}
+.idle .tool,.idle .toolf{opacity:.35}
+.idle .halo{stroke:rgba(255,255,255,.08);stroke-width:1.5;stroke-dasharray:3 6;animation:spinslow 22s linear infinite;transform-origin:56px 62px;transform-box:view-box}
+@keyframes breathe{50%{transform:scale(1.025) translateY(-1px)}}
+@keyframes spinslow{to{transform:rotate(360deg)}}
+/* working */
+.working .pupil{animation:scan 2.4s ease-in-out infinite}
+.working .lid{transform:translateY(-14px)}
+@keyframes scan{0%,100%{transform:translateX(-3.5px)}50%{transform:translateX(3.5px)}}
+/* celebrate */
+.celebrate g.all{animation:hop 1.6s cubic-bezier(.3,0,.3,1) infinite}
+.celebrate .pupil{opacity:0}
+.celebrate .smile{opacity:1}
+.celebrate .lid{transform:translateY(-14px)}
+.celebrate .spark{animation:burst 1.6s ease-out infinite}
+.celebrate .spark:nth-of-type(2){animation-delay:.08s}.celebrate .spark:nth-of-type(3){animation-delay:.16s}.celebrate .spark:nth-of-type(4){animation-delay:.04s}.celebrate .spark:nth-of-type(5){animation-delay:.12s}
+@keyframes hop{0%,55%,100%{transform:translateY(0)}20%{transform:translateY(-9px) scale(1.02,0.98)}35%{transform:translateY(0) scale(1.04,.95)}}
+@keyframes burst{0%,15%{opacity:0;transform:translate(0,0) scale(.4)}30%{opacity:1}70%,100%{opacity:0;transform:translate(var(--dx),var(--dy)) scale(1)}}
+.bot .smile{opacity:0;stroke:#1a1400;stroke-width:2.6;fill:none;stroke-linecap:round}
+/* needs you */
+.needs .halo{stroke:#f5a524;stroke-width:2;animation:ring 1.5s ease-out infinite;transform-origin:56px 62px;transform-box:view-box}
+.needs .lens{fill:#ffcc00}
+.needs .pupil{transform:scale(1.35);transform-origin:56px 52px;transform-box:view-box}
+.needs .lid{transform:translateY(-14px)}
+.needs .badge{opacity:1;animation:nudge 1.5s ease-in-out infinite;transform-origin:88px 26px;transform-box:view-box}
+.needs .tool,.needs .toolf{opacity:.5}
+.needs g.all{animation:lean 3s ease-in-out infinite}
+@keyframes ring{0%{opacity:.9;transform:scale(.92)}100%{opacity:0;transform:scale(1.18)}}
+@keyframes nudge{0%,70%,100%{transform:rotate(0)}78%{transform:rotate(-12deg)}86%{transform:rotate(10deg)}}
+@keyframes lean{50%{transform:translateY(-2px) rotate(-1.5deg)}}
+/* tool motions (working only) */
+.working .t-sieve .drop{animation:drop 1.2s linear infinite}
+.working .t-sieve .drop:nth-child(2){animation-delay:.4s}.working .t-sieve .drop:nth-child(3){animation-delay:.8s}
+@keyframes drop{0%{transform:translateY(-4px);opacity:0}20%{opacity:1}100%{transform:translateY(10px);opacity:0}}
+.t-sieve .drop{opacity:0}
+.working .t-wave path{animation:wave 1.4s ease-out infinite}
+.working .t-wave path:nth-child(2){animation-delay:.25s}.working .t-wave path:nth-child(3){animation-delay:.5s}
+@keyframes wave{0%{opacity:0}30%{opacity:1}100%{opacity:0}}
+.t-orbit .sat{transform-origin:56px 62px;transform-box:view-box}
+.working .t-orbit .sat{animation:spinslow 2.8s linear infinite}
+.t-dial .hand{transform-origin:56px 52px;transform-box:view-box}
+.working .t-dial .hand{animation:tick 4s steps(12) infinite}
+@keyframes tick{to{transform:rotate(360deg)}}
+.t-beam{opacity:0}
+.working .t-beam{opacity:1;animation:sweep 2.6s ease-in-out infinite;transform-origin:56px 52px;transform-box:view-box}
+@keyframes sweep{0%,100%{transform:rotate(-28deg)}50%{transform:rotate(28deg)}}
+
+.decide{background:var(--ink);color:var(--ink-fg);border-radius:28px;padding:28px;display:flex;flex-direction:column;gap:14px}
+.decide ol{margin:0;padding-left:20px;display:flex;flex-direction:column;gap:10px;max-width:90ch}
+.decide li{color:var(--ink-mute)}
+.decide li b{color:var(--ink-fg)}
+.decide code{background:var(--ink-3);border-color:var(--ink-line);color:var(--gold)}
+
+@media (max-width:900px){
+  .hero,.demos,.ba,.method,.grammar{grid-template-columns:1fr}
+  .ruler-track,.ruler-axis{grid-template-columns:1fr 1fr}
+  .ruler-axis{display:none}
+  .chat{grid-template-columns:150px 1fr}
+}
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{animation-duration:.001ms!important;animation-iteration-count:1!important;transition-duration:.001ms!important}
+}
+</style>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <linearGradient id="bodyGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#2e2e2e"/><stop offset=".55" stop-color="#1c1c1c"/><stop offset="1" stop-color="#121212"/>
+    </linearGradient>
+    <radialGradient id="lensGlow"><stop offset="0" stop-color="#ffcc00" stop-opacity=".55"/><stop offset="1" stop-color="#ffcc00" stop-opacity="0"/></radialGradient>
+  </defs>
+</svg>
+
+<div class="wrap">
+
+<header class="hero">
+  <div>
+    <span class="status"><i></i>Mockup v1 · aguardando aprovação do CTO</span>
+    <p class="eyebrow">CX · entrega ① · 19/11/2026</p>
+    <h1>Esperar no Torque vai ter forma, frase e saída.</h1>
+    <p class="lede">Medição das telas principais (só leitura em produção), os cinco cliques que mais acontecem, a régua de quatro tempos aplicada às três piores telas, o arrastar de card antes e depois, e a direção de arte da equipe de agentes.</p>
+  </div>
+  <div class="hero-k">
+    <div><span class="v num">2,2<small> s</small></span><span class="l">Chat até a lista aparecer (média; cauda 15 s)</span></div>
+    <div><span class="v num gold">0</span><span class="l">rotas com pré-carga de código hoje</span></div>
+    <div><span class="v num">596<small> KB</small></span><span class="l">pacote inicial (gzip), antes de qualquer tela</span></div>
+    <div><span class="v num">4<small> de 5</small></span><span class="l">cliques mais frequentes esperam o servidor</span></div>
+  </div>
+</header>
+
+<!-- ───────────── 1. MEDIÇÃO ───────────── -->
+<section class="sec" id="medicao">
+  <div>
+    <p class="eyebrow">Passo 1 · medição</p>
+    <h2>Ranking das piores telas</h2>
+    <p class="lede">Tempo até o conteúdo útil aparecer, pelo caminho serial de queries de cada tela. Servidor medido; rede estimada.</p>
+  </div>
+  <div class="method">
+    <div class="card"><h3>Servidor: medido</h3><p><code>pg_stat_statements</code> de produção desde 10/11 (9 dias), papel <code>authenticated</code>. Média por RPC/tabela.</p></div>
+    <div class="card"><h3>Cascata: lida no código</h3><p>Quais queries só começam depois de outra terminar (profundidade serial), por tela.</p></div>
+    <div class="card"><h3>Rede: estimada</h3><p>+80 ms por ida serial (sa-east-1). Não existe RUM no front — sem web-vitals, sem Sentry tracing. <b>Primeiro item da implementação.</b></p></div>
+  </div>
+
+  <div class="tbl-wrap">
+  <table>
+    <thead><tr><th></th><th>Tela</th><th>Até o útil</th><th>Gargalo medido</th><th>O que o usuário vê hoje</th><th>Uso (30 d)</th></tr></thead>
+    <tbody>
+      <tr class="hot"><td class="rank">1</td><td><b>Chat</b><div class="t-sub">lista de conversas</div></td>
+        <td><span class="t-big num">2,2 s</span><div class="t-sub">cauda até 15 s</div><div class="bar"><i style="width:55%"></i></div><div class="bar"><i class="tail" style="width:100%"></i></div></td>
+        <td><code>get_whatsapp_conversation_list_multi</code> 1.781 ms média, desvio 2,6 s, 22 mil chamadas. Oficial: 3,2 s.</td>
+        <td>Skeleton bom → <b>troca para spinner</b> de tela cheia → layout salta. Lista em spinner.</td>
+        <td class="num">9.305 visitas<br><span class="t-sub">96 usuários</span></td></tr>
+      <tr class="hot"><td class="rank">2</td><td><b>Comando</b><div class="t-sub">card "aguardando resposta"</div></td>
+        <td><span class="t-big num">2,7 s</span><div class="t-sub">4 idas em série</div><div class="bar"><i style="width:68%"></i></div></td>
+        <td><code>get_conversations_awaiting_human_reply_multi</code> 2.177 ms, só começa depois das caixas.</td>
+        <td>KPIs e skeleton razoáveis; o card mais útil é o último a chegar.</td>
+        <td><span class="chip warn">sem medição</span><div class="t-sub">não chama trackModuleVisit</div></td></tr>
+      <tr class="hot"><td class="rank">3</td><td><b>Funil</b><div class="t-sub">kanban</div></td>
+        <td><span class="t-big num">1,2 s</span><div class="t-sub">1,6 s até contadores</div><div class="bar"><i style="width:30%"></i></div></td>
+        <td>3 idas até cards: <code>get_pipeline_stage_counts_by_id</code> 248 ms → N× <code>get_pipeline_page</code> 329 ms. Contadores: <code>checklists</code> 173 ms em série.</td>
+        <td>Spinner → <b>colunas vazias sem skeleton</b> → cards pipocam por coluna.</td>
+        <td class="num">~13 mil visitas<br><span class="t-sub">somando funis</span></td></tr>
+      <tr><td class="rank">4</td><td><b>Ficha do lead / negócio</b><div class="t-sub">gaveta</div></td>
+        <td><span class="t-big num">0,6 s</span><div class="t-sub">negócio: 4 idas</div><div class="bar"><i style="width:15%"></i></div></td>
+        <td><code>can_view_lead</code> → <code>leads</code> + 4× <code>negocio_projetado</code> → extras em 2 lotes.</td>
+        <td>Texto "Carregando…" centralizado. Sem forma.</td>
+        <td><span class="chip warn">derivado</span><div class="t-sub">sem evento próprio</div></td></tr>
+      <tr><td class="rank">5</td><td><b>Leads</b><div class="t-sub">lista</div></td>
+        <td><span class="t-big num">0,3 s</span><div class="t-sub">variante de 12 s</div><div class="bar"><i style="width:8%"></i></div></td>
+        <td>Linhas rápidas. Uma forma de contagem em <code>leads</code> (filtro de shadow + org) leva <b>12,2 s</b> média em 227 chamadas.</td>
+        <td>Skeleton de 6 linhas parecido com a linha real. Trocar de página volta ao skeleton.</td>
+        <td class="num">3.713 visitas<br><span class="t-sub">102 usuários</span></td></tr>
+      <tr><td class="rank">6</td><td><b>Agenda</b></td>
+        <td><span class="t-big num">0,25 s</span><div class="bar"><i style="width:6%"></i></div></td>
+        <td><code>get_agenda_events_scoped</code> 168 ms, 1 ida.</td>
+        <td>KPI com "·" pulsando; <b>grade do calendário vazia</b> até chegar.</td>
+        <td class="t-sub">sem módulo próprio</td></tr>
+      <tr><td class="rank">—</td><td><b>Troca de rota</b></td>
+        <td><span class="t-big num">+chunk</span><div class="t-sub">Chat 101 KB, Funil 73 KB</div></td>
+        <td>Zero pré-carga de código. O prefetch no hover de Funis usa a chave antiga e nunca é lido. <code>prefetchChatRoute</code> existe e ninguém chama.</td>
+        <td>Tela antiga congela sem indicar nada até o código chegar.</td>
+        <td class="t-sub">toda navegação</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <div>
+    <h3 style="margin-bottom:12px">Os cinco cliques que mais acontecem</h3>
+    <div class="tbl-wrap">
+    <table class="clicks">
+      <thead><tr><th>Clique</th><th>Volume (30 d)</th><th>Hoje</th><th>Defeito</th></tr></thead>
+      <tbody>
+        <tr><td><b>Enviar mensagem</b></td><td class="num">21.592</td><td><span class="chip ok">otimista</span></td><td>Bolha aparece na hora, mas o botão vira spinner e o 2º envio é barrado ("Aguarde o envio anterior"). Cada envio recarrega as listas de <b>todas</b> as caixas.</td></tr>
+        <tr><td><b>Abrir conversa</b></td><td class="num">~9.300</td><td><span class="chip bad">espera</span></td><td>2–3 idas em série (manifesto → mensagens em lotes de 100). Spinner na thread. Sem prefetch no hover.</td></tr>
+        <tr><td><b>Mover card no funil</b></td><td class="num">1.891</td><td><span class="chip warn">meio otimista</span></td><td>Antes do otimismo roda <code>task_pending_for_move</code>. <b>O card volta para a coluna de origem</b> e só depois pula para o destino.</td></tr>
+        <tr><td><b>Abrir ficha</b></td><td class="num">derivado</td><td><span class="chip bad">espera</span></td><td>"Carregando…" e 3–4 idas. Sem prefetch no hover do card.</td></tr>
+        <tr><td><b>Trocar etapa / responsável na ficha</b></td><td class="num">derivado</td><td><span class="chip bad">espera</span></td><td>Etapa: checagem de tarefa roda <b>2×</b> em série, depois ~15 invalidações. Responsável: popover aberto sem sinal, nome novo só após refetch.</td></tr>
+      </tbody>
+    </table>
+    </div>
+  </div>
+</section>
+
+<!-- ───────────── 2. A RÉGUA ───────────── -->
+<section class="sec" id="regua">
+  <div>
+    <p class="eyebrow">Passo 2 · a régua</p>
+    <h2>Quatro tempos, um componente cada, escolhido pelo relógio</h2>
+    <p class="lede">O desenvolvedor não escolhe spinner ou skeleton. Ele declara a forma da tela; a primitiva <code>&lt;Espera&gt;</code> sobe de degrau sozinha conforme o tempo passa. Spinner deixa de existir em tela de dados.</p>
+  </div>
+
+  <div class="ruler">
+    <div class="ruler-track">
+      <div class="band"><span class="r">&lt; 100 ms</span><span class="n">Otimista</span><p>Nada de espera. O resultado aparece já; erro desfaz com aviso.</p><code>useAcaoOtimista</code></div>
+      <div class="band"><span class="r">100 ms – 1 s</span><span class="n">Skeleton com forma real</span><p>O esqueleto é a tela: mesmas colunas, linhas e alturas. Nada pula quando o dado chega.</p><code>&lt;Espera forma&gt;</code></div>
+      <div class="band"><span class="r">1 – 10 s</span><span class="n">Skeleton + frase</span><p>Depois de 1 s, uma frase diz o que está acontecendo, em linguagem do vendedor.</p><code>frase="…"</code></div>
+      <div class="band b4"><span class="r">&gt; 10 s</span><span class="n">Trabalho narrado</span><p>Fases, "X de Y", item atual, estimativa antes de começar, Parar sempre, e saída para segundo plano.</p><code>&lt;TrabalhoNarrado&gt;</code></div>
+    </div>
+    <div class="ruler-axis"><span>0</span><span>100 ms</span><span>1 s</span><span>10 s →</span></div>
+    <p class="rule"><b>Regras fixas:</b> nada aparece antes de 100 ms (evita piscar); skeleton fica no mínimo 300 ms quando aparece (evita flash); a frase entra aos 1 s; o narrado só é usado quando a estimativa é conhecida <b>antes</b> de começar — por isso ele é escolhido pela ação (extrair lista, disparar, importar), não pelo relógio.</p>
+  </div>
+
+  <div>
+    <h3 style="margin-bottom:12px">Um caso só: Bia, SDR, abre o Chat segunda às 9h</h3>
+    <div class="tbl-wrap">
+    <table class="case">
+      <thead><tr><th>Momento</th><th>Hoje</th><th>Com a régua</th></tr></thead>
+      <tbody>
+        <tr><td>passa o mouse no Chat</td><td class="before">Nada.</td><td class="after">Código da tela e 1ª página de conversas começam a baixar (prefetch no hover).</td></tr>
+        <tr><td>0 – 100 ms</td><td class="before">Tela anterior congela.</td><td class="after">Rota já trocou; shell do Chat no lugar.</td></tr>
+        <tr><td>100 ms – 1 s</td><td class="before">Skeleton, depois <b>spinner de tela cheia</b>.</td><td class="after">Skeleton com a forma da lista (avatar, nome, prévia, hora). Um só, do início ao fim.</td></tr>
+        <tr><td>1 – 2,2 s</td><td class="before">Spinner.</td><td class="after">Mesmo skeleton + "Juntando conversas dos seus 3 números…".</td></tr>
+        <tr><td>chegou</td><td class="before">Layout salta, lista aparece.</td><td class="after">Linhas substituem o esqueleto no mesmo lugar. Zero salto.</td></tr>
+        <tr><td>clica numa conversa</td><td class="before">Spinner na thread (2–3 idas).</td><td class="after">Já baixada no hover; abre direto. Se não, skeleton de bolhas.</td></tr>
+        <tr><td>envia 2 mensagens seguidas</td><td class="before">2ª barrada: "Aguarde o envio anterior".</td><td class="after">As duas entram na fila, aparecem na hora, ✓ chega em cada uma.</td></tr>
+      </tbody>
+    </table>
+    </div>
+  </div>
+</section>
+
+<!-- ───────────── 3. APLICADA ───────────── -->
+<section class="sec" id="aplicada">
+  <div>
+    <p class="eyebrow">Passo 2 · aplicada às três piores</p>
+    <h2>Antes e depois, no tempo real medido</h2>
+    <p class="lede">Cada moldura roda o tempo medido em produção. Alterne entre <b>Hoje</b> e <b>Régua</b> e clique em Rever.</p>
+  </div>
+
+  <div class="demos">
+    <!-- CHAT -->
+    <div class="demo" data-demo="chat">
+      <div class="demo-h"><div class="t"><h3>1 · Chat</h3><small>2,2 s até a lista · faixa 1–10 s</small></div>
+        <div style="display:flex;gap:8px;align-items:center"><div class="seg" role="group" aria-label="Versão do Chat"><button aria-pressed="false" data-v="hoje">Hoje</button><button aria-pressed="true" data-v="regua">Régua</button></div><button class="replay" data-replay>↻ Rever</button></div></div>
+      <div class="stage"><span class="clock">t = <b data-clock>0,0 s</b></span><div data-view></div></div>
+    </div>
+    <!-- COMANDO -->
+    <div class="demo" data-demo="cmd">
+      <div class="demo-h"><div class="t"><h3>2 · Comando</h3><small>2,7 s até "aguardando resposta"</small></div>
+        <div style="display:flex;gap:8px;align-items:center"><div class="seg" role="group" aria-label="Versão do Comando"><button aria-pressed="false" data-v="hoje">Hoje</button><button aria-pressed="true" data-v="regua">Régua</button></div><button class="replay" data-replay>↻ Rever</button></div></div>
+      <div class="stage"><span class="clock">t = <b data-clock>0,0 s</b></span><div data-view></div></div>
+    </div>
+    <!-- FUNIL -->
+    <div class="demo" data-demo="funil">
+      <div class="demo-h"><div class="t"><h3>3 · Funil</h3><small>1,2 s até os cards · faixa 1–10 s</small></div>
+        <div style="display:flex;gap:8px;align-items:center"><div class="seg" role="group" aria-label="Versão do Funil"><button aria-pressed="false" data-v="hoje">Hoje</button><button aria-pressed="true" data-v="regua">Régua</button></div><button class="replay" data-replay>↻ Rever</button></div></div>
+      <div class="stage"><span class="clock">t = <b data-clock>0,0 s</b></span><div data-view></div></div>
+    </div>
+    <!-- NARRADO -->
+    <div class="demo" data-demo="narr">
+      <div class="demo-h"><div class="t"><h3>4 · Trabalho narrado</h3><small>&gt; 10 s · extrair lista fria do Maps</small></div>
+        <button class="replay" data-replay>↻ Rever</button></div>
+      <div class="stage" style="min-height:300px"><div data-view style="height:300px"></div>
+        <div class="pill-bg" data-pill><svg class="ring" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="none" stroke="#303030" stroke-width="3"/><circle data-ring cx="12" cy="12" r="9" fill="none" stroke="#ffcc00" stroke-width="3" stroke-linecap="round" stroke-dasharray="56.5" stroke-dashoffset="56.5" transform="rotate(-90 12 12)"/></svg><span data-pilltxt>Prospectador · 0 de 120</span><button class="btn" data-back>Abrir</button></div>
+      </div>
+    </div>
+  </div>
+  <p class="foot">O narrado é a mesma peça que a lista fria (entrega ②) e o Oráculo (③) vão usar, e é o embrião do centro de atividades (⑤): "Continuar em segundo plano" vira a pílula, e a pílula vira item do painel "o que os agentes fizeram hoje".</p>
+</section>
+
+<!-- ───────────── 4. ARRASTAR CARD ───────────── -->
+<section class="sec" id="arrastar">
+  <div>
+    <p class="eyebrow">Passo 2 · otimista</p>
+    <h2>Arrastar card: hoje ele volta antes de ir</h2>
+    <p class="lede">Hoje a checagem de tarefa pendente roda <b>antes</b> do otimismo, então o card solta, volta para a origem e só depois pula. Na régua, ele fica onde você soltou; a checagem roda junto e, se houver tarefa pendente, o modal abre com o card já no destino — cancelar devolve com animação.</p>
+  </div>
+  <div class="ba">
+    <div class="demo" data-demo="drag-hoje">
+      <div class="demo-h"><div class="t"><span class="label b" style="padding:0">Hoje</span><small>card some, volta, pula</small></div><button class="replay" data-replay>↻ Rever</button></div>
+      <div class="stage"><span class="clock">t = <b data-clock>0,0 s</b></span><div data-view></div></div>
+      <div class="timeline" data-tl></div>
+    </div>
+    <div class="demo" data-demo="drag-regua">
+      <div class="demo-h"><div class="t"><span class="label a" style="padding:0">Régua</span><small>fica onde soltou; erro desfaz</small></div>
+        <div style="display:flex;gap:8px;align-items:center"><div class="seg" role="group" aria-label="Resultado"><button aria-pressed="true" data-v="ok">Sucesso</button><button aria-pressed="false" data-v="erro">Erro</button></div><button class="replay" data-replay>↻ Rever</button></div></div>
+      <div class="stage"><span class="clock">t = <b data-clock>0,0 s</b></span><div data-view></div></div>
+      <div class="timeline" data-tl></div>
+    </div>
+  </div>
+</section>
+
+<!-- ───────────── 5. PERSONAGENS ───────────── -->
+<section id="personagens" class="sec">
+  <div>
+    <p class="eyebrow">Passo 3 · direção de arte · em paralelo</p>
+    <h2>A equipe tem rosto</h2>
+    <p class="lede">Cada função é uma <b>peça usinada</b>: corpo de tinta, uma lente de ouro que é o olhar, e uma ferramenta que só ela tem. Torque é força aplicada num eixo; os agentes são peças da máquina, não mascotes. Mesma gramática para os cinco.</p>
+  </div>
+  <div class="grammar">
+    <div class="g-item"><span class="g-k">Lente</span><span class="g-v">O humor. Varre quando trabalha, semicerra no ócio, vira sorriso no sucesso, cresce e encara você quando precisa.</span></div>
+    <div class="g-item"><span class="g-k">Ferramenta</span><span class="g-v">A função. Só ela se mexe com significado: peneira, antena, órbita, mostrador, farol.</span></div>
+    <div class="g-item"><span class="g-k">Halo</span><span class="g-v">O estado, legível de longe e em 24 px: nada · tracejado lento · faíscas de ouro · anel âmbar pulsando com selo.</span></div>
+  </div>
+  <div class="cast-wrap">
+    <table class="cast">
+      <thead><tr><th>Função</th><th>Trabalhando</th><th>Ocioso</th><th>Comemorando</th><th>Precisa de você</th></tr></thead>
+      <tbody id="cast"></tbody>
+    </table>
+  </div>
+  <p class="foot">Tokens da V5: tinta, ouro <code>--primary</code>, âmbar <code>--warning</code> só para "precisa de você". Aparência fixa por função; o nome é por organização ("Bia · SDR"). Com movimento reduzido, cada estado vira uma pose parada e continua legível. Na implementação, um único SVG parametrizado — sem imagem, sem Lottie, ~2 KB por função.</p>
+</section>
+
+<!-- ───────────── 6. DECISÃO ───────────── -->
+<section class="decide">
+  <p class="eyebrow" style="margin:0">O que preciso que você aprove</p>
+  <h2>Se aprovado, a implementação faz isto, nesta ordem</h2>
+  <ol>
+    <li><b>Medir de verdade primeiro:</b> web-vitals + tempo até o útil por tela gravados em <code>usage_events</code> (amostrado), e <code>trackModuleVisit</code> no Comando. Sem isso o "depois" não se prova.</li>
+    <li><b>Primitivas:</b> <code>&lt;Espera&gt;</code> (skeleton → +frase aos 1 s) e <code>&lt;TrabalhoNarrado&gt;</code>, mais <code>useAcaoOtimista</code>. Um arquivo cada, com teste.</li>
+    <li><b>Chat:</b> skeleton único do chunk até a lista, frase aos 1 s, prefetch no hover da conversa, envio em fila sem barrar o 2º.</li>
+    <li><b>Funil:</b> colunas com skeleton de forma real, mover card otimista antes da checagem de tarefa, prefetch da ficha no hover.</li>
+    <li><b>Comando:</b> card "aguardando" com skeleton + frase; disparar a RPC em paralelo, não depois das caixas.</li>
+    <li><b>Troca de rota:</b> pré-carga do código no hover do trilho; a tela antiga mostra indicador de pendência no topo em vez de congelar.</li>
+    <li><b>Ficha:</b> skeleton com forma, troca de responsável otimista.</li>
+  </ol>
+  <p class="foot" style="color:var(--ink-mute)">Fora deste escopo (só anotado): a RPC de 1,8 s do Chat e a contagem de 12 s em Leads são problemas de banco; a régua esconde, não resolve. Proponho tratá-los em frente própria, testada em branch do Supabase. Personagens: a aprovação aqui é da direção; eles só entram em tela na Sala do time (④).</p>
+</section>
+
+</div>
+
+<script>
+(() => {
+  const RM = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const fmt = s => s.toFixed(1).replace('.', ',') + ' s';
+  const people = [['MS','Marina Souza','Pode mandar a proposta?','09:12',2],['RT','Rafael Teixeira','Fechado, amanhã 10h','09:04',0],['CL','Clínica Lumière','Qual o valor do plano?','08:51',1],['JP','João Pedro','Áudio · 0:42','08:30',0],['AF','Ana Ferraz','Obrigada!','ontem',0]];
+
+  function skRow(){return `<div class="c-row"><div class="av sk"></div><div class="ln"><div class="sk" style="height:9px;width:70%"></div><div class="sk" style="height:8px;width:90%"></div></div></div>`}
+  function realRow(p,i){return `<div class="c-row real ${i===0?'sel':''}"><div class="av">${p[0]}</div><div class="ln"><div class="nm">${p[1]}<small>${p[3]}</small></div><div class="pv">${p[2]} ${p[4]?`<span class="badge">${p[4]}</span>`:''}</div></div></div>`}
+
+  function runner(root, render){
+    let timers=[], raf, t0;
+    const clock = root.querySelector('[data-clock]');
+    const view = root.querySelector('[data-view]');
+    const at = (ms,fn)=>timers.push(setTimeout(fn, RM?0:ms));
+    function start(){
+      timers.forEach(clearTimeout); timers=[]; cancelAnimationFrame(raf);
+      t0=performance.now();
+      const tick=()=>{ if(clock) clock.textContent=fmt((performance.now()-t0)/1000); raf=requestAnimationFrame(tick); };
+      tick();
+      render({view,at,root,stop:()=>{cancelAnimationFrame(raf)}});
+    }
+    root.querySelector('[data-replay]').addEventListener('click',start);
+    root.querySelectorAll('.seg button').forEach(b=>b.addEventListener('click',()=>{
+      root.querySelectorAll('.seg button').forEach(x=>x.setAttribute('aria-pressed', x===b));
+      start();
+    }));
+    start();
+  }
+  const mode = root => root.querySelector('.seg button[aria-pressed="true"]')?.dataset.v;
+
+  // CHAT
+  runner(document.querySelector('[data-demo="chat"]'), ({view,at,root,stop})=>{
+    const hoje = mode(root)==='hoje';
+    const listSk = Array.from({length:5},skRow).join('');
+    const thread = `<div class="thread"><div class="bub in">Bom dia! Vi o anúncio de vocês.</div><div class="bub out">Oi Marina! Te mando a proposta agora.<span class="st">✓✓</span></div><div class="bub in">Pode mandar a proposta?</div></div>`;
+    const threadSk = `<div class="thread"><div class="sk" style="height:28px;width:55%;border-radius:14px"></div><div class="sk" style="height:28px;width:45%;border-radius:14px;align-self:flex-end"></div><div class="sk" style="height:28px;width:40%;border-radius:14px"></div></div>`;
+    if(hoje){
+      view.innerHTML=`<div class="chat"><div class="list">${listSk}</div>${threadSk}</div>`;
+      at(450,()=>{view.innerHTML=`<div class="center" style="height:250px"><div class="spinner"></div></div>`});
+      at(900,()=>{view.innerHTML=`<div class="chat"><div class="list"><div class="center" style="position:relative;height:100%"><div class="spinner"></div></div></div><div></div></div>`});
+      at(2200,()=>{view.innerHTML=`<div class="chat"><div class="list">${people.map(realRow).join('')}</div>${thread}</div>`;stop()});
+    } else {
+      view.innerHTML=`<div class="chat"><div class="list">${listSk}<div class="phrase" data-ph><span class="dot"></span>Juntando conversas dos seus 3 números…</div></div>${threadSk}</div>`;
+      at(1000,()=>view.querySelector('[data-ph]')?.classList.add('on'));
+      at(2200,()=>{view.innerHTML=`<div class="chat"><div class="list">${people.map(realRow).join('')}</div>${thread}</div>`;stop()});
+    }
+  });
+
+  // COMANDO
+  runner(document.querySelector('[data-demo="cmd"]'), ({view,at,root,stop})=>{
+    const hoje = mode(root)==='hoje';
+    const kSk = `<div class="kpis">${Array.from({length:3},()=>`<div class="kpi"><div class="sk" style="height:8px;width:60%"></div><div class="sk" style="height:18px;width:40%"></div></div>`).join('')}</div>`;
+    const kReal = `<div class="kpis"><div class="kpi"><small>Reuniões hoje</small><b class="num">6</b></div><div class="kpi"><small>Follow-ups</small><b class="num">14</b></div><div class="kpi"><small>Meta do mês</small><b class="num">72%</b></div></div>`;
+    const rows = `<div class="aw-row">Marina Souza<span>há 38 min</span></div><div class="aw-row">Clínica Lumière<span>há 1 h 12</span></div><div class="aw-row">João Pedro<span>há 2 h</span></div>`;
+    const awSk = `<div class="aw"><div class="aw-h">Aguardando sua resposta<span></span></div><div class="sk" style="height:26px"></div><div class="sk" style="height:26px"></div><div class="sk" style="height:26px"></div><div class="phrase" data-ph><span class="dot"></span>Procurando quem ficou sem resposta nas suas caixas…</div></div>`;
+    const awReal = `<div class="aw"><div class="aw-h">Aguardando sua resposta<span>3</span></div>${rows}</div>`;
+    if(hoje){
+      view.innerHTML=`<div class="cmd">${kSk}<div class="aw"><div class="aw-h">Aguardando sua resposta</div><div class="sk" style="height:26px;background:var(--ink-2)"></div><div class="sk" style="height:26px;background:var(--ink-2)"></div></div></div>`;
+      at(500,()=>{view.innerHTML=`<div class="cmd">${kReal}<div class="aw"><div class="aw-h">Aguardando sua resposta</div><div class="sk" style="height:26px;background:var(--ink-2)"></div><div class="sk" style="height:26px;background:var(--ink-2)"></div></div></div>`});
+      at(2700,()=>{view.innerHTML=`<div class="cmd">${kReal}${awReal}</div>`;stop()});
+    } else {
+      view.innerHTML=`<div class="cmd">${kSk}${awSk}</div>`;
+      at(400,()=>{view.innerHTML=`<div class="cmd">${kReal}${awSk}</div>`});
+      at(1000,()=>view.querySelector('[data-ph]')?.classList.add('on'));
+      // RPC em paralelo, não depois das caixas: 2,7 s → ~2,2 s
+      at(2200,()=>{view.innerHTML=`<div class="cmd">${kReal}${awReal}</div>`;stop()});
+    }
+  });
+
+  // FUNIL
+  const cols=[['Novo',['Padaria Bom Grão','Studio Pilates Ar','Ótica Visão']],['Qualificado',['Clínica Lumière','Auto Center 90']],['Proposta',['Marina Souza','Construtora Alvo']]];
+  const card=n=>`<div class="kc"><b>${n}</b><small><span>R$ ${(n.length*317).toLocaleString('pt-BR')}</span><span>2 d</span></small></div>`;
+  const skCard=()=>`<div class="kc sk-card"><div class="sk" style="height:9px;width:75%"></div><div class="sk" style="height:8px;width:45%"></div></div>`;
+  runner(document.querySelector('[data-demo="funil"]'), ({view,at,root,stop})=>{
+    const hoje = mode(root)==='hoje';
+    if(hoje){
+      view.innerHTML=`<div class="center" style="height:250px"><div class="spinner"></div></div>`;
+      at(350,()=>{view.innerHTML=`<div class="board">${cols.map(c=>`<div class="col"><div class="col-h">${c[0]}<span></span></div></div>`).join('')}</div>`});
+      cols.forEach((c,i)=>at(800+i*260,()=>{const col=view.querySelectorAll('.col')[i]; if(col) col.innerHTML=`<div class="col-h">${c[0]}<span>${c[1].length}</span></div>${c[1].map(card).join('')}`}));
+      at(1600,stop);
+    } else {
+      view.innerHTML=`<div class="board">${cols.map(c=>`<div class="col"><div class="col-h">${c[0]}<span>·</span></div>${Array.from({length:c[1].length},skCard).join('')}</div>`).join('')}</div>`;
+      at(300,()=>view.querySelectorAll('.col-h span').forEach((s,i)=>s.textContent=cols[i][1].length));
+      at(1200,()=>{view.innerHTML=`<div class="board">${cols.map(c=>`<div class="col"><div class="col-h">${c[0]}<span>${c[1].length}</span></div>${c[1].map(card).join('')}</div>`).join('')}</div>`;stop()});
+    }
+  });
+
+  // NARRADO
+  (()=>{
+    const root=document.querySelector('[data-demo="narr"]'); const stage=root.querySelector('.stage'); const view=root.querySelector('[data-view]');
+    const pill=root.querySelector('[data-pill]'), ring=root.querySelector('[data-ring]'), ptxt=root.querySelector('[data-pilltxt]');
+    const names=['Padaria São Jorge','Clínica Odonto Vida','Auto Peças Irmãos Lima','Studio Pilates Ar','Ótica Visão Clara','Pet Shop Patas','Restaurante Sabor da Serra','Academia Corpo Ativo','Farmácia Popular Centro','Construtora Alvo'];
+    let iv, n=0, running=false; const TOTAL=120;
+    function render(){
+      view.innerHTML=`<div class="narr">
+        <div class="n-top"><div><div class="n-title">Prospectador · Padarias e cafés em Curitiba</div><div class="n-est">Estimativa antes de começar: ~120 empresas · 2 min · 0 créditos até salvar</div></div></div>
+        <div class="phases"><div class="ph" data-p="0"><i><b></b></i>Buscar no mapa</div><div class="ph" data-p="1"><i><b></b></i>Ler os sites</div><div class="ph" data-p="2"><i><b></b></i>Achar WhatsApp</div><div class="ph" data-p="3"><i><b></b></i>Salvar na lista</div></div>
+        <div class="n-count"><span class="big" data-n>0</span><span class="of">de <b class="num">${TOTAL}</b> · <span data-ph>buscando no mapa</span> · <span data-left>~2 min</span></span></div>
+        <div class="n-cur"><span class="spark"></span><span data-cur>Começando…</span></div>
+        <div class="n-log" data-log></div>
+        <div class="n-act"><button class="btn stop" data-stop>Parar</button><button class="btn" data-bg>Continuar em segundo plano</button></div>
+      </div>`;
+      view.querySelector('[data-stop]').onclick=()=>{clearInterval(iv);running=false;view.querySelector('[data-cur]').textContent=`Parado. ${n} empresas já salvas ficam na lista.`;view.querySelector('.n-act').innerHTML=`<button class="btn gold" data-again>Ver lista (${n})</button>`};
+      view.querySelector('[data-bg]').onclick=()=>stage.classList.add('bg');
+    }
+    function step(){
+      n=Math.min(TOTAL,n+1);
+      const p = n/TOTAL, phase = p<.25?0:p<.6?1:p<.9?2:3;
+      const lbl=['buscando no mapa','lendo os sites','achando WhatsApp','salvando na lista'][phase];
+      view.querySelectorAll('.ph').forEach((el,i)=>{el.classList.toggle('on',i===phase);el.classList.toggle('done',i<phase);const lo=[0,.25,.6,.9][i],hi=[.25,.6,.9,1][i];el.querySelector('b').style.width=Math.max(0,Math.min(1,(p-lo)/(hi-lo)))*100+'%'});
+      const q=s=>view.querySelector(s);
+      if(q('[data-n]')) q('[data-n]').textContent=n;
+      if(q('[data-ph]')) q('[data-ph]').textContent=lbl;
+      const secs=Math.round((TOTAL-n)*1); if(q('[data-left]')) q('[data-left]').textContent= secs>60?`~${Math.ceil(secs/60)} min`:`~${secs} s`;
+      const nm=names[n%names.length];
+      if(q('[data-cur]')) q('[data-cur]').textContent = ['Encontrado no mapa: ','Lendo site: ','Procurando WhatsApp em ','Salvando: '][phase]+nm;
+      if(n%9===0 && q('[data-log]')){const log=q('[data-log]');const d=document.createElement('div');d.innerHTML=`<span class="okk">✓</span> ${nm} · (41) 9${(8000+n*37)%9999}-${(1000+n*53)%9999}`;log.prepend(d);while(log.children.length>3)log.lastChild.remove()}
+      ring.style.strokeDashoffset = 56.5*(1-p);
+      ptxt.textContent=`Prospectador · ${n} de ${TOTAL}`;
+      if(n>=TOTAL){clearInterval(iv);running=false;if(q('[data-cur]'))q('[data-cur]').textContent=`Pronto. 97 com WhatsApp, 23 só telefone.`;if(q('.n-act'))q('.n-act').innerHTML=`<button class="btn gold">Ver lista (120)</button>`;ptxt.textContent='Prospectador · pronto · 120'}
+    }
+    function start(){clearInterval(iv);n=0;stage.classList.remove('bg');render();running=true;iv=setInterval(step,RM?10:110)}
+    root.querySelector('[data-replay]').onclick=start;
+    root.querySelector('[data-back]').onclick=()=>stage.classList.remove('bg');
+    start();
+  })();
+
+  // DRAG
+  function dragDemo(sel, regua){
+    const root=document.querySelector(sel); const tl=root.querySelector('[data-tl]');
+    runner(root, ({view,at,root,stop})=>{
+      const erro = regua && mode(root)==='erro';
+      const board=(moving,where,state)=>`<div class="board" style="grid-template-columns:1fr 1fr">
+        <div class="col"><div class="col-h">Qualificado<span>${where==='a'?2:1}</span></div>${where==='a'?`<div class="kc ${state}">${'<b>Clínica Lumière</b><small><span>R$ 4.800</span><span>2 d</span></small>'}</div>`:''}${card('Auto Center 90')}</div>
+        <div class="col"><div class="col-h">Proposta<span>${where==='b'?3:2}</span></div>${where==='b'?`<div class="kc ${state}"><b>Clínica Lumière</b><small><span>R$ 4.800</span><span>agora</span></small></div>`:''}${card('Marina Souza')}${card('Construtora Alvo')}</div></div>`;
+      const steps = regua
+        ? (erro
+          ? [[0,'a','lift','Pega o card'],[350,'b','flash','Solta: card fica em Proposta na hora'],[1100,'b','fail','Servidor recusou'],[1400,'a','','Volta animado + aviso "Não deu para mover: sem permissão nesta etapa"']]
+          : [[0,'a','lift','Pega o card'],[350,'b','flash','Solta: card fica em Proposta na hora (<100 ms)'],[650,'b','','Checagem de tarefa e gravação correm por trás'],[1100,'b','','Servidor confirmou. Nada muda na tela.']])
+        : [[0,'a','lift','Pega o card'],[350,'a','ghost','Solta: card volta para Qualificado'],[350+330,'a','ghost','task_pending_for_move (rede + servidor)'],[350+330+20,'b','flash','Agora sim pula para Proposta'],[1500,'b','','Gravação confirmada']];
+      tl.innerHTML=steps.map((s,i)=>`<div data-i="${i}"><span>${(s[0]/1000).toFixed(2).replace('.',',')} s</span>${s[3]}</div>`).join('');
+      steps.forEach((s,i)=>at(s[0],()=>{view.innerHTML=board(true,s[1],s[2]);tl.querySelectorAll('div').forEach((d,j)=>d.classList.toggle('cur',j===i))}));
+      at(steps[steps.length-1][0]+300,stop);
+    });
+  }
+  dragDemo('[data-demo="drag-hoje"]',false);
+  dragDemo('[data-demo="drag-regua"]',true);
+
+  // CHARACTERS
+  const tools = {
+    qualificador: `<g class="t-sieve"><path class="tool" d="M40 14 H72 L60 28 H52 Z"/><path class="tool" d="M44 18 H68" stroke-width="1.2" opacity=".6"/><g><circle class="toolf drop" cx="56" cy="30" r="1.8"/><circle class="toolf drop" cx="54" cy="30" r="1.4"/><circle class="toolf drop" cx="58" cy="30" r="1.4"/></g></g>`,
+    sdr: `<g><path class="tool" d="M56 30 V14"/><circle class="toolf" cx="56" cy="12" r="3"/><g class="t-wave"><path class="tool" d="M63 8 a10 10 0 0 1 0 10" stroke-width="1.8"/><path class="tool" d="M67 4 a15 15 0 0 1 0 18" stroke-width="1.6"/><path class="tool" d="M49 8 a10 10 0 0 0 0 10" stroke-width="1.8"/></g></g>`,
+    followup: `<g class="t-orbit"><ellipse class="tool" cx="56" cy="62" rx="44" ry="13" stroke-width="1.4" opacity=".55" transform="rotate(-14 56 62)"/><g class="sat"><circle class="toolf" cx="100" cy="56" r="4"/></g></g>`,
+    agendador: `<g class="t-dial"><circle class="tool" cx="56" cy="52" r="19" stroke-width="1.6"/>${Array.from({length:12},(_,i)=>{const a=i*30*Math.PI/180;return `<line class="tool" x1="${56+Math.sin(a)*16}" y1="${52-Math.cos(a)*16}" x2="${56+Math.sin(a)*19}" y2="${52-Math.cos(a)*19}" stroke-width="${i%3?1:2}"/>`}).join('')}<g class="hand"><line class="tool" x1="56" y1="52" x2="56" y2="35" stroke-width="2"/></g></g>`,
+    prospectador: `<g><path class="tool" d="M46 30 L50 22 H62 L66 30" /><path class="tool" d="M50 22 V18 H62 V22" stroke-width="1.6"/><path class="t-beam" d="M56 52 L28 -6 A60 60 0 0 1 84 -6 Z" fill="url(#lensGlow)"/></g>`
+  };
+  const roles=[['qualificador','Qualificador','separa quem tem perfil'],['sdr','SDR','primeiro contato'],['followup','Follow-up','volta em quem sumiu'],['agendador','Agendador','marca a reunião'],['prospectador','Prospectador','encontra empresas novas']];
+  const states=[['working','varrendo'],['idle','respira, lente semicerrada'],['celebrate','salto + faíscas'],['needs','anel âmbar + selo']];
+  const bot=(role,st)=>`<svg class="bot ${st}" viewBox="0 0 112 112" role="img" aria-label="${role} ${st}">
+    <circle class="halo" cx="56" cy="62" r="46"/>
+    <g class="all">
+      ${tools[role]}
+      <rect class="body" x="24" y="30" width="64" height="62" rx="20"/>
+      <rect class="rim" x="25" y="31" width="62" height="60" rx="19"/>
+      <path d="M36 84 H76" stroke="rgba(255,255,255,.06)" stroke-width="2" stroke-linecap="round"/>
+      <circle class="socket" cx="56" cy="52" r="${role==='agendador'?13:14}"/>
+      <circle cx="56" cy="52" r="16" fill="url(#lensGlow)" opacity=".5"/>
+      <circle class="lens" cx="56" cy="52" r="${role==='agendador'?9.5:10.5}"/>
+      <rect class="pupil" x="54" y="46" width="4" height="12" rx="2"/>
+      <path class="smile" d="M50 53 Q56 47 62 53"/>
+      <rect class="lid" x="40" y="35" width="32" height="12" style="transition:transform .4s"/>
+      <circle class="spark" cx="56" cy="40" r="2.6" style="--dx:-30px;--dy:-26px"/>
+      <circle class="spark" cx="56" cy="40" r="2" style="--dx:32px;--dy:-22px"/>
+      <circle class="spark" cx="56" cy="40" r="1.6" style="--dx:-14px;--dy:-38px"/>
+      <rect class="spark" x="55" y="39" width="3" height="3" style="--dx:18px;--dy:-40px"/>
+      <circle class="spark" cx="56" cy="40" r="1.8" style="--dx:40px;--dy:-6px"/>
+    </g>
+    <g class="badge"><circle cx="88" cy="28" r="9" fill="#f5a524"/><rect x="86.8" y="22" width="2.4" height="8" rx="1.2" fill="#1a1100"/><circle cx="88" cy="33.2" r="1.4" fill="#1a1100"/></g>
+  </svg>`;
+  document.getElementById('cast').innerHTML = roles.map(r=>`<tr><td class="who"><b>${r[1]}</b><small>${r[2]}</small></td>${states.map(s=>`<td>${bot(r[0],s[0])}<span class="cap">${s[1]}</span></td>`).join('')}</tr>`).join('');
+})();
+</script>
