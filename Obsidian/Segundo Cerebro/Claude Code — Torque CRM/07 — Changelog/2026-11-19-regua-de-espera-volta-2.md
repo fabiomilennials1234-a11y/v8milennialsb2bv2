@@ -1,3 +1,14 @@
+---
+type: changelog
+title: "2026-11-19 — Régua de espera (CX ①), volta 2 do revisor/qa"
+status: active
+created: 2026-11-19
+updated: 2026-11-19
+tags: [changelog, cx, regua-de-espera]
+related: []
+owner: claude-agent
+---
+
 # 2026-11-19 — Régua de espera (CX ①), volta 2 do revisor/qa
 
 ## Mudanças
