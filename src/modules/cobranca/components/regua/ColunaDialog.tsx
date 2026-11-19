@@ -10,7 +10,9 @@
  *    quando alguém move o card para cá e confirma;
  *  - que pausa a régua (Em negociação, Jurídico): dias opcionais (Jurídico
  *    entra com 60), mensagem opcional — só sai à mão, a menos que tenha dias;
- *  - de entrada (Vencido): só a mensagem, para o movimento à mão.
+ *  - de entrada (Vencido): a mensagem, para o movimento à mão, e a chave
+ *    "enviar no dia do vencimento" (0 dias): o título que já vence hoje entra
+ *    e recebe a mensagem sozinho.
  */
 import { Loader2 } from "lucide-react";
 import { useEffect, useState, type FormEvent } from "react";
@@ -61,6 +63,8 @@ export function ColunaDialog({
   const [mensagem, setMensagem] = useState("");
   const [ativa, setAtiva] = useState(true);
   const [trilha, setTrilha] = useState<TrilhaDaColuna>("unico");
+  // Só da coluna de entrada: ligar = entra com 0 dias de atraso (no vencimento).
+  const [noVencimento, setNoVencimento] = useState(false);
 
   useEffect(() => {
     if (!aberto) return;
@@ -69,6 +73,7 @@ export function ColunaDialog({
     setMensagem(coluna?.mensagem ?? "");
     setAtiva(coluna?.automacaoAtiva ?? true);
     setTrilha(coluna?.trilha ?? "unico");
+    setNoVencimento(false);
   }, [aberto, coluna]);
 
   // Nome padrão acompanha os dias ("7 dias de atraso" → "8 dias de atraso"); nome próprio fica.
@@ -80,7 +85,7 @@ export function ColunaDialog({
 
   const nDias = Number(dias);
   const diasObrigatorios = tipo === "dias";
-  const diasValidos = dias === "" ? !diasObrigatorios : Number.isInteger(nDias) && nDias >= 1 && nDias <= 365;
+  const diasValidos = dias === "" ? !diasObrigatorios : Number.isInteger(nDias) && nDias >= 0 && nDias <= 365;
   const temDias = dias !== "" && diasValidos;
   const nomeValido = nome.trim().length <= 60 && (!(coluna || colunaManualNova) || nome.trim().length > 0);
   const valido = diasValidos && nomeValido && mensagem.length <= LIMITE_DA_MENSAGEM;
@@ -93,7 +98,7 @@ export function ColunaDialog({
         id: coluna?.id ?? null,
         // Coluna nova sem nome ganha "N dias de atraso" no banco.
         nome: nome.trim() || undefined,
-        entradaDias: tipo === "entrada" || colunaManualNova ? undefined : temDias ? nDias : null,
+        entradaDias: colunaManualNova ? undefined : tipo === "entrada" ? (noVencimento ? 0 : undefined) : temDias ? nDias : null,
         mensagem: mensagem.trim() || null,
         automacaoAtiva: ativa,
         trilha: tipo === "dias" && temDias ? trilha : undefined,
@@ -118,7 +123,7 @@ export function ColunaDialog({
         ? "Só envia quando alguém move o card para cá e confirma. A régua não move nem manda nada sozinha enquanto o caso estiver aqui."
         : tipo === "pausa"
         ? "Enquanto o caso está aqui, a régua não o move nem manda mensagem sozinha. A mensagem desta coluna sai quando alguém move o card para cá e escolhe enviar."
-        : "Toda dívida nova começa aqui. A mensagem, se houver, sai só quando alguém move o card para cá e escolhe enviar.";
+        : "Toda dívida nova começa aqui. Com a chave abaixo ligada, o título que já vence hoje recebe a mensagem sozinho ao ser cadastrado; sem ela, a mensagem sai só quando alguém move o card para cá e escolhe enviar.";
 
   return (
     <Dialog open={aberto} onOpenChange={(v) => !v && onFechar()}>
@@ -157,8 +162,8 @@ export function ColunaDialog({
                   <Campo
                     id="col-dias"
                     rotulo={diasObrigatorios ? "Entra com" : "Entra com (opcional)"}
-                    erro={dias && !diasValidos ? "De 1 a 365." : !dias && diasObrigatorios ? "Obrigatório." : undefined}
-                    dica="dias de atraso"
+                    erro={dias && !diasValidos ? "De 0 a 365." : !dias && diasObrigatorios ? "Obrigatório." : undefined}
+                    dica="dias de atraso (0 = no dia do vencimento)"
                   >
                     <div className="flex items-center gap-2">
                       <Input
@@ -201,6 +206,15 @@ export function ColunaDialog({
               <label className="flex items-center gap-2 text-sm font-medium">
                 <Switch checked={ativa} onCheckedChange={setAtiva} aria-label="Entrada automática" />
                 {ativa ? "Entrada automática ligada" : "Entrada automática desligada"}
+              </label>
+            ) : tipo === "entrada" ? (
+              <label className="flex items-center gap-2 text-sm font-medium">
+                <Switch
+                  checked={noVencimento}
+                  onCheckedChange={setNoVencimento}
+                  aria-label="Enviar a mensagem no dia do vencimento"
+                />
+                Enviar a mensagem no dia do vencimento
               </label>
             ) : (
               <span />

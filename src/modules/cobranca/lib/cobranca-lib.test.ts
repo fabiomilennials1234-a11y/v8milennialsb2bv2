@@ -13,8 +13,11 @@ import {
   parseConfiguracao,
   parseEnvio,
   parsePreviaDoEnvio,
+  renderizarMensagem,
   rotuloDaEntrada,
+  rotuloDoPasso,
   tipoDaColuna,
+  variaveisDeExemplo,
   variaveisDesconhecidas,
 } from "./regua";
 import { parseEtapa, parseImportacao, parseMetricas, parseResumo, type InadimplenteResumo } from "./tipos";
@@ -246,6 +249,17 @@ describe("colunas da régua", () => {
     expect(tipoDaColuna({ pausaRegua: true, entradaDias: 60 })).toBe("pausa");
     expect(tipoDaColuna({ pausaRegua: true, entradaDias: null })).toBe("pausa");
     expect(tipoDaColuna({ pausaRegua: false, entradaDias: null })).toBe("entrada");
+    // 0 dias é entrada no vencimento: a coluna passa a ser "de dias", não "de entrada".
+    expect(tipoDaColuna({ pausaRegua: false, entradaDias: 0 })).toBe("dias");
+  });
+
+  it("0 dias de atraso é o dia do vencimento: rótulo, marca e prévia do {dias_atraso}", () => {
+    expect(rotuloDoPasso({ gatilho: "atraso", dias: 0 })).toBe("No dia do vencimento");
+    expect(rotuloDoPasso({ gatilho: "atraso", dias: 1 })).toBe("1 dia de atraso");
+    expect(marcaDoPasso({ gatilho: "atraso", dias: 0 })).toBe("D0");
+    expect(rotuloDaEntrada(0)).toBe("Entra no dia do vencimento");
+    expect(variaveisDeExemplo(null, undefined, 0).dias_atraso).toBe(0);
+    expect(renderizarMensagem("{dias_atraso} dias", variaveisDeExemplo(null, undefined, 0))).toBe("0 dias");
   });
 
   it("marca do envio distingue entrada automática, lembrete e movimento à mão", () => {
