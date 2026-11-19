@@ -17,6 +17,8 @@ import {
   rotuloDaEntrada,
   rotuloDoPasso,
   tipoDaColuna,
+  colunaMovel,
+  zonaLivre,
   variaveisDeExemplo,
   variaveisDesconhecidas,
 } from "./regua";
@@ -313,3 +315,44 @@ describe("colunas da régua", () => {
     expect(parsePreviaDoEnvio(null).mensagem).toBeNull();
   });
 });
+
+describe("ordem das colunas", () => {
+  const col = (nome: string, posicao: number, o: Partial<{ papel: "aberta" | "recuperado" | "perdido" | "cancelado"; pausaRegua: boolean; entradaDias: number | null }> = {}) => ({
+    nome,
+    posicao,
+    papel: "aberta" as const,
+    pausaRegua: false,
+    entradaDias: null as number | null,
+    ...o,
+  });
+  const quadro = [
+    col("Vencido", 1),
+    col("1 dia", 2, { entradaDias: 1 }),
+    col("3 dias", 3, { entradaDias: 3 }),
+    col("Em negociação", 5, { pausaRegua: true }),
+    col("Fluxo cartorial", 9, { pausaRegua: true }),
+    col("Promessa ou acordo", 6, { pausaRegua: true }),
+    col("Jurídico", 10, { pausaRegua: true, entradaDias: 60 }),
+    col("Recuperado", 11, { papel: "recuperado", pausaRegua: true }),
+  ];
+
+  it("só as pausadas, abertas e sem dias são móveis", () => {
+    const moveis = Object.fromEntries(quadro.map((c) => [c.nome, colunaMovel(c)]));
+    expect(moveis).toEqual({
+      Vencido: false, // entrada: sempre a primeira
+      "1 dia": false, // dias: seguem a ordem dos dias
+      "3 dias": false,
+      "Em negociação": true,
+      "Fluxo cartorial": true, // coluna manual
+      "Promessa ou acordo": true,
+      Jurídico: false, // pausa COM dias: vem depois da zona livre
+      Recuperado: false, // desfecho
+    });
+  });
+
+  it("a zona livre vem na ordem do quadro, não na de entrada", () => {
+    expect(zonaLivre(quadro).map((c) => c.nome)).toEqual(["Em negociação", "Promessa ou acordo", "Fluxo cartorial"]);
+    expect(zonaLivre([col("Vencido", 1)])).toEqual([]);
+  });
+});
+
