@@ -23,6 +23,13 @@ export interface CarteiraFilterState {
   filterQualification: string;
   /** Dono da conta: id de `team_member`, `"all"` ou `"none"` (sem dono). */
   filterResponsible: string;
+  /**
+   * Janela de chegada do lead (`created_at`), instantes ISO cortados no fuso da
+   * org; `""` = qualquer data. Estado persistido anterior ao filtro não tem o
+   * campo — quem lê trata `undefined` como vazio.
+   */
+  createdFrom: string;
+  createdTo: string;
 }
 
 export const DEFAULT_CARTEIRA_FILTERS: CarteiraFilterState = {
@@ -30,6 +37,8 @@ export const DEFAULT_CARTEIRA_FILTERS: CarteiraFilterState = {
   filterOrigin: "all",
   filterQualification: "all",
   filterResponsible: "all",
+  createdFrom: "",
+  createdTo: "",
 };
 
 /**
@@ -49,6 +58,9 @@ export function carteiraFiltersFromLeads(
     filterOrigin: texto(leads.filterOrigin, DEFAULT_CARTEIRA_FILTERS.filterOrigin),
     filterQualification: texto(leads.filterQualification, DEFAULT_CARTEIRA_FILTERS.filterQualification),
     filterResponsible: texto(leads.filterResponsible, DEFAULT_CARTEIRA_FILTERS.filterResponsible),
+    // A aba Clientes nunca teve período: a janela da lista de Leads não viaja.
+    createdFrom: DEFAULT_CARTEIRA_FILTERS.createdFrom,
+    createdTo: DEFAULT_CARTEIRA_FILTERS.createdTo,
   };
 }
 
