@@ -17,7 +17,7 @@ import { useChatReply } from "../../../hooks/chat/useChatReply";
 import { useRef, useState, useCallback, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "framer-motion";
-import { Plus, Send, Mic, Camera, Paperclip, FileText, Film, Clock, CalendarPlus, Loader2, X } from "lucide-react";
+import { Plus, Send, Mic, Camera, Paperclip, FileText, Film, Clock, CalendarPlus, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
@@ -44,6 +44,7 @@ import type { LeadContext, AttendantContext } from "@/lib/template-variables";
 import type { MessageTemplate } from "@/modules/communication/hooks/useMessageTemplates";
 import { templateFileNameFromUrl } from "@/modules/communication/lib/template-media";
 import { notifyError } from "@/shared/errors";
+import { tratarFalhaDoEnvio } from "./tratarFalhaDoEnvio";
 import { CreateMeetingDialog } from "@/modules/engagement";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -139,7 +140,15 @@ export function MobileComposerContextual({
   const captionRef = useRef<HTMLTextAreaElement>(null);
   useEffect(() => { if (reply?.target?.messageId) inputRef.current?.focus(); }, [reply?.target?.messageId]);
 
+  // Texto e mídia NÃO travam por envio próprio: entram na fila da conversa
+  // (`shared/filaDeEnvio`), que garante ordem e um em voo. `isSending` sobra só
+  // para as ações ricas (contato/Pix/local), que não passam pela fila.
   const isSending = sendMessage.isPending || sendMedia.isPending;
+  // Rascunho/anexo atuais, para a devolução pós-"fila cheia" não pisar no novo.
+  const messageRef = useRef(message);
+  messageRef.current = message;
+  const pendingAttachmentRef = useRef(pendingAttachment);
+  pendingAttachmentRef.current = pendingAttachment;
   const hasText = message.trim().length > 0;
   // Bandeja de programadas — ver ChatComposer: publica só na troca do boolean.
   useEffect(() => {
@@ -160,49 +169,53 @@ export function MobileComposerContextual({
   // ─── Handlers ─────────────────────────────────────────────────────────────
 
   const handleSend = useCallback(async () => {
-    if (!message.trim() || !instanceName) return;
+    const text = message.trim();
+    if (!text || !instanceName) return;
+    // Limpa antes do await (contrato do /chat): o próximo texto não some no
+    // resolve, e um segundo toque não reenvia o mesmo rascunho.
+    setMessage("");
+    messageRef.current = "";
     try {
       await sendMessage.mutateAsync({
         phoneNumber,
         isGroup,
-        message: message.trim(),
+        message: text,
         instanceName,
         instanceId,
         leadId,
       });
-      setMessage("");
     } catch (err) {
-      notifyError(err, { fallback: "Não foi possível enviar." });
+      tratarFalhaDoEnvio(err, "Não foi possível enviar.", () => {
+        if (messageRef.current === "") setMessage(text);
+      });
     }
   }, [message, instanceName, phoneNumber, isGroup, instanceId, leadId, sendMessage, setMessage]);
 
   const handleAudioRecorded = useCallback(async (audioBlob: Blob) => {
     setIsRecording(false);
     try {
-      const mp3 = await convertAudioBlobToMp3(audioBlob);
-      const base64 = await readMediaAsDataUrl(mp3);
       await sendMedia.mutateAsync({
         phoneNumber,
         isGroup,
         instanceName,
         instanceId,
         mediaType: "audio",
-        media: base64,
+        // Conversão para MP3 na vez do item: a ordem é a do toque de parar.
+        media: {
+          previa: null,
+          preparar: async () => readMediaAsDataUrl(await convertAudioBlobToMp3(audioBlob)),
+        },
         mimetype: "audio/mpeg",
         leadId: leadId ?? null,
       });
       toast.success("Áudio enviado!");
     } catch (err) {
-      notifyError(err, { fallback: "Não foi possível enviar áudio." });
+      tratarFalhaDoEnvio(err, "Não foi possível enviar áudio.");
     }
   }, [phoneNumber, isGroup, instanceName, instanceId, sendMedia, leadId]);
 
   const handleFileSelected = useCallback(async (file: File) => {
     setTrayOpen(false);
-    if (isSending) {
-      toast.info("Aguarde o envio anterior finalizar.");
-      return;
-    }
     const validationError = getAttachmentValidationError(file);
     if (validationError) {
       toast.error(validationError);
@@ -217,7 +230,7 @@ export function MobileComposerContextual({
     } catch (caught) {
       notifyError(caught, { fallback: "Não foi possível ler arquivo. Tente novamente." });
     }
-  }, [isSending]);
+  }, []);
 
   const clearPendingAttachment = useCallback(() => {
     setPendingAttachment(null);
@@ -225,8 +238,14 @@ export function MobileComposerContextual({
   }, []);
 
   const handleSendAttachment = useCallback(async () => {
-    if (!pendingAttachment || isSending) return;
-    const kind = deriveAttachmentMediaType(pendingAttachment.mime);
+    if (!pendingAttachment) return;
+    const enviado = pendingAttachment;
+    const legenda = attachmentCaption;
+    const kind = deriveAttachmentMediaType(enviado.mime);
+    // O anexo sai no toque (contrato do /chat): duplo toque não duplica, e a
+    // falha vira bolha de reenvio na conversa. Só "fila cheia" devolve.
+    clearPendingAttachment();
+    pendingAttachmentRef.current = null;
     try {
       await sendMedia.mutateAsync({
         phoneNumber,
@@ -234,23 +253,25 @@ export function MobileComposerContextual({
         instanceName,
         instanceId,
         mediaType: kind,
-        media: pendingAttachment.data,
-        caption: attachmentCaption.trim() || undefined,
-        fileName: pendingAttachment.name,
-        mimetype: pendingAttachment.mime,
+        media: enviado.data,
+        caption: legenda.trim() || undefined,
+        fileName: enviado.name,
+        mimetype: enviado.mime,
         leadId: leadId ?? null,
       });
-      // Limpa só no sucesso — em falha o preview fica pra retry.
-      clearPendingAttachment();
       toast.success(
         kind === "document" ? "Arquivo enviado!"
           : kind === "video" ? "Vídeo enviado!"
           : "Imagem enviada!",
       );
     } catch (err) {
-      notifyError(err, { fallback: "Não foi possível enviar arquivo." });
+      tratarFalhaDoEnvio(err, "Não foi possível enviar arquivo.", () => {
+        if (pendingAttachmentRef.current) return;
+        setPendingAttachment(enviado);
+        setAttachmentCaption(legenda);
+      });
     }
-  }, [pendingAttachment, attachmentCaption, isSending, phoneNumber, isGroup, instanceName, instanceId, leadId, sendMedia, clearPendingAttachment]);
+  }, [pendingAttachment, attachmentCaption, phoneNumber, isGroup, instanceName, instanceId, leadId, sendMedia, clearPendingAttachment]);
 
   const handleSlashSelect = useCallback(async (template: MessageTemplate) => {
     const leadCtx: LeadContext = {
@@ -272,6 +293,9 @@ export function MobileComposerContextual({
     // Template com mídia → envia direto (o corpo resolvido vira caption).
     if (template.media_url && template.media_type !== "text") {
       if (!instanceName) return;
+      const command = message;
+      setMessage("");
+      messageRef.current = "";
       try {
         await sendMedia.mutateAsync({
           phoneNumber,
@@ -284,10 +308,14 @@ export function MobileComposerContextual({
           caption: template.media_type === "audio" ? undefined : (resolved || undefined),
           leadId: leadId ?? null,
         });
-        setMessage("");
         toast.success("Template enviado!");
       } catch (err) {
-        notifyError(err, { fallback: "Não foi possível enviar template." });
+        // Só a fila cheia devolve o "/comando": o item nem entrou (sem bolha).
+        // Falha real já tem bolha de reenvio — devolver o comando também
+        // convidaria a mandar o template duas vezes.
+        tratarFalhaDoEnvio(err, "Não foi possível enviar template.", () => {
+          if (messageRef.current === "") setMessage(command);
+        });
       }
       return;
     }
@@ -295,7 +323,7 @@ export function MobileComposerContextual({
     // Template de texto → preenche input para revisão antes de enviar.
     setMessage(resolved);
     inputRef.current?.focus();
-  }, [leadForTemplates, selectedContact, phoneNumber, isGroup, instanceName, instanceId, leadId, teamMember, sendMedia, setMessage]);
+  }, [leadForTemplates, selectedContact, message, phoneNumber, isGroup, instanceName, instanceId, leadId, teamMember, sendMedia, setMessage]);
 
   const handleTrayAction = useCallback((action: TrayAction) => {
     switch (action) {
@@ -469,17 +497,12 @@ export function MobileComposerContextual({
                   rows={1}
                   className="min-h-[36px] max-h-24 resize-none py-2"
                 />
-                <ComposerEmojiPicker inputRef={captionRef} onChange={setAttachmentCaption} disabled={isSending} />
+                <ComposerEmojiPicker inputRef={captionRef} onChange={setAttachmentCaption} />
                 <Button
                   onClick={handleSendAttachment}
-                  disabled={isSending}
                   className="w-full"
                 >
-                  {isSending ? (
-                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  ) : (
-                    <Send className="w-4 h-4 mr-2" />
-                  )}
+                  <Send className="w-4 h-4 mr-2" />
                   {kind === "document" ? "Enviar Arquivo"
                     : kind === "video" ? "Enviar Vídeo"
                     : "Enviar Imagem"}
@@ -513,7 +536,6 @@ export function MobileComposerContextual({
           key={conversationKey}
           inputRef={inputRef}
           onChange={(value) => { setMessage(value); setShowSlashPopover(false); }}
-          disabled={isSending}
         />
         <div className="relative flex-1">
           {showSlashPopover && templates && (
@@ -538,7 +560,6 @@ export function MobileComposerContextual({
               // Teclado físico: Esc fecha a bandeja de programadas aberta.
               if (e.key === "Escape") publishComposerEscape(conversationKey);
             }}
-            disabled={isSending}
             aria-label={`Mensagem para ${contactName}`}
             className="w-full min-h-[40px] max-h-32 resize-none rounded-[20px] border border-border/60 bg-sunken py-2 leading-5 focus-visible:bg-card"
           />
@@ -548,29 +569,18 @@ export function MobileComposerContextual({
         {hasText ? (
           <Button
             onClick={handleSend}
-            disabled={isSending}
             size="icon"
             aria-label="Enviar mensagem"
             className="relative shrink-0 rounded-full"
           >
-            {isSending ? (
-              <Loader2 className="w-4 h-4 animate-spin" />
-            ) : (
-              <Send className="w-4 h-4" />
-            )}
+            <Send className="w-4 h-4" />
             <SeloDeProgramadas n={programadasPendentes} />
           </Button>
         ) : (
           <Button
             variant="ghost"
             size="icon"
-            onClick={() => {
-              if (isSending) {
-                toast.info("Aguarde o envio anterior finalizar.");
-                return;
-              }
-              setIsRecording(true);
-            }}
+            onClick={() => setIsRecording(true)}
             aria-label="Gravar áudio"
             className="shrink-0 opacity-60 hover:opacity-100 transition-opacity"
           >

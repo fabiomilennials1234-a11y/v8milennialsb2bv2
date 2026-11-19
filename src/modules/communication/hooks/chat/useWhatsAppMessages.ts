@@ -2,8 +2,9 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { WhatsAppMessage } from './types';
 import { useCurrentTeamMember } from '@/modules/identity';
 import { fetchConversationMessages, isPersistedMessage, MESSAGE_PAGE_SIZE } from '@/modules/communication/lib/whatsappMessagesQuery';
-import { compareMessages, mergeConcurrentMessages, mergeMessagePages, reconcileConversation, type ThreadSnapshot } from '@/modules/communication/lib/whatsappReconciliation';
+import { compareMessages, mergeConcurrentMessages, mergeMessagePages } from '@/modules/communication/lib/whatsappReconciliation';
 import { chatQueryKeys } from './shared/queryKeys';
+import { buscarThread, chavesAuxiliaresDaThread, THREAD_STALE_TIME_MS } from '@/modules/communication/lib/threadDaConversa';
 import { useReconcileInterval } from './useRealtimeFallback';
 
 export function useWhatsAppMessages(phoneNumber: string | null, instanceId: string | null) {
@@ -12,29 +13,12 @@ export function useWhatsAppMessages(phoneNumber: string | null, instanceId: stri
   const organizationId = teamMember?.organization_id;
   const refetchInterval = useReconcileInterval('thread', organizationId);
   const key = chatQueryKeys.messages(organizationId, phoneNumber, instanceId);
-  const snapshotKey = ['whatsapp_thread_snapshot', ...key];
-  const pageKey = ['whatsapp_thread_pagination', ...key];
+  const { pageKey } = chavesAuxiliaresDaThread(key);
   const query = useQuery({
     queryKey: key,
     queryFn: async () => {
       if (!organizationId || !phoneNumber || !instanceId) return [];
-      const params = { organizationId, instanceId, phoneNumber };
-      const before = queryClient.getQueryData<WhatsAppMessage[]>(key);
-      if (!before) {
-        const initial = await reconcileConversation(params, []);
-        const page = initial.messages;
-        queryClient.setQueryData(snapshotKey, initial.snapshot);
-        queryClient.setQueryData(pageKey, page.length === MESSAGE_PAGE_SIZE);
-        const live = queryClient.getQueryData<WhatsAppMessage[]>(key) ?? [];
-        return mergeMessagePages(page, live);
-      }
-      const result = await reconcileConversation(params, before, queryClient.getQueryData<ThreadSnapshot>(snapshotKey));
-      queryClient.setQueryData(snapshotKey, result.snapshot);
-      // Realtime can update the cache while the HTTP request is in flight.
-      // Only those new patches supersede the snapshot; unchanged rows cannot
-      // resurrect server deletions found by reconciliation.
-      const live = queryClient.getQueryData<WhatsAppMessage[]>(key) ?? before;
-      return mergeConcurrentMessages(before, result.messages, live);
+      return buscarThread(queryClient, organizationId, phoneNumber, instanceId);
     },
     enabled: !!organizationId && !!phoneNumber && !!instanceId,
     // Rede final contra evento realtime perdido: 120 s saudável, degraus de
@@ -44,7 +28,7 @@ export function useWhatsAppMessages(phoneNumber: string | null, instanceId: stri
     // Volta de foco reconcilia; staleTime 30 s impede que trocar de aba dez
     // vezes vire dez RPCs. Cada refetch é 1 `whatsapp_thread_manifest`, com
     // atalho `unchanged` por fingerprint.
-    staleTime: 30_000,
+    staleTime: THREAD_STALE_TIME_MS,
     refetchOnWindowFocus: true,
   });
   const older = useMutation({

@@ -1,5 +1,5 @@
 import { providerSendStatus } from "@/modules/communication/lib/providerSendStatus";
-import { useRef } from "react";
+import { useCallback, useRef, useState } from "react";
 import { useChatReply } from "./useChatReply";
 /**
  * useSendWhatsAppMessage + useSendWhatsAppMedia + useFailedMessages + useRetryMessage
@@ -8,7 +8,7 @@ import { useChatReply } from "./useChatReply";
  * Helpers privados co-locados: isSzChatInstance, assertCanReplyOnInstance,
  * sanitizeFileName, normalizeMimeType, getMimeType, uploadMediaToStorage.
  */
-import { useMutation, useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient, type MutationObserverOptions, type QueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import type { Json } from "@/integrations/supabase/types";
 import { useCurrentTeamMember } from "@/modules/identity";
@@ -19,12 +19,26 @@ import {
   whatsAppSendErrorMessage,
 } from "@/modules/communication/lib/edgeFunctionError";
 import { sendWithBoundedRecovery, SendRetriesExhausted, MAX_SEND_RETRIES, type SendResponse } from "./shared/send-recovery";
-import type { WhatsAppMessage, FailedMessage, ReplyContext } from "./types";
+import type { WhatsAppMessage, FailedMessage, ReplyContext, MidiaAPreparar } from "./types";
 import { makeOptimisticId, promoteOptimisticMessage } from "./shared/optimistic-messages";
 import { userMessageOf } from "@/shared/errors";
 import { MEDIA_UPLOAD_TIMEOUT_MS, MediaOperationError, withMediaDeadline } from "@/modules/communication/lib/media-operation";
 import { deriveMentions } from "@/modules/communication/lib/groupMentionComposer";
 import { readCachedMentionablePhones } from "./useGroupParticipants";
+import {
+  assinaturaDoEnvio,
+  encerrarItem,
+  enfileirarEnvio,
+  filaInterrompida,
+  FilaInterrompidaError,
+  inicioDaJanelaDeConfirmacao,
+  interromperFila,
+  provaDeConfirmacao,
+  registrarConfirmado,
+  registrarTentativa,
+  type ConversaDaFila,
+} from "./shared/filaDeEnvio";
+import { registrarEnvioNaLista } from "./shared/cacheDeContatos";
 
 /**
  * Lê o id do provider carimbado em `_localMessage` pelo mutationFn.
@@ -99,28 +113,56 @@ async function isSzChatInstanceCached(instanceId: string | null | undefined): Pr
   return result;
 }
 
-function recoveryContext(queryClient: QueryClient, org: string, phone: string, destination: WhatsAppDestination, instanceId: string | null | undefined, sendId: string | undefined, content: string | null, mediaUrl?: string) {
+/**
+ * Confirmação de envio ambíguo, com a idempotência da fila (CP-v2 item 3).
+ *
+ * Criada DENTRO do `mutationFn`, imediatamente antes do POST — e é aí que o
+ * item passa a constar como "chamou o provider" (`registrarTentativa`).
+ *
+ * REGRA: o confirm nunca dá falso positivo. Ele conta as linhas da janela
+ * (`ts - 1 s`) com a assinatura do item, fora as já atribuídas a itens desta
+ * fila, e só confirma quando há MAIS linhas do que itens anteriores desta fila
+ * com a mesma assinatura que chamaram o provider sem ficar com linha
+ * (`provaDeConfirmacao`). Na dúvida, não confirma: bolha de falha e reenvio
+ * manual. A linha reivindicada vira do item (`registrarConfirmado` no
+ * onSuccess) e sai da busca dos seguintes.
+ */
+function recoveryContext(queryClient: QueryClient, org: string, phone: string, destination: WhatsAppDestination, instanceId: string | null | undefined, sendId: string | undefined, content: string | null, fila: ConversaDaFila, mediaUrl?: string) {
   const key = ["whatsapp_messages", org, phone, instanceId];
   const original = queryClient.getQueryData<WhatsAppMessage[]>(key)?.find(m => m.id === sendId);
-  const since = new Date(new Date(original?.timestamp ?? Date.now()).getTime() - 1000).toISOString();
+  const since = inicioDaJanelaDeConfirmacao(original?.timestamp);
+  const citacao = original?.reply_context?.messageId ?? null;
+  const assinatura = assinaturaDoEnvio({ conteudo: content, mediaUrl, citacao });
+  registrarTentativa(queryClient, fila, assinatura, sendId);
   return {
     onRetry: (attempt: number) => queryClient.setQueryData<WhatsAppMessage[]>(key, old =>
       (old ?? []).map(m => m.id === sendId ? { ...m, retry_attempt: attempt } : m)),
     confirm: async (): Promise<SendResponse | null> => {
       if (!instanceId) return null;
+      // Lida a cada tentativa: o histórico da fila é o de agora.
+      const prova = provaDeConfirmacao(queryClient, fila, assinatura, sendId);
+      if (!prova) return null;
       let q = supabase.from("whatsapp_messages").select("message_id")
         .eq("organization_id", org).eq("instance_id", instanceId)
         .eq("phone_number", destination.phoneNumber).eq("direction", "outgoing")
         .in("status", ["sent", "delivered", "read", "played"])
         .gte("timestamp", since);
-      q = original?.reply_context ? q.eq("reply_context->>messageId", original.reply_context.messageId) : q.is("reply_context", null);
+      q = citacao ? q.eq("reply_context->>messageId", citacao) : q.is("reply_context", null);
+      // Texto só se prova com linha de TEXTO: o webhook grava a legenda da mídia
+      // em `content`, então sem o filtro uma imagem "ok" confirmaria o texto "ok".
       if (mediaUrl) q = q.eq("media_url", mediaUrl);
-      else q = q.eq("content", content ?? "");
-      const { data, error } = await q.order("timestamp", { ascending: false }).limit(1);
-      if (error || !data?.[0]) return null;
+      else q = q.eq("content", content ?? "").is("media_url", null);
+      if (prova.excluir.length > 0) q = q.not("message_id", "in", listaPostgrest(prova.excluir));
+      const { data, error } = await q.order("timestamp", { ascending: false }).limit(prova.minimoDeLinhas);
+      if (error || !data || data.length < prova.minimoDeLinhas) return null;
       return { data: { _confirmed: true, result: { message_id: data[0].message_id } }, error: null };
     },
   };
+}
+
+/** `("a","b")` — lista do operador `in` do PostgREST, com aspas para ids opacos. */
+function listaPostgrest(ids: readonly string[]): string {
+  return `(${ids.map(id => `"${id.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`).join(",")})`;
 }
 
 async function invokeWithTimeout(
@@ -237,41 +279,112 @@ async function uploadMediaToStorage(
   return urlData.publicUrl;
 }
 
-// ─── Hooks públicos ──────────────────────────────────────────────────────────
+// ─── Fila (CP-v2, régua de espera) ───────────────────────────────────────────
+
+export type { MidiaAPreparar };
 
 /**
- * Hook para enviar mensagem de texto via WhatsApp
+ * O 1º `preparar()` de cada mídia é o único: resultado OU erro ficam guardados
+ * por objeto. Ler um PDF de 16 MB / converter um áudio para MP3 de novo só
+ * porque alguém perguntou duas vezes atrasaria a fila inteira — e um erro de
+ * conversão não melhora na segunda leitura dentro do mesmo envio.
+ */
+const preparos = new WeakMap<MidiaAPreparar, Promise<string>>();
+
+function prepararUmaVez(m: MidiaAPreparar): Promise<string> {
+  let p = preparos.get(m);
+  if (!p) {
+    p = m.preparar();
+    preparos.set(m, p);
+  }
+  return p;
+}
+
+/** O que os composers usam de um envio. `isPending` = há item desta tela na fila. */
+export interface EnvioEmFila<V, D> {
+  mutateAsync: (variaveis: V) => Promise<D>;
+  mutate: (variaveis: V) => void;
+  isPending: boolean;
+}
+
+interface VariaveisDaConversa {
+  phoneNumber: string;
+  isGroup?: boolean;
+  instanceId?: string | null;
+}
+
+interface ContextoDoEnvio {
+  previousMessages: WhatsAppMessage[] | undefined;
+  optimisticId: string;
+  timestamp: string;
+}
+
+function conversaDoEnvio(organizationId: string | null | undefined, v: VariaveisDaConversa): ConversaDaFila {
+  return { organizationId, instanceId: v.instanceId, phoneNumber: v.phoneNumber, isGroup: v.isGroup };
+}
+
+/**
+ * Cada chamada vira um item na fila da SUA conversa (ver `shared/filaDeEnvio.ts`
+ * para o porquê de não ser um `useMutation` com `scope` fixo).
+ */
+function useEnvioEmFila<V extends VariaveisDaConversa, D, C>(
+  organizationId: string | null | undefined,
+  opcoes: MutationObserverOptions<D, Error, V, C>,
+): EnvioEmFila<V, D> {
+  const queryClient = useQueryClient();
+  // As opções mais recentes (closures com teamMember/reply atuais) valem para
+  // o PRÓXIMO item; um item já criado mantém as suas, como no useMutation.
+  const opcoesRef = useRef(opcoes);
+  opcoesRef.current = opcoes;
+  const [naFila, setNaFila] = useState(0);
+
+  const mutateAsync = useCallback(async (variaveis: V) => {
+    setNaFila(n => n + 1);
+    try {
+      return await enfileirarEnvio(queryClient, conversaDoEnvio(organizationId, variaveis), opcoesRef.current, variaveis);
+    } finally {
+      setNaFila(n => n - 1);
+    }
+  }, [queryClient, organizationId]);
+
+  const mutate = useCallback((variaveis: V) => { mutateAsync(variaveis).catch(() => {}); }, [mutateAsync]);
+
+  return { mutateAsync, mutate, isPending: naFila > 0 };
+}
+
+// ─── Hooks públicos ──────────────────────────────────────────────────────────
+
+export interface EnvioDeTexto {
+  phoneNumber: string;
+  /** `is_group` do contato: o destino vira o JID `<id>@g.us`. */
+  isGroup?: boolean;
+  message: string;
+  instanceName: string;
+  instanceId?: string | null;
+  leadId?: string | null;
+  _sendId?: string;
+  replyContext?: ReplyContext;
+}
+
+/**
+ * Hook para enviar mensagem de texto via WhatsApp — em fila por conversa.
  */
 export function useSendWhatsAppMessage() {
   const reply = useChatReply();
   const queryClient = useQueryClient();
   const { data: teamMember } = useCurrentTeamMember();
+  const organizationId = teamMember?.organization_id;
 
-  return useMutation({
+  return useEnvioEmFila(organizationId, {
     retry: false, // one recovery controller owns the ten-attempt budget
-    mutationFn: async ({
-      phoneNumber,
-      isGroup,
-      message,
-      instanceName,
-      instanceId,
-      leadId,
-      _sendId,
-      replyContext,
-    }: {
-      phoneNumber: string;
-      /** `is_group` do contato: o destino vira o JID `<id>@g.us`. */
-      isGroup?: boolean;
-      message: string;
-      instanceName: string;
-      instanceId?: string | null;
-      leadId?: string | null;
-      _sendId?: string;
-      replyContext?: ReplyContext;
-    }) => {
+    mutationFn: async (variables: EnvioDeTexto) => {
+      const { phoneNumber, isGroup, message, instanceId, leadId, _sendId, replyContext } = variables;
       if (!teamMember?.organization_id || !teamMember?.id) {
         throw new Error("Usuário não vinculado à equipe");
       }
+      // Um anterior desta fila falhou: este item nunca chega ao provider.
+      const fila = conversaDoEnvio(teamMember.organization_id, variables);
+      if (filaInterrompida(queryClient, fila)) throw new FilaInterrompidaError();
 
       const destination = resolveDestinationOrThrow(phoneNumber, isGroup);
       const formattedNumber = destination.number;
@@ -289,7 +402,7 @@ export function useSendWhatsAppMessage() {
           organization_id: teamMember.organization_id,
           phone_number: formattedNumber,
           message,
-        }, SEND_TIMEOUT_MS, recoveryContext(queryClient, teamMember.organization_id, phoneNumber, destination, instanceId, _sendId, message));
+        }, SEND_TIMEOUT_MS, recoveryContext(queryClient, teamMember.organization_id, phoneNumber, destination, instanceId, _sendId, message, fila));
         data = result.data;
         error = result.error;
       } else {
@@ -309,7 +422,7 @@ export function useSendWhatsAppMessage() {
             ...(leadId ? { lead_id: leadId } : {}),
             ...groupMentionsField(queryClient, isGroup, instanceId, formattedNumber, message),
           },
-        }, SEND_TIMEOUT_MS, recoveryContext(queryClient, teamMember.organization_id, phoneNumber, destination, instanceId, _sendId, message));
+        }, SEND_TIMEOUT_MS, recoveryContext(queryClient, teamMember.organization_id, phoneNumber, destination, instanceId, _sendId, message, fila));
         data = result.data;
         error = result.error;
       }
@@ -344,7 +457,9 @@ export function useSendWhatsAppMessage() {
 
       return { ...data, _localMessage: { phoneNumber, message, instanceId, messageId, timestamp } };
     },
-    onMutate: async (variables) => {
+    // Roda na hora do Enter, mesmo para o item que vai esperar a vez: a bolha
+    // aparece antes do POST (query-core 5.83.0 mutation.js:82-92).
+    onMutate: async (variables): Promise<ContextoDoEnvio> => {
       // Manual retries already carry their original context (including no quote).
       if (!variables._sendId) variables.replyContext ??= reply?.target ?? undefined;
       const orgId = teamMember?.organization_id;
@@ -357,6 +472,8 @@ export function useSendWhatsAppMessage() {
         ["whatsapp_messages", orgId, phone, instId]
       );
 
+      // `_sendId` é a identidade do item do onMutate ao fim: a bolha, o
+      // `onRetry` da recuperação e a bolha de falha usam o MESMO id.
       const optimisticId = variables._sendId ?? makeOptimisticId();
       variables._sendId = optimisticId;
       const optimisticMsg: WhatsAppMessage = {
@@ -388,6 +505,9 @@ export function useSendWhatsAppMessage() {
       return { previousMessages, optimisticId, timestamp: optimisticMsg.timestamp };
     },
     onError: (err, variables, context) => {
+      const interrompido = err instanceof FilaInterrompidaError;
+      // Falha de verdade trava os itens que esperam atrás dela.
+      if (!interrompido) interromperFila(queryClient, conversaDoEnvio(teamMember?.organization_id, variables));
       if (context?.optimisticId) {
         queryClient.setQueryData(
           ["whatsapp_messages", teamMember?.organization_id, variables.phoneNumber, variables.instanceId],
@@ -396,7 +516,9 @@ export function useSendWhatsAppMessage() {
       }
       const failedKey = ["whatsapp_failed_messages", teamMember?.organization_id, variables.phoneNumber, variables.instanceId];
       queryClient.setQueryData<FailedMessage[]>(failedKey, (prev = []) => [
-        ...prev.filter((m) => m.id !== context?.optimisticId && (m.mediaType || m.message !== variables.message || m.replyContext?.messageId !== variables.replyContext?.messageId)),
+        // A deduplicação por texto junta tentativas repetidas da MESMA frase.
+        // Um item interrompido é outra mensagem — "oi", "oi" na fila são duas.
+        ...prev.filter((m) => m.id !== context?.optimisticId && (interrompido || m.mediaType || m.message !== variables.message || m.replyContext?.messageId !== variables.replyContext?.messageId)),
         {
           id: context?.optimisticId ?? variables._sendId ?? makeOptimisticId(),
           retry_attempt: err instanceof Error && "retryAttempts" in err ? MAX_SEND_RETRIES : 0,
@@ -427,6 +549,8 @@ export function useSendWhatsAppMessage() {
       // A partir daí o dedupe por message_id do realtime reconhece a linha do
       // webhook e não anexa uma segunda bolha.
       const realMessageId = readProviderMessageId(data);
+      // E a fila lembra dele: o confirm de um item seguinte não pode reivindicá-lo.
+      if (realMessageId) registrarConfirmado(queryClient, conversaDoEnvio(teamMember?.organization_id, variables), realMessageId);
       if (context?.optimisticId) {
         queryClient.setQueryData<WhatsAppMessage[]>(
           ["whatsapp_messages", teamMember?.organization_id, variables.phoneNumber, variables.instanceId],
@@ -440,22 +564,69 @@ export function useSendWhatsAppMessage() {
         track({ event: "message_sent", organizationId: teamMember.organization_id, entityType: "conversation" });
       }
     },
-    onSettled: (_, __, variables) => {
-      queryClient.invalidateQueries({
-        queryKey: ["whatsapp_messages", teamMember?.organization_id, variables.phoneNumber, variables.instanceId],
-      });
-      queryClient.invalidateQueries({ queryKey: ["whatsapp_contacts"] });
-    },
+    onSettled: (data, _error, variables) => aoTerminarItem(queryClient, teamMember?.organization_id, variables, data ? variables.message : undefined),
   });
 }
 
 /**
- * Hook para enviar mídia (imagem, áudio) via WhatsApp
+ * Fecho comum de texto e mídia, no `onSettled` (o item ainda conta como
+ * pendente, por isso é ele quem sabe se era o último).
+ *
+ * - Linha da conversa: patch no lugar (prévia, hora, direção) em cada lista em
+ *   cache que mostra aquela caixa — nunca a invalidação da RAIZ
+ *   `["whatsapp_contacts"]`, que refazia TODAS as listas da org a cada envio.
+ * - Thread: UMA invalidação exata, quando a fila esvazia — e não uma por item.
+ */
+function aoTerminarItem(
+  queryClient: QueryClient,
+  organizationId: string | null | undefined,
+  variables: VariaveisDaConversa,
+  /** Prévia da lista quando o item SAIU; `undefined` = não saiu. `null` = mídia sem legenda. */
+  previaEnviada: string | null | undefined,
+): void {
+  const ultimo = encerrarItem(queryClient, conversaDoEnvio(organizationId, variables));
+  if (previaEnviada !== undefined && organizationId) {
+    registrarEnvioNaLista(queryClient, {
+      organizationId,
+      instanceId: variables.instanceId ?? null,
+      phoneNumber: variables.phoneNumber,
+      conteudo: previaEnviada,
+      timestamp: new Date().toISOString(),
+    });
+  }
+  if (ultimo) {
+    void queryClient.invalidateQueries({
+      queryKey: ["whatsapp_messages", organizationId, variables.phoneNumber, variables.instanceId],
+      exact: true,
+    });
+  }
+}
+
+export interface EnvioDeMidia {
+  phoneNumber: string;
+  /** `is_group` do contato: o destino vira o JID `<id>@g.us`. */
+  isGroup?: boolean;
+  instanceName: string;
+  instanceId?: string | null;
+  mediaType: "image" | "audio" | "document" | "video" | "sticker";
+  /** URL/data URL pronta, ou o preparo que roda quando a vez do item chega. */
+  media: string | MidiaAPreparar;
+  caption?: string;
+  fileName?: string;
+  mimetype?: string;
+  leadId?: string | null;
+  _sendId?: string;
+  replyContext?: ReplyContext;
+}
+
+/**
+ * Hook para enviar mídia (imagem, áudio) via WhatsApp — na MESMA fila do texto.
  */
 export function useSendWhatsAppMedia() {
   const reply = useChatReply();
   const queryClient = useQueryClient();
   const { data: teamMember } = useCurrentTeamMember();
+  const organizationId = teamMember?.organization_id;
   // Keep the current attachment after failure, but a second click must only
   // reconcile an ambiguous send; uploading again would generate a new URL and
   // bypass the recovery controller's duplicate protection.
@@ -465,39 +636,18 @@ export function useSendWhatsAppMedia() {
     confirm: () => Promise<SendResponse | null>;
   } | null>(null);
 
-  return useMutation({
+  return useEnvioEmFila(organizationId, {
     retry: false, // one recovery controller owns the ten-attempt budget
-    mutationFn: async ({
-      phoneNumber,
-      isGroup,
-      instanceName,
-      instanceId,
-      mediaType,
-      media,
-      caption,
-      fileName,
-      mimetype,
-      leadId,
-      _sendId,
-      replyContext,
-    }: {
-      phoneNumber: string;
-      /** `is_group` do contato: o destino vira o JID `<id>@g.us`. */
-      isGroup?: boolean;
-      instanceName: string;
-      instanceId?: string | null;
-      mediaType: "image" | "audio" | "document" | "video" | "sticker";
-      media: string;
-      caption?: string;
-      fileName?: string;
-      mimetype?: string;
-      leadId?: string | null;
-      _sendId?: string;
-      replyContext?: ReplyContext;
-    }) => {
+    mutationFn: async (variables: EnvioDeMidia) => {
       if (!teamMember?.organization_id || !teamMember?.id) {
         throw new Error("Usuário não vinculado à equipe");
       }
+      const fila = conversaDoEnvio(teamMember.organization_id, variables);
+      if (filaInterrompida(queryClient, fila)) throw new FilaInterrompidaError();
+      // A vez chegou: só agora a leitura/conversão do anexo roda.
+      if (typeof variables.media !== "string") variables.media = await prepararUmaVez(variables.media);
+      const media = variables.media;
+      const { phoneNumber, isGroup, mediaType, caption, fileName, leadId, _sendId, replyContext, instanceId } = variables;
 
       const destination = resolveDestinationOrThrow(phoneNumber, isGroup);
       const formattedNumber = destination.number;
@@ -523,7 +673,7 @@ export function useSendWhatsAppMedia() {
       }
 
       const isSzChat = await isSzChatInstanceCached(instanceId);
-      const recovery = recoveryContext(queryClient, teamMember.organization_id, phoneNumber, destination, instanceId, _sendId, caption ?? null, mediaUrl);
+      const recovery = recoveryContext(queryClient, teamMember.organization_id, phoneNumber, destination, instanceId, _sendId, caption ?? null, fila, mediaUrl);
 
       // Do not depend on realtime/refetch to display an attachment already uploaded.
       queryClient.setQueryData<WhatsAppMessage[]>(
@@ -640,7 +790,7 @@ export function useSendWhatsAppMedia() {
       // pra promover a bolha otimista. Mesmo contrato do envio de texto.
       return { ...(data as Record<string, unknown>), _localMessage: { messageId } };
     },
-    onMutate: async (variables) => {
+    onMutate: async (variables): Promise<ContextoDoEnvio> => {
       // Manual retries already carry their original context (including no quote).
       if (!variables._sendId) variables.replyContext ??= reply?.target ?? undefined;
       const orgId = teamMember?.organization_id;
@@ -665,7 +815,7 @@ export function useSendWhatsAppMedia() {
         direction: "outgoing",
         message_type: variables.mediaType,
         content: variables.caption || null,
-        media_url: variables.media,
+        media_url: typeof variables.media === "string" ? variables.media : variables.media.previa,
         media_file_name: variables.mediaType === "document" ? variables.fileName?.trim() || null : null,
         push_name: null,
         status: "pending",
@@ -692,6 +842,7 @@ export function useSendWhatsAppMedia() {
         (prev = []) => prev.filter(m => m.mediaUrl !== variables.media || m.message !== (variables.caption ?? null) || m.replyContext?.messageId !== variables.replyContext?.messageId),
       );
       const realMessageId = readProviderMessageId(data);
+      if (realMessageId) registrarConfirmado(queryClient, conversaDoEnvio(teamMember?.organization_id, variables), realMessageId);
       if (context?.optimisticId) {
         queryClient.setQueryData<WhatsAppMessage[]>(
           ["whatsapp_messages", teamMember?.organization_id, variables.phoneNumber, variables.instanceId],
@@ -702,15 +853,24 @@ export function useSendWhatsAppMedia() {
       }
     },
     onError: (err, variables, context) => {
+      const interrompido = err instanceof FilaInterrompidaError;
+      if (!interrompido) interromperFila(queryClient, conversaDoEnvio(teamMember?.organization_id, variables));
       if (context?.optimisticId) {
         queryClient.setQueryData(
           ["whatsapp_messages", teamMember?.organization_id, variables.phoneNumber, variables.instanceId],
           (old: WhatsAppMessage[] = []) => old.filter(m => m.id !== context.optimisticId)
         );
       }
+      // Mídia pronta → a bolha de falha reenvia a URL/data URL. Mídia que nunca
+      // ficou pronta (item interrompido antes da vez, ou o preparo falhou) NÃO
+      // é lida aqui: reler o arquivo no onError atrasaria a drenagem da fila
+      // e repetiria um preparo que já falhou. Ela vai como `preparo`, e o
+      // reenvio manual prepara de novo.
+      const mediaUrl = typeof variables.media === "string" ? variables.media : null;
+      const preparo = typeof variables.media === "string" ? undefined : variables.media;
       const failedKey = ["whatsapp_failed_messages", teamMember?.organization_id, variables.phoneNumber, variables.instanceId];
       queryClient.setQueryData<FailedMessage[]>(failedKey, (prev = []) => [
-        ...prev.filter(m => m.id !== context?.optimisticId && (m.mediaUrl !== variables.media || m.message !== (variables.caption ?? null) || m.replyContext?.messageId !== variables.replyContext?.messageId)),
+        ...prev.filter(m => m.id !== context?.optimisticId && (interrompido || !mediaUrl || m.mediaUrl !== mediaUrl || m.message !== (variables.caption ?? null) || m.replyContext?.messageId !== variables.replyContext?.messageId)),
         {
           id: context?.optimisticId ?? variables._sendId ?? makeOptimisticId(),
           retry_attempt: err instanceof Error && "retryAttempts" in err ? MAX_SEND_RETRIES : 0,
@@ -720,7 +880,8 @@ export function useSendWhatsAppMedia() {
           instanceName: variables.instanceName,
           replyContext: variables.replyContext,
           message: variables.caption ?? null,
-          mediaUrl: variables.media,
+          mediaUrl,
+          ...(preparo ? { preparo } : {}),
           mediaType: variables.mediaType,
           error: userMessageOf(err, "Não foi possível enviar a mídia."),
           timestamp: context?.timestamp ?? new Date().toISOString(),
@@ -730,12 +891,7 @@ export function useSendWhatsAppMedia() {
         },
       ]);
     },
-    onSettled: (_, __, variables) => {
-      queryClient.invalidateQueries({
-        queryKey: ["whatsapp_messages", teamMember?.organization_id, variables.phoneNumber, variables.instanceId],
-      });
-      queryClient.invalidateQueries({ queryKey: ["whatsapp_contacts"] });
-    },
+    onSettled: (data, _error, variables) => aoTerminarItem(queryClient, teamMember?.organization_id, variables, data ? (variables.caption ?? null) : undefined),
   });
 }
 
@@ -752,7 +908,8 @@ export function useFailedMessages(phoneNumber: string, instanceId: string | null
 
 /**
  * Hook para reenviar uma mensagem que falhou.
- * Remove do cache paralelo e chama o mutation original.
+ * Remove do cache paralelo e chama o envio original — que entra na fila da
+ * conversa como qualquer outro, atrás do que já estiver saindo.
  */
 export function useRetryMessage() {
   const queryClient = useQueryClient();
@@ -763,10 +920,16 @@ export function useRetryMessage() {
 
   return async (failed: FailedMessage) => {
     if ((failed.retry_attempt ?? 0) >= MAX_SEND_RETRIES) return;
+    // Mídia sem arquivo não tem o que reenviar — e cair no ramo de texto
+    // mandaria só a legenda, como se fosse a mensagem inteira.
+    const midia: string | MidiaAPreparar | null = failed.mediaUrl
+      // Preparo NOVO (objeto novo, memo novo): o reenvio é uma tentativa nova.
+      ?? (failed.preparo ? { previa: failed.preparo.previa, preparar: failed.preparo.preparar } : null);
+    if (failed.mediaType && !midia) return;
     const key = ["whatsapp_failed_messages", organizationId, failed.phoneNumber, failed.instanceId];
     queryClient.setQueryData<FailedMessage[]>(key, (prev = []) => prev.filter((m) => m.id !== failed.id));
 
-    if (failed.mediaType && failed.mediaUrl) {
+    if (failed.mediaType && midia) {
       await sendMedia.mutateAsync({
         _sendId: failed.id,
         replyContext: failed.replyContext,
@@ -775,7 +938,7 @@ export function useRetryMessage() {
         instanceName: failed.instanceName,
         instanceId: failed.instanceId,
         mediaType: failed.mediaType as "image" | "audio" | "document" | "video",
-        media: failed.mediaUrl,
+        media: midia,
         caption: failed.message ?? undefined,
       });
     } else if (failed.message) {

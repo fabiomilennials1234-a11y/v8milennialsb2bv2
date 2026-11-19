@@ -1,6 +1,7 @@
 import { createRoot } from "react-dom/client";
 import { installClientErrorCapture, recordClientError } from "./core/observability/client-error-buffer";
 import { getSessionId } from "./core/trace/request-trace";
+import { AMOSTRA_PADRAO, iniciarMedicao } from "./core/perf/medicao";
 import { addErrorReporter, ringBufferEntry } from "@/shared/errors";
 import { loadSentry, sentryOptionsFromEnv } from "@/shared/errors/sentry-loader";
 import {
@@ -43,5 +44,9 @@ window.addEventListener("error", (e) => {
 // O CSS principal falha antes deste script rodar: confere no boot.
 const missing = missingStylesheets();
 if (missing.length > 0) void recoverFromStaleBuild(undefined, { assetUrls: missing });
+
+// Régua de espera (CX ①): tempo até a tela útil + Web Vitals, numa amostra
+// fixa por sessão, gravados em lote quando a aba esconde. Ver src/core/perf.
+iniciarMedicao({ amostra: AMOSTRA_PADRAO });
 
 createRoot(document.getElementById("root")!).render(<App />);

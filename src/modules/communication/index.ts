@@ -317,10 +317,7 @@ export * as whatsappApi from "./lib/whatsappApi";
 export { primaryInstanceFor } from "./lib/primaryInstanceFor";
 export type { PrimaryInstanceForArgs } from "./lib/primaryInstanceFor";
 export { computeNeedsDeepLinkResolve } from "./lib/computeNeedsDeepLinkResolve";
-export {
-  prefetchChatRoute,
-  prefetchChatData,
-} from "./lib/chatPrefetch";
+export { prefetchChatData } from "./lib/chatPrefetch";
 export type { PrefetchChatDataParams } from "./lib/chatPrefetch";
 
 // Chamada de voz (TorqueCalls, S14). O provider vive na raiz do app porque a

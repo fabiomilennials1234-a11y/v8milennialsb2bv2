@@ -2,7 +2,8 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 import { AlertTriangle, ArrowRight, MessageCircle, MessageSquareDot } from "lucide-react";
 import { FocusCard, FocusTile, InkPanel, InkRow } from "@/components/ui/bento";
-import { Skeleton } from "@/components/ui/skeleton";
+import { Espera, Osso } from "@/shared/espera";
+import { useMarcarUtil } from "@/core/perf/useMarcarUtil";
 import { cn } from "@/lib/utils";
 import { useViewport } from "@/shared/hooks/use-viewport";
 import { useCopilotToggleStatus } from "@/modules/copilot";
@@ -16,6 +17,100 @@ import { useFocoDoLead } from "@/modules/analytics/hooks/useFocoDoLead";
 import { esperaCurta } from "@/modules/analytics/lib/espera-curta";
 
 const MOSTRAR = 10;
+
+/** Frase da régua aos 1 s: o que está acontecendo, sem dado nenhum do usuário. */
+const FRASE_DA_ESPERA_DO_COMANDO = "Procurando quem ficou sem resposta nas suas caixas…";
+
+/*
+ * Layout do card em constantes: o card real e o esqueleto usam AS MESMAS
+ * classes de grade, ordem e altura — abaixo de `lg` o cartão de foco vem em
+ * cima da lista nos dois, e o dado entra sem pular layout (régua de espera).
+ * `comando-card-espera.test.tsx` trava a igualdade.
+ */
+const GRADE_DA_FILA = "grid items-start gap-3 lg:grid-cols-[minmax(0,340px)_minmax(0,1fr)]";
+const LISTA_DA_FILA = "order-2 flex min-w-0 flex-col gap-1 lg:order-1";
+const CARTAO_DO_FOCO = "order-1 min-h-[340px] gap-4 p-[18px] lg:order-2";
+const CABECALHO_DO_FOCO = "flex flex-wrap items-start gap-x-6 gap-y-3";
+const TILES_DO_FOCO = "grid gap-2.5 sm:grid-cols-3";
+const ACOES_DO_FOCO = "mt-auto flex flex-wrap items-center gap-2 border-t pt-4";
+
+/**
+ * Osso do tamanho de uma linha de texto: o `<p>` carrega a MESMA tipografia
+ * do texto real, então a altura da linha é a do texto, não um chute em px.
+ */
+function LinhaEmOsso({ texto, largura }: { texto: string; largura: string }) {
+  return (
+    <p className={texto}>
+      <Osso tom="tinta" className={cn("inline-block h-[0.8em] align-middle", largura)} />
+    </p>
+  );
+}
+
+/** A forma do card enquanto a fila chega: cartão de foco + lista, como o real. */
+function FormaDaFila({ mostrarDono }: { mostrarDono: boolean }) {
+  return (
+    <div data-parte="grade" className={GRADE_DA_FILA}>
+      <div data-parte="lista" className={LISTA_DA_FILA}>
+        {[0, 1, 2, 3].map((i) => (
+          <div key={i} className="flex items-center gap-3 rounded-2xl px-3 py-2.5">
+            <Osso tom="tinta" className="h-9 w-9 shrink-0 rounded-full" />
+            <span className="min-w-0 flex-1">
+              <LinhaEmOsso texto="text-[13px] font-bold" largura="w-2/3" />
+              <LinhaEmOsso texto="text-[11.5px]" largura="w-5/6" />
+            </span>
+            <Osso tom="tinta" className="h-3 w-8 shrink-0" />
+          </div>
+        ))}
+      </div>
+      {/* O cartão de foco em osso: mesma caixa, mesmas faixas do real. */}
+      <div
+        data-parte="foco"
+        className={cn("flex min-w-0 flex-col rounded-card border border-white/[.06] bg-white/[.03]", CARTAO_DO_FOCO)}
+      >
+        <div data-parte="cabecalho" className={CABECALHO_DO_FOCO}>
+          <div className="shrink-0">
+            <LinhaEmOsso texto="text-[11px] font-bold" largura="w-16" />
+            <p className="text-[2.6rem] font-extrabold leading-none">
+              <Osso tom="tinta" className="inline-block h-[0.9em] w-24 align-middle" />
+            </p>
+          </div>
+          <div className="min-w-[9rem] flex-1">
+            <LinhaEmOsso texto="text-[11px] font-bold" largura="w-12" />
+            <LinhaEmOsso texto="text-[17px] font-extrabold" largura="w-2/3" />
+            <LinhaEmOsso texto="text-[12px]" largura="w-1/2" />
+          </div>
+          {mostrarDono && (
+            <div className="flex shrink-0 items-center gap-2">
+              <Osso tom="tinta" className="h-9 w-9 rounded-full" />
+              <span className="leading-tight">
+                <Osso tom="tinta" className="h-3 w-20" />
+                <Osso tom="tinta" className="mt-1.5 h-2.5 w-14" />
+              </span>
+            </div>
+          )}
+        </div>
+        <div className="rounded-2xl border border-white/[.06] p-4">
+          {/* Uma linha: a fala típica no WhatsApp é curta (medido no harness do qa). */}
+          <LinhaEmOsso texto="text-[16px] font-semibold leading-snug" largura="w-11/12" />
+          <LinhaEmOsso texto="mt-2 text-[11px] font-semibold" largura="w-1/2" />
+        </div>
+        <div data-parte="tiles" className={TILES_DO_FOCO}>
+          {[0, 1, 2].map((i) => (
+            <div key={i} className="rounded-2xl border border-white/[.06] p-3">
+              <LinhaEmOsso texto="text-[15px] font-extrabold" largura="w-3/4" />
+              <LinhaEmOsso texto="text-[11px]" largura="w-1/2" />
+            </div>
+          ))}
+        </div>
+        <div data-parte="acoes" className={cn(ACOES_DO_FOCO, "border-white/[.06]")}>
+          <Osso tom="tinta" className="h-9 w-24 rounded-full" />
+          <span className="flex-1" />
+          <Osso tom="tinta" className="h-11 w-40 rounded-full" />
+        </div>
+      </div>
+    </div>
+  );
+}
 
 /** No celular a linha inteira abre a conversa (a lista é a ação). */
 const LINHA_CLASSES =
@@ -52,6 +147,9 @@ export function CardConversasAguardando() {
 
   const { isMobile } = useViewport();
   const [selecionadaKey, setSelecionadaKey] = useState<string | null>(null);
+  // Útil do Comando = a fila de quem espera resposta resolvida (lista, vazio
+  // ou erro — todos respondem a pergunta da tela). Uma vez por montagem.
+  useMarcarUtil("comando", !isLoading);
 
   const restantes = Math.max(0, total - items.length);
   const comLead = items.filter((c): c is ConversaAguardando & { leadId: string } => !!c.leadId);
@@ -61,7 +159,15 @@ export function CardConversasAguardando() {
   return (
     <InkPanel
       title="Conversas aguardando"
-      count={!isLoading && !isError ? `${total} ${total === 1 ? "cliente" : "clientes"}` : undefined}
+      count={
+        isLoading ? (
+          // Osso da contagem: sem ele o cabeçalho ganha a pílula ao carregar
+          // e, no celular, quebra para 2 linhas — o card pulava 32 px.
+          <Osso tom="tinta" className="inline-block h-[1em] w-[4.5em] align-middle" />
+        ) : !isError ? (
+          `${total} ${total === 1 ? "cliente" : "clientes"}`
+        ) : undefined
+      }
       actions={
         <>
           <Link
@@ -92,16 +198,8 @@ export function CardConversasAguardando() {
         </p>
       ) : null}
 
-      {isLoading ? (
-        <div className="grid gap-3 lg:grid-cols-[minmax(0,340px)_minmax(0,1fr)]">
-          <div className="space-y-2 p-1.5">
-            {[0, 1, 2, 3].map((i) => (
-              <Skeleton key={i} className="h-12 rounded-2xl bg-white/[.07]" />
-            ))}
-          </div>
-          <Skeleton className="hidden min-h-[340px] rounded-card bg-white/[.07] lg:block" />
-        </div>
-      ) : isError ? (
+      <Espera carregando={isLoading} forma={<FormaDaFila mostrarDono={isAdmin} />} frase={FRASE_DA_ESPERA_DO_COMANDO}>
+      {isError ? (
         <div className="flex flex-col items-center gap-2 px-4 py-10 text-center">
           <AlertTriangle className="h-5 w-5 text-destructive" />
           <p className="text-[13px] font-semibold">Não deu para carregar</p>
@@ -131,8 +229,8 @@ export function CardConversasAguardando() {
           </p>
         </div>
       ) : (
-        <div className="grid items-start gap-3 lg:grid-cols-[minmax(0,340px)_minmax(0,1fr)]">
-          <ul className="order-2 flex min-w-0 flex-col gap-1 lg:order-1">
+        <div data-parte="grade" className={GRADE_DA_FILA}>
+          <ul data-parte="lista" className={LISTA_DA_FILA}>
             {comLead.map((c) => (
               <li key={c.key}>
                 {isMobile ? (
@@ -167,6 +265,7 @@ export function CardConversasAguardando() {
           {emFoco && <CartaoDoFoco conversa={emFoco} mostrarDono={isAdmin} />}
         </div>
       )}
+      </Espera>
     </InkPanel>
   );
 }
@@ -231,9 +330,9 @@ function CartaoDoFoco({
   const carregando = foco.isLoading;
 
   return (
-    <FocusCard className="order-1 min-h-[340px] gap-4 p-[18px] lg:order-2">
+    <FocusCard data-parte="foco" className={CARTAO_DO_FOCO}>
       {/* (a) espera · cliente · dono */}
-      <div className="flex flex-wrap items-start gap-x-6 gap-y-3">
+      <div data-parte="cabecalho" className={CABECALHO_DO_FOCO}>
         {espera && (
           <div className="shrink-0">
             <p className="text-[11px] font-bold text-primary-foreground/70">Esperando há</p>
@@ -282,7 +381,7 @@ function CartaoDoFoco({
       </FocusTile>
 
       {/* (c) onde o lead está — só leitura */}
-      <div className="grid gap-2.5 sm:grid-cols-3">
+      <div data-parte="tiles" className={TILES_DO_FOCO}>
         <FocusTile>
           <p className="truncate text-[15px] font-extrabold">{carregando ? "…" : foco.data?.etapa ?? "Sem negócio aberto"}</p>
           <p className="truncate text-[11px] text-primary-foreground/65">
@@ -302,7 +401,7 @@ function CartaoDoFoco({
       </div>
 
       {/* (d) agir */}
-      <div className="mt-auto flex flex-wrap items-center gap-2 border-t border-primary-foreground/10 pt-4">
+      <div data-parte="acoes" className={cn(ACOES_DO_FOCO, "border-primary-foreground/10")}>
         <Link
           to={`/leads?lead=${conversa.leadId}`}
           className="inline-flex h-9 items-center rounded-full bg-primary-foreground/10 px-4 text-[12.5px] font-bold transition-colors hover:bg-primary-foreground/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-foreground/40"

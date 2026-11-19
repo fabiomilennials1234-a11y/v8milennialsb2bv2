@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { ChartNoAxesCombined, Plus, Tv } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -10,21 +10,35 @@ import { ComandoVisaoProvider, type ComandoVisao } from "@/modules/analytics/hoo
 import { useOrganization, useUserRole, useCurrentTeamMember, useIdentity, isVirtualTeamMember } from "@/modules/identity";
 import { LeadModal } from "@/modules/leads";
 import { useOrgFeatures } from "@/contexts/OrgFeaturesContext";
+import { useWhatsAppInstancesForUser } from "@/modules/communication";
+import { trackModuleVisit } from "@/lib/analytics";
 import DashboardOutbound from "./DashboardOutbound";
 
 /** Comando é a fila operacional. Os dashboards moram nos templates de /metricas. */
 export default function Dashboard() {
   const navigate = useNavigate();
-  const { orgType, isLoading: orgLoading } = useOrganization();
+  const { organizationId, orgType, isLoading: orgLoading } = useOrganization();
   const { data: userRole } = useUserRole();
   const { isLoading: memberLoading } = useCurrentTeamMember();
   const { isAdmin, teamMemberId } = useIdentity();
   const [leadOpen, setLeadOpen] = useState(false);
   const [visao, setVisao] = useState<ComandoVisao>("equipe");
   const { hasFeature } = useOrgFeatures();
+  const ehOutboundMembro = orgType === "outbound" && userRole?.role === "member";
+
+  useEffect(() => { trackModuleVisit("comando", organizationId); }, [organizationId]);
+
+  // Aquecimento (régua de espera): as caixas são a dependência do card mais
+  // importante da tela ("Conversas aguardando"). Pedidas AQUI, junto da
+  // identidade, elas carregam enquanto a página ainda está no skeleton — e a
+  // RPC da fila sai na primeira renderização do card, com as caixas já em
+  // cache, em vez de esperar o card montar para só então pedir as caixas.
+  // Mesma chave do card: o TanStack dedupa, não há segunda ida. A identidade
+  // (equipe, escopo) já é lida acima por useIdentity/useCurrentTeamMember.
+  useWhatsAppInstancesForUser({ enabled: !ehOutboundMembro });
 
   // Fluxo especializado dos membros outbound permanece intacto.
-  if (orgType === "outbound" && userRole?.role === "member") return <DashboardOutbound />;
+  if (ehOutboundMembro) return <DashboardOutbound />;
   if (orgLoading || memberLoading) return <div className="flex flex-col gap-4"><Skeleton className="h-16" /><Skeleton className="h-80" /></div>;
 
   // Só quem vê a equipe E tem um `team_member` real alterna para "minha":

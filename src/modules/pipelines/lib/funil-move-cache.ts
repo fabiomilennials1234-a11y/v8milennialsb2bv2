@@ -1,5 +1,6 @@
 import type { QueryClient, QueryKey } from "@tanstack/react-query";
 import {
+  concluirMovePipelineEntry,
   optimisticMovePipelineEntry,
   rollbackPipelineEntryMove,
   type OptimisticMoveSnapshot,
@@ -56,9 +57,19 @@ export function aplicarMoveOtimista(
   return { snapshot, pipelineId, entryId, toStage };
 }
 
+/**
+ * Devolve o card deste move à origem — só ele: a INVERSA do move, não o
+ * snapshot do board (outro move aberto ao mesmo tempo continua onde está).
+ */
 export function reverterMoveOtimista(qc: QueryClient, move: MoveOtimista): void {
-  rollbackPipelineEntryMove(qc, move.snapshot);
-  esquecerEcoProprio(move.entryId);
+  const outroAberto = rollbackPipelineEntryMove(qc, move.snapshot);
+  // Outro move da MESMA entrada segue aberto: o eco dele ainda é esperado.
+  if (!outroAberto) esquecerEcoProprio(move.entryId);
+}
+
+/** O move foi gravado: sai da lista de moves abertos da entrada. */
+export function concluirMoveOtimista(qc: QueryClient, move: MoveOtimista): void {
+  concluirMovePipelineEntry(qc, move.snapshot);
 }
 
 /**

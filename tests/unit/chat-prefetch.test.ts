@@ -1,99 +1,102 @@
 /**
- * Tests para src/lib/prefetch/chatPrefetch.ts.
+ * Prefetch da thread do /chat-whatsapp (src/modules/communication/lib/chatPrefetch.ts).
  *
- * Garantia crítica: a chave de prefetch precisa bater EXATAMENTE com a
- * `chatQueryKeys.messages(orgId, phoneNumber, instanceId)` usada pelo hook
- * `useWhatsAppMessages`. Qualquer divergência rompe o reaproveitamento de
- * cache e o prefetch vira desperdício (ou, pior, populaa uma chave morta).
+ * Garantia crítica: o prefetch grava a MESMA chave, com a MESMA busca, que
+ * `useWhatsAppMessages` lê ao abrir a conversa. A "armadilha da chave legada":
+ * antes o prefetch buscava por `fetchConversationMessages` enquanto a tela
+ * buscava por `reconcileConversation` — formatos e snapshot diferentes.
  */
+import { createElement, type ReactNode } from "react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { QueryClient } from "@tanstack/react-query";
+import { renderHook, waitFor } from "@testing-library/react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { chatQueryKeys } from "@/modules/communication/hooks/chat/shared/queryKeys";
+import type { ChatContact, InboxBox, SocialContact, WhatsAppMessage } from "@/modules/communication/hooks/chat/types";
+import { contactKey, interlocutorDaChave } from "@/modules/communication/hooks/chat/types";
+import { regimeDaConversaAberta } from "@/modules/communication/lib/regimeDaConversaAberta";
 
-// Mock do supabase client antes de importar o helper.
-// A cadeia termina em `.limit()` — `fetchConversationMessages` pede
-// `order(timestamp desc).order(created_at desc).limit(THREAD_MESSAGE_LIMIT)`,
-// porque sem limite explícito o PostgREST corta em `max_rows` sozinho.
-// `.in()` e `rpc` entram porque a thread passou a varrer o CONJUNTO de
-// `instance_id` do chip (`whatsapp_chip_instance_ids`) em vez de uma instância
-// só — aqui a RPC devolve vazio, que degrada pro id passado. Ver
-// `src/modules/communication/lib/chipInstanceIds.ts`.
-vi.mock("@/integrations/supabase/client", () => ({
-  supabase: {
-    from: vi.fn(() => ({
-      select: vi.fn().mockReturnThis(),
-      eq: vi.fn().mockReturnThis(),
-      in: vi.fn().mockReturnThis(),
-      order: vi.fn().mockReturnThis(),
-      limit: vi.fn().mockResolvedValue({
-        data: [{ id: "m1", phone_number: "5511999999999" }],
-        error: null,
-      }),
-    })),
-    rpc: vi.fn().mockResolvedValue({ data: null, error: null }),
-  },
+const reconcile = vi.hoisted(() => vi.fn());
+vi.mock("@/modules/communication/lib/whatsappReconciliation", async (orig) => ({
+  ...(await orig<typeof import("@/modules/communication/lib/whatsappReconciliation")>()),
+  reconcileConversation: reconcile,
 }));
+vi.mock("@/integrations/supabase/client", () => ({ supabase: { from: vi.fn(), rpc: vi.fn() } }));
+vi.mock("@/modules/identity", () => ({
+  useCurrentTeamMember: () => ({ data: { organization_id: "org-abc", id: "member" } }),
+}));
+vi.mock("@/modules/communication/hooks/chat/useRealtimeFallback", () => ({ useReconcileInterval: () => false }));
 
-import { prefetchChatRoute, prefetchChatData } from "@/modules/communication/lib/chatPrefetch";
+import { prefetchChatData } from "@/modules/communication/lib/chatPrefetch";
+import { alvoDoPrefetchDaConversa } from "@/modules/communication/lib/alvoDoPrefetchDaConversa";
+import { useWhatsAppMessages } from "@/modules/communication/hooks/chat/useWhatsAppMessages";
 
-describe("prefetchChatRoute", () => {
-  it("é idempotente — chamadas repetidas reusam a mesma promise", async () => {
-    const p1 = prefetchChatRoute();
-    const p2 = prefetchChatRoute();
-    expect(p1).toBe(p2);
-  });
-});
+const MSG = { id: "m1", message_id: "m1", phone_number: "5511999999999", timestamp: "2026-11-19T10:00:00.000Z" } as WhatsAppMessage;
 
 describe("prefetchChatData", () => {
   let queryClient: QueryClient;
 
   beforeEach(() => {
-    queryClient = new QueryClient({
-      defaultOptions: { queries: { retry: false } },
-    });
+    reconcile.mockReset();
+    reconcile.mockResolvedValue({ messages: [MSG], snapshot: { fingerprint: "f", revisions: {} } });
+    queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   });
 
-  it("não dispara fetch quando organizationId ausente", async () => {
-    await prefetchChatData(queryClient, {
-      organizationId: "",
-      phoneNumber: "5511999999999",
-      instanceId: "inst-1",
-    });
+  it.each([
+    ["organizationId", { organizationId: "", phoneNumber: "5511999999999", instanceId: "inst-1" }],
+    ["phoneNumber", { organizationId: "org-1", phoneNumber: "", instanceId: "inst-1" }],
+    ["instanceId (chave incompleta)", { organizationId: "org-1", phoneNumber: "5511999999999" }],
+  ])("não dispara fetch sem %s", async (_nome, params) => {
+    await prefetchChatData(queryClient, params);
     expect(queryClient.getQueryCache().getAll()).toHaveLength(0);
+    expect(reconcile).not.toHaveBeenCalled();
   });
 
-  it("não dispara fetch quando phoneNumber ausente", async () => {
-    await prefetchChatData(queryClient, {
-      organizationId: "org-1",
-      phoneNumber: "",
-      instanceId: "inst-1",
-    });
-    expect(queryClient.getQueryCache().getAll()).toHaveLength(0);
+  it("popula a EXATA chave de useWhatsAppMessages, com snapshot e paginação", async () => {
+    await prefetchChatData(queryClient, { organizationId: "org-abc", phoneNumber: "5511999999999", instanceId: "inst-xyz" });
+    const key = chatQueryKeys.messages("org-abc", "5511999999999", "inst-xyz");
+    expect(queryClient.getQueryData(key)).toEqual([MSG]);
+    expect(queryClient.getQueryData(["whatsapp_thread_snapshot", ...key])).toEqual({ fingerprint: "f", revisions: {} });
+    expect(queryClient.getQueryData(["whatsapp_thread_pagination", ...key])).toBe(false);
   });
 
-  it("não dispara fetch quando instanceId ausente (chave incompleta)", async () => {
-    await prefetchChatData(queryClient, {
-      organizationId: "org-1",
-      phoneNumber: "5511999999999",
-      // instanceId omitido a propósito
-    });
-    expect(queryClient.getQueryCache().getAll()).toHaveLength(0);
+  it("a tela que abre depois do prefetch lê o cache e NÃO refaz a busca", async () => {
+    await prefetchChatData(queryClient, { organizationId: "org-abc", phoneNumber: "5511999999999", instanceId: "inst-xyz" });
+    expect(reconcile).toHaveBeenCalledTimes(1);
+    const wrapper = ({ children }: { children: ReactNode }) => createElement(QueryClientProvider, { client: queryClient }, children);
+    const { result } = renderHook(() => useWhatsAppMessages("5511999999999", "inst-xyz"), { wrapper });
+    await waitFor(() => expect(result.current.data).toEqual([MSG]));
+    expect(result.current.isLoading).toBe(false);
+    expect(reconcile).toHaveBeenCalledTimes(1);
   });
 
-  it("popula cache com a EXATA mesma chave usada por useWhatsAppMessages", async () => {
-    const orgId = "org-abc";
-    const phone = "5511999999999";
-    const instanceId = "inst-xyz";
+  it("thread já fresca no cache: prefetch não sai para a rede", async () => {
+    await prefetchChatData(queryClient, { organizationId: "org-abc", phoneNumber: "5511999999999", instanceId: "inst-xyz" });
+    await prefetchChatData(queryClient, { organizationId: "org-abc", phoneNumber: "5511999999999", instanceId: "inst-xyz" });
+    expect(reconcile).toHaveBeenCalledTimes(1);
+  });
+});
 
-    await prefetchChatData(queryClient, {
-      organizationId: orgId,
-      phoneNumber: phone,
-      instanceId,
-    });
+describe("alvoDoPrefetchDaConversa", () => {
+  const caixas: InboxBox[] = [
+    { kind: "whatsapp", id: "inst-a", name: "Vendas", status: "connected" },
+    { kind: "whatsapp", id: "inst-b", name: "Suporte", status: "connected" },
+    { kind: "instagram", id: "ig-1", name: "Insta", status: "connected", handle: "loja" },
+  ];
+  const contato = { channel: "whatsapp", instance_id: "inst-b", phone_number: "5511988887777" } as ChatContact;
 
-    const expectedKey = chatQueryKeys.messages(orgId, phone, instanceId);
-    const cached = queryClient.getQueryData(expectedKey);
-    expect(cached).toBeDefined();
-    expect(cached).toEqual([{ id: "m1", phone_number: "5511999999999" }]);
+  it("deriva a MESMA chave que a tela lê ao clicar na linha (caixa da linha, não a selecionada)", () => {
+    const alvo = alvoDoPrefetchDaConversa(contato, caixas, [caixas[0]], "org-abc");
+    // O caminho do clique: chave da linha → regime (caixa) + telefone da linha.
+    const chave = contactKey(contato);
+    const { instanciaDeChip } = regimeDaConversaAberta({ chave, caixas, marcadas: [caixas[0]] });
+    const daTela = chatQueryKeys.messages("org-abc", interlocutorDaChave(chave), instanciaDeChip);
+    expect(chatQueryKeys.messages(alvo!.organizationId, alvo!.phoneNumber, alvo!.instanceId)).toEqual(daTela);
+    expect(alvo).toEqual({ organizationId: "org-abc", phoneNumber: "5511988887777", instanceId: "inst-b" });
+  });
+
+  it("sem org, ou linha de Instagram, não há alvo", () => {
+    expect(alvoDoPrefetchDaConversa(contato, caixas, caixas, null)).toBeNull();
+    const insta = { channel: "instagram", conversation_key: "instagram:ig-1:123" } as unknown as SocialContact;
+    expect(alvoDoPrefetchDaConversa(insta, caixas, caixas, "org-abc")).toBeNull();
   });
 });

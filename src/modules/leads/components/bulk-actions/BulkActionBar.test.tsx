@@ -195,6 +195,31 @@ describe("BulkActionBar — mover em massa para etapa de perda pede UM motivo", 
   });
 });
 
+describe("BulkActionBar — 2º clique no envio é silencioso (NB-1)", () => {
+  it("duplo clique em Mover: uma mutação só, spinner segue até o 1º lote terminar, sem erro", async () => {
+    let soltar!: (v: { data: null; error: null }) => void;
+    rpc.mockImplementation(() => new Promise((r) => { soltar = r; }));
+    const onError = vi.spyOn(console, "error").mockImplementation(() => {});
+    renderBar(new Set(["l-1"]), { pipelineId: "pipe-cus-1", entryIds: ["entry-1"] });
+    fireEvent.click(screen.getByRole("button", { name: /^mover$/i }));
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.keyDown(within(dialog).getAllByRole("combobox")[1], { key: "ArrowDown" });
+    fireEvent.click(await screen.findByRole("option", { name: "Novo" }));
+    const enviar = within(dialog).getByRole("button", { name: /^mover$/i });
+    fireEvent.click(enviar);
+    fireEvent.click(enviar);
+    await waitFor(() => expect(rpc).toHaveBeenCalledTimes(1));
+    // Dá tempo de a 2ª mutação (se existisse) falhar e derrubar o isPending.
+    await new Promise((r) => setTimeout(r, 30));
+    expect(rpc).toHaveBeenCalledTimes(1);
+    expect(enviar).toBeDisabled();
+    expect(enviar.querySelector(".animate-spin")).not.toBeNull();
+    soltar({ data: null, error: null });
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    onError.mockRestore();
+  });
+});
+
 describe("useBulkMoveToPipeline — motor único bulk_add_to_pipeline", () => {
   function wrapper({ children }: { children: React.ReactNode }) {
     const client = new QueryClient({ defaultOptions: { mutations: { retry: false } } });

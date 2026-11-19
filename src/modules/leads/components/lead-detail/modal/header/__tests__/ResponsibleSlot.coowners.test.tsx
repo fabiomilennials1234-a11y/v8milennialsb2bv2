@@ -1,3 +1,4 @@
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { ResponsibleSlot } from "../ResponsibleSlot";
 
@@ -45,14 +46,17 @@ vi.mock("sonner", () => ({ toast: { error: vi.fn(), success: vi.fn() } }));
 const VAREJO = { id: "tm-varejo", name: "Varejo Silva" };
 
 function abrir(props: Partial<Parameters<typeof ResponsibleSlot>[0]> = {}) {
+  // Provider: a troca é otimista (`useAcaoOtimista`, régua de espera CX ①).
   render(
-    <ResponsibleSlot
-      leadId="lead-1"
-      field="sale_responsible_id"
-      label="Venda"
-      currentMember={VAREJO}
-      {...props}
-    />,
+    <QueryClientProvider client={new QueryClient({ defaultOptions: { mutations: { retry: false } } })}>
+      <ResponsibleSlot
+        leadId="lead-1"
+        field="sale_responsible_id"
+        label="Venda"
+        currentMember={VAREJO}
+        {...props}
+      />
+    </QueryClientProvider>,
   );
   fireEvent.click(screen.getByRole("button", { name: /venda/i }));
 }

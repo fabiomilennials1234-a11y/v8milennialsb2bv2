@@ -1,78 +1,47 @@
 /**
- * Prefetch helpers para a rota /chat-whatsapp.
+ * Prefetch dos DADOS de uma conversa do /chat-whatsapp.
  *
- * Objetivo: reduzir o tempo entre clicar no botão WhatsApp do card Kanban
- * (e outras superfícies) e a primeira pintura útil do chat. Duas camadas:
- *
- * 1. `prefetchChatRoute()` — dispara o `import()` dinâmico do chunk JS da
- *    página `ChatWhatsApp`. Deve ser chamado em `onMouseEnter`/`onFocus`.
- *
- * 2. `prefetchChatData(queryClient, { organizationId, phoneNumber, instanceId })`
- *    — usa `queryClient.prefetchQuery` com **as mesmas chaves canônicas**
- *    da `chatQueryKeys` (de `src/hooks/chat/shared/queryKeys.ts`) para que
- *    o hook `useWhatsAppMessages` consuma o cache em vez de refazer fetch.
+ * O chunk JS da rota é responsabilidade do registro de rotas
+ * (`src/core/route-prefetch.ts`, hover no trilho). O `prefetchChatRoute` que
+ * morava aqui fazia um `import()` próprio da página, nunca foi chamado por
+ * ninguém e foi removido na régua de espera (CP-v2, 19/11).
  *
  * Multi-tenancy: `organizationId` é OBRIGATÓRIO. Sem ele, a chave do cache
  * não bate com a do hook real e o prefetch vira desperdício (ou pior, vaza
- * dados entre orgs ao rehidratar). Em call-sites onde só temos o `phone`,
- * o caller deve resolver o `organizationId` via `useOrganization()` antes
- * de chamar este helper.
+ * dados entre orgs ao rehidratar).
  */
 import type { QueryClient } from "@tanstack/react-query";
 import { chatQueryKeys } from "@/modules/communication/hooks/chat/shared/queryKeys";
-import { fetchConversationMessages } from "@/modules/communication/lib/whatsappMessagesQuery";
-
-let chatChunkPromise: Promise<unknown> | null = null;
-
-/**
- * Dispara o dynamic import do chunk da rota /chat-whatsapp.
- * Idempotente: chamadas repetidas reusam a mesma Promise.
- */
-export function prefetchChatRoute(): Promise<unknown> {
-  if (!chatChunkPromise) {
-    chatChunkPromise = import("@/modules/communication/pages/ChatWhatsApp").catch((err) => {
-      // Se falhar, deixa próxima chamada tentar de novo
-      chatChunkPromise = null;
-      throw err;
-    });
-  }
-  return chatChunkPromise;
-}
+import { buscarThread, THREAD_STALE_TIME_MS } from "@/modules/communication/lib/threadDaConversa";
 
 export interface PrefetchChatDataParams {
   organizationId: string;
-  /** Telefone em qualquer formato — `fetchConversationMessages` normaliza. */
+  /** Telefone EXATAMENTE como a tela o usará na chave da thread. */
   phoneNumber: string;
   /**
-   * `instanceId` é opcional aqui. Se não souber, o prefetch ainda popula
-   * a lista de contatos; a query de mensagens é populada depois que a
-   * página resolve qual instância usar.
+   * Sem instância não há prefetch: a chave da thread inclui a caixa, e uma
+   * chave incompleta seria uma entrada que a tela nunca lê.
    */
   instanceId?: string | null;
 }
 
 /**
- * Popula o cache do TanStack Query com a query de mensagens da conversa
- * que o usuário está prestes a abrir.
+ * Popula o cache com a thread da conversa que o usuário está prestes a abrir.
  *
- * Usa exatamente a mesma chave/queryFn que `useWhatsAppMessages` —
- * qualquer divergência leva a refetch duplicado e desperdício de prefetch.
+ * Mesma chave (`chatQueryKeys.messages`), mesma busca (`buscarThread`) e mesmo
+ * staleTime de `useWhatsAppMessages`: ao abrir, a tela lê o cache e não refaz a
+ * busca. Thread já fresca no cache = nenhuma rede.
  */
 export async function prefetchChatData(
   queryClient: QueryClient,
   params: PrefetchChatDataParams,
 ): Promise<void> {
   const { organizationId, phoneNumber, instanceId } = params;
-  if (!organizationId || !phoneNumber) return;
-
-  // Só faz sentido prefetch de mensagens quando conhecemos a instância —
-  // a chave inclui instanceId e seria diferente da que a página usa.
-  if (!instanceId) return;
+  if (!organizationId || !phoneNumber || !instanceId) return;
 
   await queryClient.prefetchQuery({
     queryKey: chatQueryKeys.messages(organizationId, phoneNumber, instanceId),
-    queryFn: () =>
-      fetchConversationMessages({ organizationId, instanceId, phoneNumber }),
-    // mesmo staleTime padrão do QueryClient (5min) basta pra ser reaproveitado
+    queryFn: () => buscarThread(queryClient, organizationId, phoneNumber, instanceId),
+    staleTime: THREAD_STALE_TIME_MS,
   });
 }

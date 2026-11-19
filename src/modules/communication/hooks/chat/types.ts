@@ -59,6 +59,20 @@ export interface WhatsAppMessage extends UazapiMenuFields, UazapiPixFields, Grou
 }
 
 /** Mensagem que falhou ao ser enviada — armazenada em cache paralelo para retry. */
+/**
+ * Mídia que ainda precisa ser lida/convertida (base64, MP3) antes de subir.
+ *
+ * Existe para a PREPARAÇÃO entrar na fila: o anexo vira bolha e ocupa a vez
+ * dele no instante do clique, e a leitura acontece quando a vez chega. Sem
+ * isto, um texto enviado durante a leitura de um PDF de 16 MB passaria na
+ * frente do PDF — a ordem do WhatsApp deixaria de ser a do vendedor.
+ */
+export interface MidiaAPreparar {
+  /** O que a bolha mostra enquanto espera (data URL da prévia), ou nada. */
+  previa: string | null;
+  preparar: () => Promise<string>;
+}
+
 export interface FailedMessage {
   replyContext?: ReplyContext;
   retry_attempt?: number;
@@ -71,6 +85,12 @@ export interface FailedMessage {
   message: string | null;
   mediaUrl: string | null;
   mediaType: string | null;
+  /**
+   * Mídia que nunca ficou pronta (item interrompido antes da vez, ou o preparo
+   * falhou). Só vive no cache em memória; o reenvio prepara de novo a partir
+   * daqui, em vez de a bolha de falha ficar sem o que reenviar.
+   */
+  preparo?: MidiaAPreparar;
   error: string;
   timestamp: string;
   direction: "outgoing";

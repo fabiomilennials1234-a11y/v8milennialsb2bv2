@@ -21,6 +21,9 @@ vi.mock("./SidebarMasterLinks", () => ({ SidebarMasterLinks: () => <div /> }));
 vi.mock("./SidebarUserMenu", () => ({ SidebarUserMenu: () => <div /> }));
 vi.mock("@/shared/components/UpgradeModal", () => ({ UpgradeModal: () => <div /> }));
 vi.mock("@/modules/pipelines", () => ({ usePrefetchPipes: () => vi.fn() }));
+vi.mock("@/modules/platform/hooks/useVisaoMeuTodos", () => ({
+  useVisaoMeuTodos: () => ({ disponivel: false, visao: "todos", setVisao: vi.fn(), donoForcado: null, pronto: true }),
+}));
 vi.mock("@/modules/identity", () => ({
   useMasterAuth: () => ({ isMaster: false, isOutbounder: false }),
   useAuth: () => ({ user: { id: "user-1" } }),

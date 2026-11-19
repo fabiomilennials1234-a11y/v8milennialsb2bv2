@@ -195946,6 +195946,853 @@
             ]
           }
         ]
+      },
+      {
+        "type": "cycle",
+        "from": "src/modules/communication/components/chat/ChatShellWithContext.tsx",
+        "to": "src/modules/communication/components/chat/list/ConversationList.tsx",
+        "unresolvedTo": "@/modules/communication/components/chat/list/ConversationList",
+        "dependencyTypes": [
+          "aliased",
+          "aliased-tsconfig",
+          "aliased-tsconfig-paths",
+          "local",
+          "import"
+        ],
+        "rule": {
+          "severity": "error",
+          "name": "no-circular"
+        },
+        "cycle": [
+          {
+            "name": "src/modules/communication/components/chat/list/ConversationList.tsx",
+            "dependencyTypes": [
+              "aliased",
+              "aliased-tsconfig",
+              "aliased-tsconfig-paths",
+              "local",
+              "import"
+            ]
+          },
+          {
+            "name": "src/modules/communication/components/chat/list/InboxFilterBar.tsx",
+            "dependencyTypes": [
+              "local",
+              "import"
+            ]
+          },
+          {
+            "name": "src/modules/communication/hooks/chat/useInboxFunnelOptions.ts",
+            "dependencyTypes": [
+              "aliased",
+              "aliased-tsconfig",
+              "aliased-tsconfig-paths",
+              "local",
+              "type-only",
+              "import"
+            ]
+          },
+          {
+            "name": "src/modules/pipelines/index.ts",
+            "dependencyTypes": [
+              "aliased",
+              "aliased-tsconfig",
+              "aliased-tsconfig-paths",
+              "local",
+              "import"
+            ]
+          },
+          {
+            "name": "src/modules/pipelines/components/disparo/index.ts",
+            "dependencyTypes": [
+              "local",
+              "export"
+            ]
+          },
+          {
+            "name": "src/modules/pipelines/components/disparo/DisparoWizard.tsx",
+            "dependencyTypes": [
+              "local",
+              "export"
+            ]
+          },
+          {
+            "name": "src/modules/communication/index.ts",
+            "dependencyTypes": [
+              "aliased",
+              "aliased-tsconfig",
+              "aliased-tsconfig-paths",
+              "local",
+              "import"
+            ]
+          },
+          {
+            "name": "src/modules/communication/components/chat/index.ts",
+            "dependencyTypes": [
+              "local",
+              "export"
+            ]
+          },
+          {
+            "name": "src/modules/communication/components/chat/ChatShellWithContext.tsx",
+            "dependencyTypes": [
+              "local",
+              "export"
+            ]
+          }
+        ]
+      },
+      {
+        "type": "cycle",
+        "from": "src/modules/communication/components/chat/ChatShellWithContext.tsx",
+        "to": "src/modules/communication/components/chat/social/SocialContextPanel.tsx",
+        "unresolvedTo": "@/modules/communication/components/chat/social/SocialContextPanel",
+        "dependencyTypes": [
+          "aliased",
+          "aliased-tsconfig",
+          "aliased-tsconfig-paths",
+          "local",
+          "import"
+        ],
+        "rule": {
+          "severity": "error",
+          "name": "no-circular"
+        },
+        "cycle": [
+          {
+            "name": "src/modules/communication/components/chat/social/SocialContextPanel.tsx",
+            "dependencyTypes": [
+              "aliased",
+              "aliased-tsconfig",
+              "aliased-tsconfig-paths",
+              "local",
+              "import"
+            ]
+          },
+          {
+            "name": "src/modules/communication/components/chat/social/SocialLeadLinkPanel.tsx",
+            "dependencyTypes": [
+              "local",
+              "import"
+            ]
+          },
+          {
+            "name": "src/modules/communication/components/chat/social/SocialCreateLeadDialog.tsx",
+            "dependencyTypes": [
+              "local",
+              "import"
+            ]
+          },
+          {
+            "name": "src/modules/pipelines/index.ts",
+            "dependencyTypes": [
+              "aliased",
+              "aliased-tsconfig",
+              "aliased-tsconfig-paths",
+              "local",
+              "import"
+            ]
+          },
+          {
+            "name": "src/modules/pipelines/components/disparo/index.ts",
+            "dependencyTypes": [
+              "local",
+              "export"
+            ]
+          },
+          {
+            "name": "src/modules/pipelines/components/disparo/DisparoWizard.tsx",
+            "dependencyTypes": [
+              "local",
+              "export"
+            ]
+          },
+          {
+            "name": "src/modules/communication/index.ts",
+            "dependencyTypes": [
+              "aliased",
+              "aliased-tsconfig",
+              "aliased-tsconfig-paths",
+              "local",
+              "import"
+            ]
+          },
+          {
+            "name": "src/modules/communication/components/chat/index.ts",
+            "dependencyTypes": [
+              "local",
+              "export"
+            ]
+          },
+          {
+            "name": "src/modules/communication/components/chat/ChatShellWithContext.tsx",
+            "dependencyTypes": [
+              "local",
+              "export"
+            ]
+          }
+        ]
+      },
+      {
+        "type": "cycle",
+        "from": "src/modules/communication/components/chat/ChatShellWithContext.tsx",
+        "to": "src/modules/communication/hooks/chat/useInboxFunnelOptions.ts",
+        "unresolvedTo": "@/modules/communication/hooks/chat/useInboxFunnelOptions",
+        "dependencyTypes": [
+          "aliased",
+          "aliased-tsconfig",
+          "aliased-tsconfig-paths",
+          "local",
+          "import"
+        ],
+        "rule": {
+          "severity": "error",
+          "name": "no-circular"
+        },
+        "cycle": [
+          {
+            "name": "src/modules/communication/hooks/chat/useInboxFunnelOptions.ts",
+            "dependencyTypes": [
+              "aliased",
+              "aliased-tsconfig",
+              "aliased-tsconfig-paths",
+              "local",
+              "import"
+            ]
+          },
+          {
+            "name": "src/modules/pipelines/index.ts",
+            "dependencyTypes": [
+              "aliased",
+              "aliased-tsconfig",
+              "aliased-tsconfig-paths",
+              "local",
+              "import"
+            ]
+          },
+          {
+            "name": "src/modules/pipelines/components/disparo/index.ts",
+            "dependencyTypes": [
+              "local",
+              "export"
+            ]
+          },
+          {
+            "name": "src/modules/pipelines/components/disparo/DisparoWizard.tsx",
+            "dependencyTypes": [
+              "local",
+              "export"
+            ]
+          },
+          {
+            "name": "src/modules/communication/index.ts",
+            "dependencyTypes": [
+              "aliased",
+              "aliased-tsconfig",
+              "aliased-tsconfig-paths",
+              "local",
+              "import"
+            ]
+          },
+          {
+            "name": "src/modules/communication/components/chat/index.ts",
+            "dependencyTypes": [
+              "local",
+              "export"
+            ]
+          },
+          {
+            "name": "src/modules/communication/components/chat/ChatShellWithContext.tsx",
+            "dependencyTypes": [
+              "local",
+              "export"
+            ]
+          }
+        ]
+      },
+      {
+        "type": "cycle",
+        "from": "src/modules/communication/components/chat/list/ConversationList.tsx",
+        "to": "src/modules/communication/hooks/chat/useInboxFunnelOptions.ts",
+        "unresolvedTo": "@/modules/communication/hooks/chat/useInboxFunnelOptions",
+        "dependencyTypes": [
+          "aliased",
+          "aliased-tsconfig",
+          "aliased-tsconfig-paths",
+          "local",
+          "type-only",
+          "import"
+        ],
+        "rule": {
+          "severity": "error",
+          "name": "no-circular"
+        },
+        "cycle": [
+          {
+            "name": "src/modules/communication/hooks/chat/useInboxFunnelOptions.ts",
+            "dependencyTypes": [
+              "aliased",
+              "aliased-tsconfig",
+              "aliased-tsconfig-paths",
+              "local",
+              "type-only",
+              "import"
+            ]
+          },
+          {
+            "name": "src/modules/pipelines/index.ts",
+            "dependencyTypes": [
+              "aliased",
+              "aliased-tsconfig",
+              "aliased-tsconfig-paths",
+              "local",
+              "import"
+            ]
+          },
+          {
+            "name": "src/modules/pipelines/components/disparo/index.ts",
+            "dependencyTypes": [
+              "local",
+              "export"
+            ]
+          },
+          {
+            "name": "src/modules/pipelines/components/disparo/DisparoWizard.tsx",
+            "dependencyTypes": [
+              "local",
+              "export"
+            ]
+          },
+          {
+            "name": "src/modules/communication/index.ts",
+            "dependencyTypes": [
+              "aliased",
+              "aliased-tsconfig",
+              "aliased-tsconfig-paths",
+              "local",
+              "import"
+            ]
+          },
+          {
+            "name": "src/modules/communication/components/chat/index.ts",
+            "dependencyTypes": [
+              "local",
+              "export"
+            ]
+          },
+          {
+            "name": "src/modules/communication/components/chat/ChatShellWithContext.tsx",
+            "dependencyTypes": [
+              "local",
+              "export"
+            ]
+          },
+          {
+            "name": "src/modules/communication/components/chat/list/ConversationList.tsx",
+            "dependencyTypes": [
+              "aliased",
+              "aliased-tsconfig",
+              "aliased-tsconfig-paths",
+              "local",
+              "import"
+            ]
+          }
+        ]
+      },
+      {
+        "type": "cycle",
+        "from": "src/modules/leads/components/lead-detail/modal/LeadDetailDialogV2.tsx",
+        "to": "src/modules/leads/components/lead-detail/modal/LeadModalToolbar.tsx",
+        "unresolvedTo": "./LeadModalToolbar",
+        "dependencyTypes": [
+          "local",
+          "import"
+        ],
+        "rule": {
+          "severity": "error",
+          "name": "no-circular"
+        },
+        "cycle": [
+          {
+            "name": "src/modules/leads/components/lead-detail/modal/LeadModalToolbar.tsx",
+            "dependencyTypes": [
+              "local",
+              "import"
+            ]
+          },
+          {
+            "name": "src/modules/engagement/components/followups/ScheduleFollowUpButton.tsx",
+            "dependencyTypes": [
+              "aliased",
+              "aliased-tsconfig",
+              "aliased-tsconfig-paths",
+              "local",
+              "import"
+            ]
+          },
+          {
+            "name": "src/modules/engagement/components/followups/ScheduleFollowUpModal.tsx",
+            "dependencyTypes": [
+              "local",
+              "import"
+            ]
+          },
+          {
+            "name": "src/modules/engagement/hooks/useNomeDoPipe.ts",
+            "dependencyTypes": [
+              "local",
+              "import"
+            ]
+          },
+          {
+            "name": "src/modules/pipelines/index.ts",
+            "dependencyTypes": [
+              "aliased",
+              "aliased-tsconfig",
+              "aliased-tsconfig-paths",
+              "local",
+              "import"
+            ]
+          },
+          {
+            "name": "src/modules/pipelines/components/custom/index.ts",
+            "dependencyTypes": [
+              "local",
+              "export"
+            ]
+          },
+          {
+            "name": "src/modules/pipelines/components/custom/AddLeadToPipeModal.tsx",
+            "dependencyTypes": [
+              "local",
+              "export"
+            ]
+          },
+          {
+            "name": "src/modules/leads/index.ts",
+            "dependencyTypes": [
+              "aliased",
+              "aliased-tsconfig",
+              "aliased-tsconfig-paths",
+              "local",
+              "import"
+            ]
+          },
+          {
+            "name": "src/modules/leads/components/lead-detail/index.ts",
+            "dependencyTypes": [
+              "local",
+              "export"
+            ]
+          },
+          {
+            "name": "src/modules/leads/components/lead-detail/modal/LeadDetailDialogV2.tsx",
+            "dependencyTypes": [
+              "local",
+              "export"
+            ]
+          }
+        ]
+      },
+      {
+        "type": "cycle",
+        "from": "src/modules/leads/index.ts",
+        "to": "src/modules/leads/components/leads/LeadModal.tsx",
+        "unresolvedTo": "./components/leads/LeadModal",
+        "dependencyTypes": [
+          "local",
+          "export"
+        ],
+        "rule": {
+          "severity": "error",
+          "name": "no-circular"
+        },
+        "cycle": [
+          {
+            "name": "src/modules/leads/components/leads/LeadModal.tsx",
+            "dependencyTypes": [
+              "local",
+              "export"
+            ]
+          },
+          {
+            "name": "src/modules/engagement/components/followups/ScheduleFollowUpButton.tsx",
+            "dependencyTypes": [
+              "aliased",
+              "aliased-tsconfig",
+              "aliased-tsconfig-paths",
+              "local",
+              "import"
+            ]
+          },
+          {
+            "name": "src/modules/engagement/components/followups/ScheduleFollowUpModal.tsx",
+            "dependencyTypes": [
+              "local",
+              "import"
+            ]
+          },
+          {
+            "name": "src/modules/engagement/hooks/useNomeDoPipe.ts",
+            "dependencyTypes": [
+              "local",
+              "import"
+            ]
+          },
+          {
+            "name": "src/modules/pipelines/index.ts",
+            "dependencyTypes": [
+              "aliased",
+              "aliased-tsconfig",
+              "aliased-tsconfig-paths",
+              "local",
+              "import"
+            ]
+          },
+          {
+            "name": "src/modules/leads/index.ts",
+            "dependencyTypes": [
+              "aliased",
+              "aliased-tsconfig",
+              "aliased-tsconfig-paths",
+              "local",
+              "export"
+            ]
+          }
+        ]
+      },
+      {
+        "type": "cycle",
+        "from": "src/modules/communication/components/chat/context-panel/ContextPanelTabInfo.tsx",
+        "to": "src/modules/communication/components/chat/context-panel/contextPanelInfoHelpers.ts",
+        "unresolvedTo": "./contextPanelInfoHelpers",
+        "dependencyTypes": [
+          "local",
+          "import"
+        ],
+        "rule": {
+          "severity": "warn",
+          "name": "no-circular-dynamic"
+        },
+        "cycle": [
+          {
+            "name": "src/modules/communication/components/chat/context-panel/contextPanelInfoHelpers.ts",
+            "dependencyTypes": [
+              "local",
+              "import"
+            ]
+          },
+          {
+            "name": "src/modules/leads/index.ts",
+            "dependencyTypes": [
+              "aliased",
+              "aliased-tsconfig",
+              "aliased-tsconfig-paths",
+              "local",
+              "import"
+            ]
+          },
+          {
+            "name": "src/modules/leads/components/deal-card/DealCardPanel.tsx",
+            "dependencyTypes": [
+              "local",
+              "export"
+            ]
+          },
+          {
+            "name": "src/modules/leads/components/deal-card/useDealCardData.ts",
+            "dependencyTypes": [
+              "local",
+              "import"
+            ]
+          },
+          {
+            "name": "src/modules/engagement/index.ts",
+            "dependencyTypes": [
+              "aliased",
+              "aliased-tsconfig",
+              "aliased-tsconfig-paths",
+              "local",
+              "import"
+            ]
+          },
+          {
+            "name": "src/modules/engagement/components/agenda/CreateMeetingDialogLazy.tsx",
+            "dependencyTypes": [
+              "local",
+              "export"
+            ]
+          },
+          {
+            "name": "src/modules/engagement/components/agenda/CreateMeetingDialog.tsx",
+            "dependencyTypes": [
+              "local",
+              "dynamic-import"
+            ]
+          },
+          {
+            "name": "src/modules/engagement/components/agenda/LeadPorFunilPicker.tsx",
+            "dependencyTypes": [
+              "local",
+              "import"
+            ]
+          },
+          {
+            "name": "src/modules/pipelines/index.ts",
+            "dependencyTypes": [
+              "aliased",
+              "aliased-tsconfig",
+              "aliased-tsconfig-paths",
+              "local",
+              "import"
+            ]
+          },
+          {
+            "name": "src/modules/pipelines/components/disparo/index.ts",
+            "dependencyTypes": [
+              "local",
+              "export"
+            ]
+          },
+          {
+            "name": "src/modules/pipelines/components/disparo/DisparoWizard.tsx",
+            "dependencyTypes": [
+              "local",
+              "export"
+            ]
+          },
+          {
+            "name": "src/modules/communication/index.ts",
+            "dependencyTypes": [
+              "aliased",
+              "aliased-tsconfig",
+              "aliased-tsconfig-paths",
+              "local",
+              "import"
+            ]
+          },
+          {
+            "name": "src/modules/communication/components/chat/index.ts",
+            "dependencyTypes": [
+              "local",
+              "export"
+            ]
+          },
+          {
+            "name": "src/modules/communication/components/chat/ChatShellWithContext.tsx",
+            "dependencyTypes": [
+              "local",
+              "export"
+            ]
+          },
+          {
+            "name": "src/modules/communication/components/chat/context-panel/ContextPanel.tsx",
+            "dependencyTypes": [
+              "aliased",
+              "aliased-tsconfig",
+              "aliased-tsconfig-paths",
+              "local",
+              "import"
+            ]
+          },
+          {
+            "name": "src/modules/communication/components/chat/context-panel/ContextPanelTabInfo.tsx",
+            "dependencyTypes": [
+              "local",
+              "import"
+            ]
+          }
+        ]
+      },
+      {
+        "type": "cycle",
+        "from": "src/modules/communication/components/chat/LeadContactModal.tsx",
+        "to": "src/modules/communication/components/chat/LeadDetailContent.tsx",
+        "unresolvedTo": "./LeadDetailContent",
+        "dependencyTypes": [
+          "local",
+          "import"
+        ],
+        "rule": {
+          "severity": "warn",
+          "name": "no-circular-dynamic"
+        },
+        "cycle": [
+          {
+            "name": "src/modules/communication/components/chat/LeadDetailContent.tsx",
+            "dependencyTypes": [
+              "local",
+              "import"
+            ]
+          },
+          {
+            "name": "src/modules/leads/index.ts",
+            "dependencyTypes": [
+              "aliased",
+              "aliased-tsconfig",
+              "aliased-tsconfig-paths",
+              "local",
+              "export"
+            ]
+          },
+          {
+            "name": "src/modules/leads/components/deal-card/DealCardPanel.tsx",
+            "dependencyTypes": [
+              "local",
+              "export"
+            ]
+          },
+          {
+            "name": "src/modules/leads/components/deal-card/useDealCardData.ts",
+            "dependencyTypes": [
+              "local",
+              "import"
+            ]
+          },
+          {
+            "name": "src/modules/engagement/index.ts",
+            "dependencyTypes": [
+              "aliased",
+              "aliased-tsconfig",
+              "aliased-tsconfig-paths",
+              "local",
+              "import"
+            ]
+          },
+          {
+            "name": "src/modules/engagement/components/agenda/CreateMeetingDialogLazy.tsx",
+            "dependencyTypes": [
+              "local",
+              "export"
+            ]
+          },
+          {
+            "name": "src/modules/engagement/components/agenda/CreateMeetingDialog.tsx",
+            "dependencyTypes": [
+              "local",
+              "dynamic-import"
+            ]
+          },
+          {
+            "name": "src/modules/engagement/components/agenda/LeadPorFunilPicker.tsx",
+            "dependencyTypes": [
+              "local",
+              "import"
+            ]
+          },
+          {
+            "name": "src/modules/pipelines/index.ts",
+            "dependencyTypes": [
+              "aliased",
+              "aliased-tsconfig",
+              "aliased-tsconfig-paths",
+              "local",
+              "import"
+            ]
+          },
+          {
+            "name": "src/modules/pipelines/components/disparo/index.ts",
+            "dependencyTypes": [
+              "local",
+              "export"
+            ]
+          },
+          {
+            "name": "src/modules/pipelines/components/disparo/DisparoWizard.tsx",
+            "dependencyTypes": [
+              "local",
+              "export"
+            ]
+          },
+          {
+            "name": "src/modules/communication/index.ts",
+            "dependencyTypes": [
+              "aliased",
+              "aliased-tsconfig",
+              "aliased-tsconfig-paths",
+              "local",
+              "import"
+            ]
+          },
+          {
+            "name": "src/modules/communication/components/chat/LeadContactModal.tsx",
+            "dependencyTypes": [
+              "local",
+              "export"
+            ]
+          }
+        ]
+      },
+      {
+        "type": "cycle",
+        "from": "src/modules/engagement/components/agenda/CreateMeetingDialog.tsx",
+        "to": "src/modules/engagement/components/agenda/LeadPorFunilPicker.tsx",
+        "unresolvedTo": "./LeadPorFunilPicker",
+        "dependencyTypes": [
+          "local",
+          "import"
+        ],
+        "rule": {
+          "severity": "warn",
+          "name": "no-circular-dynamic"
+        },
+        "cycle": [
+          {
+            "name": "src/modules/engagement/components/agenda/LeadPorFunilPicker.tsx",
+            "dependencyTypes": [
+              "local",
+              "import"
+            ]
+          },
+          {
+            "name": "src/modules/leads/index.ts",
+            "dependencyTypes": [
+              "aliased",
+              "aliased-tsconfig",
+              "aliased-tsconfig-paths",
+              "local",
+              "import"
+            ]
+          },
+          {
+            "name": "src/modules/leads/components/deal-card/DealCardPanel.tsx",
+            "dependencyTypes": [
+              "local",
+              "export"
+            ]
+          },
+          {
+            "name": "src/modules/leads/components/deal-card/useDealCardData.ts",
+            "dependencyTypes": [
+              "local",
+              "import"
+            ]
+          },
+          {
+            "name": "src/modules/engagement/index.ts",
+            "dependencyTypes": [
+              "aliased",
+              "aliased-tsconfig",
+              "aliased-tsconfig-paths",
+              "local",
+              "import"
+            ]
+          },
+          {
+            "name": "src/modules/engagement/components/agenda/CreateMeetingDialogLazy.tsx",
+            "dependencyTypes": [
+              "local",
+              "export"
+            ]
+          },
+          {
+            "name": "src/modules/engagement/components/agenda/CreateMeetingDialog.tsx",
+            "dependencyTypes": [
+              "local",
+              "dynamic-import"
+            ]
+          }
+        ]
       }
     ],
     "error": 6,

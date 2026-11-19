@@ -1,3 +1,4 @@
+import { useRef } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { LEAD_RESPONSIBLE_MAP_KEY } from "./useLeads";
@@ -43,6 +44,13 @@ export function useBulkMoveStage() {
 export function useBulkMoveToPipeline() {
   const qc = useQueryClient();
   const requestTaskMove = useTaskMoveGate();
+  /**
+   * Um lote por vez, travado ANTES da checagem de tarefa. A checagem é uma
+   * fila (TaskMoveGate): um duplo clique em "Mover" — antes do `isPending`
+   * desabilitar o botão no próximo render — esperava a vez e gravava o lote
+   * duas vezes.
+   */
+  const emCurso = useRef(false);
   return useMutation({
     mutationFn: async ({
       lead_ids,
@@ -57,24 +65,30 @@ export function useBulkMoveToPipeline() {
       source_pipeline_id?: string;
       entry_ids?: string[];
     }) => {
-      if (source_pipeline_id) {
-        if (!entry_ids?.length) throw new Error("Nenhum negócio de origem selecionado");
-        if (!(await requestTaskMove(entry_ids))) throw new Error("Movimentação cancelada.");
-        const { data, error } = await supabase.rpc("bulk_move_pipeline_entries" as never, {
-          p_entry_ids: entry_ids, p_source_pipeline_id: source_pipeline_id,
-          p_target_pipeline_id: pipeline_id, p_target_stage_id: stage_id,
-        } as never);
+      if (emCurso.current) throw new Error("Já há uma movimentação em andamento. Aguarde.");
+      emCurso.current = true;
+      try {
+        if (source_pipeline_id) {
+          if (!entry_ids?.length) throw new Error("Nenhum negócio de origem selecionado");
+          if (!(await requestTaskMove(entry_ids))) throw new Error("Movimentação cancelada.");
+          const { data, error } = await supabase.rpc("bulk_move_pipeline_entries" as never, {
+            p_entry_ids: entry_ids, p_source_pipeline_id: source_pipeline_id,
+            p_target_pipeline_id: pipeline_id, p_target_stage_id: stage_id,
+          } as never);
+          if (error) throw error;
+          return data;
+        }
+        if (!(await requestTaskMove({leadIds:lead_ids,pipelineId:pipeline_id}))) throw new Error("Movimentação cancelada.");
+        const { data, error } = await supabase.rpc("bulk_add_to_pipeline" as any, {
+          p_lead_ids: lead_ids,
+          p_pipeline_id: pipeline_id,
+          p_stage_id: stage_id,
+        });
         if (error) throw error;
         return data;
+      } finally {
+        emCurso.current = false;
       }
-      if (!(await requestTaskMove({leadIds:lead_ids,pipelineId:pipeline_id}))) throw new Error("Movimentação cancelada.");
-      const { data, error } = await supabase.rpc("bulk_add_to_pipeline" as any, {
-        p_lead_ids: lead_ids,
-        p_pipeline_id: pipeline_id,
-        p_stage_id: stage_id,
-      });
-      if (error) throw error;
-      return data;
     },
     onSuccess: () => {
       // Boards novos (pipeline-page/counts) + espelhos legados ainda montados.

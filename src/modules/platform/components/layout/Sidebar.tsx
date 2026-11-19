@@ -26,11 +26,14 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { UpgradeModal } from "@/shared/components/UpgradeModal";
+import { useIntencao } from "@/shared/espera";
+import { preCarregarRota } from "@/core/route-prefetch";
 import { usePrefetchPipes } from "@/modules/pipelines";
 import { useOraculoBriefing } from "@/modules/copilot";
 import { useMasterAuth } from "@/modules/identity";
 import { useNavigationModel } from "@/modules/platform/hooks/useNavigationModel";
 import { useFunilEntryPath } from "@/modules/platform/hooks/useFunilEntryPath";
+import { useVisaoMeuTodos } from "@/modules/platform/hooks/useVisaoMeuTodos";
 import { PITSTOP_HUB_PATH, RAIL_WIDTH, type NavNode } from "@/modules/platform/lib/navigation-model";
 import type { FeatureKey } from "@/modules/platform/lib/feature-registry";
 import { SidebarBrand } from "./SidebarBrand";
@@ -46,6 +49,35 @@ const ICONE_DO_TURBO: Record<string, React.ElementType> = {
 /** Fio de 28 px entre os grupos do trilho. */
 function Separador() {
   return <span aria-hidden className="my-1 h-px w-7 shrink-0 bg-sidebar-border" />;
+}
+
+/** Intenção no trilho: 80 ms parado sobre o item (ou foco de teclado). */
+const INTENCAO_DO_TRILHO_MS = 80;
+const FUNIL_PREFIXO = "/funil/";
+
+/**
+ * Pré-carrega o chunk da rota na intenção — e, quando há, o dado da tela
+ * (`aoAquecer`). `display: contents`: o invólucro não entra no layout do
+ * trilho; só escuta os eventos que sobem do item.
+ */
+function PreCarregaNaIntencao({
+  path,
+  aoAquecer,
+  children,
+}: {
+  path: string;
+  aoAquecer?: () => void;
+  children: React.ReactNode;
+}) {
+  const intencao = useIntencao(() => {
+    preCarregarRota(path);
+    aoAquecer?.();
+  }, INTENCAO_DO_TRILHO_MS);
+  return (
+    <div className="contents" {...intencao}>
+      {children}
+    </div>
+  );
 }
 
 /** Botão do trilho que não é link de rota simples (Oráculo, Master). */
@@ -114,22 +146,43 @@ export function Sidebar() {
   // "Todos os funis" dentro da página). Sem histórico válido: o padrão da org;
   // sem padrão, o hub.
   const funilPadrao = useFunilEntryPath(model.primary).path;
+  // A visão (Meus · Todos) entra no recorte do board: o aquecimento usa a
+  // mesma, senão a chave aquecida não é a que a tela lê.
+  const visaoFunis = useVisaoMeuTodos("funis");
+  const aquecerFunil = useCallback(() => {
+    if (!funilPadrao.startsWith(FUNIL_PREFIXO) || !visaoFunis.pronto) return;
+    void prefetchPipes({ slug: funilPadrao.slice(FUNIL_PREFIXO.length), donoForcado: visaoFunis.donoForcado });
+  }, [funilPadrao, prefetchPipes, visaoFunis.pronto, visaoFunis.donoForcado]);
 
   const principais = model.primary.filter((item) => item.path !== "/turbo");
   const turbo = model.primary.find((item) => item.path === "/turbo")?.children ?? [];
 
-  const renderItem = (item: NavNode, overrides?: Partial<NavNode>) => (
-    <SidebarNavItem
-      key={item.path}
-      rail
-      collapsed
-      item={{ ...item, children: undefined, expandOnly: undefined, ...overrides }}
-      active={model.isActive(item.path)}
-      locked={model.isLocked(item.path)}
-      onLockedClick={() => openUpgrade(item.path)}
-      onHoverPrefetch={item.path === "/funis" ? prefetchPipes : undefined}
-    />
-  );
+  const renderItem = (item: NavNode, overrides?: Partial<NavNode>) => {
+    const locked = model.isLocked(item.path);
+    const navItem = (
+      <SidebarNavItem
+        key={item.path}
+        rail
+        collapsed
+        item={{ ...item, children: undefined, expandOnly: undefined, ...overrides }}
+        active={model.isActive(item.path)}
+        locked={locked}
+        onLockedClick={() => openUpgrade(item.path)}
+      />
+    );
+    // Item trancado abre o upgrade, não a rota: nada a pré-carregar.
+    if (locked) return navItem;
+    const destino = overrides?.path ?? item.path;
+    return (
+      <PreCarregaNaIntencao
+        key={item.path}
+        path={destino}
+        aoAquecer={item.path === "/funis" ? aquecerFunil : undefined}
+      >
+        {navItem}
+      </PreCarregaNaIntencao>
+    );
+  };
 
   const atual = briefing.briefing;
   const oraculoAtivo = location.pathname.startsWith("/oraculo");

@@ -3,8 +3,13 @@
  *
  * Contrato: a caixa de texto não trava durante o envio; o rascunho é limpo na
  * hora do envio (não depois do await), então o que for digitado depois
- * sobrevive tanto ao resolve quanto ao reject; Enter durante o envio não
- * dispara um segundo envio concorrente.
+ * sobrevive tanto ao resolve quanto ao reject.
+ *
+ * Desde a régua de espera (CP-v2, 19/11) Enter durante o envio ENFILEIRA: não
+ * há mais "Aguarde o envio anterior finalizar". Quem garante ordem e um envio
+ * em voo é a fila do hook (tests/unit/chat-fila-de-envio.test.tsx); aqui fica o
+ * lado do composer — não barrar, não avisar à toa, devolver o rascunho quando
+ * a fila está cheia.
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { useState } from "react";
@@ -83,6 +88,8 @@ vi.mock("sonner", () => ({
 }));
 
 import { toast } from "sonner";
+import { notifyError } from "@/shared/errors";
+import { FilaCheiaError, FilaInterrompidaError } from "@/modules/communication/hooks/chat/shared/filaDeEnvio";
 import { ChatComposer } from "@/modules/communication/components/chat/composer/ChatComposer";
 
 const PROPS = {
@@ -105,38 +112,63 @@ describe("ChatComposer — digitar durante o envio", () => {
     mockSendMutateAsync.mockReset();
     mockMediaMutateAsync.mockReset();
     vi.mocked(toast.info).mockClear();
+    vi.mocked(toast.warning).mockClear();
+    vi.mocked(notifyError).mockClear();
   });
 
-  it("Enter com envio pendente avisa o vendedor em vez de falhar em silêncio", () => {
+  it("Enter com envio pendente enfileira sem pedir para aguardar", () => {
     sendState.pending = true;
     render(<ChatComposer {...PROPS} />);
     type("segunda");
     enter();
-    expect(toast.info).toHaveBeenCalledWith("Aguarde o envio anterior finalizar.");
+    expect(toast.info).not.toHaveBeenCalled();
+    expect(mockSendMutateAsync).toHaveBeenCalledWith(expect.objectContaining({ message: "segunda" }));
+    expect(box()).toHaveValue("");
   });
 
-  it("com mídia pendente, Enter não envia texto em paralelo e o rascunho fica", () => {
+  it("com mídia pendente, Enter entrega o texto à fila (a fila garante a ordem)", () => {
+    mockSendMutateAsync.mockReturnValue(deferred().promise);
     sendState.mediaPending = true;
     render(<ChatComposer {...PROPS} />);
     type("segunda");
     enter();
-    expect(mockSendMutateAsync).not.toHaveBeenCalled();
-    expect(box()).toHaveValue("segunda");
-    expect(screen.getByTitle("Aguardando envio da mensagem anterior")).toBeDisabled();
+    expect(mockSendMutateAsync).toHaveBeenCalledTimes(1);
+    expect(screen.getByLabelText("Enviar mensagem")).toBeInTheDocument();
   });
 
-  it("duplo Enter em sequência real resulta em 1 envio", () => {
-    const d = deferred();
-    mockSendMutateAsync.mockReturnValue(d.promise);
-    const { rerender } = render(<ChatComposer {...PROPS} />);
+  it("duplo Enter sem digitar nada entre os dois resulta em 1 envio", () => {
+    mockSendMutateAsync.mockReturnValue(deferred().promise);
+    render(<ChatComposer {...PROPS} />);
     type("primeira");
     enter();
-    sendState.pending = true;
-    rerender(<ChatComposer {...PROPS} />);
-    type("segunda");
     enter();
     expect(mockSendMutateAsync).toHaveBeenCalledTimes(1);
-    expect(box()).toHaveValue("segunda");
+  });
+
+  it("três mensagens seguidas viram três itens, na ordem digitada", () => {
+    mockSendMutateAsync.mockReturnValue(deferred().promise);
+    render(<ChatComposer {...PROPS} />);
+    for (const m of ["1", "2", "3"]) { type(m); enter(); }
+    expect(mockSendMutateAsync.mock.calls.map(([v]) => v.message)).toEqual(["1", "2", "3"]);
+  });
+
+  it("fila cheia: avisa e devolve o rascunho", async () => {
+    mockSendMutateAsync.mockRejectedValueOnce(new FilaCheiaError());
+    render(<ChatComposer {...PROPS} />);
+    type("sexta");
+    await act(async () => { enter(); });
+    expect(toast.warning).toHaveBeenCalledWith(expect.stringMatching(/Fila cheia/));
+    expect(box()).toHaveValue("sexta");
+    expect(notifyError).not.toHaveBeenCalled();
+  });
+
+  it("item interrompido pela falha anterior não gera toast próprio (a bolha já explica)", async () => {
+    mockSendMutateAsync.mockRejectedValueOnce(new FilaInterrompidaError());
+    render(<ChatComposer {...PROPS} />);
+    type("terceira");
+    await act(async () => { enter(); });
+    expect(notifyError).not.toHaveBeenCalled();
+    expect(toast.warning).not.toHaveBeenCalled();
   });
 
   it("template com mídia: texto digitado durante o envio sobrevive ao resolve", async () => {
@@ -202,21 +234,10 @@ describe("ChatComposer — digitar durante o envio", () => {
     expect(box()).toHaveValue("segunda");
   });
 
-  it("Enter com envio pendente não dispara um segundo envio", () => {
+  it("botão Enviar continua habilitado com envio pendente", () => {
     sendState.pending = true;
     render(<ChatComposer {...PROPS} />);
     type("segunda");
-    enter();
-    expect(mockSendMutateAsync).not.toHaveBeenCalled();
-    expect(box()).toHaveValue("segunda");
-  });
-
-  it("botão Enviar fica desabilitado e explica a espera", () => {
-    sendState.pending = true;
-    render(<ChatComposer {...PROPS} />);
-    type("segunda");
-    const btn = screen.getByTitle("Aguardando envio da mensagem anterior");
-    expect(btn).toBeDisabled();
-    expect(btn).toHaveAttribute("aria-label", "Aguardando envio da mensagem anterior");
+    expect(screen.getByLabelText("Enviar mensagem")).not.toBeDisabled();
   });
 });

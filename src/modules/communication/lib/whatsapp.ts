@@ -1,10 +1,7 @@
-import { useCallback, useMemo } from "react";
+import { useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
-import {
-  prefetchChatRoute,
-  prefetchChatData,
-} from "@/modules/communication/lib/chatPrefetch";
+import { prefetchChatData } from "@/modules/communication/lib/chatPrefetch";
 import { useCurrentTeamMember } from "@/modules/identity";
 import { useWhatsAppInstancesForUser } from "@/modules/communication/hooks/chat/useWhatsAppInstances";
 import { formatPhoneForWhatsApp } from "./whatsappPhone";
@@ -24,7 +21,6 @@ export function openWhatsApp(phone: string | undefined, e?: React.MouseEvent) {
 /**
  * Retorno de `useOpenWhatsAppChat`:
  *  - `open(phone, e?, instanceId?)` — navega para o chat interno.
- *  - `prefetchRoute()` — dispara o chunk JS da rota (warm-up no hover).
  *  - `prefetchData(phone, instanceId?)` — popula o cache da conversa
  *    (warm-up no mousedown). Idempotente; segura para chamadas repetidas.
  *
@@ -34,7 +30,6 @@ export function openWhatsApp(phone: string | undefined, e?: React.MouseEvent) {
  */
 export interface OpenWhatsAppChat {
   (phone: string | undefined, e?: React.MouseEvent, instanceId?: string): void;
-  prefetchRoute: () => void;
   prefetchData: (phone: string | undefined, instanceId?: string) => void;
 }
 
@@ -48,9 +43,9 @@ export interface OpenWhatsAppChat {
  * caso contrário ele resolve via busca segura. Se não souber a instância,
  * deixe undefined e o chat resolve sozinho.
  *
- * Performance: para acelerar a transição Kanban→chat, o callable
- * expõe `prefetchRoute()` e `prefetchData(phone)` — chame em
- * `onMouseEnter` (rota) e `onMouseDown` (dados) do botão.
+ * Performance: para acelerar a transição Kanban→chat, o callable expõe
+ * `prefetchData(phone)` — chame no `onMouseDown` do botão. O chunk da rota é
+ * do registro de rotas (`src/core/route-prefetch.ts`).
  */
 export function useOpenWhatsAppChat(): OpenWhatsAppChat {
   const navigate = useNavigate();
@@ -82,11 +77,6 @@ export function useOpenWhatsAppChat(): OpenWhatsAppChat {
       navigate(`/chat-whatsapp?${params.toString()}`);
     }) as OpenWhatsAppChat;
 
-    fn.prefetchRoute = () => {
-      // Fire-and-forget — erros ficam dentro do helper
-      void prefetchChatRoute();
-    };
-
     fn.prefetchData = (phone, instanceId) => {
       if (!organizationId) return;
       const formatted = formatPhoneForWhatsApp(phone);
@@ -100,30 +90,4 @@ export function useOpenWhatsAppChat(): OpenWhatsAppChat {
 
     return fn;
   }, [navigate, queryClient, organizationId, hasNoInstance]);
-}
-
-/**
- * Mesma idéia que `useOpenWhatsAppChat`, mas voltado a call-sites que só
- * precisam fazer prefetch (ex.: hover em link, foco em row de tabela)
- * sem o callable de navegação. Mais leve para usar em listas grandes.
- */
-export function useChatPrefetch() {
-  const queryClient = useQueryClient();
-  const { data: teamMember } = useCurrentTeamMember();
-  const organizationId = teamMember?.organization_id ?? null;
-
-  return useCallback(
-    (phone: string | undefined, instanceId?: string) => {
-      void prefetchChatRoute();
-      if (!organizationId) return;
-      const formatted = formatPhoneForWhatsApp(phone);
-      if (!formatted) return;
-      void prefetchChatData(queryClient, {
-        organizationId,
-        phoneNumber: formatted,
-        instanceId: instanceId ?? null,
-      });
-    },
-    [organizationId, queryClient],
-  );
 }

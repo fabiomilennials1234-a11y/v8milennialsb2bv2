@@ -20,7 +20,7 @@ import { useChatReply } from "../../../hooks/chat/useChatReply";
  */
 import { useRef, useState, useCallback, useEffect, type DragEvent } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Send, Loader2, CalendarClock, CalendarPlus, AlertCircle, X, LayoutList, QrCode, Sticker, FileText, Film } from "lucide-react";
+import { Send, CalendarClock, CalendarPlus, AlertCircle, X, LayoutList, QrCode, Sticker, FileText, Film } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -32,6 +32,8 @@ import { useCurrentTeamMember } from "@/modules/identity";
 import { useConversationDraft } from "@/modules/communication/hooks/useConversationDraft";
 import { publishComposerEscape, publishComposerHasText, usePendingBadge } from "@/modules/communication/lib/composerTrayBus";
 import { useSendWhatsAppMessage, useSendWhatsAppMedia } from "@/modules/communication/hooks/chat/useWhatsAppSend";
+import { FilaInterrompidaError } from "@/modules/communication/hooks/chat/shared/filaDeEnvio";
+import { tratarFalhaDoEnvio } from "./tratarFalhaDoEnvio";
 import { useTypingPresence } from "@/modules/communication/hooks/chat/useTypingPresence";
 import { AudioRecorder } from "@/modules/communication/components/chat/media/AudioRecorder";
 import { ScheduleMessageModal } from "@/modules/communication/components/chat/ScheduleMessageModal";
@@ -60,7 +62,6 @@ import { criarEnviadorUazapi, type MenuMontado } from "@/modules/communication/l
 import { acceptedInteractiveRow, interactiveInsertOptions } from "@/modules/communication/lib/accepted-interactive-message";
 import { sendMenu as enviarMenuNoProxy } from "@/modules/communication/lib/whatsappApi";
 import { SendPixDialog } from "./SendPixDialog";
-import { notifyError } from "@/shared/errors";
 import { CreateMeetingDialog } from "@/modules/engagement";
 import { resolveWhatsAppDestination } from "@/modules/communication/lib/whatsappPhone";
 import { useGroupParticipants } from "@/modules/communication/hooks/chat/useGroupParticipants";
@@ -183,8 +184,6 @@ export function ChatComposer({
   const caps = useInstanceCapabilities(instanceId);
   const [isDragOver, setIsDragOver] = useState(false);
   const [sendAsSticker, setSendAsSticker] = useState(false);
-  // Leitura base64 do anexo em andamento (janela pré-mutation)
-  const [isPreparing, setIsPreparing] = useState(false);
 
   // Refs
   const reply = useChatReply();
@@ -230,25 +229,20 @@ export function ChatComposer({
 
   // ─── Handlers ───────────────────────────────────────────────────────────────
 
-  // Texto e mídia não correm em paralelo: a ordem no WhatsApp importa.
-  const isBusy = sendMessage.isPending || sendMedia.isPending || isPreparing;
   // Rascunho mais recente, para o restore pós-falha não depender de closure velha.
   const messageRef = useRef(message);
   messageRef.current = message;
 
   const handleSend = useCallback(async () => {
-    // Um envio por vez: a ordem no WhatsApp importa e a recuperação de envio
-    // existe para não reenviar às cegas — nada de fila nem de envio paralelo.
-    if (isBusy) {
-      toast.info("Aguarde o envio anterior finalizar.");
-      return;
-    }
     const text = message.trim();
     if (!text || !instanceName) return;
     // Limpa antes do await: o vendedor já pode digitar a próxima mensagem sem
     // que o resolve apague o texto novo. Se o envio falha, o hook guarda a
     // mensagem em whatsapp_failed_messages (bolha de reenvio) — o texto não se perde.
     setMessage("");
+    // O ref acompanha já: "fila cheia" rejeita antes do próximo render, e o
+    // restore precisa saber que o rascunho está vazio.
+    messageRef.current = "";
     try {
       await sendMessage.mutateAsync({
         phoneNumber,
@@ -258,9 +252,11 @@ export function ChatComposer({
         instanceId,
       });
     } catch (err) {
-      notifyError(err, { fallback: "Não foi possível enviar mensagem." });
+      tratarFalhaDoEnvio(err, "Não foi possível enviar mensagem.", () => {
+        if (messageRef.current === "") setMessage(text);
+      });
     }
-  }, [message, isBusy, instanceName, phoneNumber, isGroup, instanceId, sendMessage, setMessage]);
+  }, [message, instanceName, phoneNumber, isGroup, instanceId, sendMessage, setMessage]);
 
   const handleSlashSelect = useCallback(async (template: MessageTemplate) => {
     const leadCtx: LeadContext = {
@@ -283,15 +279,12 @@ export function ChatComposer({
     // Texto não é editável inline p/ mídia, então selecionar = enviar.
     if (template.media_url && template.media_type !== "text") {
       if (!instanceName) return;
-      if (isBusy) {
-        toast.info("Aguarde o envio anterior finalizar.");
-        return;
-      }
       // Limpa o comando "/…" ANTES do await: o que o vendedor digitar durante o
       // envio não pode ser apagado pelo resolve. Se a mídia falha, devolve o
       // comando só se o rascunho ainda estiver vazio (não pisa no texto novo).
       const command = message;
       setMessage("");
+      messageRef.current = "";
       try {
         await sendMedia.mutateAsync({
           phoneNumber,
@@ -306,15 +299,16 @@ export function ChatComposer({
         });
         toast.success("Template enviado!");
       } catch (err) {
+        if (err instanceof FilaInterrompidaError) return;
         if (messageRef.current === "") setMessage(command);
-        notifyError(err, { fallback: "Não foi possível enviar template." });
+        tratarFalhaDoEnvio(err, "Não foi possível enviar template.");
       }
       return;
     }
 
     // Template de texto → preenche input para revisão antes de enviar.
     setMessage(resolved);
-  }, [leadForTemplates, selectedContact, message, isBusy, phoneNumber, isGroup, instanceName, instanceId, leadId, teamMember, sendMedia, setMessage]);
+  }, [leadForTemplates, selectedContact, message, phoneNumber, isGroup, instanceName, instanceId, leadId, teamMember, sendMedia, setMessage]);
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     // Slash popover captura Enter para selecionar template. O seletor de
@@ -371,13 +365,7 @@ export function ChatComposer({
 
   // Ctrl+V de print/arquivo: mesmo caminho do botão de anexar (validação + preview).
   const composerRootRef = useRef<HTMLDivElement>(null);
-  usePasteAttachment(composerRootRef, canReply && !isRecording, (file) => {
-    if (sendMedia.isPending || isPreparing) {
-      toast.info("Aguarde o envio anterior finalizar.");
-      return;
-    }
-    handleFileSelect(file);
-  });
+  usePasteAttachment(composerRootRef, canReply && !isRecording, handleFileSelect);
 
   const handleFileInputChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     handleFileSelect(e.target.files?.[0] ?? null);
@@ -385,29 +373,35 @@ export function ChatComposer({
     e.target.value = "";
   }, [handleFileSelect]);
 
+  // Anexo atual, para a devolução pós-"fila cheia" não pisar num anexo novo.
+  const selectedFileRef = useRef(selectedFile);
+  selectedFileRef.current = selectedFile;
+
   const handleSendMedia = useCallback(async () => {
-    // isPreparing cobre a janela da leitura base64 (centenas de ms num PDF de
-    // 16MB) em que sendMedia.isPending ainda é false — sem isso, duplo-clique
-    // envia o arquivo em duplicata.
-    if (!selectedFile || !instanceName || sendMedia.isPending || isPreparing) return;
-    const kind = deriveAttachmentMediaType(selectedFile.type);
+    if (!selectedFile || !instanceName) return;
+    const file = selectedFile;
+    const preview = filePreview;
+    const legenda = caption;
+    const kind = deriveAttachmentMediaType(file.type);
     const asSticker = sendAsSticker && kind === "image";
-    setIsPreparing(true);
+    // O anexo sai do composer no clique: a leitura base64 (centenas de ms num
+    // PDF de 16 MB) roda DENTRO da vez do item na fila — é assim que um texto
+    // enviado logo depois não passa na frente do arquivo. Duplo clique não
+    // duplica: no segundo clique o anexo já não está mais aqui.
+    clearAttachment();
     try {
-      const base64 = await readMediaAsDataUrl(selectedFile);
       await sendMedia.mutateAsync({
         phoneNumber,
         isGroup,
         instanceName,
         instanceId,
         mediaType: asSticker ? "sticker" : kind,
-        media: base64,
-        caption: asSticker ? undefined : (caption || undefined),
-        fileName: selectedFile.name,
-        mimetype: selectedFile.type,
+        media: { previa: preview, preparar: () => readMediaAsDataUrl(file) },
+        caption: asSticker ? undefined : (legenda || undefined),
+        fileName: file.name,
+        mimetype: file.type,
         leadId: leadId ?? null,
       });
-      clearAttachment();
       toast.success(
         asSticker ? "Figurinha enviada!"
           : kind === "document" ? "Arquivo enviado!"
@@ -415,36 +409,42 @@ export function ChatComposer({
           : "Imagem enviada!",
       );
     } catch (err) {
-      notifyError(err, { fallback: "Não foi possível enviar arquivo." });
-    } finally {
-      setIsPreparing(false);
+      tratarFalhaDoEnvio(err, "Não foi possível enviar arquivo.", () => {
+        // Fila cheia: o anexo volta, a não ser que outro já tenha sido escolhido.
+        if (selectedFileRef.current) return;
+        setSelectedFile(file);
+        setFilePreview(preview);
+        setCaption(legenda);
+      });
     }
-  }, [selectedFile, instanceName, phoneNumber, isGroup, instanceId, leadId, caption, sendMedia, sendAsSticker, clearAttachment, isPreparing]);
-
+  }, [selectedFile, filePreview, caption, instanceName, phoneNumber, isGroup, instanceId, leadId, sendMedia, sendAsSticker, clearAttachment]);
   const handleAudioRecorded = useCallback(async (audioBlob: Blob) => {
     setIsRecording(false);
     try {
-      const blobToSend = await convertAudioBlobToMp3(audioBlob);
-      const isMp3 = (blobToSend.type || "").toLowerCase().includes("mpeg") ||
-        (blobToSend.type || "").toLowerCase().includes("mp3");
-      if (!isMp3 || blobToSend.size === 0) {
-        toast.error("Não foi possível converter o áudio para MP3. Tente gravar novamente.");
-        return;
-      }
-      const base64 = await readMediaAsDataUrl(blobToSend);
       await sendMedia.mutateAsync({
         phoneNumber,
         isGroup,
         instanceName,
         instanceId,
         mediaType: "audio",
-        media: base64,
+        // Conversão para MP3 na vez do item: a ordem é a do clique de parar.
+        media: {
+          previa: null,
+          preparar: async () => {
+            const blobToSend = await convertAudioBlobToMp3(audioBlob);
+            const tipo = (blobToSend.type || "").toLowerCase();
+            if (!(tipo.includes("mpeg") || tipo.includes("mp3")) || blobToSend.size === 0) {
+              throw new Error("Não foi possível converter o áudio para MP3. Tente gravar novamente.");
+            }
+            return readMediaAsDataUrl(blobToSend);
+          },
+        },
         mimetype: "audio/mpeg",
         leadId: leadId ?? null,
       });
       toast.success("Áudio enviado!");
     } catch (err) {
-      notifyError(err, { fallback: "Não foi possível enviar áudio." });
+      tratarFalhaDoEnvio(err, "Não foi possível enviar áudio.");
     }
   }, [phoneNumber, isGroup, instanceName, instanceId, sendMedia, leadId]);
 
@@ -560,7 +560,7 @@ export function ChatComposer({
                   )}
                   {!sendAsSticker && (
                     <div className="flex items-center gap-1">
-                      <ComposerEmojiPicker inputRef={captionRef} onChange={setCaption} disabled={sendMedia.isPending || isPreparing} />
+                      <ComposerEmojiPicker inputRef={captionRef} onChange={setCaption} />
                       <div className="relative flex-1">
                         {captionMention.trigger && (
                           <MentionPopover
@@ -591,12 +591,9 @@ export function ChatComposer({
                   <div className="flex gap-2">
                     <Button
                       onClick={handleSendMedia}
-                      disabled={sendMedia.isPending || isPreparing}
                       className="flex-1"
                     >
-                      {sendMedia.isPending || isPreparing ? (
-                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                      ) : sendAsSticker ? (
+                      {sendAsSticker ? (
                         <Sticker className="w-4 h-4 mr-2" />
                       ) : (
                         <Send className="w-4 h-4 mr-2" />
@@ -695,19 +692,12 @@ export function ChatComposer({
                 className={QUICK_ACTION_BUTTON}
               />
               <ChatQuickActions
-                onAudio={() => {
-                  if (sendMedia.isPending) {
-                    toast.info("Aguarde o envio anterior finalizar.");
-                    return;
-                  }
-                  setIsRecording(true);
-                }}
+                onAudio={() => setIsRecording(true)}
                 onTemplate={() => {
                   setMessage("/");
                   setShowSlashPopover(true);
                 }}
                 onAttach={() => fileInputRef.current?.click()}
-                disabled={sendMessage.isPending || sendMedia.isPending}
                 className="min-w-0 flex-1 overflow-x-auto scrollbar-hide"
               >
                 {/* Agendar */}
@@ -777,16 +767,11 @@ export function ChatComposer({
                   variant="ink"
                   size="icon"
                   onClick={handleSend}
-                  disabled={!message.trim() || isBusy}
-                  aria-label={isBusy ? "Aguardando envio da mensagem anterior" : "Enviar mensagem"}
-                  title={isBusy ? "Aguardando envio da mensagem anterior" : undefined}
+                  disabled={!message.trim()}
+                  aria-label="Enviar mensagem"
                   className="h-[38px] w-[38px] shrink-0 rounded-full"
                 >
-                  {sendMessage.isPending ? (
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                  ) : (
-                    <Send className="w-4 h-4" />
-                  )}
+                  <Send className="w-4 h-4" />
                 </Button>
                 <SeloDeProgramadas n={programadasPendentes} />
               </span>

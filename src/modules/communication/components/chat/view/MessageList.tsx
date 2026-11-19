@@ -154,7 +154,8 @@ function buildTimeline(
       _type: "message" as const,
       message_type: f.mediaType ?? "text",
       content: f.message,
-      media_url: f.mediaUrl ?? null,
+      // Mídia que nunca ficou pronta mostra a prévia que a bolha já mostrava.
+      media_url: f.mediaUrl ?? f.preparo?.previa ?? null,
       failure_reason: f.error,
       id: f.id,
       organization_id: "",

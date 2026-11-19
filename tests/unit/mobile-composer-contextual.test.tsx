@@ -273,6 +273,31 @@ describe("MobileComposerContextual", () => {
     });
   });
 
+  it("template com mídia e falha REAL: bolha de reenvio, sem devolver o /comando ao campo", async () => {
+    mockMediaMutateAsync.mockRejectedValueOnce(new Error("provider caiu"));
+    mockTemplateList = [MEDIA_TPL];
+    renderComposer();
+    openTemplatePopover();
+    fireEvent.click(screen.getByText("/catalogo"));
+    await waitFor(() => expect(mockMediaMutateAsync).toHaveBeenCalledTimes(1));
+    await new Promise((r) => setTimeout(r, 0));
+    // "/" do tray, "" no envio — e nada depois.
+    expect(mockSetDraft.mock.calls.map((c) => c[0])).toEqual(["/", ""]);
+  });
+
+  it("template com mídia e fila cheia: o /comando volta ao campo, com o aviso da fila", async () => {
+    const { FilaCheiaError, MENSAGEM_DE_FILA_CHEIA } = await import("@/modules/communication/hooks/chat/shared/filaDeEnvio");
+    const { toast } = await import("sonner");
+    mockMediaMutateAsync.mockRejectedValueOnce(new FilaCheiaError());
+    mockTemplateList = [MEDIA_TPL];
+    renderComposer();
+    openTemplatePopover();
+    fireEvent.click(screen.getByText("/catalogo"));
+    // O tray abre o popover escrevendo "/" no campo: é esse o comando que volta.
+    await waitFor(() => expect(mockSetDraft.mock.calls.map((c) => c[0])).toEqual(["/", "", "/"]));
+    expect(toast.warning).toHaveBeenCalledWith(MENSAGEM_DE_FILA_CHEIA);
+  });
+
   // ─── Anexo via tray: PDF (paridade com desktop) ────────────
   it("PDF anexado via tray mostra preview e envia como document após confirmar", async () => {
     renderComposer();
@@ -325,19 +350,55 @@ describe("MobileComposerContextual", () => {
     expect(mockMediaMutateAsync).not.toHaveBeenCalled();
   });
 
-  it("envio falho mantém o preview pra retry", async () => {
+  it("o anexo sai no toque (contrato da fila): falha vira bolha de reenvio, não preview preso", async () => {
     mockMediaMutateAsync.mockRejectedValueOnce(new Error("sessão morta"));
     renderComposer();
     const pdf = new File(["%PDF-1.7 fake"], "proposta.pdf", { type: "application/pdf" });
     fireEvent.change(screen.getByTestId("mobile-file-input"), { target: { files: [pdf] } });
     await waitFor(() => screen.getByTestId("attachment-preview"));
-
     fireEvent.click(screen.getByRole("button", { name: /Enviar Arquivo/ }));
+    expect(screen.queryByTestId("attachment-preview")).not.toBeInTheDocument();
+    await waitFor(() => expect(mockMediaMutateAsync).toHaveBeenCalledTimes(1));
+  });
 
-    await waitFor(() => expect(mockMediaMutateAsync).toHaveBeenCalled());
-    // Preview NÃO limpa em falha
-    expect(screen.getByTestId("attachment-preview")).toBeInTheDocument();
-    expect(screen.getByText("proposta.pdf")).toBeInTheDocument();
+  it("fila cheia devolve o anexo e a legenda, com o aviso da fila", async () => {
+    const { FilaCheiaError, MENSAGEM_DE_FILA_CHEIA } = await import("@/modules/communication/hooks/chat/shared/filaDeEnvio");
+    const { toast } = await import("sonner");
+    mockMediaMutateAsync.mockRejectedValueOnce(new FilaCheiaError());
+    renderComposer();
+    const pdf = new File(["%PDF-1.7 fake"], "proposta.pdf", { type: "application/pdf" });
+    fireEvent.change(screen.getByTestId("mobile-file-input"), { target: { files: [pdf] } });
+    await waitFor(() => screen.getByTestId("attachment-preview"));
+    fireEvent.change(screen.getByLabelText("Legenda do anexo"), { target: { value: "Segue" } });
+    fireEvent.click(screen.getByRole("button", { name: /Enviar Arquivo/ }));
+    await waitFor(() => expect(screen.getByTestId("attachment-preview")).toBeInTheDocument());
+    expect(screen.getByLabelText("Legenda do anexo")).toHaveValue("Segue");
+    expect(toast.warning).toHaveBeenCalledWith(MENSAGEM_DE_FILA_CHEIA);
+  });
+
+  it("texto: limpa no toque e entra na fila; fila cheia devolve o rascunho", async () => {
+    const { FilaCheiaError } = await import("@/modules/communication/hooks/chat/shared/filaDeEnvio");
+    mockSendMutateAsync.mockRejectedValueOnce(new FilaCheiaError());
+    mockDraft = "sexta";
+    renderComposer();
+    fireEvent.click(screen.getByRole("button", { name: "Enviar mensagem" }));
+    expect(mockSetDraft).toHaveBeenCalledWith("");
+    await waitFor(() => expect(mockSetDraft).toHaveBeenLastCalledWith("sexta"));
+  });
+
+  it("texto interrompido na fila: sem toast e sem devolver o rascunho", async () => {
+    const { FilaInterrompidaError } = await import("@/modules/communication/hooks/chat/shared/filaDeEnvio");
+    const { toast } = await import("sonner");
+    vi.mocked(toast.error).mockClear();
+    mockSendMutateAsync.mockRejectedValueOnce(new FilaInterrompidaError());
+    mockDraft = "esperava";
+    renderComposer();
+    fireEvent.click(screen.getByRole("button", { name: "Enviar mensagem" }));
+    await waitFor(() => expect(mockSendMutateAsync).toHaveBeenCalledTimes(1));
+    await Promise.resolve();
+    expect(mockSetDraft).toHaveBeenCalledWith("");
+    expect(mockSetDraft).not.toHaveBeenCalledWith("esperava");
+    expect(toast.error).not.toHaveBeenCalled();
   });
 
   it("arquivo acima de 16MB é rejeitado sem preview nem envio", async () => {

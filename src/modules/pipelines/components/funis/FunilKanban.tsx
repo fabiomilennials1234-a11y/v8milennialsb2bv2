@@ -2,7 +2,17 @@ import { useMemo, useRef, useState, type MutableRefObject, type ReactNode } from
 import { toast } from "sonner";
 import { DraggableKanbanBoard, type KanbanColumn } from "@/modules/pipelines/components/kanban/DraggableKanbanBoard";
 import { ExportStageDialog } from "@/modules/pipelines/components/kanban/ExportStageDialog";
-import { CardEffectsHost, LeadCard, useEntradasEmDesfecho, type LeadCardData, type LeadMetrics } from "@/modules/leads";
+import {
+  CardEffectsHost,
+  LeadCard,
+  useEntradasEmDesfecho,
+  usePrefetchFicha,
+  type LeadCardData,
+  type LeadMetrics,
+} from "@/modules/leads";
+import { useIntencao } from "@/shared/espera";
+import { marcarInicioNavegacao } from "@/core/perf/medicao";
+import { FunilColunaSkeleton } from "./FunilColunaSkeleton";
 import { StageWorkflowsBadge } from "@/modules/pipelines/components/kanban/StageWorkflowsBadge";
 import { MergedFunnelCardActions } from "@/modules/pipelines/components/kanban/MergedFunnelCardActions";
 import { useCustomPipeStageWorkflows, useCustomPipeWorkflowCounts } from "@/modules/workflows/hooks/useStageWorkflows";
@@ -132,6 +142,25 @@ interface FunilKanbanProps {
 }
 
 const NADA_A_FAZER = () => {};
+
+/** Intenção sobre o card antes de aquecer a ficha (dado do servidor). */
+const INTENCAO_DO_CARD_MS = 150;
+const FRASE_DO_BOARD = "Trazendo os negócios de cada etapa…";
+
+/**
+ * Aquece a ficha quando o ponteiro PARA sobre o card (150 ms) ou o card ganha
+ * foco — passar por cima a caminho de outro não busca nada; toque também não.
+ * `display: contents`: não entra no layout nem no arrasto do card.
+ */
+function CardComIntencao({ leadId, children }: { leadId: string | undefined; children: ReactNode }) {
+  const aquecer = usePrefetchFicha();
+  const intencao = useIntencao(() => aquecer(leadId), INTENCAO_DO_CARD_MS);
+  return (
+    <div className="contents" {...intencao}>
+      {children}
+    </div>
+  );
+}
 
 function FunilStageBadge({
   pipelineId,
@@ -409,6 +438,10 @@ export function FunilKanban({
     [stages, stageData, metricsMap, desfechoPorEtapa, focoEntryId],
   );
 
+  // Uma coluna só fala pelo board (a 1ª ainda em espera) — as outras mostram
+  // o osso caladas, para o leitor de tela não ouvir a frase por etapa.
+  const primeiraEmEspera = stages.find((s) => stageData[s.stage_key]?.isLoading)?.stage_key ?? null;
+
   const findEntry = (entryId: string): FunilEntry | undefined => {
     for (const s of stages) {
       const hit = ((stageData[s.stage_key]?.items ?? []) as FunilEntry[]).find((e) => e.id === entryId);
@@ -426,6 +459,14 @@ export function FunilKanban({
           if (stage) onMove(itemId, stage);
         }}
         disabled={!canMovePipe}
+        // Régua de espera por coluna: cada uma pagina sozinha, então cada uma
+        // mostra o próprio osso (forma do card real) até a 1ª página chegar.
+        renderColumnFooter={(col) => (
+          <FunilColunaSkeleton
+            carregando={!!stageData[col.id]?.isLoading}
+            frase={col.id === primeiraEmEspera ? FRASE_DO_BOARD : undefined}
+          />
+        )}
         closedGrouping={closedGrouping}
         revelarId={focoEntryId}
         tecladoAbreCard={tecladoAbreCard}
@@ -462,44 +503,49 @@ export function FunilKanban({
           );
         }}
         renderCard={(card) => (
-          <LeadCard
-            lead={card}
-            variant="custom"
-            density="compact"
-            showValue
-            extraActions={
-              <MergedFunnelCardActions
-                entryId={card.id}
-                stageKey={card.stageKey}
-                stageRole={card.stageRole}
-                meetingDate={card.meetingDate}
-                confirmationStatus={card.confirmationStatus}
-                lostStageKey={lostStageKey}
-                onMoveStage={(toStage) => {
-                  const st = stages.find((s) => s.stage_key === toStage);
-                  if (st) onMove(card.id, st);
-                }}
-                leadId={card.leadId}
-                leadName={card.name}
-                leadCompany={card.company}
-                leadPhone={card.phone}
-              />
-            }
-            selected={bulk.isSelected(card.leadId || "")}
-            onSelect={(e) => {
-              const lid = card.leadId || "";
-              if (e.shiftKey) bulk.toggleRange(lid, loadedLeadIds);
-              else bulk.toggle(lid);
-            }}
-            onClick={() => {
-              const entry = findEntry(card.id);
-              if (entry) onClickEntry?.(entry);
-            }}
-            onRemove={onRemoveEntry ? () => onRemoveEntry(card.id) : undefined}
-            onQuickAction={(title) => {
-              createAcaoDoDia.mutate({ title, lead_id: card.leadId || undefined });
-            }}
-          />
+          <CardComIntencao leadId={card.leadId || undefined}>
+            <LeadCard
+              lead={card}
+              variant="custom"
+              density="compact"
+              showValue
+              extraActions={
+                <MergedFunnelCardActions
+                  entryId={card.id}
+                  stageKey={card.stageKey}
+                  stageRole={card.stageRole}
+                  meetingDate={card.meetingDate}
+                  confirmationStatus={card.confirmationStatus}
+                  lostStageKey={lostStageKey}
+                  onMoveStage={(toStage) => {
+                    const st = stages.find((s) => s.stage_key === toStage);
+                    if (st) onMove(card.id, st);
+                  }}
+                  leadId={card.leadId}
+                  leadName={card.name}
+                  leadCompany={card.company}
+                  leadPhone={card.phone}
+                />
+              }
+              selected={bulk.isSelected(card.leadId || "")}
+              onSelect={(e) => {
+                const lid = card.leadId || "";
+                if (e.shiftKey) bulk.toggleRange(lid, loadedLeadIds);
+                else bulk.toggle(lid);
+              }}
+              onClick={() => {
+                const entry = findEntry(card.id);
+                if (!entry) return;
+                // A ficha mede "tempo até útil" a partir daqui (src/core/perf).
+                marcarInicioNavegacao();
+                onClickEntry?.(entry);
+              }}
+              onRemove={onRemoveEntry ? () => onRemoveEntry(card.id) : undefined}
+              onQuickAction={(title) => {
+                createAcaoDoDia.mutate({ title, lead_id: card.leadId || undefined });
+              }}
+            />
+          </CardComIntencao>
         )}
       />
       <ExportStageDialog

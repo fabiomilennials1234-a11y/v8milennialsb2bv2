@@ -33,6 +33,9 @@ import {
 } from "../lead-detail/hooks/useLeadComments";
 import { GavetaLateral } from "@/shared/components/GavetaLateral";
 import { LeadCardContainer } from "../lead-card/LeadCardContainer";
+import { FichaSkeleton } from "../lead-card/FichaSkeleton";
+import { Espera } from "@/shared/espera";
+import { MarcarUtil } from "@/core/perf/MarcarUtil";
 import { TelefoneDoNegocioFaixa } from "./TelefoneDoNegocio";
 import { useResolucaoDoTelefoneDoNegocio } from "../../hooks/useTelefoneDoNegocio";
 import { numeroDoNegocio } from "@/modules/communication/lib/telefoneDoNegocio";
@@ -281,94 +284,107 @@ export const DealCardPanel = memo(function DealCardPanel() {
   const painelRef = useRef<HTMLDivElement>(null);
   const { origemDo, celebrar, camada: camadaDaCelebracao } = useCelebracaoDoDesfecho(painelRef);
 
+  /**
+   * Trava SÍNCRONA do clique. `decidindo` (estado) só chega no próximo render;
+   * com a checagem de tarefa em fila (TaskMoveGate), um duplo clique em Ganho
+   * passava pelos dois `requestTaskMove` e chamava a RPC duas vezes (banco
+   * idempotente, mas o front celebrava e registrava 2×). A ref liga ANTES do
+   * primeiro await e só solta no fim de tudo.
+   */
+  const decidindoRef = useRef(false);
+
   const definirDesfecho = useCallback(
     async (desfecho: "open" | "won" | "lost", valor?: number) => {
-      if (!entryId || decidindo) return;
-      if (desfecho !== "open" && !(await requestTaskMove(entryId))) return;
-
-      // Perder exige o motivo (SCRUM-369), gravado no metadata da entrada
-      // ANTES do desfecho — o mesmo par id+rótulo que o `/funil` grava — e
-      // passado à RPC, que o copia para `deals.loss_reason`. Cancelou ou a
-      // gravação falhou: nenhuma escrita de desfecho.
-      let perda: PerdaResolvida | null = null;
-      if (desfecho === "lost") {
-        perda = await capturarMotivoDaPerda({ entryIds: [entryId] });
-        if (!perda) return;
-      }
-
+      if (!entryId || decidindoRef.current) return;
+      decidindoRef.current = true;
       setDecidindo(true);
-      const origem = desfecho === "open" ? null : origemDo(desfecho);
       try {
-        const { error } = await supabase.rpc("definir_desfecho_da_entrada", {
-          p_entry_id: entryId,
-          p_outcome: desfecho,
-          p_loss_reason: perda?.texto ?? undefined,
-          // O valor vai na MESMA chamada do desfecho, nunca antes: a trava é
-          // BEFORE UPDATE OF outcome, e escrever em dois passos abriria a
-          // janela em que o preço está salvo e o fechamento falhou.
-          ...(valor !== undefined ? { p_valor: valor } : {}),
-        } as never);
+        if (desfecho !== "open" && !(await requestTaskMove(entryId))) return;
 
-        if (error) {
-          // ── A migration ainda não rodou ────────────────────────────────────
-          //
-          // O front é mergeado antes do apply, por desenho. Sem este ramo, o
-          // botão aparece e o clique cai num toast de erro — e para os 113
-          // funis que TINHAM etapa terminal isso é regressão pura: eles
-          // fechavam negócio ontem e parariam hoje.
-          //
-          // Então degrada para o comportamento anterior: mover para a etapa
-          // terminal, quando ela existe. Some sozinho quando a RPC responder.
-          if (isMissingSchemaError(error)) {
-            if (desfecho === "open") {
-              toast.error("Não foi possível reabrir o negócio. A atualização do funil precisa estar disponível.");
-              return;
-            }
-            const papel = desfecho === "won" ? "ganho" : "perdido";
-            const terminal = data?.etapas.find((e) => e.papel === papel);
-            if (terminal) {
-              // Motivo já gravado acima — o move não pergunta de novo.
-              await moverEtapa(terminal.chave, perda ?? undefined);
-              dispararEfeitoDeDesfecho(entryId, desfecho);
-              celebrar(desfecho, origem);
-              return;
-            }
-            // Os 283 funis (71%) sem etapa terminal nunca tiveram este botão.
-            // Dizer o que falta é melhor que um erro de banco cru.
-            toast.error("Disponível assim que a atualização do funil for aplicada.");
-            return;
-          }
-          // ── A trava de valor ────────────────────────────────────────────
-          // Não é erro do usuário nem falha: é a única informação que falta.
-          // Abre o campo em vez de despejar a mensagem do banco num toast.
-          if (isSaleValueRequiredError(error)) {
-            setPedindoValor(true);
-            return;
-          }
-          throw new Error(error.message);
+        // Perder exige o motivo (SCRUM-369), gravado no metadata da entrada
+        // ANTES do desfecho — o mesmo par id+rótulo que o `/funil` grava — e
+        // passado à RPC, que o copia para `deals.loss_reason`. Cancelou ou a
+        // gravação falhou: nenhuma escrita de desfecho.
+        let perda: PerdaResolvida | null = null;
+        if (desfecho === "lost") {
+          perda = await capturarMotivoDaPerda({ entryIds: [entryId] });
+          if (!perda) return;
         }
 
-        toast.success(desfecho === "open" ? "Negócio reaberto" : desfecho === "won" ? "Negócio ganho" : "Negócio perdido");
-        if (desfecho === "open") {
-          cancelarEfeitoDeDesfecho(entryId);
-        } else {
-          dispararEfeitoDeDesfecho(entryId, desfecho);
-          celebrar(desfecho, origem);
+        const origem = desfecho === "open" ? null : origemDo(desfecho);
+        try {
+          const { error } = await supabase.rpc("definir_desfecho_da_entrada", {
+            p_entry_id: entryId,
+            p_outcome: desfecho,
+            p_loss_reason: perda?.texto ?? undefined,
+            // O valor vai na MESMA chamada do desfecho, nunca antes: a trava é
+            // BEFORE UPDATE OF outcome, e escrever em dois passos abriria a
+            // janela em que o preço está salvo e o fechamento falhou.
+            ...(valor !== undefined ? { p_valor: valor } : {}),
+          } as never);
+
+          if (error) {
+            // ── A migration ainda não rodou ────────────────────────────────────
+            //
+            // O front é mergeado antes do apply, por desenho. Sem este ramo, o
+            // botão aparece e o clique cai num toast de erro — e para os 113
+            // funis que TINHAM etapa terminal isso é regressão pura: eles
+            // fechavam negócio ontem e parariam hoje.
+            //
+            // Então degrada para o comportamento anterior: mover para a etapa
+            // terminal, quando ela existe. Some sozinho quando a RPC responder.
+            if (isMissingSchemaError(error)) {
+              if (desfecho === "open") {
+                toast.error("Não foi possível reabrir o negócio. A atualização do funil precisa estar disponível.");
+                return;
+              }
+              const papel = desfecho === "won" ? "ganho" : "perdido";
+              const terminal = data?.etapas.find((e) => e.papel === papel);
+              if (terminal) {
+                // Motivo já gravado acima — o move não pergunta de novo.
+                await moverEtapa(terminal.chave, perda ?? undefined);
+                dispararEfeitoDeDesfecho(entryId, desfecho);
+                celebrar(desfecho, origem);
+                return;
+              }
+              // Os 283 funis (71%) sem etapa terminal nunca tiveram este botão.
+              // Dizer o que falta é melhor que um erro de banco cru.
+              toast.error("Disponível assim que a atualização do funil for aplicada.");
+              return;
+            }
+            // ── A trava de valor ────────────────────────────────────────────
+            // Não é erro do usuário nem falha: é a única informação que falta.
+            // Abre o campo em vez de despejar a mensagem do banco num toast.
+            if (isSaleValueRequiredError(error)) {
+              setPedindoValor(true);
+              return;
+            }
+            throw new Error(error.message);
+          }
+
+          toast.success(desfecho === "open" ? "Negócio reaberto" : desfecho === "won" ? "Negócio ganho" : "Negócio perdido");
+          if (desfecho === "open") {
+            cancelarEfeitoDeDesfecho(entryId);
+          } else {
+            dispararEfeitoDeDesfecho(entryId, desfecho);
+            celebrar(desfecho, origem);
+          }
+          // `leads-deals` é de onde sai `estado` do card. Sem invalidar, o botão
+          // some do jeito certo mas o cabeçalho segue dizendo "aberto".
+          await queryClient.invalidateQueries({ queryKey: ["leads-deals"] });
+          queryClient.invalidateQueries({ queryKey: ["deal-card-extras", entryId] });
+          for (const key of ["deal-menu-outcome", "funil-desfecho-counts", "pipeline-desfecho-por-mes", "pipeline-page", "pipeline-stage-counts", "custom_pipe_entries", "custom_pipe_stage_counts", "leads-sales-metrics"]) {
+            void queryClient.invalidateQueries({ queryKey: [key] });
+          }
+        } catch (e) {
+          notifyError(e, { fallback: "Não foi possível registrar o desfecho." });
         }
-        // `leads-deals` é de onde sai `estado` do card. Sem invalidar, o botão
-        // some do jeito certo mas o cabeçalho segue dizendo "aberto".
-        await queryClient.invalidateQueries({ queryKey: ["leads-deals"] });
-        queryClient.invalidateQueries({ queryKey: ["deal-card-extras", entryId] });
-        for (const key of ["deal-menu-outcome", "funil-desfecho-counts", "pipeline-desfecho-por-mes", "pipeline-page", "pipeline-stage-counts", "custom_pipe_entries", "custom_pipe_stage_counts", "leads-sales-metrics"]) {
-          void queryClient.invalidateQueries({ queryKey: [key] });
-        }
-      } catch (e) {
-        notifyError(e, { fallback: "Não foi possível registrar o desfecho." });
       } finally {
+        decidindoRef.current = false;
         setDecidindo(false);
       }
     },
-    [entryId, decidindo, queryClient, data, moverEtapa, origemDo, celebrar, capturarMotivoDaPerda, requestTaskMove],
+    [entryId, queryClient, data, moverEtapa, origemDo, celebrar, capturarMotivoDaPerda, requestTaskMove],
   );
 
   /**
@@ -598,64 +614,70 @@ export const DealCardPanel = memo(function DealCardPanel() {
    * `tags`. O painel já tem a resposta em mãos — perguntar de novo lá dentro
    * seria uma segunda consulta para um fato que ele acabou de ler.
    */
-  const negocio =
-    isLoading ? (
-      <div className="flex items-center justify-center py-16">
-        <span className="text-[13px] text-muted-foreground">Carregando…</span>
-      </div>
-    ) : data ? (
-      <DealCard
-        negocio={data}
-        acaoCopiar={leadId && entryId ? <CopyLeadSummaryButton key={entryId} leadId={leadId} entryId={entryId} /> : undefined}
-        /* Ligar só quando a gaveta NÃO tem a pessoa no cabeçalho (negócio sem
-           lead): com ela, o Ligar já está na fileira de ações da pessoa, e dois
-           botões de ligar para o mesmo número a 200 px é ruído. */
-        acaoLigar={
-          !leadId && renderLigar ? renderLigar({ id: data.lead.id, nome: data.lead.nome }) : undefined
-        }
-        onSaveNote={salvarNota}
-        onRenomear={(nome, alterarLead) => renomearNegocio.mutateAsync({ nome, alterarLead })}
-        onMoverEtapa={moverEtapa}
-        onDefinirDesfecho={definirDesfecho}
-        decidindo={decidindo}
-        onOpenDeal={trocarNegocio}
-        onNewDeal={abrirFicha}
-        /* Sempre — inclusive no card sem negócio, que é materializado no
-           clique. Era esta linha que sumia o botão em 19,2% dos cards. */
-        onAdicionarProduto={adicionarProduto}
-        onAjustarPedido={dealId && data.pedidoAtualizadoEm ? ajustePedido.mutateAsync : undefined}
-        onCorrigirVendaHistorica={data.estado === "ganho" && (data.vendaHistorica || dealId) && data.pedidoAtualizadoEm && organizacaoId ? corrigirVenda.mutateAsync : undefined}
-        onCorrigirDataDoDesfecho={data.estado !== "aberto" && (data.vendaHistorica || dealId) && data.pedidoAtualizadoEm && organizacaoId ? corrigirDataDoDesfecho.mutateAsync : undefined}
-        ajustesPedido={ajustePedido.historico}
-        /* Estes dois seguem presos ao negócio, e isso NÃO esconde nada: o lápis
-           e a lixeira são de item já lançado, e não há item sem negócio. */
-        onEditarItem={dealIdParaProduto ? editarItem : undefined}
-        onRemoverItem={dealIdParaProduto ? removerItemDoNegocio : undefined}
-        onEditarValor={(valor, expectedUpdatedAt) => editarValorProposta.mutateAsync({ valor, expectedUpdatedAt })}
-        onRecarregarValor={editarValorProposta.recarregarValor}
-        movendo={pendingStageKey}
-        comentarios={comentarios}
-        onComentar={podeComentar ? comentar : undefined}
-        onBaixarAnexo={downloadCommentFile}
-        onEditarComentario={podeComentar ? editarComentario : undefined}
-        onApagarComentario={podeComentar ? apagarComentario : undefined}
-        comentando={criarComentario.isPending}
-        abaInicial={aba}
-        resumoChecklists={resumoChecklists ?? null}
-        /* O elemento é criado aqui, montado lá — e só quando a aba está aberta.
-           Ver o bloco `painelChecklists` no `DealCard` para o porquê do slot. */
-        painelChecklists={<div className="space-y-6">{entryId && <DealTasks key={entryId} entryId={entryId}/>}<DealCardChecklists leadId={leadId} entryId={entryId}/></div>}
-        painelPedidoErp={dealId ? (
-          <TothOrderDraftSlot key={dealId} dealId={dealId} organizationId={organizacaoId} />
-        ) : undefined}
-        onExcluir={podeExcluirCard ? () => setConfirmandoExclusao(true) : undefined}
-        excluindo={excluindo}
-      />
-    ) : (
-      <div className="flex items-center justify-center rounded-[18px] border border-dashed border-border px-6 py-16 text-center">
-        <span className="text-[13px] text-muted-foreground">Negócio não encontrado.</span>
-      </div>
-    );
+  // Régua de espera (CX ①): o negócio em osso com a forma real, frase aos 1 s,
+  // osso mínimo de 300 ms — no lugar do "Carregando…" solto.
+  const negocio = (
+    <Espera
+      carregando={isLoading}
+      forma={<FichaSkeleton variante="negocio" />}
+      frase="Abrindo o negócio…"
+      rotulo="Carregando negócio"
+    >
+      {data ? (
+        <DealCard
+          negocio={data}
+          acaoCopiar={leadId && entryId ? <CopyLeadSummaryButton key={entryId} leadId={leadId} entryId={entryId} /> : undefined}
+          /* Ligar só quando a gaveta NÃO tem a pessoa no cabeçalho (negócio sem
+             lead): com ela, o Ligar já está na fileira de ações da pessoa, e dois
+             botões de ligar para o mesmo número a 200 px é ruído. */
+          acaoLigar={
+            !leadId && renderLigar ? renderLigar({ id: data.lead.id, nome: data.lead.nome }) : undefined
+          }
+          onSaveNote={salvarNota}
+          onRenomear={(nome, alterarLead) => renomearNegocio.mutateAsync({ nome, alterarLead })}
+          onMoverEtapa={moverEtapa}
+          onDefinirDesfecho={definirDesfecho}
+          decidindo={decidindo}
+          onOpenDeal={trocarNegocio}
+          onNewDeal={abrirFicha}
+          /* Sempre — inclusive no card sem negócio, que é materializado no
+             clique. Era esta linha que sumia o botão em 19,2% dos cards. */
+          onAdicionarProduto={adicionarProduto}
+          onAjustarPedido={dealId && data.pedidoAtualizadoEm ? ajustePedido.mutateAsync : undefined}
+          onCorrigirVendaHistorica={data.estado === "ganho" && (data.vendaHistorica || dealId) && data.pedidoAtualizadoEm && organizacaoId ? corrigirVenda.mutateAsync : undefined}
+          onCorrigirDataDoDesfecho={data.estado !== "aberto" && (data.vendaHistorica || dealId) && data.pedidoAtualizadoEm && organizacaoId ? corrigirDataDoDesfecho.mutateAsync : undefined}
+          ajustesPedido={ajustePedido.historico}
+          /* Estes dois seguem presos ao negócio, e isso NÃO esconde nada: o lápis
+             e a lixeira são de item já lançado, e não há item sem negócio. */
+          onEditarItem={dealIdParaProduto ? editarItem : undefined}
+          onRemoverItem={dealIdParaProduto ? removerItemDoNegocio : undefined}
+          onEditarValor={(valor, expectedUpdatedAt) => editarValorProposta.mutateAsync({ valor, expectedUpdatedAt })}
+          onRecarregarValor={editarValorProposta.recarregarValor}
+          movendo={pendingStageKey}
+          comentarios={comentarios}
+          onComentar={podeComentar ? comentar : undefined}
+          onBaixarAnexo={downloadCommentFile}
+          onEditarComentario={podeComentar ? editarComentario : undefined}
+          onApagarComentario={podeComentar ? apagarComentario : undefined}
+          comentando={criarComentario.isPending}
+          abaInicial={aba}
+          resumoChecklists={resumoChecklists ?? null}
+          /* O elemento é criado aqui, montado lá — e só quando a aba está aberta.
+             Ver o bloco `painelChecklists` no `DealCard` para o porquê do slot. */
+          painelChecklists={<div className="space-y-6">{entryId && <DealTasks key={entryId} entryId={entryId}/>}<DealCardChecklists leadId={leadId} entryId={entryId}/></div>}
+          painelPedidoErp={dealId ? (
+            <TothOrderDraftSlot key={dealId} dealId={dealId} organizationId={organizacaoId} />
+          ) : undefined}
+          onExcluir={podeExcluirCard ? () => setConfirmandoExclusao(true) : undefined}
+          excluindo={excluindo}
+        />
+      ) : (
+        <div className="flex items-center justify-center rounded-[18px] border border-dashed border-border px-6 py-16 text-center">
+          <span className="text-[13px] text-muted-foreground">Negócio não encontrado.</span>
+        </div>
+      )}
+    </Espera>
+  );
 
   /**
    * A pessoa é a MOLDURA: o `LeadCardContainer` desenha o cabeçalho dela e as
@@ -810,6 +832,8 @@ export const DealCardPanel = memo(function DealCardPanel() {
 
   return (
     <>
+      {/* "Tempo até útil" do negócio (src/core/perf): monta a cada abertura. */}
+      <MarcarUtil tela="ficha_negocio" pronto={!isLoading && !!data} />
       <GavetaLateral
         aberta={isOpen}
         onFechar={close}

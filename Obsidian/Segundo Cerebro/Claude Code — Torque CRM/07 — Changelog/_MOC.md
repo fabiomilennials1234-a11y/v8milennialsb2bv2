@@ -189,3 +189,5 @@ owner: claude-agent
 - [[2026-11-09-mencao-em-grupo-uazapi|Menção (@) ao enviar para grupo do WhatsApp (Uazapi)]]
 - [[2026-11-09-numero-em-varios-cadastros|Número em vários cadastros volta a vincular a conversa]]
 - [[2026-11-16-google-watch-channel-unico|Watch channel do Google Calendar deixa de se multiplicar]]
+- [[2026-11-19-regua-de-espera-volta-1|2026-11-19 — Régua de espera (CX ①), volta 1 do revisor/qa]]
+- [[2026-11-19-regua-de-espera-volta-2|2026-11-19 — Régua de espera (CX ①), volta 2 do revisor/qa]]
