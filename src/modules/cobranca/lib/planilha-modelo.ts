@@ -13,6 +13,7 @@
  *
  * exceljs é carregado sob demanda — é pesado e só o import/modelo o usam.
  */
+import type { DataValidation } from "exceljs";
 
 export const NOME_DO_ARQUIVO_MODELO = "modelo-importacao-inadimplentes.xlsx";
 export const ABA_DO_MODELO = "Modelo";
@@ -140,8 +141,11 @@ export async function gerarBufferDoModelo(): Promise<ArrayBuffer> {
     vencimento.numFmt = "dd/mm/yyyy";
   }
   // Uma validação por faixa: atribuir célula a célula faz o exceljs gravar faixas
-  // sobrepostas, e o Excel abre esse arquivo pedindo "reparo".
-  modelo.dataValidations.add(`C2:C${ultima}`, {
+  // sobrepostas, e o Excel abre esse arquivo pedindo "reparo". `dataValidations`
+  // existe em runtime, mas o index.d.ts do exceljs não o declara em Worksheet.
+  const validacoes = (modelo as unknown as { dataValidations: { add(faixa: string, regra: DataValidation): void } })
+    .dataValidations;
+  validacoes.add(`C2:C${ultima}`, {
     type: "decimal",
     operator: "greaterThan",
     formulae: [0],
@@ -151,7 +155,7 @@ export async function gerarBufferDoModelo(): Promise<ArrayBuffer> {
     errorTitle: "Valor inválido",
     error: "Informe o valor em reais, maior que zero.",
   });
-  modelo.dataValidations.add(`D2:D${ultima}`, {
+  validacoes.add(`D2:D${ultima}`, {
     type: "date",
     operator: "greaterThan",
     formulae: [new Date(Date.UTC(2000, 0, 1))],
