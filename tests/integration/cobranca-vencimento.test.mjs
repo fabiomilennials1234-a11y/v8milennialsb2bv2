@@ -20,6 +20,12 @@ const INST_COBRANCA = id(501);
 // Quarta, 21/10/2026, 14h em São Paulo — dentro da janela padrão.
 const AGORA = '2026-10-21T14:00:00-03:00';
 const dia = (offset) => new Date(Date.UTC(2026, 9, 21 + offset)).toISOString().slice(0, 10);
+// Dia de hoje no fuso da org (relógio real) — o cadastro usa now(), não o AGORA fixo.
+const hojeBR = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date());
+const diaReal = (offset) => {
+  const [a, m, d] = hojeBR().split('-').map(Number);
+  return new Date(Date.UTC(a, m - 1, d + offset)).toISOString().slice(0, 10);
+};
 
 const MIGRATIONS = [
   '20271212000000_cobranca_fundacao',
@@ -64,12 +70,18 @@ const erro = async (db, sql) => {
   assert.fail(`esperava erro em: ${sql}`);
 };
 
-async function devedor(db, { nome, telefone = '5548999990001', vencimento, valor = 100 }) {
+async function devedor(db, { nome, telefone = '5548999990001', vencimento, valor = 100 , imediato = false}) {
+  // O cadastro já entra na coluna do atraso na hora (relógio real). Os testes do cron usam
+  // relógio fixo: o caso nasce com a régua desligada e quem o coloca é o planejar(AGORA).
+  // `imediato: true` testa o caminho do cadastro.
+  const ativa = await val(db, `SELECT COALESCE((SELECT ativa FROM cobranca_regua WHERE organization_id = '${TORQUE}'), false)`);
+  if (ativa && !imediato) await db.exec(`UPDATE cobranca_regua SET ativa = false WHERE organization_id = '${TORQUE}'`);
   await as(db, U_ADMIN);
   const inad = await val(db, `SELECT cobranca_inadimplente_salvar('${TORQUE}', NULL,
     '${JSON.stringify({ nome, telefone, titulos: [{ valor, vencimento }] }).replace(/'/g, "''")}'::jsonb)`);
   await asPostgres(db);
   const caso = await val(db, `SELECT id FROM cobranca_casos WHERE inadimplente_id = '${inad}' AND encerrado_em IS NULL`);
+  if (ativa && !imediato) await db.exec(`UPDATE cobranca_regua SET ativa = true WHERE organization_id = '${TORQUE}'`);
   return { inad, caso };
 }
 const planejar = (db, agora = AGORA) => one(db, `SELECT cobranca_regua_planejar('${agora}') AS r`).then((x) => x.r);
@@ -168,7 +180,10 @@ test('"Só mover" à mão ou voltar o card não faz a régua enviar o vencimento
   const db = await setup();
   try {
     await salvarColuna(db, { entrada_dias: 0, mensagem: MSG0 }, await coluna(db, 'Vencido'));
+    // Cadastro feito com a régua desligada; a equipe mexe no card antes de ligar.
+    await db.exec(`UPDATE cobranca_regua SET ativa = false WHERE organization_id = '${TORQUE}'`);
     const { caso } = await devedor(db, { nome: 'Manual', vencimento: dia(0) });
+    await db.exec(`UPDATE cobranca_regua SET ativa = true WHERE organization_id = '${TORQUE}'`);
     await mover(db, caso, 'Em negociação');
     await mover(db, caso, 'Vencido');
     await planejar(db);
@@ -199,3 +214,48 @@ test('rollback pareado: volta a faixa 1..365 e a régua segue funcionando', asyn
     await db.close();
   }
 });
+
+test('cadastro com atraso: o caso já nasce na coluna do atraso, com a mensagem na fila, sem esperar o cron', async () => {
+  const db = await setup();
+  try {
+    // 1 dia de atraso → coluna de 1 dia, direto do cadastro (nenhum planejar).
+    const um = await devedor(db, { imediato: true, nome: 'Um Dia', telefone: '5548999990001', vencimento: diaReal(-1) });
+    assert.equal(await colunaDo(db, um.caso), '1 dia de atraso');
+    assert.deepEqual((await envios(db, um.caso)).map((e) => `${e.gatilho}:${e.dias}:${e.status}`), ['atraso:1:pendente']);
+    // Atraso grande cai na maior coluna vencida.
+    const dez = await devedor(db, { imediato: true, nome: 'Dez Dias', telefone: '5548999990002', vencimento: diaReal(-10) });
+    assert.equal(await colunaDo(db, dez.caso), '7 dias de atraso');
+    // O cron depois não duplica nem move de volta.
+    await planejar(db, new Date().toISOString());
+    assert.equal((await envios(db, um.caso)).length, 1);
+    assert.equal(await colunaDo(db, um.caso), '1 dia de atraso');
+    assert.equal((await envios(db, dez.caso)).length, 1);
+  } finally {
+    await db.close();
+  }
+});
+
+test('cadastro com a coluna de entrada de 0 dias: título que vence hoje já entra com a mensagem na fila', async () => {
+  const db = await setup();
+  try {
+    await salvarColuna(db, { entrada_dias: 0, mensagem: MSG0 }, await coluna(db, 'Vencido'));
+    const { caso } = await devedor(db, { imediato: true, nome: 'Hoje', vencimento: diaReal(0) });
+    assert.equal(await colunaDo(db, caso), 'Vencido');
+    assert.deepEqual((await envios(db, caso)).map((e) => `${e.dias}:${e.status}`), ['0:pendente']);
+  } finally {
+    await db.close();
+  }
+});
+
+test('cadastro com a régua desligada: fica na coluna de entrada e não enfileira nada', async () => {
+  const db = await setup();
+  try {
+    await db.exec(`UPDATE cobranca_regua SET ativa = false WHERE organization_id = '${TORQUE}'`);
+    const { caso } = await devedor(db, { imediato: true, nome: 'Desligada', vencimento: diaReal(-1) });
+    assert.equal(await colunaDo(db, caso), 'Vencido');
+    assert.equal((await envios(db, caso)).length, 0);
+  } finally {
+    await db.close();
+  }
+});
+

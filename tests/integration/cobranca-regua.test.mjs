@@ -81,12 +81,18 @@ const erro = async (db, sql) => {
 };
 
 /** Cadastra pela RPC (como a tela) e devolve { inad, caso }. */
-async function devedor(db, { nome, telefone = '5548999990001', vencimento, valor = 100 }) {
+async function devedor(db, { nome, telefone = '5548999990001', vencimento, valor = 100 , imediato = false}) {
+  // O cadastro já entra na coluna do atraso na hora (relógio real). Os testes do cron usam
+  // relógio fixo: o caso nasce com a régua desligada e quem o coloca é o planejar(AGORA).
+  // `imediato: true` testa o caminho do cadastro.
+  const ativa = await val(db, `SELECT COALESCE((SELECT ativa FROM cobranca_regua WHERE organization_id = '${TORQUE}'), false)`);
+  if (ativa && !imediato) await db.exec(`UPDATE cobranca_regua SET ativa = false WHERE organization_id = '${TORQUE}'`);
   await as(db, U_ADMIN);
   const inad = await val(db, `SELECT cobranca_inadimplente_salvar('${TORQUE}', NULL,
     '${JSON.stringify({ nome, telefone, titulos: [{ valor, vencimento }] }).replace(/'/g, "''")}'::jsonb)`);
   await asPostgres(db);
   const caso = await val(db, `SELECT id FROM cobranca_casos WHERE inadimplente_id = '${inad}' AND encerrado_em IS NULL`);
+  if (ativa && !imediato) await db.exec(`UPDATE cobranca_regua SET ativa = true WHERE organization_id = '${TORQUE}'`);
   return { inad, caso };
 }
 const planejar = (db, agora = AGORA) => one(db, `SELECT cobranca_regua_planejar('${agora}') AS r`).then((x) => x.r);

@@ -35,7 +35,52 @@ AS $fn$
   SELECT CASE WHEN p_dias = 1 THEN '1 dia de atraso' ELSE p_dias || ' dias de atraso' END;
 $fn$;
 
-CREATE OR REPLACE FUNCTION private.cobranca_regua_candidatos(p_org uuid, p_agora timestamptz)
+CREATE OR REPLACE FUNCTION private.cobranca_garantir_caso(p_inadimplente uuid, p_responsavel uuid DEFAULT NULL)
+RETURNS uuid
+LANGUAGE plpgsql
+VOLATILE SECURITY DEFINER
+SET search_path = ''
+AS $fn$
+DECLARE
+  v_org   uuid;
+  v_caso  uuid;
+  v_etapa uuid;
+BEGIN
+  SELECT organization_id INTO v_org FROM public.cobranca_inadimplentes WHERE id = p_inadimplente;
+
+  SELECT id INTO v_caso FROM public.cobranca_casos
+   WHERE inadimplente_id = p_inadimplente AND encerrado_em IS NULL;
+  IF v_caso IS NOT NULL THEN
+    RETURN v_caso;
+  END IF;
+
+  IF NOT EXISTS (SELECT 1 FROM public.cobranca_titulos_saldo
+                  WHERE inadimplente_id = p_inadimplente AND saldo > 0) THEN
+    RETURN NULL;
+  END IF;
+
+  PERFORM private.cobranca_semear_etapas(v_org);
+  SELECT id INTO v_etapa FROM public.cobranca_etapas
+   WHERE organization_id = v_org AND papel = 'aberta'
+   ORDER BY posicao LIMIT 1;
+
+  INSERT INTO public.cobranca_casos (organization_id, inadimplente_id, etapa_id, responsavel_id, posicao)
+  VALUES (v_org, p_inadimplente, v_etapa, p_responsavel,
+          COALESCE((SELECT max(posicao) FROM public.cobranca_casos
+                     WHERE etapa_id = v_etapa AND encerrado_em IS NULL), 0) + 1)
+  RETURNING id INTO v_caso;
+
+  PERFORM private.cobranca_evento(v_org, p_inadimplente, v_caso, 'caso_aberto',
+                                  jsonb_build_object('etapa_id', v_etapa));
+  RETURN v_caso;
+END
+$fn$;
+
+DROP FUNCTION private.cobranca_regua_entrar_caso(uuid, timestamptz);
+
+DROP FUNCTION private.cobranca_regua_candidatos(uuid, timestamptz, uuid);
+
+CREATE FUNCTION private.cobranca_regua_candidatos(p_org uuid, p_agora timestamptz)
 RETURNS TABLE (
   caso_id uuid, inadimplente_id uuid, passo_id uuid, etapa_id uuid, gatilho text, dias integer,
   referencia date, status text, motivo text, mover_para uuid
@@ -138,6 +183,9 @@ AS $fn$
     FROM (SELECT * FROM atraso UNION ALL SELECT * FROM lembrete) x
    WHERE NOT (x.status = 'pendente' AND x.adiar);
 $fn$;
+
+REVOKE ALL ON FUNCTION private.cobranca_regua_candidatos(uuid, timestamptz) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION private.cobranca_regua_candidatos(uuid, timestamptz) TO service_role;
 
 CREATE OR REPLACE FUNCTION public.cobranca_coluna_salvar(p_org uuid, p_etapa uuid, p_dados jsonb)
 RETURNS uuid

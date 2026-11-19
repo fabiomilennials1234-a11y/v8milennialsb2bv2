@@ -14,7 +14,13 @@
 --    moveu (nenhum evento etapa_alterada): grava a entrada (uma vez, mesma
 --    chave de idempotência) e a mensagem sai pela fila normal (janela, teto,
 --    não contatar). "Só mover" à mão ou voltar o card não reenvia;
---  · a coluna de entrada só aceita 0 dias (ligar/desligar o envio no vencimento).
+--  · a coluna de entrada só aceita 0 dias (ligar/desligar o envio no vencimento);
+--  · o caso já NASCE na coluna do atraso: cobranca_garantir_caso chama
+--    cobranca_regua_entrar_caso (o planejador do cron para um caso só), que coloca
+--    o card na coluna certa e enfileira a mensagem na hora, sem esperar o ciclo de
+--    ~10 min (o envio em si segue a janela e o ritmo do chip). Régua desligada ou
+--    sem número: nasce na coluna de entrada, como antes. cobranca_regua_candidatos
+--    ganha o parâmetro p_caso (assinatura nova; o cron chama com 2 argumentos).
 
 BEGIN;
 
@@ -35,7 +41,9 @@ AS $fn$
               ELSE p_dias || ' dias de atraso' END;
 $fn$;
 
-CREATE OR REPLACE FUNCTION private.cobranca_regua_candidatos(p_org uuid, p_agora timestamptz)
+DROP FUNCTION private.cobranca_regua_candidatos(uuid, timestamptz);
+
+CREATE FUNCTION private.cobranca_regua_candidatos(p_org uuid, p_agora timestamptz, p_caso uuid DEFAULT NULL)
 RETURNS TABLE (
   caso_id uuid, inadimplente_id uuid, passo_id uuid, etapa_id uuid, gatilho text, dias integer,
   referencia date, status text, motivo text, mover_para uuid
@@ -65,6 +73,7 @@ AS $fn$
                       AND COALESCE(en.enviado_em, en.agendado_para) > p_agora - make_interval(days => cfg.intervalo_minimo_dias)) AS recente
       FROM cfg
       JOIN public.cobranca_casos c ON c.organization_id = cfg.organization_id AND c.encerrado_em IS NULL
+                                  AND (p_caso IS NULL OR c.id = p_caso)
       JOIN public.cobranca_etapas e ON e.id = c.etapa_id
       JOIN public.cobranca_inadimplentes i ON i.id = c.inadimplente_id AND i.arquivado_em IS NULL
       LEFT JOIN LATERAL (
@@ -142,6 +151,99 @@ AS $fn$
   SELECT caso_id, inadimplente_id, passo_id, etapa_id, gatilho, dias, referencia, status, motivo, mover_para
     FROM (SELECT * FROM atraso UNION ALL SELECT * FROM lembrete) x
    WHERE NOT (x.status = 'pendente' AND x.adiar);
+$fn$;
+
+REVOKE ALL ON FUNCTION private.cobranca_regua_candidatos(uuid, timestamptz, uuid) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION private.cobranca_regua_candidatos(uuid, timestamptz, uuid) TO service_role;
+
+-- O planejador do cron, para UM caso: coloca o caso recém-aberto na coluna do atraso
+-- dele e enfileira a mensagem, sem esperar o próximo ciclo. Só roda com a régua da
+-- org ligada, habilitada e com número; idempotente (mesma chave dos envios).
+CREATE FUNCTION private.cobranca_regua_entrar_caso(p_caso uuid, p_agora timestamptz DEFAULT now())
+RETURNS void
+LANGUAGE plpgsql
+VOLATILE SECURITY DEFINER
+SET search_path = ''
+AS $fn$
+DECLARE
+  v_org    record;
+  c        record;
+  v_quando timestamptz;
+BEGIN
+  SELECT r.organization_id, r.janela, o.timezone
+    INTO v_org
+    FROM public.cobranca_casos ca
+    JOIN public.cobranca_regua r ON r.organization_id = ca.organization_id
+    JOIN public.organizations o ON o.id = r.organization_id
+   WHERE ca.id = p_caso AND r.ativa
+     AND private.cobranca_habilitada(r.organization_id)
+     AND private.cobranca_regua_instancia(r.organization_id) IS NOT NULL;
+  IF NOT FOUND THEN
+    RETURN;
+  END IF;
+
+  v_quando := COALESCE(private.cobranca_proxima_janela(v_org.janela, v_org.timezone, p_agora), p_agora);
+
+  FOR c IN SELECT * FROM private.cobranca_regua_candidatos(v_org.organization_id, p_agora, p_caso) LOOP
+    INSERT INTO public.cobranca_regua_envios
+      (organization_id, caso_id, inadimplente_id, passo_id, etapa_id, gatilho, dias, referencia,
+       status, motivo, agendado_para, criado_por)
+    VALUES
+      (v_org.organization_id, c.caso_id, c.inadimplente_id, c.passo_id, c.etapa_id, c.gatilho, c.dias,
+       c.referencia, c.status, c.motivo, v_quando, NULL)
+    ON CONFLICT (caso_id, gatilho, dias, referencia) WHERE gatilho <> 'entrada_manual' DO NOTHING;
+    IF FOUND AND c.mover_para IS NOT NULL THEN
+      PERFORM private.cobranca_regua_mover(c.caso_id, c.mover_para,
+                jsonb_build_object('motivo', 'coluna', 'dias', c.dias));
+    END IF;
+  END LOOP;
+END
+$fn$;
+
+REVOKE ALL ON FUNCTION private.cobranca_regua_entrar_caso(uuid, timestamptz) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION private.cobranca_regua_entrar_caso(uuid, timestamptz) TO service_role;
+
+CREATE OR REPLACE FUNCTION private.cobranca_garantir_caso(p_inadimplente uuid, p_responsavel uuid DEFAULT NULL)
+RETURNS uuid
+LANGUAGE plpgsql
+VOLATILE SECURITY DEFINER
+SET search_path = ''
+AS $fn$
+DECLARE
+  v_org   uuid;
+  v_caso  uuid;
+  v_etapa uuid;
+BEGIN
+  SELECT organization_id INTO v_org FROM public.cobranca_inadimplentes WHERE id = p_inadimplente;
+
+  SELECT id INTO v_caso FROM public.cobranca_casos
+   WHERE inadimplente_id = p_inadimplente AND encerrado_em IS NULL;
+  IF v_caso IS NOT NULL THEN
+    RETURN v_caso;
+  END IF;
+
+  IF NOT EXISTS (SELECT 1 FROM public.cobranca_titulos_saldo
+                  WHERE inadimplente_id = p_inadimplente AND saldo > 0) THEN
+    RETURN NULL;
+  END IF;
+
+  PERFORM private.cobranca_semear_etapas(v_org);
+  SELECT id INTO v_etapa FROM public.cobranca_etapas
+   WHERE organization_id = v_org AND papel = 'aberta'
+   ORDER BY posicao LIMIT 1;
+
+  INSERT INTO public.cobranca_casos (organization_id, inadimplente_id, etapa_id, responsavel_id, posicao)
+  VALUES (v_org, p_inadimplente, v_etapa, p_responsavel,
+          COALESCE((SELECT max(posicao) FROM public.cobranca_casos
+                     WHERE etapa_id = v_etapa AND encerrado_em IS NULL), 0) + 1)
+  RETURNING id INTO v_caso;
+
+  PERFORM private.cobranca_evento(v_org, p_inadimplente, v_caso, 'caso_aberto',
+                                  jsonb_build_object('etapa_id', v_etapa));
+  -- Já nasce na coluna do atraso (e com a mensagem na fila), sem esperar o cron.
+  PERFORM private.cobranca_regua_entrar_caso(v_caso);
+  RETURN v_caso;
+END
 $fn$;
 
 CREATE OR REPLACE FUNCTION public.cobranca_coluna_salvar(p_org uuid, p_etapa uuid, p_dados jsonb)
