@@ -51,7 +51,9 @@ export function correcaoVendaError(error: { message?: string; code?: string }) {
   if (isMissingSchemaError(error)) return "A correção de vendas ainda não está disponível neste ambiente.";
   return (
     Object.entries(errors).find(([code]) => error.message?.includes(code))?.[1] ??
-    "Não foi possível salvar a correção. Atualize a ficha e tente novamente."
+    // O código do banco acompanha a frase: sem ele, um erro novo chega ao
+    // suporte como "não deu" e a causa só aparece reproduzindo em produção.
+    `Não foi possível salvar a correção${error.code ? ` (código ${error.code})` : ""}. Atualize a ficha e tente novamente.`
   );
 }
 
