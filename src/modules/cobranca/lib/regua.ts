@@ -246,12 +246,14 @@ export function rotuloDoPasso(p: { gatilho: Gatilho; dias: number }): string {
   if (p.gatilho === "lembrete_compromisso") {
     return p.dias === 0 ? "No dia da promessa/parcela" : p.dias === 1 ? "Véspera da promessa/parcela" : `${p.dias} dias antes da promessa/parcela`;
   }
+  if (p.dias === 0) return "No dia do vencimento";
   return p.dias === 1 ? "1 dia de atraso" : `${p.dias} dias de atraso`;
 }
 
 export function marcaDoPasso(p: { gatilho: GatilhoDoEnvio; dias: number }): string {
   if (p.gatilho === "entrada_manual") return "Manual";
-  return p.gatilho === "lembrete_compromisso" ? (p.dias === 0 ? "D0" : `D-${p.dias}`) : `D+${p.dias}`;
+  if (p.gatilho === "lembrete_compromisso") return p.dias === 0 ? "D0" : `D-${p.dias}`;
+  return p.dias === 0 ? "D0" : `D+${p.dias}`;
 }
 
 /**
@@ -265,8 +267,9 @@ export function tipoDaColuna(e: Pick<Etapa, "pausaRegua" | "entradaDias">): Tipo
   return e.entradaDias !== null ? "dias" : "entrada";
 }
 
-/** "Entra com 7 dias de atraso" — o rótulo da entrada automática de uma coluna. */
+/** "Entra com 7 dias de atraso" (ou "no dia do vencimento", com 0) — o rótulo da entrada automática de uma coluna. */
 export function rotuloDaEntrada(dias: number): string {
+  if (dias === 0) return "Entra no dia do vencimento";
   return dias === 1 ? "Entra com 1 dia de atraso" : `Entra com ${dias} dias de atraso`;
 }
 
