@@ -262,6 +262,7 @@ describe("getLeadgenData", () => {
     });
     const result = await getLeadgenData("lead-1", "page-tok");
     expect(result.id).toBe("lead-1");
+    expect(new URL(mockFetch.mock.calls[0][0]).searchParams.get("fields")).toBe("id,created_time,form_id,field_data");
   });
 
   it("throws on error", async () => {
