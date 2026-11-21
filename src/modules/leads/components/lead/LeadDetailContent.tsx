@@ -19,6 +19,7 @@ import { LeadTabInfo } from "./tabs/LeadTabInfo";
 import { LeadTabPipe } from "./tabs/LeadTabPipe";
 import { LeadTabCampanhas } from "./tabs/LeadTabCampanhas";
 import { LeadCreateForm } from "./create/LeadCreateForm";
+import { VincularClienteNaFicha } from "./create/VincularClienteNaFicha";
 import { LeadChecklistSection } from "../leads/LeadChecklistSection";
 import { useLeadByPhone } from "@/modules/communication/hooks/useWhatsAppLeadIntegration";
 import { useLeadAllPipelines } from "../../hooks/useLeadAllPipelines";
@@ -76,13 +77,17 @@ export function LeadDetailContent({
           {chatCreation.isLoading ? "Verificando permissão..." : "Você não tem permissão para criar leads pelo chat nesta organização."}
         </p>
       ) : !lead ? (
-        <LeadCreateForm
-          phoneNumber={phoneNumber}
-          pushName={pushName}
-          onSubmit={createLead}
-          onCancel={onClose}
-          isSubmitting={isCreating}
-        />
+        <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
+          {/* "Já é cliente?" — só monta quando a conversa está sem lead. */}
+          <VincularClienteNaFicha phoneNumber={phoneNumber} onVinculado={() => void refetchLead()} />
+          <LeadCreateForm
+            phoneNumber={phoneNumber}
+            pushName={pushName}
+            onSubmit={createLead}
+            onCancel={onClose}
+            isSubmitting={isCreating}
+          />
+        </div>
       ) : (
         <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 overflow-hidden flex flex-col">
           <TabsList className="grid w-full grid-cols-4 mx-6 w-[calc(100%-3rem)]">
