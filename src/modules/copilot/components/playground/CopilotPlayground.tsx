@@ -325,11 +325,11 @@ export function CopilotPlayground() {
       attendUnknownContacts: wd.attendUnknownContacts ?? true,
       agentId: editId,
       handoffNotifyPhones: wd.handoffNotifyPhones || (
-        Array.isArray((editData as any)?.agent?.handoff_notify_phones)
-          ? ((editData as any).agent.handoff_notify_phones as string[]).map((phone: string) => ({ phone, label: "" }))
+        Array.isArray(editData.agent.handoff_notify_phones)
+          ? editData.agent.handoff_notify_phones.map((phone) => ({ phone, label: "" }))
           : []
       ),
-      handoffNotifyInstructions: wd.handoffNotifyInstructions || (editData as any)?.agent?.handoff_notify_instructions || "",
+      handoffNotifyInstructions: wd.handoffNotifyInstructions || editData.agent.handoff_notify_instructions || "",
       funis: payloadToFunisState({
         active_pipes: wd.activePipes || [],
         active_stages: wd.activeStages || {},
@@ -351,9 +351,9 @@ export function CopilotPlayground() {
 
     // Load conexao state from agent
     setConexao(payloadToConexaoState({
-      whatsapp_instance_id: wd.whatsappInstanceId ?? (editData as any)?.agent?.whatsapp_instance_id ?? null,
-      retention_enabled: wd.retentionEnabled ?? (editData as any)?.agent?.retention_enabled ?? false,
-      retention_config: wd.retentionConfig ?? (editData as any)?.agent?.retention_config ?? {},
+      whatsapp_instance_id: wd.whatsappInstanceId ?? editData.agent.whatsapp_instance_id ?? null,
+      retention_enabled: wd.retentionEnabled ?? editData.agent.retention_enabled ?? false,
+      retention_config: wd.retentionConfig ?? editData.agent.retention_config ?? {},
     }));
 
     // Load comportamento state from existing data
