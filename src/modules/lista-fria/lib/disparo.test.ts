@@ -5,6 +5,7 @@ import {
   chipPodeDispararFrio,
   dentroDaJanelaFria,
   pendenciasDoPedido,
+  resumoDoDisparo,
   variaveisDesconhecidas,
   type PedidoDeDisparo,
 } from "./disparo";
@@ -85,5 +86,20 @@ describe("CADENCIAS", () => {
       expect(c.minMs).toBeGreaterThanOrEqual(3000);
       expect(c.maxMs).toBeGreaterThanOrEqual(c.minMs);
     }
+  });
+});
+
+describe("resumoDoDisparo", () => {
+  it("sem contatos aguardando é um disparo comum", () => {
+    expect(resumoDoDisparo(12, 0)).toEqual({ total: 12, retomada: false });
+  });
+  it("só contatos aguardando é retomada — o caso do disparo que falhou depois de importar", () => {
+    expect(resumoDoDisparo(0, 81)).toEqual({ total: 81, retomada: true });
+  });
+  it("mistura soma os dois e continua sendo importação", () => {
+    expect(resumoDoDisparo(5, 81)).toEqual({ total: 86, retomada: false });
+  });
+  it("nada para nenhum lado mantém o botão desabilitado (total 0)", () => {
+    expect(resumoDoDisparo(0, 0)).toEqual({ total: 0, retomada: false });
   });
 });

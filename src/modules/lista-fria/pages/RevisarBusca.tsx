@@ -31,6 +31,7 @@ import {
   TAMANHO_DA_PAGINA,
   type FiltrosDaRevisao,
   useBusca,
+  useAguardandoDisparo,
   usePendentesDaImportacao,
   useResultados,
 } from "../hooks/useListaFriaDados";
@@ -58,6 +59,7 @@ export default function RevisarBusca() {
   const { data: busca, isLoading: carregandoBusca } = useBusca(buscaId);
   const { data: resultados, isFetching } = useResultados(buscaId, filtros);
   const { data: pendentes } = usePendentesDaImportacao(buscaId);
+  const { data: aguardando = 0 } = useAguardandoDisparo(buscaId);
   const selecionar = useSelecionarResultados();
   const importar = useImportarBusca();
   const exportar = useExportarBusca();
@@ -91,6 +93,8 @@ export default function RevisarBusca() {
   const todosMarcados = novos > 0 && selecionados === novos;
   const naoTerminou = buscaEstaAberta(busca);
   const podeImportar = podeEditar && buscaTemResultado(busca) && selecionados > 0 && !importar.isPending;
+  // Contatos que um disparo anterior importou e deixou sem mensagem também podem ser disparados.
+  const podeDisparar = podeEditar && buscaTemResultado(busca) && selecionados + aguardando > 0 && !importar.isPending;
 
   const erroDeEscrita = (fallback: string) => (err: unknown) =>
     notifyError(err, {
@@ -309,13 +313,18 @@ export default function RevisarBusca() {
         <p className="text-sm">
           <b className="tabular-nums">{n(selecionados)} contatos selecionados</b>
           {busca.jaLeads > 0 && <span className="ml-2 text-xs text-muted-foreground">Os {n(busca.jaLeads)} que já são leads ficam de fora.</span>}
+          {aguardando > 0 && (
+            <span className="ml-2 text-xs text-muted-foreground">
+              {n(aguardando)} já importados aguardam o disparo.
+            </span>
+          )}
         </p>
         <div className="flex flex-wrap justify-end gap-2">
           <Button variant="outline" onClick={() => setConfirmando(true)} disabled={!podeImportar}>
             <CheckCircle2 />
             Importar para Lista fria
           </Button>
-          <Button onClick={() => setDisparando(true)} disabled={!podeImportar}>
+          <Button onClick={() => setDisparando(true)} disabled={!podeDisparar}>
             <Send />
             Importar e Disparar
           </Button>
@@ -323,7 +332,7 @@ export default function RevisarBusca() {
       </div>
 
       {disparando && (
-        <ImportarEDispararDialog open={disparando} onOpenChange={setDisparando} buscaId={busca.id} selecionados={selecionados} />
+        <ImportarEDispararDialog open={disparando} onOpenChange={setDisparando} buscaId={busca.id} selecionados={selecionados} aguardando={aguardando} />
       )}
 
       <Dialog open={confirmando} onOpenChange={(v) => !importar.isPending && setConfirmando(v)}>

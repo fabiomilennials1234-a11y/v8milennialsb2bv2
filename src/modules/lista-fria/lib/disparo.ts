@@ -76,6 +76,14 @@ export function chipPodeDispararFrio(i: { provider: string; reserved_for: string
   return (i.provider === "uazapi" || i.provider === "evolution") && i.reserved_for === null;
 }
 
+/**
+ * O que o diálogo promete. `aguardando` são contatos que um disparo anterior
+ * importou e deixou sem mensagem: já são leads e já têm negócio, falta o envio.
+ */
+export function resumoDoDisparo(selecionados: number, aguardando: number): { total: number; retomada: boolean } {
+  return { total: selecionados + aguardando, retomada: aguardando > 0 && selecionados === 0 };
+}
+
 export interface PedidoDeDisparo {
   funilId: string;
   etapaId: string;
