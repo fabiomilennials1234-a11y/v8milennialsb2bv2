@@ -190,4 +190,52 @@ describe("montarPayloadDoAgente", () => {
 
     expect(payload.instance_id).toBeNull();
   });
+
+  // Regressão medida em PROD (Macerados, 16/11/2026): a lead respondeu a
+  // saudação com um ÁUDIO. `content` de um `ptt` vem vazio, o payload fixava
+  // "text" e não carregava mídia — o agente recebeu string vazia, não gerou
+  // nada, a fila marcou `done` SEM ERRO e a pessoa ficou no vácuo. Nenhum log
+  // registrou o sumiço.
+  it("carrega o tipo REAL e a mídia quando a resposta veio em áudio", () => {
+    const payload = montarPayloadDoAgente({
+      phone: "5547999999999",
+      orgId: "org-1",
+      content: "",
+      instanceId: "inst-1",
+      mediaUrl: "https://proj.supabase.co/storage/v1/object/public/media/a.ogg",
+      incomingMessageType: "ptt",
+    });
+
+    expect(payload.incoming_message_type).toBe("ptt");
+    expect(payload.media_url).toBe("https://proj.supabase.co/storage/v1/object/public/media/a.ogg");
+  });
+
+  it("mídia com legenda preserva o texto e o anexo", () => {
+    const payload = montarPayloadDoAgente({
+      phone: "5547999999999",
+      orgId: "org-1",
+      content: "olha só",
+      instanceId: "inst-1",
+      mediaUrl: "https://proj.supabase.co/storage/v1/object/public/media/b.jpg",
+      incomingMessageType: "image",
+    });
+
+    expect(payload.message).toBe("olha só");
+    expect(payload.incoming_message_type).toBe("image");
+    expect(payload.media_url).toContain("b.jpg");
+  });
+
+  // Sem mídia o payload tem de continuar byte a byte o que era — é o contrato
+  // que o agent-message já consumia para texto puro.
+  it("sem mídia, nada de media_url no corpo", () => {
+    const payload = montarPayloadDoAgente({
+      phone: "5547999999999",
+      orgId: "org-1",
+      content: "oi",
+      instanceId: "inst-1",
+    });
+
+    expect(payload).not.toHaveProperty("media_url");
+    expect(payload.incoming_message_type).toBe("text");
+  });
 });
