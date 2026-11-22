@@ -2,7 +2,7 @@ import { ReactNode } from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useCurrentTeamMember } from '../../org-team/hooks/useTeamMembers';
-import { useIdentity } from '../hooks/useIdentity';
+import { useMasterAuth } from '../../master/hooks/useMasterAuth';
 import { useGestor } from '../../gestor/hooks/useGestor';
 import { useMfaRequired } from '../hooks/useMfaRequired';
 import { useDeactivatedMembership } from '../../org-team/hooks/useMembershipStatus';
@@ -26,7 +26,12 @@ export function ProtectedRoute({ children, requireOrganization = true }: Protect
     error: teamMemberError,
     refetch: refetchTeamMember,
   } = useCurrentTeamMember();
-  const { isMaster, isLoading: masterLoading } = useIdentity();
+  // `useMasterAuth`, não `useIdentity`: o `isLoading` de useIdentity soma as
+  // feature permissions (edge get-member-permissions), e este gate não decide
+  // nada por feature — quem decide é o PermissionProtectedRoute, que continua
+  // esperando por elas. Esperá-las aqui punha a edge em série antes de TODA
+  // tela, inclusive as que não pedem permissão alguma (perf boot, 21/11).
+  const { isMaster, isLoading: masterLoading } = useMasterAuth();
   const { isGestor, isLoading: gestorLoading } = useGestor();
   // Gate de MFA. A propria rota /seguranca/mfa fica de fora, senao o redirect
   // aponta para si mesmo e vira loop.
@@ -59,7 +64,10 @@ export function ProtectedRoute({ children, requireOrganization = true }: Protect
     return <>{children}</>;
   }
 
-  if (authLoading || masterLoading || gestorLoading) {
+  // `teamMemberLoading` entra aqui para todo mundo (master incluso), como
+  // entrava via useIdentity: o que saiu deste gate foi SÓ a espera pelas
+  // feature permissions.
+  if (authLoading || masterLoading || gestorLoading || teamMemberLoading) {
     return <TorqueLoader variant="full" />;
   }
 
@@ -77,10 +85,6 @@ export function ProtectedRoute({ children, requireOrganization = true }: Protect
     if (precisaMfa) {
       return <Navigate to="/seguranca/mfa" replace />;
     }
-  }
-
-  if (teamMemberLoading && requireOrganization && !isMaster) {
-    return <TorqueLoader variant="full" />;
   }
 
   if (requireOrganization && !isMaster) {

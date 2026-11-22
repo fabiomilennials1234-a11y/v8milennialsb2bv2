@@ -4,6 +4,7 @@
  * Verifica se a organização tem subscription ativa antes de permitir acesso
  */
 
+import { queryOptions } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 
 export interface SubscriptionStatus {
@@ -62,10 +63,54 @@ export async function checkSubscription(
 }
 
 /**
- * Verifica se o usuário atual tem subscription válida
+ * Status da assinatura de UMA org — a do vínculo atual (`useCurrentTeamMember`,
+ * que já resolveu o org switcher). Mesmo motor de `checkSubscription`; o nome
+ * deixa explícito no chamador que a org vem de fora, não de um `limit 1`.
+ */
+export const checkSubscriptionForOrg = checkSubscription;
+
+/** Frescor do status: igual ao cache que o Copilot já usava. */
+const SUBSCRIPTION_STALE_MS = 5 * 60 * 1000;
+
+/**
+ * Chave ÚNICA do status de assinatura por org. O guard de rota e o Copilot
+ * leem a mesma entrada: uma RPC por org por carga, não duas.
+ */
+export const subscriptionStatusKey = (organizationId: string | null | undefined) =>
+  ['subscription-status', organizationId ?? null] as const;
+
+/**
+ * Opções compartilhadas da consulta. `retry: false` de propósito: falha de
+ * verificação vai direto para a tela honesta com "Tentar de novo" (ADR-0038),
+ * em vez de segurar o loader durante o backoff.
+ */
+export function subscriptionStatusQueryOptions(organizationId: string | null | undefined) {
+  return queryOptions({
+    queryKey: subscriptionStatusKey(organizationId),
+    queryFn: () => {
+      if (!organizationId) throw new Error('subscription-status: organization_id ausente');
+      return checkSubscriptionForOrg(organizationId);
+    },
+    enabled: !!organizationId,
+    staleTime: SUBSCRIPTION_STALE_MS,
+    refetchOnWindowFocus: false,
+    retry: false,
+  });
+}
+
+/**
+ * Verifica se o usuário atual tem subscription válida.
+ *
+ * @deprecated Prefira `subscriptionStatusQueryOptions(orgDoVinculoAtual)`.
+ * Esta função pega o PRIMEIRO vínculo ativo (`limit 1`, sem ordem) — em
+ * multi-org pode checar uma org diferente da selecionada. Sem chamadores no
+ * app desde a Trilha A do boot (21/11); fica pela API pública do módulo.
  */
 export async function checkCurrentUserSubscription(): Promise<SubscriptionStatus | null> {
-  const { data: { user } } = await supabase.auth.getUser();
+  // Sessão local, não `getUser()`: aquele é uma ida ao servidor de auth só
+  // para descobrir o id que o token já carrega. A RPC valida o JWT de novo.
+  const { data: { session } } = await supabase.auth.getSession();
+  const user = session?.user;
   if (!user) return null;
 
   // Buscar organização do usuário (limit 1 pois masters podem estar em múltiplas orgs)

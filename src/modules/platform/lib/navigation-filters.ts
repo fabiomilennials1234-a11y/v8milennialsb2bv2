@@ -84,13 +84,23 @@ export interface ViewPermissionInput {
   isMaster: boolean;
   isAdmin: boolean;
   featurePerms: Record<string, boolean> | undefined;
+  /**
+   * Matriz de permissão ainda sem resposta (edge get-member-permissions em
+   * voo). Desde que o ProtectedRoute deixou de esperar a edge (perf boot,
+   * 21/11), a navegação monta antes dela — e `undefined` lido como "liberado"
+   * mostraria, por um instante, portas que o membro não tem.
+   */
+  permissionsLoading?: boolean;
 }
 
 /**
  * Master e admin passam por cima da matriz de permissão. Para os demais, só
  * uma negação explícita (`false`) fecha a rota — chave ausente é liberada.
+ * Enquanto a matriz carrega, rota COM chave de permissão fica fechada
+ * (fail-closed); rota sem chave segue aberta. Em ERRO o comportamento é o de
+ * sempre (chave ausente = liberada) — herdado, fora deste escopo.
  */
-export function makeCanViewRoute({ isMaster, isAdmin, featurePerms }: ViewPermissionInput) {
+export function makeCanViewRoute({ isMaster, isAdmin, featurePerms, permissionsLoading = false }: ViewPermissionInput) {
   return (path: string): boolean => {
     if (isMaster || isAdmin) return true;
     const permKey =
@@ -99,6 +109,7 @@ export function makeCanViewRoute({ isMaster, isAdmin, featurePerms }: ViewPermis
       // permissão do prefixo — igual ao guard de rota do App.tsx.
       (path.startsWith("/funil/") ? NAV_VIEW_PERMISSIONS["/funil"] : undefined);
     if (!permKey) return true;
+    if (permissionsLoading) return false;
     return featurePerms?.[permKey] !== false;
   };
 }

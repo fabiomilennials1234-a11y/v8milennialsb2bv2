@@ -45,6 +45,28 @@ type PipelineEntryInsert = Omit<
 > & ({ stage_id: string; stage_key?: never } | { stage_key: string; stage_id?: never });
 
 const STALE_TIME = 2 * 60_000;
+/** Frescor da lista de funis — o mesmo na tela e no aquecimento do boot. */
+export const PIPELINES_STALE_MS = STALE_TIME;
+
+/**
+ * Chave da lista de funis da org — a MESMA de `usePipelines` e do aquecimento
+ * do boot (`src/core/boot-prewarm.ts`). `/funil/:slug` resolve o slug nela.
+ */
+export const pipelinesQueryKey = (organizationId: string | null | undefined) =>
+  ["pipelines", organizationId] as const;
+
+/** Funis da org, na ordem de exibição. Leitura sob RLS. */
+export async function buscarPipelinesDaOrg(organizationId: string | null | undefined): Promise<Pipeline[]> {
+  if (!organizationId) return [] as Pipeline[];
+
+  const { data, error } = await (supabase.from as any)("pipelines")
+    .select("*")
+    .eq("organization_id", organizationId)
+    .order("display_order", { ascending: true });
+
+  if (error) throw error;
+  return data as Pipeline[];
+}
 
 export function usePipelines() {
   const { organizationId } = useOrganization();
@@ -52,18 +74,8 @@ export function usePipelines() {
   useRealtimeSubscription("pipelines", ["pipelines"]);
 
   return useQuery({
-    queryKey: ["pipelines", organizationId],
-    queryFn: async () => {
-      if (!organizationId) return [] as Pipeline[];
-
-      const { data, error } = await (supabase.from as any)("pipelines")
-        .select("*")
-        .eq("organization_id", organizationId)
-        .order("display_order", { ascending: true });
-
-      if (error) throw error;
-      return data as Pipeline[];
-    },
+    queryKey: pipelinesQueryKey(organizationId),
+    queryFn: () => buscarPipelinesDaOrg(organizationId),
     enabled: !!organizationId,
     staleTime: STALE_TIME,
   });
