@@ -1,0 +1,21 @@
+-- 20280123000300_idx_read_state_marked_unread.sql — conversas marcadas como não lida, parcial
+--
+-- ⚠ NÃO RODAR EM TRANSAÇÃO. Arquivo de UM statement, sem BEGIN/COMMIT:
+-- CREATE INDEX CONCURRENTLY falha dentro de bloco de transação. Aplicar sozinho
+-- (Management API: 1 chamada só com este statement; psql em autocommit), com
+-- `SET lock_timeout = '3s'` na sessão quando der. NÃO por apply_migration do
+-- MCP nem `supabase db push` em lote.
+-- Se cair no meio, sobra índice INVALID: conferir
+--   SELECT indisvalid FROM pg_index WHERE indexrelid = 'public.conversation_read_state_marked_unread_idx'::regclass;
+-- false → rollback/20280123000300_idx_read_state_marked_unread.sql e repetir. Registrar a versão no ledger à mão.
+--
+-- POR QUÊ (prod, 21/11/2026): get_unread_total/get_unread_counts (96 k chamadas)
+-- e a lista multi procuram as conversas que o usuário marcou como não lida:
+-- `(organization_id, user_id) … AND marked_unread`. O único índice é o único
+-- (org, user, conversation_key): relê as ~5,7 k linhas do usuário e filtra
+-- `marked_unread` — no Nested Loop de 60 caixas, 222 ms / 346 k buffers de
+-- 495 ms. Existem 13 linhas marcadas no banco inteiro: índice parcial de 16 kB.
+--
+-- Rollback: supabase/migrations/rollback/20280123000300_idx_read_state_marked_unread.sql
+
+CREATE INDEX CONCURRENTLY IF NOT EXISTS conversation_read_state_marked_unread_idx ON public.conversation_read_state USING btree (organization_id, user_id, conversation_key) WHERE marked_unread;

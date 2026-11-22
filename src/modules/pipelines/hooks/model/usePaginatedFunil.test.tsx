@@ -219,3 +219,113 @@ describe("usePaginatedFunil — empate de created_at na borda da página", () =>
     expect(vistos.length).toBeLessThan(massa.length);
   });
 });
+
+// ── Quadro numa chamada (get_pipeline_board, migration 20280123000000) ──────
+//
+// O dublê do quadro é DERIVADO do mesmo dublê de get_pipeline_page
+// (`keysetRpc`): a 1ª página de cada coluna no quadro é, por construção, a 1ª
+// página da RPC por coluna. A prova de equivalência no banco é o pgTAP
+// `funil_quadro_numa_chamada_test.sql`; aqui o que se prova é a HIDRATAÇÃO.
+function quadroRpc(massa: FakeRow[], opcoes: { ausente?: boolean } = {}) {
+  const porColuna = keysetRpc(massa);
+  return async (fn: string, params: Record<string, unknown>) => {
+    if (fn === "get_pipeline_board") {
+      if (opcoes.ausente) {
+        return { data: null, error: { code: "PGRST202", message: "Could not find the function" } };
+      }
+      const keys = params.p_stage_keys as string[];
+      const columns: Record<string, unknown[]> = {};
+      for (const k of keys) {
+        const { data } = await porColuna("get_pipeline_page", { p_stage_id: k, p_page_size: params.p_page_size, p_cursor: null, p_cursor_id: null });
+        columns[k] = data;
+      }
+      return {
+        data: {
+          counts: [
+            { stage_id: "s-a", stage_key: "novo", cnt: massa.length - 1 },
+            { stage_id: null, stage_key: "novo", cnt: 1 },
+          ],
+          columns,
+        },
+        error: null,
+      };
+    }
+    return porColuna(fn, params);
+  };
+}
+
+describe("usePaginatedFunil — quadro numa chamada", () => {
+  it("abre com UMA ida: nenhuma página por coluna, nenhuma contagem avulsa", async () => {
+    const massa = massaComEmpates();
+    rpc.mockImplementation(quadroRpc(massa));
+
+    const { result } = renderHook(
+      () => usePaginatedFunil(PIPELINE_ID, [{ stage_key: "novo" }, { stage_key: "ganho" }]),
+      { wrapper },
+    );
+    await waitFor(() => expect(result.current.stageData["novo"]?.items).toHaveLength(PAGE_SIZE));
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+    const nomes = rpc.mock.calls.map(([fn]) => fn);
+    expect(nomes.filter((n) => n === "get_pipeline_board")).toHaveLength(1);
+    expect(nomes).not.toContain("get_pipeline_page");
+    expect(nomes).not.toContain("get_pipeline_stage_counts_by_id");
+
+    // Pedido do quadro: mesmas etapas, mesmo PAGE_SIZE, funil por id.
+    const [, args] = rpc.mock.calls.find(([fn]) => fn === "get_pipeline_board")!;
+    expect(args).toMatchObject({ p_pipeline_id: PIPELINE_ID, p_stage_keys: ["novo", "ganho"], p_page_size: PAGE_SIZE, p_org_id: "org-1" });
+
+    // Ordem da coluna = ordem da RPC por coluna; contagem soma a linha fantasma.
+    const esperado = (await keysetRpc(massa)("get_pipeline_page", { p_stage_id: "novo", p_page_size: PAGE_SIZE, p_cursor: null, p_cursor_id: null })).data;
+    expect(result.current.stageData["novo"].items.map((e) => (e as { id: string }).id)).toEqual(
+      esperado.map((r) => (r as FakeRow).id),
+    );
+    expect(result.current.stageData["novo"].totalCount).toBe(massa.length);
+    expect(result.current.stageData["novo"].hasMore).toBe(true);
+    expect(result.current.stageData["ganho"].items).toEqual([]);
+    expect(result.current.stageData["ganho"].hasMore).toBe(false);
+  });
+
+  it("“carregar mais” depois do quadro segue em get_pipeline_page com o cursor composto da última linha", async () => {
+    const massa = massaComEmpates();
+    rpc.mockImplementation(quadroRpc(massa));
+
+    const { result } = renderHook(() => usePaginatedFunil(PIPELINE_ID, [{ stage_key: "novo" }]), { wrapper });
+    await waitFor(() => expect(result.current.stageData["novo"]?.items).toHaveLength(PAGE_SIZE));
+    const ultima = result.current.stageData["novo"].items[PAGE_SIZE - 1] as { id: string; created_at: string };
+
+    await act(async () => result.current.stageData["novo"].fetchMore());
+    await waitFor(() => expect(result.current.stageData["novo"].items).toHaveLength(2 * PAGE_SIZE));
+
+    const paginas = rpc.mock.calls.filter(([fn]) => fn === "get_pipeline_page").map(([, p]) => p);
+    expect(paginas).toHaveLength(1);
+    expect(paginas[0]).toMatchObject({ p_cursor: ultima.created_at, p_cursor_id: ultima.id, p_stage_id: "novo" });
+  });
+
+  it("quadro ausente (PGRST202): a tela cai nas páginas por coluna, sem erro", async () => {
+    const massa = massaComEmpates();
+    rpc.mockImplementation(quadroRpc(massa, { ausente: true }));
+
+    const { result } = renderHook(() => usePaginatedFunil(PIPELINE_ID, [{ stage_key: "novo" }]), { wrapper });
+    await waitFor(() => expect(result.current.stageData["novo"]?.items).toHaveLength(PAGE_SIZE));
+    const nomes = rpc.mock.calls.map(([fn]) => fn);
+    expect(nomes).toContain("get_pipeline_board");
+    expect(nomes).toContain("get_pipeline_page");
+    expect(nomes).toContain("get_pipeline_stage_counts_by_id");
+  });
+
+  it("enquanto o quadro não volta, a coluna fica em carregamento (não 'vazia')", async () => {
+    let soltar: (v: unknown) => void = () => {};
+    rpc.mockImplementation((fn: string) =>
+      fn === "get_pipeline_board" ? new Promise((r) => { soltar = r; }) : Promise.resolve({ data: [], error: null }),
+    );
+    const { result } = renderHook(() => usePaginatedFunil(PIPELINE_ID, [{ stage_key: "novo" }]), { wrapper });
+    await waitFor(() => expect(rpc.mock.calls.some(([fn]) => fn === "get_pipeline_board")).toBe(true));
+    expect(result.current.isLoading).toBe(true);
+    expect(result.current.stageData["novo"].isLoading).toBe(true);
+    expect(rpc.mock.calls.map(([fn]) => fn)).toEqual(["get_pipeline_board"]);
+    soltar({ data: { counts: [], columns: { novo: [] } }, error: null });
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+    expect(rpc.mock.calls.map(([fn]) => fn)).toEqual(["get_pipeline_board"]);
+  });
+});

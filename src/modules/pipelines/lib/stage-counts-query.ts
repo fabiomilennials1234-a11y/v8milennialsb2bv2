@@ -47,7 +47,27 @@ export function stageCountsQueryKey(pipelineId: string | null | undefined, args:
   ] as const;
 }
 
-/** Busca e agrega por `stage_key` (linha fantasma soma na key que carrega). */
+/** Linha de `get_pipeline_stage_counts_by_id` (e de `counts` em `get_pipeline_board`). */
+export interface StageCountRow {
+  stage_id?: string | null;
+  stage_key: string | null;
+  cnt: number | string;
+}
+
+/**
+ * Agrega por `stage_key` (linha fantasma soma na key que carrega). É o valor
+ * gravado na `stageCountsQueryKey` — por quem busca a contagem sozinha e por
+ * quem a SEMEIA a partir do quadro (`pipeline-board-query`).
+ */
+export function agregarContagensPorEtapa(rows: readonly StageCountRow[]): Record<string, number> {
+  const map: Record<string, number> = {};
+  for (const row of rows) {
+    if (row.stage_key) map[row.stage_key] = (map[row.stage_key] ?? 0) + Number(row.cnt);
+  }
+  return map;
+}
+
+/** Busca e agrega por `stage_key`. */
 export async function fetchStageCounts(args: StageCountsArgs): Promise<Record<string, number>> {
   // `as never`: RPC mais nova que o types.ts gerado de prod; morre no regen.
   const { data, error } = await supabase.rpc(
@@ -55,9 +75,5 @@ export async function fetchStageCounts(args: StageCountsArgs): Promise<Record<st
     args as never,
   );
   if (error) throw error;
-  const map: Record<string, number> = {};
-  for (const row of (data ?? []) as Array<{ stage_key: string | null; cnt: number | string }>) {
-    if (row.stage_key) map[row.stage_key] = (map[row.stage_key] ?? 0) + Number(row.cnt);
-  }
-  return map;
+  return agregarContagensPorEtapa((data ?? []) as StageCountRow[]);
 }

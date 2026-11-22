@@ -8,7 +8,7 @@ import { addErrorReporter, type ErrorReport } from "@/shared/errors";
 
 const { fetchMock, chips } = vi.hoisted(() => ({
   fetchMock: vi.fn(),
-  chips: { value: [{ id: "chip-1", instance_name: "Comercial" }] },
+  chips: { value: [{ id: "chip-1", instance_name: "Comercial" }] as { id: string; instance_name: string }[] | undefined, loading: false },
 }));
 
 // Keep the real SDK: replacing rpc with a mock hides loss of its `this` receiver.
@@ -27,7 +27,7 @@ vi.mock("@/modules/identity", () => ({
   useCurrentTeamMember: () => ({ data: { organization_id: "org-1" } }),
 }));
 vi.mock("@/modules/communication", () => ({
-  useWhatsAppInstancesForUser: () => ({ data: chips.value, isLoading: false }),
+  useWhatsAppInstancesForUser: () => ({ data: chips.loading ? undefined : chips.value, isLoading: chips.loading }),
 }));
 vi.mock("./useComandoScope", () => ({
   useComandoScope: () => ({
@@ -45,11 +45,17 @@ const fim = new Date("2026-09-22T12:00:00Z");
 const json = (data: unknown, status = 200) => new Response(JSON.stringify(data), {
   status, headers: { "Content-Type": "application/json" },
 });
+/** `get_comando_fila` ausente (front antes da migration 20280123001000). */
+const filaAusente = () => json({ code: "PGRST202", message: "Could not find the function" }, 404);
+const ehFila = (url: unknown) => String(url).includes("/rpc/get_comando_fila");
+/** Chamadas que NÃO são a sonda de `get_comando_fila`. */
+const semFila = () => fetchMock.mock.calls.filter(([u]) => !ehFila(u));
 
 beforeEach(() => {
   client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
   fetchMock.mockReset();
   chips.value = [{ id: "chip-1", instance_name: "Comercial" }];
+  chips.loading = false;
 });
 afterEach(() => { cleanup(); client.clear(); });
 
@@ -73,6 +79,7 @@ describe("Comando RPC transport", () => {
 
   it("loads waiting conversations and only displays those linked to leads", async () => {
     fetchMock.mockImplementation(async (url: string) => {
+      if (ehFila(url)) return filaAusente();
       if (url.includes("/rpc/get_conversations_awaiting_human_reply_multi")) {
         return json([null, "lead-1"].map((lead_id, i) => ({
           instance_id: "chip-1", lead_id, normalized_phone: `551199999000${i}`, phone_number: `551199999000${i}`,
@@ -92,8 +99,8 @@ describe("Comando RPC transport", () => {
       leadId: "lead-1", displayName: "Lead cadastrado", aiReplied: true,
       lastClientMessage: "Preciso de ajuda",
     })]);
-    expect(fetchMock.mock.calls[0][0]).toContain("/rpc/get_conversations_awaiting_human_reply_multi");
-    expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({
+    expect(semFila()[0][0]).toContain("/rpc/get_conversations_awaiting_human_reply_multi");
+    expect(JSON.parse(semFila()[0][1].body)).toEqual({
       p_org: "org-1", p_instances: ["chip-1"], p_limit: 30,
     });
   });
@@ -107,7 +114,7 @@ describe("Comando RPC transport", () => {
   });
 
   it("skips lead enrichment when the RPC already supplies every displayed field", async () => {
-    fetchMock.mockResolvedValue(json([{
+    fetchMock.mockImplementation(async (url: string) => ehFila(url) ? filaAusente() : json([{
       lead_id: "lead-1", normalized_phone: "5511999990001", phone_number: "5511999990001",
       push_name: "Nome WhatsApp", last_client_message_at: inicio.toISOString(),
       waiting_total: 1, owner_team_member_id: "member-1", owner_name: "Ana",
@@ -117,7 +124,7 @@ describe("Comando RPC transport", () => {
     expect(result.current.items).toEqual([expect.objectContaining({
       displayName: "Nome WhatsApp", ownerTeamMemberId: "member-1", ownerName: "Ana",
     })]);
-    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(semFila()).toHaveLength(1);
   });
 
   it("enriches only incomplete rows, retaining null-owner and legacy-owner fallbacks", async () => {
@@ -129,6 +136,7 @@ describe("Comando RPC transport", () => {
       { lead_id: "empty-name", push_name: "", owner_team_member_id: "member-1" },
     ];
     fetchMock.mockImplementation(async (url: string) => {
+      if (ehFila(url)) return filaAusente();
       if (url.includes("/rpc/")) return json(rows.map((r, i) => ({
         ...r, normalized_phone: `551199999000${i}`, waiting_total: rows.length,
         last_client_message_at: inicio.toISOString(),
@@ -151,7 +159,7 @@ describe("Comando RPC transport", () => {
     expect(byLead.get("null-owner")?.ownerTeamMemberId).toBe("member-fallback");
     expect(byLead.get("legacy-owner")?.ownerTeamMemberId).toBe("member-fallback");
     expect(byLead.get("empty-name")?.displayName).toBe("");
-    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(semFila()).toHaveLength(2);
   });
   it("keeps waiting-queue server errors visible", async () => {
     fetchMock.mockImplementation(async () => json({ code: "42501", message: "Forbidden" }, 403));
@@ -168,6 +176,7 @@ describe("Comando RPC transport", () => {
       id: `chip-${i}`, instance_name: `Caixa ${i}`,
     }));
     fetchMock.mockImplementation(async (url: string) => {
+      if (ehFila(url)) return filaAusente();
       if (url.includes("/rpc/get_conversations_awaiting_human_reply_multi")) {
         return json([
           { instance_id: "chip-7", lead_id: "lead-a", normalized_phone: "5511999990001",
@@ -184,8 +193,8 @@ describe("Comando RPC transport", () => {
     });
     const { result } = renderHook(() => useConversasAguardando(), { wrapper });
     await waitFor(() => expect(result.current.isLoading).toBe(false));
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-    const body = JSON.parse(fetchMock.mock.calls[0][1].body);
+    expect(semFila()).toHaveLength(1);
+    const body = JSON.parse(semFila()[0][1].body);
     expect(body.p_instances).toHaveLength(57);
     expect(body).not.toHaveProperty("p_instance");
     // Mesmo telefone em duas caixas = duas conversas, cada uma na SUA caixa.
@@ -202,6 +211,7 @@ describe("Comando RPC transport", () => {
       { id: "chip-2", instance_name: "Suporte" },
     ];
     fetchMock.mockImplementation(async (url: string, init: { body: string }) => {
+      if (ehFila(url)) return filaAusente();
       if (url.includes("/rpc/get_conversations_awaiting_human_reply_multi")) {
         return json({ code: "PGRST202", message: "Could not find the function" }, 404);
       }
@@ -224,12 +234,14 @@ describe("Comando RPC transport", () => {
     })]);
   });
 
-  it("does not call the server at all when the user has no box", async () => {
+  it("without any box: one server-side probe, no per-box fan-out, semChips", async () => {
     chips.value = [];
+    fetchMock.mockImplementation(async (url: string) => (ehFila(url) ? json([]) : filaAusente()));
     const { result } = renderHook(() => useConversasAguardando(), { wrapper });
     await waitFor(() => expect(result.current.semChips).toBe(true));
-    expect(fetchMock).not.toHaveBeenCalled();
-    expect(result.current.isLoading).toBe(false);
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+    expect(semFila()).toHaveLength(0);
+    expect(result.current.items).toEqual([]);
   });
 
 
@@ -247,6 +259,7 @@ describe("Comando RPC transport", () => {
       { id: "chip-2", instance_name: "Suporte" },
     ];
     fetchMock.mockImplementation(async (url: string) => {
+      if (ehFila(url)) return filaAusente();
       if (url.includes("/rpc/get_conversations_awaiting_human_reply_multi")) {
         return json({ code, message }, 400);
       }
@@ -254,8 +267,8 @@ describe("Comando RPC transport", () => {
     });
     const { result } = renderHook(() => useConversasAguardando(), { wrapper });
     await waitFor(() => expect(result.current.isError).toBe(true));
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(fetchMock.mock.calls[0][0]).toContain("/rpc/get_conversations_awaiting_human_reply_multi");
+    expect(semFila()).toHaveLength(1);
+    expect(semFila()[0][0]).toContain("/rpc/get_conversations_awaiting_human_reply_multi");
     expect(result.current.isDegraded).toBe(false);
   });
 
@@ -267,6 +280,7 @@ describe("Comando RPC transport", () => {
       { id: "chip-2", instance_name: "Suporte" },
     ];
     fetchMock.mockImplementation(async (url: string) => {
+      if (ehFila(url)) return filaAusente();
       if (url.includes("/rpc/get_conversations_awaiting_human_reply_multi")) {
         return json({ code: "PGRST202", message: "Could not find the function" }, 404);
       }
@@ -284,4 +298,81 @@ describe("Comando RPC transport", () => {
     expect(reports.map((r) => r.context.fallback)).toEqual(["awaiting-multi-ausente"]);
   });
 
+  // ── get_comando_fila (20280123001000): uma ida, sem esperar as caixas ──────
+  it("get_comando_fila: ONE request, lead name/owner from the server, box label from the list", async () => {
+    chips.value = [
+      { id: "chip-1", instance_name: "Comercial" },
+      { id: "chip-2", instance_name: "Suporte" },
+    ];
+    fetchMock.mockImplementation(async (url: string) => {
+      if (ehFila(url)) {
+        return json([
+          { instance_id: "chip-2", lead_id: "lead-a", normalized_phone: "5511999990001",
+            phone_number: "5511999990001", push_name: null, waiting_total: 3,
+            owner_team_member_id: null, owner_name: null, lead_name: "Lead A", lead_owner_id: "member-9",
+            last_client_message: "oi", last_client_message_at: "2026-09-08T13:00:00Z",
+            ai_replied: false, ai_replied_at: null },
+          { instance_id: "chip-1", lead_id: "lead-b", normalized_phone: "5511999990002",
+            phone_number: "5511999990002", push_name: "B", waiting_total: 3,
+            owner_team_member_id: "member-1", owner_name: "Ana", lead_name: "Lead B", lead_owner_id: "member-1",
+            last_client_message: "olá", last_client_message_at: "2026-09-08T12:00:00Z",
+            ai_replied: true, ai_replied_at: null },
+          // Sem lead: fica fora do card (filaComLead), como antes.
+          { instance_id: "chip-1", lead_id: null, normalized_phone: "5511999990003",
+            phone_number: "5511999990003", push_name: "C", waiting_total: 3,
+            owner_team_member_id: null, owner_name: null, lead_name: null, lead_owner_id: null,
+            last_client_message: "?", last_client_message_at: "2026-09-08T11:00:00Z",
+            ai_replied: false, ai_replied_at: null },
+        ]);
+      }
+      throw new Error(`Unexpected request: ${url}`);
+    });
+    const { result } = renderHook(() => useConversasAguardando(), { wrapper });
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+    expect(result.current.isError).toBe(false);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({ p_org: "org-1", p_limit: 30 });
+    expect(result.current.items.map((r) => [r.key, r.instanceName, r.displayName, r.ownerTeamMemberId, r.ownerName])).toEqual([
+      ["chip-2:5511999990001", "Suporte", "Lead A", "member-9", null],
+      ["chip-1:5511999990002", "Comercial", "B", "member-1", "Ana"],
+    ]);
+    expect(result.current.total).toBe(2);
+    expect(result.current.isDegraded).toBe(false);
+  });
+
+  it("get_comando_fila: a real error surfaces as card error, never falls back", async () => {
+    fetchMock.mockImplementation(async (url: string) => {
+      if (ehFila(url)) return json({ code: "42501", message: "forbidden" }, 403);
+      throw new Error(`Unexpected request: ${url}`);
+    });
+    const { result } = renderHook(() => useConversasAguardando(), { wrapper });
+    await waitFor(() => expect(result.current.isError).toBe(true));
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("get_comando_fila: o card NÃO espera a lista de caixas (só o fallback espera)", async () => {
+    chips.loading = true;
+    fetchMock.mockImplementation(async (url: string) => {
+      if (ehFila(url)) {
+        return json([{ instance_id: "chip-1", lead_id: "lead-a", normalized_phone: "5511999990001",
+          phone_number: "5511999990001", push_name: "A", waiting_total: 1, owner_team_member_id: null,
+          owner_name: null, lead_name: "Lead A", lead_owner_id: "member-1", last_client_message: "oi",
+          last_client_message_at: "2026-09-08T13:00:00Z", ai_replied: false, ai_replied_at: null }]);
+      }
+      throw new Error(`Unexpected request: ${url}`);
+    });
+    const { result } = renderHook(() => useConversasAguardando(), { wrapper });
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+    expect(result.current.items).toEqual([expect.objectContaining({ key: "chip-1:5511999990001", instanceName: "" })]);
+  });
+
+  it("fallback (get_comando_fila ausente): continua esperando a lista de caixas", async () => {
+    chips.loading = true;
+    fetchMock.mockImplementation(async (url: string) => (ehFila(url) ? filaAusente() : json([])));
+    const { result } = renderHook(() => useConversasAguardando(), { wrapper });
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    await new Promise((r) => setTimeout(r, 30));
+    expect(result.current.isLoading).toBe(true);
+    expect(semFila()).toHaveLength(0);
+  });
 });

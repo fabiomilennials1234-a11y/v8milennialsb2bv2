@@ -100,6 +100,15 @@ export interface OpcoesDeEnriquecimento {
    * "não veio" — quem sabe se a coluna existiu é o chamador.
    */
   etiquetasJaResolvidas?: boolean;
+  /**
+   * As linhas JÁ trazem `saved_contact_name` resolvido pelo servidor — a RPC
+   * multi devolve a coluna desde a migration 20280123000600, da MESMA linha do
+   * resumo que deu a conversa. Quando `true`, o fetch por caixa a
+   * `whatsapp_conversation_summary` (1 request por caixa × lotes de telefone,
+   * ~140 ms cada em prod) NÃO roda. Opt-in do chamador pelo mesmo motivo de
+   * `etiquetasJaResolvidas`: `null` é resposta válida ("sem nome salvo").
+   */
+  nomesSalvosJaResolvidos?: boolean;
 }
 
 /**
@@ -111,10 +120,15 @@ export interface OpcoesDeEnriquecimento {
  */
 export async function enriquecerContatos(
   contatos: ChatContact[],
-  { tagsCriticas, organizationId, etiquetasJaResolvidas = false }: OpcoesDeEnriquecimento,
+  {
+    tagsCriticas,
+    organizationId,
+    etiquetasJaResolvidas = false,
+    nomesSalvosJaResolvidos = false,
+  }: OpcoesDeEnriquecimento,
 ): Promise<ChatContact[]> {
   if (contatos.length === 0) return contatos;
-  if (organizationId) await enrichSavedContactNames(contatos, organizationId);
+  if (organizationId && !nomesSalvosJaResolvidos) await enrichSavedContactNames(contatos, organizationId);
 
   // Falha de enriquecimento NÃO derruba a lista. Mas degradar em SILÊNCIO foi o
   // que escondeu o incidente — agora deixa rastro no console.

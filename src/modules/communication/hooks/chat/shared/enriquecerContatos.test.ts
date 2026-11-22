@@ -35,6 +35,7 @@ vi.mock("./savedContactNames", async (importOriginal) => ({
 }));
 
 import { enriquecerContatos } from "./enriquecerContatos";
+import { enrichSavedContactNames } from "./savedContactNames";
 import type { ChatContact, ChatContactTag } from "../types";
 
 const VIP: ChatContactTag = { id: "t-vip", name: "VIP", color: "#f00" };
@@ -112,5 +113,19 @@ describe("enriquecerContatos", () => {
       expect.arrayContaining(["leads", "lead_tags", "whatsapp_conversation_tags"]),
     );
     expect(contatos[0].tags).toEqual([VIP, QUENTE]);
+  });
+
+  it("nomes salvos já resolvidos pela RPC: o fetch por caixa ao resumo NÃO sai e c.saved_contact_name fica como veio", async () => {
+    vi.mocked(enrichSavedContactNames).mockClear();
+    const c = contato({ saved_contact_name: "Agenda" });
+    await enriquecerContatos([c], { tagsCriticas: false, organizationId: "org-1", nomesSalvosJaResolvidos: true });
+    expect(enrichSavedContactNames).not.toHaveBeenCalled();
+    expect(c.saved_contact_name).toBe("Agenda");
+  });
+
+  it("sem a opção: busca o nome salvo no resumo como antes", async () => {
+    vi.mocked(enrichSavedContactNames).mockClear();
+    await enriquecerContatos([contato()], { tagsCriticas: false, organizationId: "org-1" });
+    expect(enrichSavedContactNames).toHaveBeenCalledTimes(1);
   });
 });

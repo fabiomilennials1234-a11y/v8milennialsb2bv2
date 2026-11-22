@@ -37,6 +37,17 @@ import {
  * cabeçalho da migration 20270819100000 conta que esse descasamento já vazou o
  * inbox inteiro uma vez.
  *
+ * ─── UMA IDA, SEM ESPERAR AS CAIXAS (21/11/2026) ─────────────────────────────
+ *
+ * Até aqui eram três idas em SÉRIE: caixas do usuário → RPC multi → `leads`
+ * (nome/dono das linhas sem push_name/dono). Agora a fila sai de
+ * `get_comando_fila` (migration 20280123001000): resolve as caixas legíveis NO
+ * SERVIDOR (o mesmo conjunto: fora de status 'error') e devolve nome e dono do
+ * lead lidos sob a RLS do usuário (SECURITY INVOKER — lead que ele não vê vem
+ * NULL, como o `select` em `leads` vinha). A lista de caixas continua sendo
+ * buscada, EM PARALELO, só para rotular a caixa da linha e para `semChips`.
+ * Função ausente (PGRST202) ⇒ o caminho antigo abaixo, intacto.
+ *
  * Expand/contract: se a RPC multi ainda não estiver no banco (front sobe antes
  * da migration — PostgREST responde PGRST202), cai na RPC por chip, o
  * comportamento antigo, e relata ao Sentry. SÓ PGRST202: qualquer outro erro da
@@ -129,6 +140,13 @@ interface AwaitingRow {
   owner_name?: string | null;
 }
 
+/** Linha de `get_comando_fila`: a da multi + nome e dono do lead (RLS do usuário). */
+interface ComandoFilaRow extends AwaitingRow {
+  instance_id: string;
+  lead_name: string | null;
+  lead_owner_id: string | null;
+}
+
 interface FallbackRow {
   phone_number: string;
   normalized_phone: string;
@@ -204,6 +222,11 @@ type AwaitingRpc = (
   fn: "get_conversations_awaiting_human_reply",
   args: { p_org: string; p_instance: string; p_limit: number },
 ) => PromiseLike<{ data: AwaitingRow[] | null; error: PgLikeError | null }>;
+
+type ComandoFilaRpc = (
+  fn: "get_comando_fila",
+  args: { p_org: string; p_limit: number },
+) => PromiseLike<{ data: ComandoFilaRow[] | null; error: PgLikeError | null }>;
 
 type AwaitingMultiRpc = (
   fn: "get_conversations_awaiting_human_reply_multi",
@@ -447,6 +470,59 @@ export async function buscarFilaAguardando(
 }
 
 /**
+ * A fila numa ida: `get_comando_fila`. `null` = a função não está no schema
+ * (SÓ PGRST202, a mesma regra estreita de `isMultiAusenteDoSchema`) — o hook
+ * cai em `buscarFilaAguardando`. Qualquer outro erro sobe.
+ *
+ * A caixa da linha sai com `instanceName` vazio: o nome vem da lista de caixas,
+ * buscada em paralelo, e é aplicado na leitura (`rotularCaixas`).
+ */
+export async function buscarFilaDoComando(
+  organizationId: string,
+  limit: number,
+): Promise<FilaResult | null> {
+  const chamar = supabase.rpc.bind(supabase) as unknown as ComandoFilaRpc;
+  const { data, error } = await chamar("get_comando_fila", { p_org: organizationId, p_limit: limit });
+  if (error) {
+    if (isMultiAusenteDoSchema(error)) return null;
+    throw error;
+  }
+  const linhas = data ?? [];
+  return {
+    total: linhas[0]?.waiting_total ?? 0,
+    degraded: false,
+    chipsComErro: 0,
+    rows: linhas.map((r) => ({
+      key: `${r.instance_id}:${r.normalized_phone}`,
+      phoneNumber: r.phone_number ?? r.normalized_phone,
+      normalizedPhone: r.normalized_phone,
+      // Mesma cascata de `mapearLinhas`: push_name → nome do lead → número.
+      displayName: r.push_name ?? r.lead_name ?? r.phone_number ?? r.normalized_phone,
+      leadId: r.lead_id,
+      instanceId: r.instance_id,
+      instanceName: "",
+      lastClientMessage: r.last_client_message,
+      lastClientMessageAt: r.last_client_message_at,
+      aiReplied: r.ai_replied,
+      aiRepliedAt: r.ai_replied_at,
+      ownerTeamMemberId: r.owner_team_member_id ?? r.lead_owner_id ?? null,
+      ownerName: r.owner_name ?? null,
+    })),
+  };
+}
+
+/** Rotula a caixa de cada linha pelo nome da lista de caixas (vazio se não achar). */
+export function rotularCaixas(
+  rows: readonly ConversaAguardando[],
+  chips: readonly ChipRef[],
+): ConversaAguardando[] {
+  const nomePorCaixa = new Map(chips.map((c) => [c.id, c.instance_name]));
+  return rows.map((r) =>
+    r.instanceName ? r : { ...r, instanceName: nomePorCaixa.get(r.instanceId) ?? "" },
+  );
+}
+
+/**
  * @param limite quantas conversas mostrar depois de juntar todos os chips.
  */
 export function useConversasAguardando(limite = 10): ConversasAguardandoResult {
@@ -470,9 +546,27 @@ export function useConversasAguardando(limite = 10): ConversasAguardandoResult {
   // de cache, não duas).
   const chipIds = chips.map((c) => c.id).sort().join(",");
 
-  const fila = useQuery({
-    // `escopo` entra na chave: admin e vendedor não podem compartilhar cache,
-    // senão um troca-troca de conta serve a lista errada.
+  // Caminho de uma ida: não espera as caixas (o servidor as resolve).
+  // `escopo` entra na chave: admin e vendedor não podem compartilhar cache,
+  // senão um troca-troca de conta serve a lista errada.
+  const filaDoComando = useQuery({
+    queryKey: [
+      "comando",
+      "conversas-aguardando",
+      "fila",
+      organizationId,
+      limiteBusca,
+      escopo,
+      meuTeamMemberId,
+    ],
+    queryFn: () => buscarFilaDoComando(organizationId as string, limiteBusca),
+    enabled: !!organizationId && isReady,
+    staleTime: 30_000,
+  });
+  // `null` = get_comando_fila ausente neste banco: o caminho antigo assume.
+  const semFilaDoComando = filaDoComando.isSuccess && filaDoComando.data === null;
+
+  const filaAntiga = useQuery({
     queryKey: [
       "comando",
       "conversas-aguardando",
@@ -493,15 +587,17 @@ export function useConversasAguardando(limite = 10): ConversasAguardandoResult {
     // Espera a identidade resolver. Sem isso o primeiro fetch sairia com
     // `escopo: "meu"` para um admin, e o resultado errado ficaria em cache
     // sob uma chave que nunca mais é pedida. Sem chip não há pergunta a fazer.
-    enabled: !!organizationId && isReady && chips.length > 0,
+    enabled: semFilaDoComando && !!organizationId && isReady && chips.length > 0,
     staleTime: 30_000,
   });
+  const fila = semFilaDoComando ? filaAntiga : filaDoComando;
+  const linhas = rotularCaixas(fila.data?.rows ?? [], chips);
 
   // Só conversa com LEAD cadastrado (decisão do CTO em 2026-09-04): o card
   // é uma fila de trabalho sobre gente conhecida. Número solto continua no
   // /chat — some daqui, não do produto. A regra vive em lib para ser
   // testada sem React nem banco.
-  const comLead = filaComLead(fila.data?.rows ?? []);
+  const comLead = filaComLead(linhas);
 
   const resultado: Omit<ConversasAguardandoResult, "refetch"> = {
     items: comLead.slice(0, limite),
@@ -512,7 +608,10 @@ export function useConversasAguardando(limite = 10): ConversasAguardandoResult {
     // Enquanto a identidade não resolve não há query nenhuma, e em React
     // Query v5 query desabilitada reporta `isLoading: false` — sem esta
     // linha o card afirmaria "ninguém esperando" durante o boot.
-    isLoading: instLoading || identidadePendente || fila.isLoading,
+    // A lista de caixas só segura o card no caminho antigo (PGRST202), que
+    // depende dela. Com get_comando_fila o card pinta assim que a RPC volta;
+    // o rótulo da caixa chega junto com a lista, em paralelo.
+    isLoading: identidadePendente || fila.isLoading || (semFilaDoComando && instLoading),
     isError: !!instError || fila.isError,
     isDegraded: fila.data?.degraded === true,
     semChips: !instLoading && !instError && !identidadePendente && chips.length === 0,

@@ -68,8 +68,8 @@ describe("Dashboard (Comando) — aquecimento", () => {
   });
 });
 
-describe("useConversasAguardando — RPC com caixas no cache", () => {
-  it("sai na primeira renderização, sem nova ida de caixas", async () => {
+describe("useConversasAguardando — fila numa ida", () => {
+  it("sai na primeira renderização, sem esperar nem repetir a ida das caixas", async () => {
     vi.resetModules();
     const rpc = vi.fn(async () => ({ data: [], error: null }));
     const from = vi.fn();
@@ -89,7 +89,8 @@ describe("useConversasAguardando — RPC com caixas no cache", () => {
 
     renderHook(() => useConversasAguardando(10), { wrapper });
     await waitFor(() => expect(rpc).toHaveBeenCalledTimes(1));
-    expect(rpc).toHaveBeenCalledWith("get_conversations_awaiting_human_reply_multi", expect.objectContaining({ p_instances: ["chip-1"] }));
+    // get_comando_fila resolve as caixas no servidor: nenhum p_instances no payload.
+    expect(rpc).toHaveBeenCalledWith("get_comando_fila", { p_org: "org-1", p_limit: 30 });
     expect(from).not.toHaveBeenCalled();
     qc.clear();
   });

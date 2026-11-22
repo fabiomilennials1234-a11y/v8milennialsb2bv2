@@ -718,6 +718,29 @@ rodar_pendentes() {
   echo "==> pendentes seguem vermelhas, como esperado. Não derrubam o job."
 }
 
+# Tripwire do whatsapp_thread_manifest SECURITY DEFINER (20280123000800): ele
+# reproduz à mão a RLS de SELECT de whatsapp_messages. Policy nova/alterada (ou
+# função chamada por ela trocada de assinatura/DEFINER/search_path) sem revisar
+# a função = vazamento calado. Num banco montado das migrations do repo, o
+# fingerprint TEM de ser o repo-form; com as restritivas prod-only, o de prod.
+checar_fingerprint_manifest() {
+  local fp esperado tem_prod
+  fp="$(psql "$DATABASE_URL" --no-psqlrc -t -A --variable ON_ERROR_STOP=1 -c \
+        "SELECT CASE WHEN to_regprocedure('private.whatsapp_messages_policy_fingerprint()') IS NULL
+                     THEN '' ELSE private.whatsapp_messages_policy_fingerprint() END")" || exit 1
+  [ -z "$fp" ] && { echo "==> manifest: fingerprint ausente (migration 20280123000800 não aplicada) — pulado"; return 0; }
+  tem_prod="$(psql "$DATABASE_URL" --no-psqlrc -t -A -c \
+        "SELECT count(*) FROM pg_policies WHERE schemaname='public' AND tablename='whatsapp_messages' AND policyname='riofix_balcao_chat_scope'")"
+  if [ "$tem_prod" = "1" ]; then esperado="aa9b3228f5e4c80130235ca1b286c8b1"; else esperado="7e5c0bc4e85ec7c8cfd93bb97ae5425b"; fi
+  if [ "$fp" != "$esperado" ]; then
+    echo "FAIL: policy de whatsapp_messages mudou → revisar whatsapp_thread_manifest" >&2
+    echo "      fingerprint $fp, esperado $esperado (supabase/migrations/20280123000800_thread_manifest_definer_gate_unico.sql)" >&2
+    exit 1
+  fi
+  echo "==> manifest: fingerprint de policies de whatsapp_messages = revisado ($esperado)"
+}
+checar_fingerprint_manifest
+
 if command -v pg_prove >/dev/null 2>&1; then
   echo "==> using pg_prove"
   run_with_pg_prove
