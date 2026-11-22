@@ -444,4 +444,43 @@ describe("useConversasUnificadas — etiquetas vindas da RPC", () => {
     expect(opcoesDoEnriquecimento()).toMatchObject({ etiquetasJaResolvidas: false });
     aviso.mockRestore();
   });
+
+  // ── Nome salvo na própria linha (migration 20280123000600) ────────────────
+  it("linha com `saved_contact_name`: vira contato.saved_contact_name e o fetch ao resumo não sai", async () => {
+    rpcMock.mockImplementation(async (nome: string) =>
+      nome === "get_whatsapp_conversation_list_multi"
+        ? {
+            data: [
+              { ...linhaDeChip("cx-a", "5548911110000", "2026-09-03T12:00:00Z"), tags: [], saved_contact_name: "Maria Agenda" },
+              // `null` é resposta ("sem nome salvo"), não ausência.
+              { ...linhaDeChip("cx-a", "5548922220000", "2026-09-03T11:00:00Z"), tags: [], saved_contact_name: null },
+            ],
+            error: null,
+          }
+        : { data: [], error: null },
+    );
+
+    const { result } = renderHook(() => useConversasUnificadas([CHIP_A]), { wrapper: wrap(newQc()) });
+    await waitFor(() => expect(result.current.linhas).toHaveLength(2));
+
+    expect(opcoesDoEnriquecimento()).toMatchObject({ nomesSalvosJaResolvidos: true });
+    expect(result.current.linhas.map((l) => (l.contato as { saved_contact_name?: unknown }).saved_contact_name)).toEqual([
+      "Maria Agenda",
+      null,
+    ]);
+  });
+
+  it("linha sem `saved_contact_name` (banco antigo): o enriquecimento busca no resumo como antes", async () => {
+    rpcMock.mockImplementation(async (nome: string) =>
+      nome === "get_whatsapp_conversation_list_multi"
+        ? { data: [{ ...linhaDeChip("cx-a", "5548911110000", "2026-09-03T12:00:00Z"), tags: [] }], error: null }
+        : { data: [], error: null },
+    );
+
+    const { result } = renderHook(() => useConversasUnificadas([CHIP_A]), { wrapper: wrap(newQc()) });
+    await waitFor(() => expect(result.current.linhas).toHaveLength(1));
+
+    expect(opcoesDoEnriquecimento()).toMatchObject({ nomesSalvosJaResolvidos: false });
+    expect("saved_contact_name" in (result.current.linhas[0].contato as object)).toBe(false);
+  });
 });

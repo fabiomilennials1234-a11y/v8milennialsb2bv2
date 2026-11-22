@@ -303,3 +303,42 @@ describe("native metrics navigation", () => {
     expect(visible.some((item) => item.path === "/metricas")).toBe(true);
   });
 });
+
+/**
+ * Perf boot (21/11): o ProtectedRoute deixou de esperar a edge de permissões,
+ * então a navegação monta antes da matriz. Enquanto ela carrega, porta com
+ * chave de permissão fica fechada para membro; master/admin não esperam nada.
+ */
+describe("makeCanViewRoute — matriz de permissão carregando", () => {
+  it("membro com matriz carregando NÃO vê rota com chave, mas vê rota sem chave", () => {
+    expect(NAV_VIEW_PERMISSIONS["/equipe"]).toBe("team.view");
+    const membro = makeCanViewRoute({ isMaster: false, isAdmin: false, featurePerms: undefined, permissionsLoading: true });
+    expect(membro("/equipe")).toBe(false);
+    expect(NAV_VIEW_PERMISSIONS["/funil"]).toBe("pipeline.view");
+    expect(membro("/funil/vendas")).toBe(false);
+    const semChave = "/rota-sem-chave-de-permissao";
+    expect(NAV_VIEW_PERMISSIONS[semChave]).toBeUndefined();
+    expect(membro(semChave)).toBe(true);
+  });
+
+  it("carregando vence até um true em cache velho: só a resposta abre", () => {
+    const membro = makeCanViewRoute({ isMaster: false, isAdmin: false, featurePerms: { "team.view": true }, permissionsLoading: true });
+    expect(membro("/equipe")).toBe(false);
+  });
+
+  it.each([
+    ["admin", { isMaster: false, isAdmin: true }],
+    ["master", { isMaster: true, isAdmin: false }],
+  ])("%s vê tudo mesmo com a matriz carregando", (_, papel) => {
+    const pode = makeCanViewRoute({ ...papel, featurePerms: undefined, permissionsLoading: true });
+    expect(pode("/equipe")).toBe(true);
+    expect(pode("/lista-fria")).toBe(true);
+  });
+
+  it("depois de carregar volta à regra de sempre (só false explícito fecha)", () => {
+    const membro = makeCanViewRoute({ isMaster: false, isAdmin: false, featurePerms: {}, permissionsLoading: false });
+    expect(membro("/equipe")).toBe(true);
+    const negado = makeCanViewRoute({ isMaster: false, isAdmin: false, featurePerms: { "team.view": false } });
+    expect(negado("/equipe")).toBe(false);
+  });
+});

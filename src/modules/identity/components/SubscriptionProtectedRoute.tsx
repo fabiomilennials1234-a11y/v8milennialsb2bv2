@@ -8,15 +8,14 @@
  * - 'suspended' / 'cancelled' / 'expired' → SubscriptionBlockedPage.
  */
 
-import { ReactNode, useEffect, useState } from "react";
+import { ReactNode } from "react";
 import { Navigate } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "../auth/contexts/AuthContext";
-import {
-  checkCurrentUserSubscription,
-  type SubscriptionStatus,
-} from "@/modules/billing/lib/subscription";
+import { subscriptionStatusQueryOptions } from "@/modules/billing/lib/subscription";
 import { useUserRole, useCanManageCopilot } from "../permissions/hooks/useUserRole";
-import { useIdentity } from "../auth/hooks/useIdentity";
+import { useMasterAuth } from "../master/hooks/useMasterAuth";
+import { useCurrentTeamMember } from "../org-team/hooks/useCurrentTeamMember";
 import { TorqueLoader } from "@/components/ui/branding/TorqueLoader";
 import { IS_DEMO_MODE } from "@/core/demo-mode";
 import { OverdueBanner } from "@/modules/billing/components/subscription/OverdueBanner";
@@ -34,54 +33,56 @@ export function SubscriptionProtectedRoute({
   requireActive = false,
 }: SubscriptionProtectedRouteProps) {
   const { user, loading: authLoading } = useAuth();
+  // `useMasterAuth`, não `useIdentity`: o `isLoading` de useIdentity inclui as
+  // feature permissions (edge get-member-permissions), e a assinatura não
+  // depende delas. Esperá-las punha uma ida de rede a mais na frente da tela.
+  const { isMaster, isLoading: masterLoading } = useMasterAuth();
+  const {
+    data: teamMember,
+    isLoading: teamMemberLoading,
+    error: teamMemberError,
+    refetch: refetchTeamMember,
+  } = useCurrentTeamMember();
   const { data: userRole, isLoading: roleLoading } = useUserRole();
-  const { isMaster, isLoading: masterLoading } = useIdentity();
   const { canManage: canManageCopilot, isLoading: copilotLoading } =
     useCanManageCopilot();
-  const [subscription, setSubscription] = useState<SubscriptionStatus | null>(
-    null
-  );
-  const [loading, setLoading] = useState(true);
+
+  // A org do vínculo ATUAL (a que o org switcher escolheu). Antes a checagem
+  // fazia o próprio `team_members … limit 1` sem ordem: em multi-org podia
+  // validar a assinatura de OUTRA org. Mudança declarada (perf boot, 21/11).
+  const organizationId = teamMember?.organization_id ?? null;
+
+  // Dispara assim que a org existe — em paralelo a papel/feature permissions,
+  // não depois delas. Mesma chave do `useCopilotSubscription`: uma RPC só.
+  const subscriptionQuery = useQuery({
+    ...subscriptionStatusQueryOptions(organizationId),
+    enabled: !!user && !!organizationId && !masterLoading && !isMaster,
+  });
+  const subscription = subscriptionQuery.data ?? null;
   // `undefined` = sem erro. Separado de `subscription` de propósito: falha de
   // consulta não é "sem assinatura" (ADR-0038).
-  const [loadError, setLoadError] = useState<unknown>(undefined);
-  const [attempt, setAttempt] = useState(0);
+  const loadError: unknown =
+    subscriptionQuery.error ?? (!teamMember && teamMemberError ? teamMemberError : undefined);
+  const subscriptionLoading =
+    !!organizationId && subscriptionQuery.isPending && !subscriptionQuery.isError;
 
   const canBypassSubscription =
     isMaster || userRole?.role === "admin" || canManageCopilot;
 
-  useEffect(() => {
-    if (isMaster && !masterLoading) {
-      setLoading(false);
-      return;
-    }
-    if (!authLoading && !masterLoading && user) {
-      setLoading(true);
-      setLoadError(undefined);
-      checkCurrentUserSubscription()
-        .then(setSubscription)
-        .catch((error: unknown) => {
-          setSubscription(null);
-          setLoadError(error ?? null);
-        })
-        .finally(() => setLoading(false));
-    } else if (!authLoading && !user) {
-      setLoading(false);
-    }
-    // `user?.id`, não `user`: o efeito faz setState na entrada (loading/erro),
-    // então depender da IDENTIDADE do objeto transformaria qualquer `user`
-    // recriado por render num laço que martela a RPC — o teste pegou 1.091
-    // chamadas em 200 ms com um dublê que recriava o objeto.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user?.id, authLoading, isMaster, masterLoading, attempt]);
+  // Papel e permissão de Copilot só decidem o caso trial + requireActive. Fora
+  // dele não há o que esperar: a tela não muda com a resposta.
+  const decisaoDependeDoPapel = requireActive && subscription?.status === "trial";
 
-  // Loading gate. Não espera copilotLoading nem roleLoading quando master
-  // (master bypassa subscription check — esperar por feature perms cria
-  // loader eterno se a query falha trocando para org sem team_member real).
-  // Incidente 2026-04-24.
+  // Loading gate. Master não espera nada além da própria identidade (master
+  // bypassa subscription — esperar por feature perms cria loader eterno se a
+  // query falha trocando para org sem team_member real). Incidente 2026-04-24.
   const effectiveLoading = isMaster
-    ? authLoading || masterLoading || loading
-    : authLoading || loading || roleLoading || masterLoading || copilotLoading;
+    ? authLoading || masterLoading
+    : authLoading ||
+      masterLoading ||
+      teamMemberLoading ||
+      subscriptionLoading ||
+      (decisaoDependeDoPapel && (roleLoading || copilotLoading));
 
   // Modo demonstração (build de dev + VITE_DEMO_MODE=1). Em produção
   // `IS_DEMO_MODE` é a constante `false` e este bloco não chega ao bundle.
@@ -115,7 +116,10 @@ export function SubscriptionProtectedRoute({
         title="Não conseguimos confirmar sua assinatura"
         fallback="Não foi possível verificar a assinatura da sua organização. Tente de novo em instantes."
         source="boot:subscription"
-        onRetry={() => setAttempt((n) => n + 1)}
+        onRetry={() => {
+          if (!teamMember) void refetchTeamMember();
+          if (organizationId) void subscriptionQuery.refetch();
+        }}
       />
     );
   }

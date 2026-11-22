@@ -194,11 +194,7 @@ describe('ProtectedRoute', () => {
 
   // 2
   it('shows spinner when master is loading', () => {
-    mockUseIdentity.mockReturnValue({
-      userId: 'user-1', organizationId: 'org-1', teamMemberId: 'tm-1',
-      effectiveRole: null, isMaster: false, isAdmin: false,
-      features: {}, isLoading: true, isReady: false,
-    });
+    mockUseMasterAuth.mockReturnValue({ isMaster: false, isLoading: true });
 
     render(
       <ProtectedRoute>
@@ -481,11 +477,7 @@ describe('ProtectedRoute', () => {
 
   // 13
   it('master bypasses all org checks (renders children even without teamMember)', () => {
-    mockUseIdentity.mockReturnValue({
-      userId: 'user-1', organizationId: null, teamMemberId: null,
-      effectiveRole: 'admin' as const, isMaster: true, isAdmin: true,
-      features: {}, isLoading: false, isReady: true,
-    });
+    mockUseMasterAuth.mockReturnValue({ isMaster: true, isLoading: false });
     mockUseCurrentTeamMember.mockReturnValue({ data: null, isLoading: false, error: null });
 
     render(
@@ -564,5 +556,93 @@ describe('ProtectedRoute — Gestor de Portfólio', () => {
 
     expect(screen.getByText('app')).toBeInTheDocument();
     expect(screen.queryByTestId('navigate')).not.toBeInTheDocument();
+  });
+});
+
+// ─── Perf boot (21/11): o gate deixou de esperar as feature permissions ──────
+//
+// Antes o ProtectedRoute lia `useIdentity().isLoading`, que soma a edge
+// get-member-permissions: TODA tela esperava a edge em série. Agora ele usa
+// `useMasterAuth` direto. Os casos abaixo travam as duas metades da troca:
+// a espera pela edge saiu, e nenhum dos gates que importam saiu junto.
+describe('ProtectedRoute — não espera feature permissions', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    setDefaults();
+    // Dublê PENDURADO: identity/feature permissions nunca resolvem.
+    mockUseIdentity.mockReturnValue({
+      userId: 'user-1', organizationId: 'org-1', teamMemberId: 'tm-1',
+      effectiveRole: 'member' as const, isMaster: false, isAdmin: false,
+      features: {}, isLoading: true, isReady: false,
+    });
+  });
+
+  it('com vínculo ativo, renderiza sem esperar a edge de permissões', () => {
+    render(
+      <ProtectedRoute>
+        <p>protected</p>
+      </ProtectedRoute>,
+    );
+    expect(screen.getByText('protected')).toBeInTheDocument();
+    expect(mockUseIdentity).not.toHaveBeenCalled();
+  });
+
+  it('sem vínculo continua bloqueando, mesmo com a edge pendurada', () => {
+    mockUseCurrentTeamMember.mockReturnValue({ data: null, isLoading: false, error: null });
+    render(
+      <ProtectedRoute>
+        <p>protected</p>
+      </ProtectedRoute>,
+    );
+    expect(screen.getByText('Aguardando Ativação')).toBeInTheDocument();
+    expect(screen.queryByText('protected')).not.toBeInTheDocument();
+  });
+
+  it('team_member ainda carregando segura o loader (para master também)', () => {
+    mockUseMasterAuth.mockReturnValue({ isMaster: true, isLoading: false });
+    mockUseCurrentTeamMember.mockReturnValue({ data: null, isLoading: true, error: null });
+    render(
+      <ProtectedRoute requireOrganization={false}>
+        <p>protected</p>
+      </ProtectedRoute>,
+    );
+    expect(screen.getByAltText('Torque')).toBeInTheDocument();
+    expect(screen.queryByText('protected')).not.toBeInTheDocument();
+  });
+
+  it('vínculo desativado continua bloqueando', () => {
+    mockUseCurrentTeamMember.mockReturnValue({
+      data: makeTeamMember({ is_active: false }), isLoading: false, error: null,
+    });
+    render(
+      <ProtectedRoute>
+        <p>protected</p>
+      </ProtectedRoute>,
+    );
+    expect(screen.getByText('Conta Desativada')).toBeInTheDocument();
+    expect(screen.queryByText('protected')).not.toBeInTheDocument();
+  });
+
+  it('master sem segundo fator continua indo para /seguranca/mfa', () => {
+    mockUseMasterAuth.mockReturnValue({ isMaster: true, isLoading: false });
+    mockUseMfaRequired.mockReturnValue({ required: true, isLoading: false });
+    render(
+      <ProtectedRoute>
+        <p>protected</p>
+      </ProtectedRoute>,
+    );
+    expect(screen.getByTestId('navigate')).toHaveAttribute('data-to', '/seguranca/mfa');
+    expect(screen.queryByText('protected')).not.toBeInTheDocument();
+  });
+
+  it('sem sessão continua indo para /auth', () => {
+    mockUseAuth.mockReturnValue({ user: null, loading: false, signOut: vi.fn() });
+    mockUseCurrentTeamMember.mockReturnValue({ data: undefined, isLoading: false, error: null });
+    render(
+      <ProtectedRoute>
+        <p>protected</p>
+      </ProtectedRoute>,
+    );
+    expect(screen.getByTestId('navigate')).toHaveAttribute('data-to', '/auth');
   });
 });

@@ -68,7 +68,11 @@ export function useNavigationModel(): NavigationModel {
   const location = useLocation();
   const { isAdmin, isMaster } = useIdentity();
   const { data: userRole } = useUserRole();
-  const { data: featurePerms } = useFeaturePermissions();
+  const { data: featurePerms, isLoading: featurePermsLoading, isError: featurePermsError } = useFeaturePermissions();
+  // Fail-closed enquanto a matriz não respondeu: `isLoading` cobre o voo; sem
+  // dado e sem erro (consulta ainda desabilitada, esperando a org) também conta.
+  // Erro fica de fora de propósito — comportamento herdado.
+  const permissionsLoading = featurePermsLoading || (featurePerms === undefined && !featurePermsError);
   const { hasFeature } = useOrgFeatures();
   const { orgType } = useOrganization();
   // Registro único dos funis — a lateral reflete cor/ícone que o usuário
@@ -86,8 +90,8 @@ export function useNavigationModel(): NavigationModel {
   const leadsLabel = useLeadsLabel();
 
   const canViewRoute = useMemo(
-    () => makeCanViewRoute({ isMaster, isAdmin, featurePerms }),
-    [isMaster, isAdmin, featurePerms],
+    () => makeCanViewRoute({ isMaster, isAdmin, featurePerms, permissionsLoading }),
+    [isMaster, isAdmin, featurePerms, permissionsLoading],
   );
 
   /** Plano é uma camada à parte da permissão: admin também é barrado, master não. */

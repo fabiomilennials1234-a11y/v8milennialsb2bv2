@@ -56,11 +56,33 @@ interface CreateOpportunityModalProps {
   onSuccess?: () => void;
 }
 
-export function CreateOpportunityModal({ 
-  open, 
-  onOpenChange, 
+/**
+ * O Dialog é só a casca. Tudo que busca dado (leads da org, o pipe WhatsApp
+ * inteiro, etapas, equipe) mora em `CreateOpportunityContent`, que o Radix só
+ * monta com o modal ABERTO (DialogContent sem forceMount). Antes os hooks
+ * rodavam no corpo do modal FECHADO: a tela do Funil (trio WhatsApp) pagava
+ * `pipeline_entries?limit=500` com embeds a cada abertura — 286 ms a 1,2 s em
+ * prod (21/11/2026) — para um modal que quase nunca abre. Fechar desmonta o
+ * conteúdo, e o estado do formulário some junto (sem reset manual).
+ */
+export function CreateOpportunityModal({
+  open,
+  onOpenChange,
   onSuccess,
 }: CreateOpportunityModalProps) {
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-[650px] max-h-[85vh] overflow-hidden flex flex-col">
+        <CreateOpportunityContent onOpenChange={onOpenChange} onSuccess={onSuccess} />
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function CreateOpportunityContent({
+  onOpenChange,
+  onSuccess,
+}: Omit<CreateOpportunityModalProps, "open">) {
   const [step, setStep] = useState<"select-lead" | "opportunity-details">("select-lead");
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null);
@@ -101,23 +123,6 @@ export function CreateOpportunityModal({
   }, [leads, searchTerm, leadsInPipe]);
 
   const selectedLead = leads.find(l => l.id === selectedLeadId);
-
-  // Reset state when modal closes
-  useEffect(() => {
-    if (!open) {
-      setTimeout(() => {
-        setStep("select-lead");
-        setSearchTerm("");
-        setSelectedLeadId(null);
-        setFormData({
-          pre_sale_responsible_id: "",
-          sale_responsible_id: "",
-          scheduled_date: "",
-          notes: "",
-        });
-      }, 200);
-    }
-  }, [open]);
 
   // Auto-fill responsible from lead
   useEffect(() => {
@@ -171,249 +176,247 @@ export function CreateOpportunityModal({
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[650px] max-h-[85vh] overflow-hidden flex flex-col">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2.5">
-            <IconChip icon={Zap} tone="gold" />
-            {step === "select-lead" ? "Selecionar lead" : "Nova oportunidade"}
-          </DialogTitle>
-        </DialogHeader>
+    <>
+      <DialogHeader>
+        <DialogTitle className="flex items-center gap-2.5">
+          <IconChip icon={Zap} tone="gold" />
+          {step === "select-lead" ? "Selecionar lead" : "Nova oportunidade"}
+        </DialogTitle>
+      </DialogHeader>
 
-        <AnimatePresence mode="wait">
-          {step === "select-lead" ? (
-            <motion.div
-              key="select-lead"
-              initial={{ opacity: 0, x: -20 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: -20 }}
-              className="flex-1 flex flex-col min-h-0"
-            >
-              {/* Search */}
-              <div className="relative mb-4">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                <Input
-                  placeholder="Buscar lead por nome, empresa ou email..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-9"
+      <AnimatePresence mode="wait">
+        {step === "select-lead" ? (
+          <motion.div
+            key="select-lead"
+            initial={{ opacity: 0, x: -20 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: -20 }}
+            className="flex-1 flex flex-col min-h-0"
+          >
+            {/* Search */}
+            <div className="relative mb-4">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+              <Input
+                placeholder="Buscar lead por nome, empresa ou email..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="pl-9"
+              />
+            </div>
+
+            {/* Lead List */}
+            <ScrollArea className="flex-1 -mx-6 px-6">
+              <div className="space-y-2 pb-4">
+                {leadsLoading ? (
+                  <div className="text-center py-8 text-muted-foreground">
+                    Carregando leads...
+                  </div>
+                ) : filteredLeads.length === 0 ? (
+                  <div className="text-center py-8 text-muted-foreground">
+                    {leadsInPipe.size > 0 && searchTerm === "" 
+                      ? "Todos os leads já estão no funil"
+                      : "Nenhum lead encontrado"
+                    }
+                  </div>
+                ) : (
+                  filteredLeads.map((lead) => {
+                    const originInfo = originLabels[lead.origin || "outro"] || originLabels.outro;
+                    
+                    return (
+                      <motion.button
+                        key={lead.id}
+                        onClick={() => handleSelectLead(lead.id)}
+                        whileHover={{ scale: 1.01 }}
+                        whileTap={{ scale: 0.99 }}
+                        className={cn(
+                          "w-full p-4 rounded-2xl border text-left transition-all",
+                          "hover:border-primary/50 hover:bg-muted/40",
+                          selectedLeadId === lead.id && "border-primary bg-primary-soft"
+                        )}
+                      >
+                        <div className="flex items-start justify-between">
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2">
+                              <User className="w-4 h-4 text-muted-foreground" />
+                              <span className="font-medium truncate">{lead.name}</span>
+                              <Badge variant="soft" className="gap-1.5 text-xs">
+                                <span className={cn("h-1.5 w-1.5 shrink-0 rounded-full", originInfo.color)} aria-hidden />
+                                {originInfo.label}
+                              </Badge>
+                            </div>
+                            {lead.company && (
+                              <div className="flex items-center gap-2 mt-1 text-muted-foreground">
+                                <Building2 className="w-3.5 h-3.5" />
+                                <span className="text-sm truncate">{lead.company}</span>
+                              </div>
+                            )}
+                            <div className="flex items-center gap-3 mt-2">
+                              {lead.faturamento && (
+                                <Badge variant="outline" className="text-xs">
+                                  {lead.faturamento}
+                                </Badge>
+                              )}
+                              {lead.segment && (
+                                <Badge variant="secondary" className="text-xs">
+                                  {lead.segment}
+                                </Badge>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      </motion.button>
+                    );
+                  })
+                )}
+              </div>
+            </ScrollArea>
+          </motion.div>
+        ) : (
+          <motion.div
+            key="opportunity-details"
+            initial={{ opacity: 0, x: 20 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: 20 }}
+            className="flex-1 overflow-y-auto"
+          >
+            {/* Selected Lead Info */}
+            {selectedLead && (
+              <div className="mb-6 rounded-2xl bg-sunken p-4">
+                <div className="flex items-start justify-between">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <User className="w-4 h-4 text-muted-foreground" />
+                      <span className="font-medium">{selectedLead.name}</span>
+                      <Badge variant="soft" className="gap-1.5 text-xs">
+                        <span
+                          className={cn("h-1.5 w-1.5 shrink-0 rounded-full", originLabels[selectedLead.origin || "outro"]?.color || "bg-muted-foreground/50")}
+                          aria-hidden
+                        />
+                        {originLabels[selectedLead.origin || "outro"]?.label || "Outro"}
+                      </Badge>
+                    </div>
+                    {selectedLead.company && (
+                      <p className="text-sm text-muted-foreground mt-1">
+                        {selectedLead.company}
+                      </p>
+                    )}
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setStep("select-lead")}
+                  >
+                    Trocar Lead
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            {/* Opportunity Form */}
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="grid gap-2">
+                  <Label>Resp. Pré-Venda</Label>
+                  <Select
+                    value={formData.pre_sale_responsible_id}
+                    onValueChange={(v) => setFormData({ ...formData, pre_sale_responsible_id: v })}
+                  >
+                    <SelectTrigger>
+                      <User className="w-4 h-4 mr-2 text-muted-foreground" />
+                      <SelectValue placeholder="Selecionar (opcional)" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {activeMembers.map(member => (
+                        <SelectItem key={member.id} value={member.id}>{member.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="grid gap-2">
+                  <Label>Resp. Venda</Label>
+                  <Select
+                    value={formData.sale_responsible_id}
+                    onValueChange={(v) => setFormData({ ...formData, sale_responsible_id: v })}
+                  >
+                    <SelectTrigger>
+                      <User className="w-4 h-4 mr-2 text-muted-foreground" />
+                      <SelectValue placeholder="Selecionar (opcional)" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {activeMembers.map(member => (
+                        <SelectItem key={member.id} value={member.id}>{member.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              <div className="grid gap-2">
+                <Label htmlFor="scheduled_date">Data agendada (opcional)</Label>
+                <div className="relative">
+                  <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                  <Input
+                    id="scheduled_date"
+                    type="datetime-local"
+                    value={formData.scheduled_date}
+                    onChange={(e) => setFormData({ ...formData, scheduled_date: e.target.value })}
+                    className="pl-9"
+                  />
+                </div>
+              </div>
+
+              <div className="grid gap-2">
+                <Label htmlFor="notes">Observações</Label>
+                <Textarea
+                  id="notes"
+                  value={formData.notes}
+                  onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+                  placeholder="Detalhes sobre a oportunidade, contexto do lead..."
+                  rows={3}
                 />
               </div>
 
-              {/* Lead List */}
-              <ScrollArea className="flex-1 -mx-6 px-6">
-                <div className="space-y-2 pb-4">
-                  {leadsLoading ? (
-                    <div className="text-center py-8 text-muted-foreground">
-                      Carregando leads...
-                    </div>
-                  ) : filteredLeads.length === 0 ? (
-                    <div className="text-center py-8 text-muted-foreground">
-                      {leadsInPipe.size > 0 && searchTerm === "" 
-                        ? "Todos os leads já estão no funil"
-                        : "Nenhum lead encontrado"
-                      }
-                    </div>
-                  ) : (
-                    filteredLeads.map((lead) => {
-                      const originInfo = originLabels[lead.origin || "outro"] || originLabels.outro;
-                      
-                      return (
-                        <motion.button
-                          key={lead.id}
-                          onClick={() => handleSelectLead(lead.id)}
-                          whileHover={{ scale: 1.01 }}
-                          whileTap={{ scale: 0.99 }}
-                          className={cn(
-                            "w-full p-4 rounded-2xl border text-left transition-all",
-                            "hover:border-primary/50 hover:bg-muted/40",
-                            selectedLeadId === lead.id && "border-primary bg-primary-soft"
-                          )}
-                        >
-                          <div className="flex items-start justify-between">
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center gap-2">
-                                <User className="w-4 h-4 text-muted-foreground" />
-                                <span className="font-medium truncate">{lead.name}</span>
-                                <Badge variant="soft" className="gap-1.5 text-xs">
-                                  <span className={cn("h-1.5 w-1.5 shrink-0 rounded-full", originInfo.color)} aria-hidden />
-                                  {originInfo.label}
-                                </Badge>
-                              </div>
-                              {lead.company && (
-                                <div className="flex items-center gap-2 mt-1 text-muted-foreground">
-                                  <Building2 className="w-3.5 h-3.5" />
-                                  <span className="text-sm truncate">{lead.company}</span>
-                                </div>
-                              )}
-                              <div className="flex items-center gap-3 mt-2">
-                                {lead.faturamento && (
-                                  <Badge variant="outline" className="text-xs">
-                                    {lead.faturamento}
-                                  </Badge>
-                                )}
-                                {lead.segment && (
-                                  <Badge variant="secondary" className="text-xs">
-                                    {lead.segment}
-                                  </Badge>
-                                )}
-                              </div>
-                            </div>
-                          </div>
-                        </motion.button>
-                      );
-                    })
-                  )}
-                </div>
-              </ScrollArea>
-            </motion.div>
-          ) : (
-            <motion.div
-              key="opportunity-details"
-              initial={{ opacity: 0, x: 20 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: 20 }}
-              className="flex-1 overflow-y-auto"
-            >
-              {/* Selected Lead Info */}
-              {selectedLead && (
-                <div className="mb-6 rounded-2xl bg-sunken p-4">
-                  <div className="flex items-start justify-between">
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <User className="w-4 h-4 text-muted-foreground" />
-                        <span className="font-medium">{selectedLead.name}</span>
-                        <Badge variant="soft" className="gap-1.5 text-xs">
-                          <span
-                            className={cn("h-1.5 w-1.5 shrink-0 rounded-full", originLabels[selectedLead.origin || "outro"]?.color || "bg-muted-foreground/50")}
-                            aria-hidden
-                          />
-                          {originLabels[selectedLead.origin || "outro"]?.label || "Outro"}
-                        </Badge>
-                      </div>
-                      {selectedLead.company && (
-                        <p className="text-sm text-muted-foreground mt-1">
-                          {selectedLead.company}
-                        </p>
-                      )}
-                    </div>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => setStep("select-lead")}
-                    >
-                      Trocar Lead
-                    </Button>
-                  </div>
-                </div>
-              )}
-
-              {/* Opportunity Form */}
-              <div className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="grid gap-2">
-                    <Label>Resp. Pré-Venda</Label>
-                    <Select
-                      value={formData.pre_sale_responsible_id}
-                      onValueChange={(v) => setFormData({ ...formData, pre_sale_responsible_id: v })}
-                    >
-                      <SelectTrigger>
-                        <User className="w-4 h-4 mr-2 text-muted-foreground" />
-                        <SelectValue placeholder="Selecionar (opcional)" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {activeMembers.map(member => (
-                          <SelectItem key={member.id} value={member.id}>{member.name}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="grid gap-2">
-                    <Label>Resp. Venda</Label>
-                    <Select
-                      value={formData.sale_responsible_id}
-                      onValueChange={(v) => setFormData({ ...formData, sale_responsible_id: v })}
-                    >
-                      <SelectTrigger>
-                        <User className="w-4 h-4 mr-2 text-muted-foreground" />
-                        <SelectValue placeholder="Selecionar (opcional)" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {activeMembers.map(member => (
-                          <SelectItem key={member.id} value={member.id}>{member.name}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-
-                <div className="grid gap-2">
-                  <Label htmlFor="scheduled_date">Data agendada (opcional)</Label>
-                  <div className="relative">
-                    <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                    <Input
-                      id="scheduled_date"
-                      type="datetime-local"
-                      value={formData.scheduled_date}
-                      onChange={(e) => setFormData({ ...formData, scheduled_date: e.target.value })}
-                      className="pl-9"
-                    />
-                  </div>
-                </div>
-
-                <div className="grid gap-2">
-                  <Label htmlFor="notes">Observações</Label>
-                  <Textarea
-                    id="notes"
-                    value={formData.notes}
-                    onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-                    placeholder="Detalhes sobre a oportunidade, contexto do lead..."
-                    rows={3}
-                  />
-                </div>
-
-                {/* Info about next steps */}
-                <motion.div
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className="rounded-2xl border border-primary/25 bg-primary-soft p-4"
-                >
-                  <div className="flex items-center gap-2 text-primary-soft-foreground">
-                    <Zap className="w-5 h-5" />
-                    <span className="font-medium">Próximos passos</span>
-                  </div>
-                  <p className="text-sm text-muted-foreground mt-1">
-                    O lead entrará na etapa "Novo" e poderá ser movido através do funil.
-                    Etapas de sucesso com transição configurada movem o negócio ao funil de destino automaticamente.
-                  </p>
-                </motion.div>
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-
-        {/* Footer */}
-        <div className="flex justify-between gap-2 pt-4 border-t mt-4">
-          {step === "opportunity-details" && (
-            <Button variant="outline" onClick={() => setStep("select-lead")}>
-              Voltar
-            </Button>
-          )}
-          <div className="flex gap-2 ml-auto">
-            <Button variant="outline" onClick={() => onOpenChange(false)}>
-              Cancelar
-            </Button>
-            {step === "opportunity-details" && (
-              <Button 
-                onClick={handleSubmit}
-                disabled={createPipeWhatsapp.isPending}
+              {/* Info about next steps */}
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="rounded-2xl border border-primary/25 bg-primary-soft p-4"
               >
-                {createPipeWhatsapp.isPending ? "Criando..." : "Criar oportunidade"}
-              </Button>
-            )}
-          </div>
+                <div className="flex items-center gap-2 text-primary-soft-foreground">
+                  <Zap className="w-5 h-5" />
+                  <span className="font-medium">Próximos passos</span>
+                </div>
+                <p className="text-sm text-muted-foreground mt-1">
+                  O lead entrará na etapa "Novo" e poderá ser movido através do funil.
+                  Etapas de sucesso com transição configurada movem o negócio ao funil de destino automaticamente.
+                </p>
+              </motion.div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Footer */}
+      <div className="flex justify-between gap-2 pt-4 border-t mt-4">
+        {step === "opportunity-details" && (
+          <Button variant="outline" onClick={() => setStep("select-lead")}>
+            Voltar
+          </Button>
+        )}
+        <div className="flex gap-2 ml-auto">
+          <Button variant="outline" onClick={() => onOpenChange(false)}>
+            Cancelar
+          </Button>
+          {step === "opportunity-details" && (
+            <Button 
+              onClick={handleSubmit}
+              disabled={createPipeWhatsapp.isPending}
+            >
+              {createPipeWhatsapp.isPending ? "Criando..." : "Criar oportunidade"}
+            </Button>
+          )}
         </div>
-      </DialogContent>
-    </Dialog>
+      </div>
+    </>
   );
 }

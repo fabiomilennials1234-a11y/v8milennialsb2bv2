@@ -150,6 +150,12 @@ interface LinhaDeChip {
    * RPC de uma caixa — e é a ausência, não o `[]`, que manda fazer o fan-out.
    */
   tags?: ChatContactTag[];
+  /**
+   * Nome salvo do contato, da linha do resumo que deu a conversa — desde a
+   * migration 20280123000600. AUSENTE em banco sem ela e na queda por caixa; a
+   * ausência (não o `null`) manda buscar no resumo como antes.
+   */
+  saved_contact_name?: string | null;
 }
 
 /** A linha do canal oficial no formato multi — a de sempre, mais a caixa de origem. */
@@ -275,6 +281,10 @@ export function useConversasUnificadas(
       // TABLE da função. `every` também cobre a queda por caixa, que nunca a traz.
       const etiquetasJaResolvidas =
         linhas.length > 0 && linhas.every((r) => Array.isArray(r.tags));
+      // Mesma regra para o nome salvo: a chave existe (mesmo `null`) em toda
+      // linha ⇒ a RPC já resolveu, e o fetch por caixa ao resumo não sai.
+      const nomesSalvosJaResolvidos =
+        linhas.length > 0 && linhas.every((r) => "saved_contact_name" in r);
       const contatos: ChatContact[] = linhas.map((r) => ({
         channel: "whatsapp",
         // A caixa sai da RESPOSTA, nunca do argumento — ver cabeçalho.
@@ -302,9 +312,15 @@ export function useConversasUnificadas(
         is_group: r.is_group === true,
         funnels: [],
         qualification_tier: null,
+        ...(nomesSalvosJaResolvidos ? { saved_contact_name: r.saved_contact_name ?? null } : {}),
       }));
 
-      await enriquecerContatos(contatos, { tagsCriticas, organizationId, etiquetasJaResolvidas });
+      await enriquecerContatos(contatos, {
+        tagsCriticas,
+        organizationId,
+        etiquetasJaResolvidas,
+        nomesSalvosJaResolvidos,
+      });
 
       // `cheia` é medido, não presumido: é o que sustenta o piso de confiança do
       // motor. Uma org com menos conversas que o limite ficaria marcada como

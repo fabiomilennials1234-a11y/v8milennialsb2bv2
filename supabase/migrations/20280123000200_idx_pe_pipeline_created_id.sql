@@ -1,0 +1,22 @@
+-- 20280123000200_idx_pe_pipeline_created_id.sql — pipeline_entries por funil na ordem da página
+--
+-- ⚠ NÃO RODAR EM TRANSAÇÃO. Arquivo de UM statement, sem BEGIN/COMMIT:
+-- CREATE INDEX CONCURRENTLY falha dentro de bloco de transação. Aplicar sozinho
+-- (Management API: 1 chamada só com este statement; psql em autocommit), com
+-- `SET lock_timeout = '3s'` na sessão quando der. NÃO por apply_migration do
+-- MCP nem `supabase db push` em lote.
+-- Se cair no meio, sobra índice INVALID: conferir
+--   SELECT indisvalid FROM pg_index WHERE indexrelid = 'public.idx_pe_pipeline_created_id'::regclass;
+-- false → rollback/20280123000200_idx_pe_pipeline_created_id.sql e repetir. Registrar a versão no ledger à mão.
+--
+-- POR QUÊ (prod, 21/11/2026): `pipeline_entries?pipeline_id=eq.X&order=created_at.desc
+-- &limit=500` com embeds (usePipelineEntries, AcoesDoDia, TV) não tem índice
+-- (pipeline_id, created_at): os embeds (5× team_members + lead_tags, sob RLS)
+-- são calculados para TODAS as linhas do funil antes do top-N sort — 286 ms /
+-- 30 k buffers no funil de 3.984 cards. Com o índice o Limit para no 500º.
+-- (pipeline_id, created_at DESC, id DESC) é também a ordem total do cursor de
+-- get_pipeline_page. Tabela de 80 k linhas / 60 MB: build de segundos, ~3 MB.
+--
+-- Rollback: supabase/migrations/rollback/20280123000200_idx_pe_pipeline_created_id.sql
+
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_pe_pipeline_created_id ON public.pipeline_entries USING btree (pipeline_id, created_at DESC, id DESC);

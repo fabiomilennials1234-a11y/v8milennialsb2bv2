@@ -1,4 +1,10 @@
-import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  useInfiniteQuery,
+  useMutation,
+  useQuery,
+  useQueryClient,
+  type QueryClient,
+} from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useCanDo, useCurrentTeamMember, useOrganization } from "@/modules/identity";
@@ -15,6 +21,11 @@ import {
 import { executarMoveCustom } from "../custom/useCustomPipelines";
 import { useFunilRealtime } from "./useFunilRealtime";
 import { fetchStageCounts, stageCountsQueryKey } from "@/modules/pipelines/lib/stage-counts-query";
+import {
+  fetchPipelineBoard,
+  pipelineBoardKey,
+  semearQuadroNoCache,
+} from "@/modules/pipelines/lib/pipeline-board-query";
 import {
   aplicarMoveOtimista,
   cancelarFetchDoMove,
@@ -125,6 +136,44 @@ export async function buscarPaginaDoFunil(
   return ((data ?? []) as RpcPageRow[]).map(flattenRpcEntry);
 }
 
+/**
+ * O quadro numa ida (`get_pipeline_board`): busca e SEMEIA as chaves das
+ * colunas e da contagem — as mesmas que a tela e o prefetch leem. Devolve se
+ * semeou; `false` = RPC ausente/erro, e as colunas buscam sozinhas como antes.
+ * Compartilhado pela tela (`usePaginatedFunil`) e pelo prefetch do trilho.
+ */
+export async function carregarQuadroDoFunil(
+  queryClient: QueryClient,
+  args: {
+    pipelineId: string;
+    organizationId: string;
+    stageKeys: readonly string[];
+    filterParams: ReturnType<typeof sharedRpcFilterParams>;
+  },
+): Promise<{ semeado: boolean }> {
+  const stageKeys = args.stageKeys.slice(0, MAX_STAGES);
+  if (stageKeys.length === 0) return { semeado: false };
+  const pedidoEm = Date.now();
+  const quadro = await fetchPipelineBoard({
+    pipelineId: args.pipelineId,
+    stageKeys,
+    filterParams: args.filterParams,
+    pageSize: PAGE_SIZE,
+  });
+  if (!quadro) return { semeado: false };
+  semearQuadroNoCache(queryClient, {
+    pipelineId: args.pipelineId,
+    organizationId: args.organizationId,
+    filtersKey: filtersKeyDe(args.filterParams),
+    stageKeys,
+    countsArgs: { ...args.filterParams, p_pipeline_id: args.pipelineId },
+    quadro,
+    pedidoEm,
+    paraCard: flattenRpcEntry,
+  });
+  return { semeado: true };
+}
+
 function useStageSlot(
   pipelineId: string | undefined,
   filterParams: ReturnType<typeof sharedRpcFilterParams>,
@@ -151,6 +200,7 @@ export function usePaginatedFunil(
   filters: PaginatedFilters = {},
 ) {
   const { organizationId, isReady } = useOrganization();
+  const queryClient = useQueryClient();
   const [debouncedSearch, setDebouncedSearch] = useState(filters.search ?? "");
   const debounceRef = useRef<ReturnType<typeof setTimeout>>();
 
@@ -196,6 +246,35 @@ export function usePaginatedFunil(
 
   const filtersKey = useMemo(() => filtersKeyDe(filterParams), [filterParams]);
 
+  const stageKeys = useMemo(() => stages.map((s) => s.stage_key), [stages]);
+  const stageKeysDoQuadro = useMemo(() => stageKeys.slice(0, MAX_STAGES), [stageKeys]);
+
+  // O quadro numa ida (1ª página de todas as colunas + contagens), semeando as
+  // chaves de sempre. Colunas e contagem só se habilitam DEPOIS dele: com o
+  // cache cheio e fresco elas não saem; sem o quadro (RPC ausente/erro) saem
+  // como antes. Sem refetch por foco: o quadro é a carga inicial, quem se
+  // mantém fresca depois é cada coluna (Realtime, move, fetchMore).
+  const quadroHabilitado =
+    isReady && !!organizationId && !!pipelineId && stageKeysDoQuadro.length > 0;
+  const quadroQuery = useQuery({
+    queryKey: pipelineBoardKey(pipelineId, organizationId, filtersKey, stageKeysDoQuadro),
+    queryFn: () =>
+      carregarQuadroDoFunil(queryClient, {
+        pipelineId: pipelineId!,
+        organizationId: organizationId!,
+        stageKeys: stageKeysDoQuadro,
+        filterParams,
+      }),
+    enabled: quadroHabilitado,
+    staleTime: 30_000,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+    retry: false,
+  });
+  const quadroResolvido =
+    !quadroHabilitado || (!quadroQuery.isFetching && quadroQuery.status !== "pending");
+  const aguardandoQuadro = !quadroResolvido;
+
   // Chave/busca compartilhadas com o cabeçalho (`useFunilMetrics`): mesmo
   // recorte ⇒ mesma chave ⇒ uma ida só no mount (ver `stage-counts-query`).
   const countsArgs = useMemo(
@@ -205,13 +284,11 @@ export function usePaginatedFunil(
   const countsQuery = useQuery({
     queryKey: stageCountsQueryKey(pipelineId, countsArgs),
     queryFn: () => fetchStageCounts(countsArgs),
-    enabled: isReady && !!organizationId && !!pipelineId,
+    enabled: isReady && !!organizationId && !!pipelineId && quadroResolvido,
     staleTime: 30_000,
   });
 
   const stageCounts = countsQuery.data ?? {};
-
-  const stageKeys = useMemo(() => stages.map((s) => s.stage_key), [stages]);
 
   // Fixed-slots (mesma regra do board legado): sempre MAX_STAGES hooks,
   // habilita só os ativos — a contagem de hooks por render nunca muda.
@@ -226,7 +303,7 @@ export function usePaginatedFunil(
         key,
         filtersKey,
         organizationId,
-        isReady && !!organizationId && i < stageKeys.length,
+        isReady && !!organizationId && i < stageKeys.length && quadroResolvido,
       ),
     );
   }
@@ -246,21 +323,26 @@ export function usePaginatedFunil(
         fetchMore: () => {
           if (q.hasNextPage && !q.isFetchingNextPage) q.fetchNextPage();
         },
-        isLoading: q.isLoading,
+        // Coluna desligada esperando o quadro não é "carregada vazia".
+        isLoading: q.isLoading || (aguardandoQuadro && !q.data),
       };
     }
     return map;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [stageKeys, ...stageQueries.map((q) => q.data), stageCounts]);
+  }, [stageKeys, ...stageQueries.map((q) => q.data), stageCounts, aguardandoQuadro]);
 
+  const isLoadingCounts = countsQuery.isLoading || (aguardandoQuadro && !countsQuery.data);
   const isLoading =
-    countsQuery.isLoading || stageQueries.some((q, i) => i < stageKeys.length && q.isLoading);
+    isLoadingCounts ||
+    stageQueries.some(
+      (q, i) => i < stageKeys.length && (q.isLoading || (aguardandoQuadro && !q.data)),
+    );
 
   return {
     stageData,
     stageCounts,
     isLoading,
-    isLoadingCounts: countsQuery.isLoading,
+    isLoadingCounts,
     organizationId,
     /** Recorte ativo — quem busca a etapa inteira (selecionar todos) reusa o MESMO. */
     filterParams,

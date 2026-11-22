@@ -6,6 +6,7 @@ import { MAX_STAGES, sharedRpcFilterParams } from "../model/usePaginatedPipeline
 import {
   buscarEtapasDoFunil,
   buscarPaginaDoFunil,
+  carregarQuadroDoFunil,
   funilStagesKey,
 } from "../model/usePaginatedFunil";
 import {
@@ -17,6 +18,7 @@ import {
 import { resolveFunil } from "@/modules/pipelines/lib/resolve-funil";
 import { filtersKeyDe, pipelinePageKey } from "@/modules/pipelines/lib/pipeline-page-key";
 import { fetchStageCounts, stageCountsQueryKey } from "@/modules/pipelines/lib/stage-counts-query";
+import { pipelineBoardKey } from "@/modules/pipelines/lib/pipeline-board-query";
 import type { PipelinePageCursor } from "@/modules/pipelines/lib/pipeline-page-cursor";
 
 /** Mesmo frescor da tela (`usePaginatedFunil`): prefetch não pode durar mais que ela. */
@@ -49,11 +51,13 @@ export function recorteInicialDoFunil(organizationId: string, donoForcado: strin
 }
 
 /**
- * Aquece o board de um funil na intenção (hover/foco no trilho): etapas,
- * contagens e a 1ª página de cada coluna — nas MESMAS chaves que a tela lê
- * (`pipelinePageKey`, `stageCountsQueryKey`, `funilStagesKey`), com os
- * mesmos queryFns. Um aquecimento em voo por vez; o funil precisa já estar
- * na lista em cache (o trilho a carrega para montar o item).
+ * Aquece o board de um funil na intenção (hover/foco no trilho): etapas e,
+ * numa ida só (`get_pipeline_board`), contagens + 1ª página de cada coluna —
+ * semeadas nas MESMAS chaves que a tela lê (`pipelinePageKey`,
+ * `stageCountsQueryKey`), sob a MESMA chave de quadro que a tela usa
+ * (`pipelineBoardKey`): a tela aberta logo depois não repete a ida. Sem o
+ * quadro (RPC ausente), cai no aquecimento antigo, coluna por coluna. Um
+ * aquecimento em voo por vez; o funil precisa já estar na lista em cache.
  */
 export function usePrefetchPipes() {
   const queryClient = useQueryClient();
@@ -78,6 +82,21 @@ export function usePrefetchPipes() {
         const filterParams = recorteInicialDoFunil(organizationId, donoForcado);
         const filtersKey = filtersKeyDe(filterParams);
         const countsArgs = { ...filterParams, p_pipeline_id: pipeline.id };
+        const stageKeys = stages.slice(0, MAX_STAGES).map((s) => s.stage_key);
+
+        // A tela lê `semeado` do MESMO cache: aquecido aqui, ela não busca de novo.
+        const quadro = await queryClient.fetchQuery({
+          queryKey: pipelineBoardKey(pipeline.id, organizationId, filtersKey, stageKeys),
+          queryFn: () =>
+            carregarQuadroDoFunil(queryClient, {
+              pipelineId: pipeline.id,
+              organizationId,
+              stageKeys,
+              filterParams,
+            }),
+          staleTime: FRESCOR_COLUNA_MS,
+        });
+        if (quadro.semeado) return;
 
         await Promise.all([
           queryClient.prefetchQuery({

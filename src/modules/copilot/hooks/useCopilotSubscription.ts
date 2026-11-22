@@ -6,8 +6,8 @@
  */
 
 import { useQuery } from "@tanstack/react-query";
-import { checkCurrentUserSubscription } from "@/modules/billing/lib/subscription";
-import { useCanManageCopilot } from "@/modules/identity";
+import { subscriptionStatusQueryOptions } from "@/modules/billing/lib/subscription";
+import { useCanManageCopilot, useCurrentTeamMember } from "@/modules/identity";
 /**
  * Verifica se o usuário tem acesso ao Copilot
  *
@@ -25,17 +25,16 @@ import { useCanManageCopilot } from "@/modules/identity";
  */
 export function useCopilotSubscription() {
   const { canManage, isLoading: adminLoading } = useCanManageCopilot();
-  const { data: subscription, isLoading: subLoading } = useQuery({
-    queryKey: ["subscription", "copilot"],
-    queryFn: async () => {
-      const sub = await checkCurrentUserSubscription();
-      return sub;
-    },
-    staleTime: 5 * 60 * 1000, // Cache por 5 minutos
-    refetchOnWindowFocus: false,
-  });
+  // Org do vínculo atual — a mesma que o guard de rota checa. Mesma chave e
+  // mesmas opções (`subscriptionStatusQueryOptions`): com os dois montados sai
+  // UMA RPC, não duas (antes: chave própria + `limit 1` sem ordem).
+  const { data: teamMember, isLoading: teamMemberLoading } = useCurrentTeamMember();
+  const organizationId = teamMember?.organization_id ?? null;
+  const { data: subscription = null, isLoading: subLoading } = useQuery(
+    subscriptionStatusQueryOptions(organizationId),
+  );
 
-  const isLoading = adminLoading || subLoading;
+  const isLoading = adminLoading || teamMemberLoading || subLoading;
 
   // Admins e Vendedores têm acesso completo, outros precisam de subscription ativa
   const hasAccess = canManage ||

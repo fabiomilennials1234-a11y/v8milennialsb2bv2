@@ -1,0 +1,24 @@
+-- 20280123000900_idx_wa_msgs_incoming_instance_cover.sql — mensagens recebidas por caixa, cobrindo telefone e lead
+--
+-- ⚠ NÃO RODAR EM TRANSAÇÃO. Arquivo de UM statement, sem BEGIN/COMMIT:
+-- CREATE INDEX CONCURRENTLY falha dentro de bloco de transação. Aplicar sozinho
+-- (Management API: 1 chamada só com este statement; psql em autocommit), com
+-- `SET lock_timeout = '3s'` na sessão quando der. NÃO por apply_migration do
+-- MCP nem `supabase db push` em lote.
+-- Se cair no meio, sobra índice INVALID: conferir
+--   SELECT indisvalid FROM pg_index WHERE indexrelid = 'public.idx_wa_msgs_incoming_instance_cover'::regclass;
+-- false → rollback/20280123000900_idx_wa_msgs_incoming_instance_cover.sql e repetir. Registrar a versão no ledger à mão.
+--
+-- POR QUÊ (prod, 21/11/2026): get_conversations_awaiting_human_reply_multi (Comando)
+-- agrega as recebidas da janela por (caixa, telefone, lead). O índice de
+-- cobertura atual (idx_whatsapp_msgs_unread_cover) não tem lead_id: o caminho
+-- strict faz heap fetch por mensagem (22 k buffers em 54 caixas; 3,2 s frio
+-- para o membro Café). Com lead_id no INCLUDE a varredura é index-only
+-- (depende do visibility map). Substitui idx_whatsapp_msgs_unread_cover — o DROP
+-- dele é follow-up, só depois de medir idx_scan em prod. Custo ~200–230 MB
+-- (idx_whatsapp_msgs_unread_cover tem 167 MB em prod; +lead_id no INCLUDE).
+-- ANTES DE RODAR: folga de disco ≥ 2× o índice + WAL (ver 20280123000400).
+--
+-- Rollback: supabase/migrations/rollback/20280123000900_idx_wa_msgs_incoming_instance_cover.sql
+
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_wa_msgs_incoming_instance_cover ON public.whatsapp_messages USING btree (organization_id, instance_id, "timestamp" DESC) INCLUDE (normalized_phone, lead_id) WHERE direction = 'incoming' AND deleted_at IS NULL AND is_group = false;

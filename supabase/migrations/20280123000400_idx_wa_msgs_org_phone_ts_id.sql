@@ -1,0 +1,28 @@
+-- 20280123000400_idx_wa_msgs_org_phone_ts_id.sql — mensagens de um telefone na ordem da conversa
+--
+-- ⚠ NÃO RODAR EM TRANSAÇÃO. Arquivo de UM statement, sem BEGIN/COMMIT:
+-- CREATE INDEX CONCURRENTLY falha dentro de bloco de transação. Aplicar sozinho
+-- (Management API: 1 chamada só com este statement; psql em autocommit), com
+-- `SET lock_timeout = '3s'` na sessão quando der. NÃO por apply_migration do
+-- MCP nem `supabase db push` em lote.
+-- Se cair no meio, sobra índice INVALID: conferir
+--   SELECT indisvalid FROM pg_index WHERE indexrelid = 'public.idx_wa_msgs_org_phone_ts_id'::regclass;
+-- false → rollback/20280123000400_idx_wa_msgs_org_phone_ts_id.sql e repetir. Registrar a versão no ledger à mão.
+--
+-- POR QUÊ (prod, 21/11/2026): whatsapp_thread_manifest lê as 100 últimas mensagens
+-- de um telefone, mas o índice usado (organization_id, normalized_phone) não tem
+-- ordem: lê TODAS as mensagens do telefone e faz top-N sort — linear no
+-- histórico (p90 26 k, p99 58 k mensagens); 2,9 s quente / 9,3 s frio, timeout
+-- de 15 s na cauda. Com (org, telefone, timestamp DESC, id DESC) o Limit para
+-- em ~100 linhas. Supera idx_whatsapp_messages_normalized_phone (prefixo) — o
+-- DROP dele é follow-up, só depois de medir idx_scan em prod.
+-- Custo: ~350–400 MB (referência: idx_whatsapp_msgs_org_phone_instance_ts, mesma
+-- largura de chave e mesmo predicado parcial, tem 353 MB em prod em 21/11/2026)
+-- em tabela de 7,4 GB, e escrita a mais por INSERT.
+-- ANTES DE RODAR: folga de disco ≥ 2× o índice + WAL (o build CONCURRENTLY
+-- escreve o índice inteiro e o WAL dele): conferir GET /v1/projects/<ref>/config/disk/util
+-- (fs_avail_bytes) e pg_database_size(); sem ~1 GB livre, não rodar.
+--
+-- Rollback: supabase/migrations/rollback/20280123000400_idx_wa_msgs_org_phone_ts_id.sql
+
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_wa_msgs_org_phone_ts_id ON public.whatsapp_messages USING btree (organization_id, normalized_phone, "timestamp" DESC, id DESC) WHERE normalized_phone IS NOT NULL;

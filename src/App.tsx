@@ -40,6 +40,7 @@ import { PushPermissionPrompt } from "@/modules/platform/components/PushPermissi
 import { lazyRetry } from "@/core/stale-build-recovery";
 import { rastrearCarga, registrarRotas } from "@/core/route-prefetch";
 import { definirOrgDaMedicao } from "@/core/perf/medicao";
+import { AquecerTelaAtual, iniciarCargaDaRotaAtual } from "@/core/boot-prewarm";
 
 /**
  * Rota sob demanda. `lazyRetry`: uma nova tentativa para falha passageira; chunk
@@ -190,6 +191,10 @@ registrarRotas({
   "/configuracoes": importarConfiguracoes,
   "/configuracoes/:tab": importarConfiguracoes,
 });
+// Carga fria: o chunk da rota em que o app abriu começa a descer AGORA, em
+// paralelo à sessão e aos gates — não depois deles. Só baixa; quem decide se a
+// página monta continuam sendo os gates (src/core/boot-prewarm.ts).
+iniciarCargaDaRotaAtual();
 
 // Master route/layout — carregam sob demanda quando acessar /master
 import { MasterRoute } from "@/modules/identity/master/components/MasterRoute";
@@ -1125,6 +1130,9 @@ const App = () => {
               <AuthProvider>
                 <ReportIdentityBridge />
                 <MedicaoOrgBridge />
+                {/* 1ª consulta da tela assim que o vínculo atual resolve —
+                    em paralelo aos gates de permissão e assinatura. */}
+                <AquecerTelaAtual />
                 <TorqueIntro />
                 {/* Abertura de segunda-feira: o resumo da semana anterior, uma vez
                     por usuário por semana. Espera o TorqueIntro acabar; o chunk da
