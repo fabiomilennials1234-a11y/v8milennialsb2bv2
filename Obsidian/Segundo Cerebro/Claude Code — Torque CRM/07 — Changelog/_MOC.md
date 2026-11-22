@@ -191,3 +191,5 @@ owner: claude-agent
 - [[2026-11-16-google-watch-channel-unico|Watch channel do Google Calendar deixa de se multiplicar]]
 - [[2026-11-19-regua-de-espera-volta-1|2026-11-19 — Régua de espera (CX ①), volta 1 do revisor/qa]]
 - [[2026-11-19-regua-de-espera-volta-2|2026-11-19 — Régua de espera (CX ①), volta 2 do revisor/qa]]
+- [[2026-11-21-perf-banco-trilha-b|2026-11-21 — Perf do banco (pacotes 2–4, Trilha B): Funil, Chat e Comando]]
+- [[2026-11-21-perf-boot-trilha-a|2026-11-21 — Perf do boot (pacote 1, Trilha A): gates em paralelo e aquecimento da tela]]
