@@ -200,6 +200,8 @@ export interface ConfiguracaoEditavel {
   prazoDiasUteis?: number;
   comoPagar?: string | null;
   etapaAposQuebraId?: string | null;
+  etapaPromessaId?: string | null;
+  promessaMaxDias?: number | null;
 }
 
 export function useSalvarRegua() {
@@ -217,6 +219,8 @@ export function useSalvarRegua() {
       if (c.prazoDiasUteis !== undefined) dados.prazo_dias_uteis = c.prazoDiasUteis;
       if (c.comoPagar !== undefined) dados.como_pagar = c.comoPagar ?? "";
       if (c.etapaAposQuebraId !== undefined) dados.etapa_apos_quebra_id = c.etapaAposQuebraId ?? "";
+      if (c.etapaPromessaId !== undefined) dados.etapa_promessa_id = c.etapaPromessaId ?? "";
+      if (c.promessaMaxDias !== undefined) dados.promessa_max_dias = c.promessaMaxDias === null ? "" : c.promessaMaxDias;
       const { error } = await rpcCobranca("cobranca_regua_salvar", { p_org: organizationId as string, p_dados: dados as Json });
       if (error) throw error;
     },

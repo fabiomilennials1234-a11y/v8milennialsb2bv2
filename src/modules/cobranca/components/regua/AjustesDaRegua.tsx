@@ -128,6 +128,8 @@ interface Formulario {
   prazoDiasUteis: string;
   comoPagar: string;
   etapaQuebra: string;
+  etapaPromessa: string;
+  promessaMaxDias: string;
 }
 
 function doConfig(c: ConfiguracaoDaRegua): Formulario {
@@ -141,6 +143,8 @@ function doConfig(c: ConfiguracaoDaRegua): Formulario {
     prazoDiasUteis: String(c.prazoDiasUteis),
     comoPagar: c.comoPagar ?? "",
     etapaQuebra: c.etapaAposQuebraId ?? SEM,
+    etapaPromessa: c.etapaPromessaId ?? SEM,
+    promessaMaxDias: c.promessaMaxDias === null ? "" : String(c.promessaMaxDias),
   };
 }
 
@@ -166,6 +170,10 @@ export function AjustesDaRegua({ config, etapas, podeEditar }: { config: Configu
     if (!(id >= 1 && id <= 30)) e.intervaloDias = "De 1 a 30 dias.";
     const pz = inteiro(f.prazoDiasUteis);
     if (!(pz >= 1 && pz <= 10)) e.prazoDiasUteis = "De 1 a 10 dias úteis.";
+    if (f.promessaMaxDias !== "") {
+      const pm = inteiro(f.promessaMaxDias);
+      if (!(pm >= 1 && pm <= 365)) e.promessaMaxDias = "De 1 a 365 dias, ou vazio para sem limite.";
+    }
     if (f.comoPagar.length > 600) e.comoPagar = "Até 600 caracteres.";
     for (const faixa of Object.values(f.janela)) {
       if (faixa && !(faixa.inicio < faixa.fim)) e.janela = "Em cada dia, o início vem antes do fim.";
@@ -199,6 +207,8 @@ export function AjustesDaRegua({ config, etapas, podeEditar }: { config: Configu
         prazoDiasUteis: inteiro(f.prazoDiasUteis),
         comoPagar: f.comoPagar.trim() || null,
         etapaAposQuebraId: f.etapaQuebra === SEM ? null : f.etapaQuebra,
+        etapaPromessaId: f.etapaPromessa === SEM ? null : f.etapaPromessa,
+        promessaMaxDias: f.promessaMaxDias === "" ? null : inteiro(f.promessaMaxDias),
       },
       { onSuccess: () => toast.success("Ajustes da régua salvos."), onError: falha("Não foi possível salvar os ajustes.") },
     );
@@ -279,6 +289,24 @@ export function AjustesDaRegua({ config, etapas, podeEditar }: { config: Configu
                   ))}
                 </SelectContent>
               </Select>
+            </Campo>
+            <Campo id="rg-promessa" rotulo="Quem promete pagar vai para" dica="Destino do card em “Registrar promessa”.">
+              <Select value={f.etapaPromessa} onValueChange={(v) => setF({ ...f, etapaPromessa: v })}>
+                <SelectTrigger id="rg-promessa">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={SEM}>Não mover o card</SelectItem>
+                  {etapasAbertas.map((e) => (
+                    <SelectItem key={e.id} value={e.id}>
+                      {e.nome}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </Campo>
+            <Campo id="rg-promessa-max" rotulo="Prazo máximo da promessa (dias)" erro={erros.promessaMaxDias} dica="Vazio = sem limite. A data da promessa não passa de hoje + N dias.">
+              <Input id="rg-promessa-max" inputMode="numeric" value={f.promessaMaxDias} onChange={(e) => setF({ ...f, promessaMaxDias: e.target.value.replace(/\D/g, "") })} />
             </Campo>
           </div>
         </Bloco>

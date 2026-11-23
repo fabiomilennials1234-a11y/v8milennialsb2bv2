@@ -29,6 +29,10 @@ export interface ConfiguracaoDaRegua {
   prazoDiasUteis: number;
   comoPagar: string | null;
   etapaAposQuebraId: string | null;
+  /** Coluna para onde "Registrar promessa" leva o card. null = não move. */
+  etapaPromessaId: string | null;
+  /** A promessa (uma data) vale até hoje + N dias. null = sem limite. */
+  promessaMaxDias: number | null;
   atualizadaEm: string | null;
 }
 
@@ -105,6 +109,8 @@ export function parseConfiguracao(r: Linha): ConfiguracaoDaRegua {
     prazoDiasUteis: num(r.prazo_dias_uteis, 2),
     comoPagar: str(r.como_pagar),
     etapaAposQuebraId: str(r.etapa_apos_quebra_id),
+    etapaPromessaId: str(r.etapa_promessa_id),
+    promessaMaxDias: r.promessa_max_dias == null ? null : num(r.promessa_max_dias),
     atualizadaEm: str(r.updated_at),
   };
 }
