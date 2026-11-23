@@ -18,8 +18,10 @@ interface QueryRecord {
 }
 
 const queries: QueryRecord[] = [];
+const xlsxRows: unknown[][] = [];
 
 const tableData = new Map<string, AnyRow[]>();
+const tableErrors = new Map<string, { message: string }>();
 
 function setTableData(table: string, rows: AnyRow[]) {
   tableData.set(table, rows);
@@ -27,7 +29,7 @@ function setTableData(table: string, rows: AnyRow[]) {
 
 function buildChain(record: QueryRecord) {
   const exec = () =>
-    Promise.resolve({ data: tableData.get(record.table) ?? [], error: null });
+    Promise.resolve({ data: tableData.get(record.table) ?? [], error: tableErrors.get(record.table) ?? null });
 
   const chain: Record<string, unknown> & PromiseLike<unknown> = {
     select(_cols: string) {
@@ -50,6 +52,9 @@ function buildChain(record: QueryRecord) {
       record.limited = n;
       // limit() is the terminal call for the leads query — return promise
       return exec();
+    },
+    range(from: number, to: number) {
+      return exec().then(({ data, error }) => ({ data: data.slice(from, to + 1), error }));
     },
     then(resolve: (v: unknown) => unknown, reject?: (r: unknown) => unknown) {
       return exec().then(resolve, reject);
@@ -101,15 +106,10 @@ vi.mock("@/modules/identity/permissions/hooks/useCanDo", () => ({
   useCanDo: () => ({ allowed: true, reason: "admin", isLoading: false }),
 }));
 
-// exceljs may not be installed in the test environment — only used by the
-// xlsx branch, which our tests don't exercise. Stub to keep the import
-// graph resolvable.
 vi.mock("exceljs", () => ({
-  default: {
-    Workbook: class {
-      addWorksheet() { return { addRow: () => {} }; }
-      xlsx = { writeBuffer: async () => new ArrayBuffer(0) };
-    },
+  Workbook: class {
+    addWorksheet() { return { addRow: (row: unknown[]) => xlsxRows.push(row) }; }
+    xlsx = { writeBuffer: async () => new ArrayBuffer(0) };
   },
 }));
 
@@ -130,7 +130,9 @@ function seedFunnels() {
 // jsdom doesn't ship URL.createObjectURL — stub it so the CSV branch runs.
 beforeEach(() => {
   queries.length = 0;
+  xlsxRows.length = 0;
   tableData.clear();
+  tableErrors.clear();
   // @ts-expect-error — jsdom polyfill
   URL.createObjectURL = vi.fn(() => "blob://test");
   // @ts-expect-error — jsdom polyfill
@@ -145,6 +147,58 @@ import { useExportLeads } from "@/modules/leads";
 function findQueriesFor(table: string) {
   return queries.filter((q) => q.table === table);
 }
+
+describe("useExportLeads — campos personalizados", () => {
+  beforeEach(() => {
+    seedFunnels();
+    setTableData("leads", [{ id: "L1", name: "Lead A" }, { id: "L2", name: "Lead B" }]);
+    setTableData("lead_custom_fields", [
+      { id: "F1", field_name: "Linha, interesse:", display_order: 1, created_at: null },
+      { id: "F2", field_name: "Sem resposta", display_order: 2, created_at: null },
+    ]);
+    setTableData("lead_custom_field_values", [{ lead_id: "L1", field_id: "F1", value: "=1+2" }]);
+  });
+
+  it("anexa campos ao CSV, escapa cabeçalhos com vírgula e neutraliza fórmulas", async () => {
+    const { result } = renderHook(() => useExportLeads());
+    await act(async () => {
+      expect(await result.current.exportLeads({ format: "csv" })).toEqual({ count: 2 });
+    });
+    const blob = vi.mocked(URL.createObjectURL).mock.calls[0][0] as Blob;
+    const reader = new FileReader();
+    const csv = await new Promise<string>((resolve, reject) => {
+      reader.onload = () => resolve(String(reader.result));
+      reader.onerror = () => reject(reader.error);
+      reader.readAsText(blob);
+    });
+    const [header, firstRow, secondRow] = csv.split("\n");
+    expect(header).toMatch(/,"Campo: Linha, interesse"$/);
+    expect(firstRow).toMatch(/,'=1\+2$/);
+    expect(secondRow).toMatch(/,$/);
+    expect(findQueriesFor("lead_custom_field_values")[0]).toMatchObject({
+      eqs: [["leads.organization_id", "org-123"], ["lead_custom_fields.organization_id", "org-123"]],
+      ins: [["lead_id", ["L1", "L2"]]],
+    });
+  });
+
+  it("preenche a última coluna no XLSX e mantém texto como texto", async () => {
+    const { result } = renderHook(() => useExportLeads());
+    await act(async () => {
+      await result.current.exportLeads({ format: "xlsx" });
+    });
+    expect(xlsxRows.map((row) => row.at(-1))).toEqual(["Campo: Linha, interesse", "=1+2", ""]);
+  });
+
+  it("aborta o download quando a leitura dos valores falha", async () => {
+    tableErrors.set("lead_custom_field_values", { message: "Falha de consulta" });
+    const { result } = renderHook(() => useExportLeads());
+    await act(async () => {
+      await expect(result.current.exportLeads({ format: "csv" })).rejects.toThrow("Não foi possível carregar os campos personalizados");
+    });
+    expect(URL.createObjectURL).not.toHaveBeenCalled();
+    expect(result.current.isExporting).toBe(false);
+  });
+});
 
 describe("useExportLeads — stageFilter (motor único por pipeline_id, SCRUM-635/637)", () => {
   it("stage_key (formato legado de etapa): filtra pipeline_entries por stage_key", async () => {
