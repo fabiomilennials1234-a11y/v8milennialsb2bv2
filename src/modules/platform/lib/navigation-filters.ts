@@ -39,6 +39,8 @@ export interface RuntimeGates {
   cobranca: boolean;
   /** Flag `lista_fria` da org (ADR-0042). Fail-closed. */
   listaFria: boolean;
+  /** Flag `crm_mcp` da org (IA conectada, ADR 0012). Fail-closed. */
+  crmMcp: boolean;
 }
 
 export function filterByGate(items: NavNode[], gates: RuntimeGates): NavNode[] {
@@ -46,6 +48,7 @@ export function filterByGate(items: NavNode[], gates: RuntimeGates): NavNode[] {
     if (item.gate === "meta_pages_connected") return gates.metaPagesConnected;
     if (item.gate === "cobranca") return gates.cobranca;
     if (item.gate === "lista_fria") return gates.listaFria;
+    if (item.gate === "crm_mcp") return gates.crmMcp;
     return true;
   });
 }
