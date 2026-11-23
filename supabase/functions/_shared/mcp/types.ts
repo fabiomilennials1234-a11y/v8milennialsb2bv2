@@ -61,6 +61,18 @@ export interface ToolContext {
   userId?: string;
   /** Granted PAT scopes (crm-mcp); intersect with RLS, never additive. */
   scopes?: string[];
+  /** The PAT behind this request (crm-mcp) — for audit attribution only, never authorization. */
+  patId?: string;
+  /**
+   * Plan/confirm store for write tools (crm-mcp). Opaque here; crm-mcp/tools/actions.ts types
+   * it. Absent in torque-mcp.
+   */
+  actions?: unknown;
+  /**
+   * Calls another edge function AS THE SAME USER (crm-mcp): the app's own engines (Disparos,
+   * WhatsApp proxy) are reused instead of duplicated. Opaque here; typed in crm-mcp.
+   */
+  edge?: unknown;
 }
 
 /**
@@ -90,6 +102,11 @@ export interface ToolDef {
    * (crm-mcp DESIGN §6.1). torque-mcp ignores this field.
    */
   customerExposed?: boolean;
+  /**
+   * For a non-readonly customer tool: the PAT scope it requires (e.g. "crm:write"). A write tool
+   * without one is never exposed (fail-closed). torque-mcp ignores this field.
+   */
+  requiredScope?: string;
   inputSchema: JsonSchema;
   handler: (args: Record<string, unknown>, ctx: ToolContext) => Promise<ToolResult> | ToolResult;
 }

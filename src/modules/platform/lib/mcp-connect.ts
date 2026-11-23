@@ -90,3 +90,46 @@ const REVOKE_REASON_LABEL: Record<string, string> = {
 export function revokeReasonLabel(reason: string | null): string {
   return (reason && REVOKE_REASON_LABEL[reason]) || "revogado";
 }
+
+/**
+ * Acessos de escrita que a pessoa pode dar à IA (escopos do token). Só aparecem os que já
+ * têm ferramentas no servidor; o banco recusa o que a pessoa não pode fazer no app.
+ */
+export const WRITE_SCOPE_OPTIONS: ReadonlyArray<{
+  id: string;
+  label: string;
+  description: string;
+  adminOnly?: boolean;
+}> = [
+  {
+    id: "crm:write",
+    label: "Organizar o funil",
+    description: "Mover cards entre etapas. A IA monta um plano e só aplica depois que você confirmar.",
+  },
+  {
+    id: "messages:send",
+    label: "Enviar mensagens",
+    description:
+      "Disparos de WhatsApp para uma audiência, pelo motor de Disparos (limites e anti-ban valem). " +
+      "A IA testa no seu celular e só dispara com sua confirmação.",
+    adminOnly: true,
+  },
+  {
+    id: "automations:write",
+    label: "Criar automações",
+    description:
+      "Montar automações (ex.: parado N dias numa etapa → WhatsApp). Nascem desligadas e só ligam " +
+      "com sua confirmação. Exige permissão de criar automações.",
+  },
+];
+
+const SCOPE_LABEL: Record<string, string> = {
+  read: "Ler",
+  "crm:write": "Organizar o funil",
+  "messages:send": "Enviar mensagens",
+  "automations:write": "Criar automações",
+};
+
+export function scopeLabel(scope: string): string {
+  return SCOPE_LABEL[scope] ?? scope;
+}

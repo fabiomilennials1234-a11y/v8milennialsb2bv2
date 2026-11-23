@@ -31,6 +31,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
 import { useAuth, useIdentity } from "@/modules/identity";
+import { useFeatureFlag } from "@/modules/platform/feature-flags";
 import {
   type CreatedPersonalAccessToken,
   type PersonalAccessToken,
@@ -45,8 +46,10 @@ import {
   type McpClient,
   mcpEndpoint,
   revokeReasonLabel,
+  scopeLabel,
   tokenState,
   VALIDITY_OPTIONS,
+  WRITE_SCOPE_OPTIONS,
 } from "@/modules/platform/lib/mcp-connect";
 import { botaoNoOuroSecundario } from "./settings-classes";
 
@@ -66,6 +69,7 @@ export function PersonalAccessTokensPanel() {
   const { data: tokens = [], isLoading } = usePersonalAccessTokens();
   const { user } = useAuth();
   const { isAdmin } = useIdentity();
+  const { enabled: escritaLiberada } = useFeatureFlag("crm_mcp_write");
   const criar = useCreatePersonalAccessToken();
   const revogar = useRevokePersonalAccessToken();
   const { copiado, copiar } = useCopiar();
@@ -74,6 +78,7 @@ export function PersonalAccessTokensPanel() {
   const [novo, setNovo] = useState<CreatedPersonalAccessToken | null>(null);
   const [nome, setNome] = useState("");
   const [validade, setValidade] = useState("90");
+  const [escopos, setEscopos] = useState<string[]>([]);
   const [cliente, setCliente] = useState<McpClient>("claude-code");
   const [focoId, setFocoId] = useState<string | null>(null);
   const [alvo, setAlvo] = useState<PersonalAccessToken | null>(null);
@@ -93,6 +98,7 @@ export function PersonalAccessTokensPanel() {
     if (!aberto) {
       setNome("");
       setValidade("90");
+      setEscopos([]);
       setNovo(null);
       setCliente("claude-code");
     }
@@ -102,7 +108,13 @@ export function PersonalAccessTokensPanel() {
   const handleCriar = async () => {
     if (!nome.trim()) return;
     try {
-      setNovo(await criar.mutateAsync({ name: nome.trim(), expires_in_days: Number(validade) }));
+      setNovo(
+        await criar.mutateAsync({
+          name: nome.trim(),
+          expires_in_days: Number(validade),
+          scopes: ["read", ...escopos],
+        }),
+      );
     } catch {
       // toast no hook
     }
@@ -255,6 +267,16 @@ export function PersonalAccessTokensPanel() {
                 <p className="mt-1 truncate font-mono text-[12.5px] font-semibold text-primary-foreground/80">
                   {foco.token_prefix}••••••••••••••••••••••
                 </p>
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  {(foco.scopes ?? ["read"]).map((s) => (
+                    <span
+                      key={s}
+                      className="rounded-full bg-tinta px-2.5 py-1 text-[11px] font-bold text-tinta-foreground"
+                    >
+                      {scopeLabel(s)}
+                    </span>
+                  ))}
+                </div>
               </div>
 
               <div className="grid grid-cols-2 gap-2 lg:grid-cols-3">
@@ -319,7 +341,8 @@ export function PersonalAccessTokensPanel() {
             </DialogTitle>
             {!novo && (
               <DialogDescription>
-                A IA vai consultar o CRM como você: os mesmos leads, funis e conversas que você vê. Só leitura.
+                A IA vai consultar o CRM como você: os mesmos leads, funis e conversas que você vê.
+                {escritaLiberada ? " Por padrão, só leitura." : " Só leitura."}
               </DialogDescription>
             )}
           </DialogHeader>
@@ -418,6 +441,30 @@ export function PersonalAccessTokensPanel() {
                 </Select>
                 <p className="text-xs text-muted-foreground">Sem uso por 90 dias, o token é revogado sozinho.</p>
               </div>
+
+              {escritaLiberada && (
+                <fieldset className="grid gap-2">
+                  <legend className="mb-1 text-sm font-medium">O que a IA pode fazer além de ler</legend>
+                  {WRITE_SCOPE_OPTIONS.filter((o) => !o.adminOnly || isAdmin).map((o) => (
+                    <label
+                      key={o.id}
+                      className="flex cursor-pointer items-start gap-3 rounded-xl border border-border p-3 hover:bg-muted/50"
+                    >
+                      <Checkbox
+                        checked={escopos.includes(o.id)}
+                        onCheckedChange={(v) =>
+                          setEscopos((atual) => (v === true ? [...atual, o.id] : atual.filter((x) => x !== o.id)))
+                        }
+                        className="mt-0.5"
+                      />
+                      <span>
+                        <span className="block text-sm font-medium">{o.label}</span>
+                        <span className="block text-xs text-muted-foreground">{o.description}</span>
+                      </span>
+                    </label>
+                  ))}
+                </fieldset>
+              )}
 
               {isAdmin && (
                 <div className="flex items-start gap-3 rounded-xl border border-warning/40 bg-warning/10 p-3">

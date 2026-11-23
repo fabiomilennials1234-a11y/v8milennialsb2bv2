@@ -135,7 +135,7 @@ Deno.test("classifyAuthRow: DB verdicts map to the right decision", () => {
     kind: "unauthorized",
     reason: "expired",
   });
-  for (const r of ["master_principal", "not_member", "org_blocked", "org_disabled"]) {
+  for (const r of ["master_principal", "not_member", "org_blocked", "org_disabled"] as const) {
     assertEquals(classifyAuthRow(row({ outcome: r, principal: r }), NOW), {
       kind: "forbidden",
       reason: r,

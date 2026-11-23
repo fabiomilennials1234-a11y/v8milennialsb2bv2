@@ -22,6 +22,10 @@ autorização explícita do CTO para produção.**
 
 ## 1. Migrations (ordem importa)
 
+> v2: `20280124013300_crm_mcp_escrita.sql` vem depois das duas abaixo (escopos, plano de uso
+> único e auditoria). A escrita só existe em org com a flag `crm_mcp_write` — ligue por org,
+> depois do `crm_mcp`.
+
 1. `20280124013100_crm_mcp_tokens.sql`, depois `20280124013200_crm_mcp_lifecycle.sql`, pela
    Management API, cada uma registrada no ledger. **Confira a linha depois**: o INSERT no
    ledger falha em silêncio quando há colisão.
