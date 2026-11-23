@@ -38,6 +38,12 @@ const identity = {
  */
 const permissao = { podeVerTodos: true, carregando: false };
 
+// Esta suíte cobre a abertura padrão. A variante por organização é uma flag
+// consultada pela página, fora do recorte de permissões destes testes.
+vi.mock("@/modules/platform/hooks/useFeatureFlag", () => ({
+  useFeatureFlag: () => ({ enabled: false, isLoading: false }),
+}));
+
 vi.mock("@/modules/identity", () => ({
   useAuth: () => ({ session: { user: { id: USER_ID }, access_token: "t" } }),
   useIdentity: () => identity,

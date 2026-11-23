@@ -1,0 +1,22 @@
+{
+  "tasks": {
+    "test": "deno test --config deno.test.json --frozen --allow-env --allow-net --allow-read --no-check",
+    "test:coverage": "deno test --config deno.test.json --frozen --allow-env --allow-net --allow-read --no-check --coverage=.coverage",
+    "coverage:report": "deno coverage .coverage --lcov --output=coverage.lcov && deno coverage .coverage"
+  },
+  "imports": {
+    "std/": "https://deno.land/std@0.177.0/",
+    "@std/assert": "jsr:@std/assert@^1.0.0",
+    "@supabase/supabase-js": "npm:@supabase/supabase-js@2.105.4",
+    "https://esm.sh/@supabase/supabase-js@2": "npm:@supabase/supabase-js@2.105.4",
+    "jose": "npm:jose@5.9.6",
+    "https://esm.sh/jose@5.9.6": "npm:jose@5.9.6",
+    "zod": "npm:zod@3.23.8",
+    "https://esm.sh/zod@3.23.8": "npm:zod@3.23.8"
+  },
+  "lock": {
+    "path": "./deno.test.lock",
+    "frozen": true
+  },
+  "nodeModulesDir": "none"
+}

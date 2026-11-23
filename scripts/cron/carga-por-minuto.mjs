@@ -144,19 +144,24 @@ export function lerReescalonamento(sql) {
 /**
  * Jobs agendados por migrations POSTERIORES a `arquivoBase` (ordem lexical =
  * ordem de versão): cada `cron.schedule('nome', 'agenda', ...)` vira
- * { arquivo, jobname, schedule }. O snapshot de prod não conhece job criado
+ * { arquivo, jobname, schedule }. Um novo agendamento com o mesmo nome
+ * substitui o anterior, como no pg_cron. O snapshot de prod não conhece job criado
  * depois dele; sem isto os contratos de carga ficam verdes por ausência.
  * `cron.alter_job` não é lido — mudança de agenda por alter_job precisa ser
  * declarada à mão no contrato que depende dela.
  */
 export function lerAgendadosDepois(dirMigrations, arquivoBase) {
-  return readdirSync(dirMigrations)
+  const agendamentos = new Map();
+  const arquivos = readdirSync(dirMigrations)
     .filter((f) => f.endsWith('.sql') && arquivoBase !== undefined && f > arquivoBase)
-    .flatMap((f) =>
-      [...readFileSync(path.join(dirMigrations, f), 'utf8').matchAll(
-        /cron\.schedule\(\s*'([^']+)'\s*,\s*'([^']+)'/g,
-      )].map(([, jobname, schedule]) => ({ arquivo: f, jobname, schedule })),
-    );
+    .sort();
+  for (const arquivo of arquivos) {
+    const sql = readFileSync(path.join(dirMigrations, arquivo), 'utf8');
+    for (const [, jobname, schedule] of sql.matchAll(/cron\.schedule\(\s*'([^']+)'\s*,\s*'([^']+)'/g)) {
+      agendamentos.set(jobname, { arquivo, jobname, schedule });
+    }
+  }
+  return [...agendamentos.values()];
 }
 
 /** Aplica o reescalonamento sobre o snapshot, sem mutar a entrada. */
