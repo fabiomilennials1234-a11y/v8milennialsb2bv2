@@ -268,6 +268,15 @@ describe("colunas da régua", () => {
     expect(parseConfiguracao({}).prazoDiasUteis).toBe(2);
   });
 
+  it("parseConfiguracao lê o destino e o prazo máximo da promessa; banco sem as colunas = não move, sem limite", () => {
+    const c = parseConfiguracao({ etapa_promessa_id: "e-1", promessa_max_dias: 7 });
+    expect(c.etapaPromessaId).toBe("e-1");
+    expect(c.promessaMaxDias).toBe(7);
+    const vazio = parseConfiguracao({});
+    expect(vazio.etapaPromessaId).toBeNull();
+    expect(vazio.promessaMaxDias).toBeNull();
+  });
+
   it("prazo_data sai como data e prazo_horario como veio; a prévia lista as duas variáveis", () => {
     expect(formatarVariavel("prazo_data", "2026-11-20")).toBe("20/11/2026");
     expect(formatarVariavel("prazo_horario", "18:00")).toBe("18:00");

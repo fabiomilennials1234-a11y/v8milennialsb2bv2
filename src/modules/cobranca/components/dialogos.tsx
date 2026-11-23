@@ -30,6 +30,7 @@ import { cn } from "@/lib/utils";
 import { isoDia } from "../lib/atraso";
 import { gerarParcelas } from "../lib/parcelas";
 import { documentoValido, formatarDocumento, formatarTelefone, telefoneValido } from "../lib/documento";
+import { useRegua } from "../hooks/useRegua";
 import { recusaDaCobranca } from "../lib/erros";
 import { ROTULO_CANAL, ROTULO_RESULTADO, reais } from "../lib/formato";
 import type { CanalDeContato, Etapa, InadimplenteResumo, ResultadoDoContato, TipoDeCompromisso, TituloSaldo } from "../lib/tipos";
@@ -435,7 +436,16 @@ export function CompromissoDialog({
   const [parcelas, setParcelas] = useState<{ vencimento: string; valor: number }[]>([]);
   const [obs, setObs] = useState("");
   const [mover, setMover] = useState(true);
-  const etapaDeCompromisso = etapas.find((e) => e.papel === "aberta" && /promessa|acordo/i.test(e.nome)) ?? null;
+  const config = useRegua().data?.configuracao ?? null;
+  // Destino escolhido pela org nos ajustes da régua (não adivinhado pelo nome da coluna).
+  const etapaDeCompromisso = etapas.find((e) => e.papel === "aberta" && e.id === config?.etapaPromessaId) ?? null;
+  const maxDias = tipo === "promessa" ? (config?.promessaMaxDias ?? null) : null;
+  const dataLimite = useMemo(() => {
+    if (maxDias === null) return null;
+    const d = new Date();
+    d.setDate(d.getDate() + maxDias);
+    return isoDia(d);
+  }, [maxDias]);
 
   useEffect(() => {
     if (!aberto) return;
@@ -452,7 +462,10 @@ export function CompromissoDialog({
   }, [total, n, primeira, tipo]);
 
   const soma = parcelas.reduce((s, p) => s + p.valor, 0);
-  const valido = parcelas.length > 0 && parcelas.every((p) => p.valor > 0 && p.vencimento);
+  const valido =
+    parcelas.length > 0 &&
+    parcelas.every((p) => p.valor > 0 && p.vencimento) &&
+    (dataLimite === null || parcelas.every((p) => p.vencimento <= dataLimite));
 
   const enviar = (ev: FormEvent) => {
     ev.preventDefault();
@@ -522,8 +535,12 @@ export function CompromissoDialog({
                 />
               </Campo>
             )}
-            <Campo id="cmp-data" rotulo={tipo === "promessa" ? "Data" : "1ª parcela"}>
-              <Input id="cmp-data" type="date" value={primeira} onChange={(e) => setPrimeira(e.target.value)} />
+            <Campo
+              id="cmp-data"
+              rotulo={tipo === "promessa" ? "Data" : "1ª parcela"}
+              dica={dataLimite && maxDias ? `Até ${dataLimite.split("-").reverse().join("/")} (${maxDias} dias).` : undefined}
+            >
+              <Input id="cmp-data" type="date" value={primeira} max={dataLimite ?? undefined} onChange={(e) => setPrimeira(e.target.value)} />
             </Campo>
           </div>
 
