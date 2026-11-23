@@ -7,7 +7,12 @@ Deno.test("parseCreateBody: trims/collapses the name and defaults the validity",
   const r = parseCreateBody({ name: "  Claude   do  notebook ", organization_id: ORG });
   assertEquals(r, {
     ok: true,
-    value: { name: "Claude do notebook", organizationId: ORG, expiresInDays: DEFAULT_EXPIRY_DAYS },
+    value: {
+      name: "Claude do notebook",
+      organizationId: ORG,
+      expiresInDays: DEFAULT_EXPIRY_DAYS,
+      scopes: ["read"],
+    },
   });
 });
 
@@ -31,6 +36,32 @@ Deno.test("parseCreateBody: refuses empty/long names, bad org and off-preset val
 
 Deno.test("refusalMessage: every DB reason has human copy; unknown falls back", () => {
   for (const r of ["org_disabled", "org_blocked", "not_member", "master_principal", "pat_limit"]) {
+    assertEquals(refusalMessage(r) !== refusalMessage("???"), true, r);
+  }
+});
+
+Deno.test("parseCreateBody: scopes always include read, dedupe, refuse unknown names", () => {
+  const r = parseCreateBody({
+    name: "ok",
+    organization_id: ORG,
+    scopes: ["crm:write", "crm:write"],
+  });
+  assertEquals(r.ok && r.value.scopes, ["read", "crm:write"]);
+  assertEquals(parseCreateBody({ name: "ok", organization_id: ORG, scopes: ["admin"] }).ok, false);
+  assertEquals(
+    parseCreateBody({ name: "ok", organization_id: ORG, scopes: "crm:write" }).ok,
+    false,
+  );
+});
+
+Deno.test("refusalMessage: scope refusals from issue_check have their own copy", () => {
+  for (
+    const r of [
+      "write_disabled:crm:write",
+      "scope_admin_only:messages:send",
+      "scope_permission:crm:write",
+    ]
+  ) {
     assertEquals(refusalMessage(r) !== refusalMessage("???"), true, r);
   }
 });

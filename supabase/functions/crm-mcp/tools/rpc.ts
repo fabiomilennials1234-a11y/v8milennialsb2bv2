@@ -22,6 +22,11 @@ export const RPC_ALLOWLIST = {
   fn_metric_measure: "definer:assert_org_access",
   /** DEFINER — answers for auth.uid() inside the given org (team_members of the caller). */
   has_feature_permission: "definer:auth.uid",
+  /**
+   * INVOKER — the card move the app (kanban), the public API and the DB triggers all share.
+   * Runs under the caller's RLS (pipeline.view_all / strict-owner regimes apply).
+   */
+  mover_negocio: "invoker",
 } as const;
 
 export type AllowedRpc = keyof typeof RPC_ALLOWLIST;

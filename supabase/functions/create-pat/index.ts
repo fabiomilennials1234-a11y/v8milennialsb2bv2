@@ -51,10 +51,11 @@ Deno.serve(async (req: Request): Promise<Response> => {
 
     const parsed = parseCreateBody((await req.json().catch(() => ({}))) as CreateBody);
     if (!parsed.ok) return json({ error: parsed.message }, 400, cors);
-    const { name, organizationId, expiresInDays } = parsed.value;
+    const { name, organizationId, expiresInDays, scopes } = parsed.value;
 
     const { data: check, error: checkErr } = await userClient.rpc("crm_mcp_issue_check", {
       p_org: organizationId,
+      p_scopes: scopes,
     });
     if (checkErr) throw new Error(`crm_mcp_issue_check: ${checkErr.code} ${checkErr.message}`);
     if (check !== "ok") {
@@ -75,11 +76,11 @@ Deno.serve(async (req: Request): Promise<Response> => {
         name,
         token_hash: tokenHash,
         token_prefix: tokenPrefix,
-        scopes: ["read"],
+        scopes,
         expires_at: expiresAt,
         created_by: userId,
       })
-      .select("id, name, token_prefix, expires_at, created_at")
+      .select("id, name, token_prefix, scopes, expires_at, created_at")
       .single();
 
     if (insErr || !row) {

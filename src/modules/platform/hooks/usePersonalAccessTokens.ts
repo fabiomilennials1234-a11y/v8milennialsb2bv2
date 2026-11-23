@@ -23,6 +23,7 @@ export interface PersonalAccessToken {
   user_id: string;
   name: string;
   token_prefix: string;
+  scopes: string[];
   last_used_at: string | null;
   expires_at: string;
   revoked_at: string | null;
@@ -36,6 +37,7 @@ export interface CreatedPersonalAccessToken {
   id: string;
   name: string;
   token_prefix: string;
+  scopes: string[];
   expires_at: string;
   created_at: string;
   /** Texto do token — só existe nesta resposta. */
@@ -54,7 +56,7 @@ export function usePersonalAccessTokens() {
       const [tokens, members] = await Promise.all([
         db
           .from("personal_access_tokens")
-          .select("id, user_id, name, token_prefix, last_used_at, expires_at, revoked_at, revoked_reason, created_at")
+          .select("id, user_id, name, token_prefix, scopes, last_used_at, expires_at, revoked_at, revoked_reason, created_at")
           .eq("organization_id", organizationId!)
           .order("created_at", { ascending: false })
           .limit(200),
@@ -78,7 +80,11 @@ export function useCreatePersonalAccessToken() {
   const queryClient = useQueryClient();
   const { organizationId } = useOrganization();
 
-  return useMutation<CreatedPersonalAccessToken, Error, { name: string; expires_in_days: number }>({
+  return useMutation<
+    CreatedPersonalAccessToken,
+    Error,
+    { name: string; expires_in_days: number; scopes?: string[] }
+  >({
     mutationFn: async (input) => {
       const { data, error } = await supabase.functions.invoke("create-pat", {
         body: { ...input, organization_id: organizationId },

@@ -141,7 +141,7 @@ SELECT throws_ok($$
   INSERT INTO public.personal_access_tokens (organization_id, user_id, name, token_hash, token_prefix, scopes, expires_at, created_by)
   VALUES ('3c0e0000-0000-4000-8000-00000000000a', '3c0e0000-0000-4000-8000-0000000000a2', 'Escrita',
           pg_temp.h('tok-x3'), 'tq_mcp_test_AAAAAAAA', ARRAY['read','write'], now() + interval '30 days', '3c0e0000-0000-4000-8000-0000000000a2')
-$$, '23514', NULL, 'IN4 v1 não aceita escopo de escrita');
+$$, '42501', NULL, 'IN4 escopo fora do permitido (aqui: org sem crm_mcp_write) é recusado na emissão');
 
 SELECT throws_ok($$
   INSERT INTO public.personal_access_tokens (organization_id, user_id, name, token_hash, token_prefix, expires_at, created_by)

@@ -4,7 +4,11 @@ export interface CreateBody {
   name?: unknown;
   organization_id?: unknown;
   expires_in_days?: unknown;
+  scopes?: unknown;
 }
+
+/** Scopes a token may carry. `read` is always included. */
+export const KNOWN_SCOPES = ["read", "crm:write", "messages:send", "automations:write"] as const;
 
 /** The validity presets the UI offers; the DB caps at 366 days regardless. */
 export const EXPIRY_PRESETS = [7, 30, 90, 180, 366] as const;
@@ -15,7 +19,10 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 export function parseCreateBody(
   body: CreateBody,
 ):
-  | { ok: true; value: { name: string; organizationId: string; expiresInDays: number } }
+  | {
+    ok: true;
+    value: { name: string; organizationId: string; expiresInDays: number; scopes: string[] };
+  }
   | { ok: false; message: string } {
   const name = typeof body.name === "string" ? body.name.trim().replace(/\s+/g, " ") : "";
   if (!name) return { ok: false, message: "Dê um nome ao token (ex.: Claude do notebook)." };
@@ -32,11 +39,34 @@ export function parseCreateBody(
     return { ok: false, message: `Validade deve ser uma de: ${EXPIRY_PRESETS.join(", ")} dias.` };
   }
 
-  return { ok: true, value: { name, organizationId, expiresInDays: days } };
+  let scopes: string[] = ["read"];
+  if (body.scopes !== undefined && body.scopes !== null) {
+    if (!Array.isArray(body.scopes) || !body.scopes.every((x) => typeof x === "string")) {
+      return { ok: false, message: "Escopos inválidos." };
+    }
+    const unknown = body.scopes.filter((x) => !(KNOWN_SCOPES as readonly string[]).includes(x));
+    if (unknown.length) {
+      return { ok: false, message: `Escopo desconhecido: ${unknown.join(", ")}.` };
+    }
+    scopes = [...new Set(["read", ...body.scopes as string[]])];
+  }
+
+  return { ok: true, value: { name, organizationId, expiresInDays: days, scopes } };
 }
 
 /** What the person sees when issuance is refused — the reason is their own state. */
 export function refusalMessage(reason: string): string {
+  // Scope refusals come as "<motivo>:<escopo>" from crm_mcp_issue_check.
+  const [base] = reason.split(":");
+  if (base === "write_disabled") {
+    return "A IA ainda não pode alterar dados nesta organização (escrita não liberada).";
+  }
+  if (base === "scope_admin_only") {
+    return "Só administradores podem dar à IA permissão de enviar mensagens.";
+  }
+  if (base === "scope_permission") {
+    return "Você não tem no Torque a permissão que esse acesso exige.";
+  }
   switch (reason) {
     case "org_disabled":
       return "O acesso por IA ainda não está liberado para esta organização.";

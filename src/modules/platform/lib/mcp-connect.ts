@@ -90,3 +90,26 @@ const REVOKE_REASON_LABEL: Record<string, string> = {
 export function revokeReasonLabel(reason: string | null): string {
   return (reason && REVOKE_REASON_LABEL[reason]) || "revogado";
 }
+
+/**
+ * Acessos de escrita que a pessoa pode dar à IA (escopos do token). Só aparecem os que já
+ * têm ferramentas no servidor; o banco recusa o que a pessoa não pode fazer no app.
+ */
+export const WRITE_SCOPE_OPTIONS: ReadonlyArray<{ id: string; label: string; description: string }> = [
+  {
+    id: "crm:write",
+    label: "Organizar o funil",
+    description: "Mover cards entre etapas. A IA monta um plano e só aplica depois que você confirmar.",
+  },
+];
+
+const SCOPE_LABEL: Record<string, string> = {
+  read: "Ler",
+  "crm:write": "Organizar o funil",
+  "messages:send": "Enviar mensagens",
+  "automations:write": "Criar automações",
+};
+
+export function scopeLabel(scope: string): string {
+  return SCOPE_LABEL[scope] ?? scope;
+}
