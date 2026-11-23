@@ -1,18 +1,56 @@
 import { assertEquals, assertNotEquals, assertRejects, assertThrows } from "@std/assert";
 import {
-  assertEligiblePrincipal,
   assertWellFormedJwt,
-  classifyTokenRow,
+  assertWellFormedResolverJwt,
+  type AuthRow,
+  classifyAuthRow,
   crc32,
   generatePat,
   hashToken,
   MINT_TTL_SEC,
+  mintResolverJwt,
   mintUserJwt,
   parsePat,
-  type PatRow,
+  RESOLVER_ROLE,
+  RESOLVER_TTL_SEC,
+  toSigningJwk,
 } from "./pat.ts";
+import { importJWK } from "jose";
 
 const UUID = "11111111-1111-4111-8111-111111111111";
+
+// --- signing key ------------------------------------------------------------------------
+
+Deno.test("toSigningJwk: the JWK exactly as Supabase's signing-keys API requires it imports for ES256", async () => {
+  const kp = await crypto.subtle.generateKey({ name: "ECDSA", namedCurve: "P-256" }, true, [
+    "sign",
+    "verify",
+  ]);
+  const priv = await crypto.subtle.exportKey("jwk", kp.privateKey);
+  // What we upload to POST /config/auth/signing-keys and store as the secret.
+  const supabaseShape = JSON.stringify({
+    ...priv,
+    kid: "9272496f-06ef-4b06-bdbd-4e6b6f569c71",
+    alg: "ES256",
+    use: "sig",
+    key_ops: ["sign", "verify"],
+    ext: true,
+  });
+  // Control: the raw shape is what broke the first deploy ("Invalid key usage").
+  await assertRejects(() => importJWK(JSON.parse(supabaseShape), "ES256"));
+  const key = await importJWK(toSigningJwk(supabaseShape), "ES256");
+  const jwt = await mintResolverJwt(
+    { projectRef: "ref", signingKey: key as CryptoKey, kid: "k" },
+    1,
+  );
+  assertEquals(jwt.split(".").length, 3);
+});
+
+Deno.test("toSigningJwk: refuses non-JSON, wrong curve and a PUBLIC key with a clear message", () => {
+  assertThrows(() => toSigningJwk("nope"), Error, "not JSON");
+  assertThrows(() => toSigningJwk('{"kty":"RSA"}'), Error, "P-256");
+  assertThrows(() => toSigningJwk('{"kty":"EC","crv":"P-256","x":"a","y":"b"}'), Error, "PRIVATE");
+});
 
 // --- token format ---------------------------------------------------------------------
 
@@ -59,87 +97,97 @@ Deno.test("hashToken: stable, distinct per token, and pepper changes the digest"
 
 // --- pure resolution logic ------------------------------------------------------------
 
-function row(over: Partial<PatRow> = {}): PatRow {
+const PAT = "22222222-2222-4222-8222-222222222222";
+const ORG = "33333333-3333-4333-8333-333333333333";
+const NOW = 1_900_000_000_000;
+const FUTURE = new Date(NOW + 86_400_000).toISOString();
+
+function row(over: Partial<AuthRow> = {}): AuthRow {
   return {
-    id: "pat-1",
+    pat_id: PAT,
     user_id: UUID,
-    organization_id: "org-A",
+    organization_id: ORG,
     scopes: ["read"],
-    expires_at: null,
-    revoked_at: null,
     audience: "crm-mcp",
+    expires_at: FUTURE,
+    revoked_at: null,
+    principal: "ok",
+    outcome: "ok",
+    retry_after_seconds: null,
     ...over,
   };
 }
-const NOW = 1_900_000_000_000;
 
-Deno.test("classifyTokenRow: empty row → not_found (no existence oracle)", () => {
-  assertEquals(classifyTokenRow(null, NOW), { kind: "unauthorized", reason: "not_found" });
+Deno.test("classifyAuthRow: no row → not_found (no existence oracle)", () => {
+  assertEquals(classifyAuthRow(null, NOW), { kind: "unauthorized", reason: "not_found" });
 });
 
-Deno.test("classifyTokenRow: revoked / expired → unauthorized; bad audience → forbidden", () => {
-  assertEquals(classifyTokenRow(row({ revoked_at: "2020-01-01T00:00:00Z" }), NOW), {
-    kind: "unauthorized",
-    reason: "revoked",
+Deno.test("classifyAuthRow: ok verdict with consistent facts → principal from the TOKEN", () => {
+  assertEquals(classifyAuthRow(row(), NOW), {
+    kind: "ok",
+    principal: { patId: PAT, userId: UUID, orgId: ORG, scopes: ["read"] },
   });
-  assertEquals(classifyTokenRow(row({ expires_at: "2020-01-01T00:00:00Z" }), NOW), {
+});
+
+Deno.test("classifyAuthRow: DB verdicts map to the right decision", () => {
+  assertEquals(classifyAuthRow(row({ outcome: "revoked" }), NOW).kind, "unauthorized");
+  assertEquals(classifyAuthRow(row({ outcome: "expired" }), NOW), {
     kind: "unauthorized",
     reason: "expired",
   });
-  assertEquals(classifyTokenRow(row({ audience: "some-other-product" }), NOW), {
-    kind: "forbidden",
-    reason: "audience",
+  for (const r of ["master_principal", "not_member", "org_blocked", "org_disabled"]) {
+    assertEquals(classifyAuthRow(row({ outcome: r, principal: r }), NOW), {
+      kind: "forbidden",
+      reason: r,
+    });
+  }
+  assertEquals(classifyAuthRow(row({ outcome: "rate_limited", retry_after_seconds: 17 }), NOW), {
+    kind: "rate_limited",
+    retryAfterSeconds: 17,
+  });
+  // a missing/garbage Retry-After still yields a sane one
+  assertEquals(classifyAuthRow(row({ outcome: "rate_limited", retry_after_seconds: null }), NOW), {
+    kind: "rate_limited",
+    retryAfterSeconds: 60,
   });
 });
 
-Deno.test("classifyTokenRow: valid, unexpired, right audience → ok", () => {
-  const out = classifyTokenRow(row({ expires_at: "2099-01-01T00:00:00Z" }), NOW);
-  assertEquals(out.kind, "ok");
+Deno.test("classifyAuthRow: FAILS CLOSED when an `ok` verdict contradicts the facts", () => {
+  // A future SQL regression that answers ok must not let these through.
+  assertEquals(classifyAuthRow(row({ revoked_at: "2020-01-01T00:00:00Z" }), NOW), {
+    kind: "unauthorized",
+    reason: "revoked",
+  });
+  assertEquals(classifyAuthRow(row({ expires_at: "2020-01-01T00:00:00Z" }), NOW), {
+    kind: "unauthorized",
+    reason: "expired",
+  });
+  assertEquals(classifyAuthRow(row({ expires_at: "not-a-date" }), NOW).kind, "unauthorized");
+  assertEquals(classifyAuthRow(row({ principal: "master_principal" }), NOW), {
+    kind: "forbidden",
+    reason: "master_principal",
+  });
+  assertEquals(classifyAuthRow(row({ principal: "weird" }), NOW), {
+    kind: "forbidden",
+    reason: "inconsistent",
+  });
+  assertEquals(classifyAuthRow(row({ audience: "other" }), NOW), {
+    kind: "forbidden",
+    reason: "audience",
+  });
+  assertEquals(classifyAuthRow(row({ scopes: [] }), NOW), { kind: "forbidden", reason: "scope" });
+  assertEquals(classifyAuthRow(row({ scopes: null }), NOW), { kind: "forbidden", reason: "scope" });
+  assertEquals(classifyAuthRow(row({ organization_id: "org-A" }), NOW), {
+    kind: "forbidden",
+    reason: "inconsistent",
+  });
 });
 
-Deno.test("assertEligiblePrincipal: master owner → forbidden (H1)", () => {
-  assertEquals(
-    assertEligiblePrincipal({ isMaster: true, currentOrgIds: ["org-A"], patOrgId: "org-A" }),
-    { kind: "forbidden", reason: "master_principal" },
-  );
-});
-
-Deno.test("assertEligiblePrincipal: PAT org not in current membership → org_drift (M5)", () => {
-  assertEquals(
-    assertEligiblePrincipal({ isMaster: false, currentOrgIds: ["org-B"], patOrgId: "org-A" }),
-    { kind: "forbidden", reason: "org_drift" },
-  );
-});
-
-Deno.test("assertEligiblePrincipal: non-master, org is current membership → eligible (null)", () => {
-  assertEquals(
-    assertEligiblePrincipal({
-      isMaster: false,
-      currentOrgIds: ["org-A", "org-B"],
-      patOrgId: "org-A",
-    }),
-    null,
-  );
-});
-
-Deno.test("assertEligiblePrincipal: FAILS CLOSED on a non-boolean is_master (drifted resolver)", () => {
-  // Only a strict `false` passes the master gate. A NULL/undefined/non-boolean is_master —
-  // e.g. if is_master_user ever drifted — must be treated as master (rejected), never as
-  // "not master". This keeps H1 robust regardless of the is_master_user search_path pin.
-  for (const bad of [null, undefined, "false", 0, "true"]) {
-    assertEquals(
-      assertEligiblePrincipal({ isMaster: bad, currentOrgIds: ["org-A"], patOrgId: "org-A" }),
-      { kind: "forbidden", reason: "master_principal" },
-      `is_master=${JSON.stringify(bad)} must fail closed`,
-    );
-  }
-});
-
-Deno.test("assertEligiblePrincipal: non-array current_org_ids → org_drift (fail closed)", () => {
-  assertEquals(
-    assertEligiblePrincipal({ isMaster: false, currentOrgIds: null, patOrgId: "org-A" }),
-    { kind: "forbidden", reason: "org_drift" },
-  );
+Deno.test("classifyAuthRow: an unknown verdict is never ok", () => {
+  assertEquals(classifyAuthRow(row({ outcome: "maybe" }), NOW), {
+    kind: "forbidden",
+    reason: "inconsistent",
+  });
 });
 
 // --- mint + hard-fail-closed guard ----------------------------------------------------
@@ -228,5 +276,38 @@ Deno.test("assertWellFormedJwt: throws on >60s ttl, wrong role, and non-UUID sub
       ),
     Error,
     "sub",
+  );
+});
+
+Deno.test("mintResolverJwt: role crm_mcp_resolver, no sub, 30s — and the guard enforces it", async () => {
+  const key = await es256Key();
+  const now = 1_900_000_000;
+  const jwt = await mintResolverJwt({ projectRef: "ref", signingKey: key, kid: "k1" }, now);
+  assertWellFormedResolverJwt(jwt);
+  const payload = JSON.parse(atob(jwt.split(".")[1].replace(/-/g, "+").replace(/_/g, "/")));
+  assertEquals(payload.role, RESOLVER_ROLE);
+  assertEquals("sub" in payload, false);
+  assertEquals(payload.exp - payload.iat, RESOLVER_TTL_SEC);
+  // the user guard must reject it (no sub, wrong role) — the two tokens never interchange
+  assertThrows(() => assertWellFormedJwt(jwt), Error);
+});
+
+Deno.test("assertWellFormedResolverJwt: rejects service_role, a sub, and a long ttl", () => {
+  const head = b64url({ alg: "ES256", typ: "JWT" });
+  const mk = (p: Record<string, unknown>) => `${head}.${b64url(p)}.x`;
+  assertThrows(
+    () => assertWellFormedResolverJwt(mk({ role: "service_role", iat: 1, exp: 20 })),
+    Error,
+    "role",
+  );
+  assertThrows(
+    () => assertWellFormedResolverJwt(mk({ role: RESOLVER_ROLE, sub: UUID, iat: 1, exp: 20 })),
+    Error,
+    "sub",
+  );
+  assertThrows(
+    () => assertWellFormedResolverJwt(mk({ role: RESOLVER_ROLE, iat: 1, exp: 100 })),
+    Error,
+    "ttl",
   );
 });

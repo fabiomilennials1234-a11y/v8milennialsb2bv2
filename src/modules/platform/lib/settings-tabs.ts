@@ -33,6 +33,7 @@ import {
   MessageSquare,
   Plug,
   Settings,
+  Sparkles,
   Tag,
   Timer,
   Webhook,
@@ -136,6 +137,8 @@ export const SETTINGS_TABS: SettingsTab[] = [
   { value: "webhooks", slug: "webhooks", label: "Webhooks", icon: Webhook, group: "api-webhooks" },
   { value: "api", slug: "api-docs", label: "API & Chaves", icon: Code, group: "api-webhooks" },
   { value: "api-keys", slug: "api-keys", label: "API Keys", icon: Key, group: "api-webhooks" },
+  // Tokens pessoais do crm-mcp (ADR 0012). A seção só renderiza com a flag `crm_mcp`.
+  { value: "mcp", slug: "mcp", label: "IA conectada (MCP)", icon: Sparkles, group: "api-webhooks" },
   { value: "sla", slug: "sla", label: "SLA", icon: Timer, group: "general" },
   { value: "sandbox", slug: "sandbox", label: "Sandbox", icon: FlaskConical, group: "general" },
   { value: "oraculo-profile", slug: "perfil-operacao", label: "Perfil da operação", icon: BrainCircuit, group: "general" },

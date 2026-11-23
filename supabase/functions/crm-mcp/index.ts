@@ -1,53 +1,105 @@
 /**
  * crm-mcp — customer-facing "bring-your-own-AI" MCP server (Edge Function, Streamable HTTP).
- * Scenario B of docs/adr/0011; full spec in .specs/features/crm-mcp/DESIGN.md.
+ * Scenario B of docs/adr/0011; decision record docs/adr/0012; spec in
+ * .specs/features/crm-mcp/DESIGN.md.
  *
  * Pipeline (mirrors torque-mcp, swapping ONLY the auth layer for a per-PAT path):
- *   L1 HTTP   — CORS / OPTIONS / POST-only. The bearer PAT IS the credential (no x-mcp-secret).
- *   L2 AUTH   — parse PAT → hash → hermetic resolve RPC → pure classify + eligibility
- *               (master-reject H1, org-drift M5) → mint ES256 user JWT → HARD-FAIL-CLOSED
- *               assert → per-user RLS client. service_role is never in scope.
+ *   L0 BOOT   — try to drop the project-wide privileged secrets from the isolate (the runtime
+ *               keeps them; the code never reads them — see lib/config.ts), import the
+ *               dedicated ES256 signing key once.
+ *   L1 HTTP   — CORS / OPTIONS / POST-only / body cap. The bearer PAT IS the credential.
+ *   L2 AUTH   — parse PAT offline (format + CRC) → hash → crm_mcp_authenticate, called with a
+ *               30 s JWT for the `crm_mcp_resolver` role (browser-unreachable resolver; it
+ *               also enforces the rate limit and stamps last_used_at) → pure re-check of the
+ *               verdict against the raw facts (fail closed) → mint the 60 s user JWT → hard
+ *               assert → per-request per-user RLS client. service_role is never in scope.
  *   L3/L4     — the shared spine dispatch with a fail-closed customer toolFilter.
  */
-import { createClient } from "@supabase/supabase-js";
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { importJWK } from "jose";
 import { getCorsHeaders } from "../_shared/cors.ts";
 import { logError } from "../_shared/error-boundary.ts";
 import { handleRpcPayload } from "../_shared/mcp/http.ts";
 import type { DispatchContext } from "../_shared/mcp/dispatch.ts";
 import type { JsonRpcRequest, ToolDef } from "../_shared/mcp/types.ts";
-import { loadConfig } from "./lib/config.ts";
+import { type CrmMcpConfig, loadConfig, scrubPrivilegedEnv } from "./lib/config.ts";
 import {
-  assertEligiblePrincipal,
   assertWellFormedJwt,
-  classifyTokenRow,
+  assertWellFormedResolverJwt,
+  type AuthDecision,
+  type AuthRow,
+  classifyAuthRow,
   hashToken,
+  mintResolverJwt,
   mintUserJwt,
   parsePat,
-  type PatRow,
+  toSigningJwk,
 } from "./lib/pat.ts";
 import { CUSTOMER_TOOLS } from "./tools/index.ts";
 
-// --- boot (fail loud) -----------------------------------------------------------------
-const config = loadConfig(Deno.env.toObject()); // throws if ops secrets present or reqs missing
-
-// Import the dedicated ES256 signing key ONCE per isolate. A bad key fails the boot loudly
-// rather than per-request (DESIGN §4.4/§4.5). Private key only — never service_role material.
-const signingKey = await importJWK(JSON.parse(config.jwtSigningKeyJwk), "ES256") as CryptoKey;
-
-const SERVER_INFO = { name: "torque-crm", version: "0.1.0" }; // NO project — no env reconnaissance
+const SERVER_INFO = { name: "torque-crm", version: "1.0.0" }; // NO project — no env reconnaissance
 const CUSTOMER_TOOL_FILTER = (t: ToolDef) => t.readonly === true && t.customerExposed === true;
+const MAX_BODY_BYTES = 256 * 1024;
+const nowSec = () => Math.floor(Date.now() / 1000);
 
-// Anon-key client for the PRE-AUTH resolve only (role `anon`; the resolve RPC is hermetic).
-// Never used for tenant data — that always goes through the per-request per-user client.
-const resolveDb = createClient(config.supabaseUrl, config.supabaseAnonKey, {
-  auth: { persistSession: false, autoRefreshToken: false },
-});
+// --- boot (fail closed, but observable) -------------------------------------------------
+// A throw at module scope surfaces only as an opaque WORKER_ERROR (and this project's Logs API
+// is unavailable), so the boot is caught: every request then gets a 503 naming the STAGE that
+// failed. The detail carries variable names only — never a value. Nothing is served.
+interface Booted {
+  config: CrmMcpConfig;
+  signingKey: CryptoKey;
+  resolverDb: SupabaseClient;
+}
+interface BootFailure {
+  stage: "scrub" | "config" | "signing_key";
+  detail: string;
+}
 
-function json(body: unknown, status: number, cors: Record<string, string>): Response {
+async function boot(): Promise<Booted | BootFailure> {
+  let stage: BootFailure["stage"] = "scrub";
+  try {
+    // Order matters: the scrub runs before anything else reads the env, so no module — ours
+    // or a dependency — can pick the platform's service_role key up later in this isolate.
+    const scrubbed = scrubPrivilegedEnv(Deno.env);
+    stage = "config";
+    const config = loadConfig(Deno.env.toObject()); // throws on ops secrets or missing reqs
+    stage = "signing_key";
+    // Import the dedicated ES256 signing key ONCE per isolate (DESIGN §4.4/§4.5).
+    const signingKey = await importJWK(toSigningJwk(config.jwtSigningKeyJwk), "ES256") as CryptoKey;
+
+    // Pre-auth client: every call carries a FRESH 30 s resolver JWT. That role can execute
+    // crm_mcp_authenticate and read nothing — tenant data goes through the per-user client.
+    const resolverDb = createClient(config.supabaseUrl, config.supabaseAnonKey, {
+      accessToken: async () => {
+        const jwt = await mintResolverJwt(
+          { projectRef: config.projectRef, signingKey, kid: config.jwtKid },
+          nowSec(),
+        );
+        assertWellFormedResolverJwt(jwt);
+        return jwt;
+      },
+    });
+    console.log(JSON.stringify({ at: "crm-mcp/boot", ok: true, scrubbed }));
+    return { config, signingKey, resolverDb };
+  } catch (e) {
+    const detail = e instanceof Error ? e.message : String(e);
+    console.error(JSON.stringify({ at: "crm-mcp/boot", ok: false, stage, detail }));
+    return { stage, detail };
+  }
+}
+
+const booted = await boot();
+
+function json(
+  body: unknown,
+  status: number,
+  cors: Record<string, string>,
+  extra: Record<string, string> = {},
+): Response {
   return new Response(JSON.stringify(body), {
     status,
-    headers: { ...cors, "Content-Type": "application/json" },
+    headers: { ...cors, ...extra, "Content-Type": "application/json", "Cache-Control": "no-store" },
   });
 }
 
@@ -56,8 +108,9 @@ function rpcError(
   message: string,
   status: number,
   cors: Record<string, string>,
+  extra: Record<string, string> = {},
 ): Response {
-  return json({ jsonrpc: "2.0", id: null, error: { code, message } }, status, cors);
+  return json({ jsonrpc: "2.0", id: null, error: { code, message } }, status, cors, extra);
 }
 
 function bearer(header: string | null): string | null {
@@ -66,58 +119,18 @@ function bearer(header: string | null): string | null {
   return m ? m[1].trim() : null;
 }
 
-interface ResolvedPrincipal {
-  userId: string;
-  orgId: string;
-  scopes: string[];
-  email: string;
-}
+const WWW_AUTH = 'Bearer realm="torque-crm", error="invalid_token"';
 
-type ResolveResult =
-  | { ok: true; principal: ResolvedPrincipal }
-  | { ok: false; status: 401 | 403; message: string };
-
-/**
- * Full PAT resolution: offline parse → hash → hermetic resolve RPC → pure status check →
- * pure eligibility (master-reject, membership). The pure decisions live in lib/pat.ts and
- * are unit-tested; this orchestrates the DB calls around them.
- */
-async function resolvePat(token: string): Promise<ResolveResult> {
+/** Full PAT resolution: offline parse → hash → resolver RPC → pure re-check. */
+async function authenticate(b: Booted, token: string): Promise<AuthDecision> {
   const parsed = parsePat(token);
-  if (!parsed) return { ok: false, status: 401, message: "Unauthorized" }; // malformed/bad CRC
+  if (!parsed) return { kind: "unauthorized", reason: "not_found" }; // malformed/bad CRC: no DB hit
 
-  const hash = await hashToken(parsed.full, config.patPepper);
-  const { data, error } = await resolveDb.rpc("crm_mcp_resolve_token", { p_hash: hash });
-  if (error) throw new Error(`resolve_token failed: ${error.message}`);
-
-  const rows = (Array.isArray(data) ? data : []) as Array<
-    PatRow & { is_master: boolean; current_org_ids: string[] }
-  >;
-  const row = rows[0] ?? null;
-
-  const status = classifyTokenRow(row, Date.now());
-  if (status.kind === "unauthorized") return { ok: false, status: 401, message: "Unauthorized" };
-  if (status.kind === "forbidden") return { ok: false, status: 403, message: "Forbidden" };
-
-  // Pass the resolver values RAW — assertEligiblePrincipal fails closed on anything that is
-  // not a strict boolean false / a real org array (never reads a drifted flag as "not master").
-  const eligibility = assertEligiblePrincipal({
-    isMaster: row!.is_master,
-    currentOrgIds: row!.current_org_ids,
-    patOrgId: row!.organization_id,
-  });
-  if (eligibility) return { ok: false, status: 403, message: "Forbidden" };
-
-  return {
-    ok: true,
-    principal: {
-      userId: row!.user_id,
-      orgId: row!.organization_id,
-      scopes: row!.scopes ?? ["read"],
-      // email is not returned by the resolver; the minted JWT can carry an empty email.
-      email: "",
-    },
-  };
+  const hash = await hashToken(parsed.full, b.config.patPepper);
+  const { data, error } = await b.resolverDb.rpc("crm_mcp_authenticate", { p_token_hash: hash });
+  if (error) throw new Error(`crm_mcp_authenticate failed: ${error.code ?? ""} ${error.message}`);
+  const rows = (Array.isArray(data) ? data : []) as AuthRow[];
+  return classifyAuthRow(rows[0] ?? null, Date.now());
 }
 
 Deno.serve(async (req: Request): Promise<Response> => {
@@ -125,28 +138,54 @@ Deno.serve(async (req: Request): Promise<Response> => {
 
   if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: cors });
   if (req.method !== "POST") {
-    return json({ error: "Method not allowed; POST a JSON-RPC body." }, 405, cors);
+    // Streamable HTTP: a server without an SSE stream answers GET with 405.
+    return json({ error: "Method not allowed; POST a JSON-RPC body." }, 405, cors, {
+      Allow: "POST, OPTIONS",
+    });
   }
 
-  const token = bearer(req.headers.get("authorization"));
-  if (!token) return rpcError(-32001, "Unauthorized", 401, cors);
-
-  let resolution: ResolveResult;
-  try {
-    resolution = await resolvePat(token);
-  } catch (e) {
-    await logError(e, { functionName: "crm-mcp", extra: { stage: "resolve" } });
-    return rpcError(-32603, "Internal error", 500, cors);
-  }
-  if (!resolution.ok) {
-    return rpcError(
-      resolution.status === 403 ? -32003 : -32001,
-      resolution.message,
-      resolution.status,
+  if ("stage" in booted) {
+    return json(
+      {
+        jsonrpc: "2.0",
+        id: null,
+        error: { code: -32603, message: "Service unavailable", data: booted },
+      },
+      503,
       cors,
     );
   }
-  const { principal } = resolution;
+  const { config, signingKey } = booted;
+
+  // Cheap rejects first: no DB round-trip for an oversized body or a missing credential.
+  const declared = Number(req.headers.get("content-length") ?? "0");
+  if (declared > MAX_BODY_BYTES) return rpcError(-32600, "Request too large", 413, cors);
+
+  const token = bearer(req.headers.get("authorization"));
+  if (!token) return rpcError(-32001, "Unauthorized", 401, cors, { "WWW-Authenticate": WWW_AUTH });
+
+  let decision: AuthDecision;
+  try {
+    decision = await authenticate(booted, token);
+  } catch (e) {
+    await logError(e, { functionName: "crm-mcp", extra: { stage: "authenticate" } });
+    return rpcError(-32603, "Internal error", 500, cors);
+  }
+
+  if (decision.kind === "unauthorized") {
+    return rpcError(-32001, "Unauthorized", 401, cors, { "WWW-Authenticate": WWW_AUTH });
+  }
+  if (decision.kind === "forbidden") {
+    // The reason is the token owner's own state (flag off, left the org…) — safe and useful
+    // to tell the holder; it is not an oracle for anyone without the token.
+    return rpcError(-32003, `Forbidden: ${decision.reason}`, 403, cors);
+  }
+  if (decision.kind === "rate_limited") {
+    return rpcError(-32029, "Rate limit exceeded", 429, cors, {
+      "Retry-After": String(decision.retryAfterSeconds),
+    });
+  }
+  const { principal } = decision;
 
   // Mint the short-lived per-user JWT and HARD-FAIL-CLOSED before building any client (H3a):
   // a malformed mint must never let the request fall back to the anon role.
@@ -154,11 +193,11 @@ Deno.serve(async (req: Request): Promise<Response> => {
   try {
     userJwt = await mintUserJwt({
       userId: principal.userId,
-      email: principal.email,
+      email: "",
       projectRef: config.projectRef,
       signingKey,
       kid: config.jwtKid,
-    }, Math.floor(Date.now() / 1000));
+    }, nowSec());
     assertWellFormedJwt(userJwt);
   } catch (e) {
     await logError(e, { functionName: "crm-mcp", extra: { stage: "mint" } });
@@ -174,7 +213,9 @@ Deno.serve(async (req: Request): Promise<Response> => {
 
   let payload: JsonRpcRequest | JsonRpcRequest[];
   try {
-    payload = await req.json();
+    const raw = await req.text();
+    if (raw.length > MAX_BODY_BYTES) return rpcError(-32600, "Request too large", 413, cors);
+    payload = JSON.parse(raw);
   } catch {
     return rpcError(-32700, "Parse error", 400, cors);
   }
@@ -192,12 +233,17 @@ Deno.serve(async (req: Request): Promise<Response> => {
         userId: principal.userId,
         scopes: principal.scopes,
       },
+      logContext: { pat_id: principal.patId, org_id: principal.orgId },
     };
     const result = await handleRpcPayload(payload, ctx);
     if (result === null) return new Response(null, { status: 202, headers: cors });
     return json(result, 200, cors);
   } catch (e) {
-    await logError(e, { functionName: "crm-mcp", extra: { stage: "dispatch" } });
+    await logError(e, {
+      functionName: "crm-mcp",
+      organizationId: principal.orgId,
+      extra: { stage: "dispatch", pat_id: principal.patId },
+    });
     return rpcError(-32603, "Internal error", 500, cors);
   }
 });

@@ -3,23 +3,31 @@
  *
  * Two non-negotiable invariants live here:
  *  1. crm-mcp signs with its OWN dedicated ES256 key (CRM_MCP_JWT_SIGNING_KEY), never the
- *     project legacy/service_role secret (DESIGN §4.4, H2).
- *  2. ASSERT-ABSENT (H3): the function MUST NOT have any ops/master/service_role secret in
- *     its env. We fail the boot loudly if one is present — turning "don't copy the wrong
- *     secret bundle into this function" from a deploy convention into an enforced, tested
- *     invariant (the MEMORY is full of "wrong env in prod" incidents).
+ *     project legacy/service_role secret (DESIGN §4.4).
+ *  2. NEVER-READ privileged env (H3). Supabase edge secrets are PROJECT-WIDE: every function
+ *     sees every secret. Measured 2026-11-23:
+ *       - the platform injects SUPABASE_SERVICE_ROLE_KEY / SUPABASE_DB_URL everywhere and the
+ *         edge runtime ignores `Deno.env.delete` for them (preview branch);
+ *       - in production the torque-mcp secrets (MCP_MASTER_*, MCP_GATEWAY_SECRET) are visible
+ *         to crm-mcp too — the C2 "assert-absent" boot guard (DESIGN D3, "separate secret
+ *         namespace") therefore kept crm-mcp from ever serving.
+ *     A per-function namespace does not exist on this platform, so the guarantee is in the
+ *     code, not the env: no crm-mcp module names any of these (source invariant test in
+ *     config.test.ts) and no client is ever built from them. The boot still tries to drop
+ *     them and logs which ones the runtime kept.
  */
 
 export interface CrmMcpConfig {
   supabaseUrl: string;
+  /** Public API key sent as `apikey` (the gateway key). Grants nothing by itself. */
   supabaseAnonKey: string;
   /** Project ref (e.g. "jsjsmuncfkbsbzqzqhfq") for the JWT `iss` claim. */
   projectRef: string;
   /** ES256 private key material (JWK JSON string). Imported to a CryptoKey at boot. */
   jwtSigningKeyJwk: string;
-  /** `kid` advertised in the minted JWT header — must match the public key the project trusts. */
+  /** `kid` advertised in the minted JWT header — must match the key the project trusts. */
   jwtKid: string;
-  /** Optional pepper for HMAC-SHA256 token hashing (DESIGN §4.2, D2). */
+  /** Optional pepper for HMAC-SHA256 token hashing (DESIGN §4.2, D2). Unset by default. */
   patPepper?: string;
 }
 
@@ -27,22 +35,26 @@ type EnvMap = Record<string, string | undefined>;
 
 const REQUIRED = [
   "SUPABASE_URL",
-  "SUPABASE_ANON_KEY",
   "CRM_MCP_JWT_SIGNING_KEY",
   "CRM_MCP_JWT_KID",
 ] as const;
 
 /**
- * Secrets whose mere PRESENCE in this function's env is a deploy mistake. crm-mcp is
- * customer-facing and RLS-pure per-user: it must never hold the master creds, the gateway
- * secret, or service_role. Boot fails if any is set (DESIGN §4.5/§4.7, H3).
+ * Secrets that carry master/service power and exist in the project env for OTHER functions
+ * (platform-injected, or torque-mcp's). crm-mcp must never read them; the boot tries to drop
+ * them from its isolate.
  */
-const FORBIDDEN = [
+export const PRIVILEGED_ENV = [
   "SUPABASE_SERVICE_ROLE_KEY",
+  "SUPABASE_DB_URL",
+  "SUPABASE_SECRET_KEYS",
   "MCP_MASTER_EMAIL",
   "MCP_MASTER_PASSWORD",
   "MCP_GATEWAY_SECRET",
 ] as const;
+
+/** Same precedence as `_shared/user-auth.ts#getAnonKey` (the keys this project rotated). */
+const ANON_KEY_VARS = ["ANON_KEY_2", "ANON_KEY", "SUPABASE_ANON_KEY"] as const;
 
 function deriveProjectRef(env: EnvMap, url: string): string {
   if (env.CRM_MCP_PROJECT_REF?.trim()) return env.CRM_MCP_PROJECT_REF.trim();
@@ -55,24 +67,40 @@ function deriveProjectRef(env: EnvMap, url: string): string {
   }
 }
 
-export function loadConfig(env: EnvMap): CrmMcpConfig {
-  const present = FORBIDDEN.filter((k) => (env[k] ?? "").trim().length > 0);
-  if (present.length > 0) {
-    // Fail loud — this function must never be deployed with ops/service_role secrets.
-    throw new Error(
-      `crm-mcp boot refused: forbidden ops secret(s) present in env: ${present.join(", ")}. ` +
-        "crm-mcp is RLS-pure per-user and must not hold master/service_role/gateway secrets.",
-    );
+/**
+ * Best-effort removal of the privileged env from this isolate. Reports what was removed and
+ * what the runtime kept (Supabase keeps the platform ones — see the header); the boot logs
+ * both. A delete that throws counts as kept.
+ */
+export function scrubPrivilegedEnv(env: {
+  get(key: string): string | undefined;
+  delete(key: string): void;
+}): { removed: string[]; kept: string[] } {
+  const removed: string[] = [];
+  const kept: string[] = [];
+  for (const key of PRIVILEGED_ENV) {
+    if (env.get(key) === undefined) continue;
+    try {
+      env.delete(key);
+    } catch {
+      /* runtime refuses: reported as kept */
+    }
+    (env.get(key) === undefined ? removed : kept).push(key);
   }
+  return { removed, kept };
+}
 
-  const missing = REQUIRED.filter((k) => !(env[k] ?? "").trim());
+export function loadConfig(env: EnvMap): CrmMcpConfig {
+  const missing: string[] = REQUIRED.filter((k) => !(env[k] ?? "").trim());
+  const anonKey = ANON_KEY_VARS.map((k) => env[k]?.trim()).find((v) => !!v);
+  if (!anonKey) missing.push("SUPABASE_ANON_KEY");
   if (missing.length > 0) {
     throw new Error(`crm-mcp boot refused: missing required env var(s): ${missing.join(", ")}`);
   }
 
   return {
     supabaseUrl: env.SUPABASE_URL!,
-    supabaseAnonKey: env.SUPABASE_ANON_KEY!,
+    supabaseAnonKey: anonKey!,
     projectRef: deriveProjectRef(env, env.SUPABASE_URL!),
     jwtSigningKeyJwk: env.CRM_MCP_JWT_SIGNING_KEY!,
     jwtKid: env.CRM_MCP_JWT_KID!,
