@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { isVirtualTeamMember, useAuth, useCanDo, useCurrentTeamMember, useOrganization } from "@/modules/identity";
+import { useAuth, useCanDo, useCurrentTeamMember, useOrganization } from "@/modules/identity";
 import { mapearResumo, type ResumoSemana } from "../lib/boas-vindas-semana";
 
 /**
@@ -12,9 +12,9 @@ import { mapearResumo, type ResumoSemana } from "../lib/boas-vindas-semana";
  *
  *   · `metrics.view` — a permissão que tranca a tela de Métricas. Quem não pode
  *     ver receita no painel não vê receita na abertura, e nada é consumido.
- *   · nem master nem gestor — eles não são membros da org, são operadores que
- *     trocam de org pelo seletor. Sem esta guarda, um master veria "Boa tarde,
- *     Master." uma vez por org visitada, em toda segunda.
+ *
+ * Master e gestor de portfólio também recebem: entram como admin (membro
+ * virtual) e ganham a abertura uma vez por org, por semana, como qualquer usuário.
  *
  * O resultado fica em cache para sempre na sessão: refazer a chamada devolveria
  * `ja_vista` e apagaria da tela uma abertura que está tocando.
@@ -25,9 +25,8 @@ export function useBoasVindasSemana() {
   const { data: membro } = useCurrentTeamMember();
   const podeVerMetricas = useCanDo("metrics.view");
 
-  const operador = isVirtualTeamMember(membro?.id);
   const habilitado = Boolean(
-    user?.id && isReady && organizationId && membro && !operador && !podeVerMetricas.isLoading && podeVerMetricas.allowed,
+    user?.id && isReady && organizationId && membro && !podeVerMetricas.isLoading && podeVerMetricas.allowed,
   );
 
   return useQuery<ResumoSemana | null>({

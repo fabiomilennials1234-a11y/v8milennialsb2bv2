@@ -1,6 +1,6 @@
 import { lazy, Suspense, useEffect, useState } from "react";
 import { lazyRetry } from "@/core/stale-build-recovery";
-import { useAuth, useCurrentTeamMember } from "@/modules/identity";
+import { isVirtualTeamMember, useAuth, useCurrentTeamMember } from "@/modules/identity";
 import { useBoasVindasSemana } from "../../hooks/useBoasVindasSemana";
 import type { ResumoSemana } from "../../lib/boas-vindas-semana";
 
@@ -50,8 +50,10 @@ export function BoasVindasSemanaGate() {
 
   if (!resumo || !introPassou || concluida) return null;
 
+  // O membro virtual de master/gestor se chama só "Master"/"Gestor": para eles
+  // a saudação usa o nome da conta.
   const nome =
-    membro?.name?.trim() ||
+    (isVirtualTeamMember(membro?.id) ? "" : membro?.name?.trim()) ||
     (user?.user_metadata?.full_name as string | undefined)?.trim() ||
     user?.email?.split("@")[0] ||
     "";
