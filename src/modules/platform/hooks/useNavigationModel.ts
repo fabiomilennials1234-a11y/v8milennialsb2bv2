@@ -86,6 +86,8 @@ export function useNavigationModel(): NavigationModel {
   const { enabled: cobranca } = useFeatureFlag("cobranca");
   // Piloto da Lista fria (ADR-0042): mesma regra, fail-closed.
   const { enabled: listaFria } = useFeatureFlag("lista_fria");
+  // IA conectada (crm-mcp): o atalho só existe para org liberada. Fail-closed.
+  const { enabled: crmMcp } = useFeatureFlag("crm_mcp");
   // Hotfix Café Jurerê: "Leads" vira "Ficha do Parceiro" só com a flag da org.
   const leadsLabel = useLeadsLabel();
 
@@ -150,7 +152,7 @@ export function useNavigationModel(): NavigationModel {
     const filtered = filterByPermission(
       filterByGate(
         filterByMaster(filterByOutbound(withChildren, isOutboundMember), isMaster),
-        { metaPagesConnected, cobranca, listaFria },
+        { metaPagesConnected, cobranca, listaFria, crmMcp },
       ),
       canViewRoute,
     );
@@ -163,6 +165,7 @@ export function useNavigationModel(): NavigationModel {
     metaPagesConnected,
     cobranca,
     listaFria,
+    crmMcp,
     canViewRoute,
   ]);
 
@@ -180,12 +183,12 @@ export function useNavigationModel(): NavigationModel {
       .map((group) => ({
         ...group,
         // O Pitstop respeita os mesmos gates de runtime e permissões da lateral.
-        items: filterByGate(group.items, { metaPagesConnected, cobranca, listaFria }).filter(
+        items: filterByGate(group.items, { metaPagesConnected, cobranca, listaFria, crmMcp }).filter(
           (item) => canViewRoute(item.path),
         ),
       }))
       .filter((group) => group.items.length > 0);
-  }, [canViewRoute, isAdmin, isOutboundMember, metaPagesConnected, cobranca, listaFria, orgType]);
+  }, [canViewRoute, isAdmin, isOutboundMember, metaPagesConnected, cobranca, listaFria, crmMcp, orgType]);
 
   const isActive = useMemo(
     () =>

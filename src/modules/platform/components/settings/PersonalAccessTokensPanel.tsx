@@ -6,7 +6,8 @@
  * ouro à direita, e o texto do token aparecendo uma única vez, no diálogo de criação.
  */
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { format, formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { AlertTriangle, Ban, Check, Copy, Loader2, Plus, ShieldCheck, Sparkles } from "lucide-react";
@@ -83,6 +84,17 @@ export function PersonalAccessTokensPanel() {
   const [focoId, setFocoId] = useState<string | null>(null);
   const [alvo, setAlvo] = useState<PersonalAccessToken | null>(null);
   const [vazou, setVazou] = useState(false);
+
+  // Atalho `/ia-conectada` (Pitstop › Administração): chega com `novo=1` e abre o diálogo
+  // uma vez. O parâmetro sai da URL na hora, para recarregar a página não reabrir.
+  const [searchParams, setSearchParams] = useSearchParams();
+  useEffect(() => {
+    if (searchParams.get("novo") !== "1") return;
+    setCriarAberto(true);
+    const semNovo = new URLSearchParams(searchParams);
+    semNovo.delete("novo");
+    setSearchParams(semNovo, { replace: true });
+  }, [searchParams, setSearchParams]);
 
   // No máximo 200 linhas (o hook limita): particionar a cada render custa nada e mantém
   // "expirou agora" honesto sem memo preso a um relógio velho.

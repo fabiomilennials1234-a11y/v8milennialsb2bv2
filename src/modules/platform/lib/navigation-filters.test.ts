@@ -12,6 +12,8 @@ import {
 } from "./navigation-filters";
 import {
   FUNIS_PATHS,
+  IA_CONECTADA_DESTINO,
+  IA_CONECTADA_PATH,
   NAV_VIEW_PERMISSIONS,
   PITSTOP_GROUPS,
   SIDEBAR_PRIMARY,
@@ -64,7 +66,7 @@ describe("filterByMaster", () => {
 });
 
 describe("filterByGate", () => {
-  const gates = { metaPagesConnected: false, cobranca: false, listaFria: false };
+  const gates = { metaPagesConnected: false, cobranca: false, listaFria: false, crmMcp: false };
 
   it("respeita o gate de páginas Meta conectadas", () => {
     const items = [node("/dashboard"), node("/atendimento/meta", { gate: "meta_pages_connected" })];
@@ -103,6 +105,24 @@ describe("filterByGate", () => {
     const membroLiberado = makeCanViewRoute({ isMaster: false, isAdmin: false, featurePerms: { "lista_fria.view": true } });
     expect(membroSemChave("/lista-fria")).toBe(false);
     expect(membroLiberado("/lista-fria")).toBe(true);
+  });
+
+  // ADR 0012: a IA conectada é piloto por org. O atalho de criar token mora no Pitstop ›
+  // Administração e some sem a flag `crm_mcp` (o banco recusaria o token de qualquer jeito).
+  it("IA conectada só aparece no Pitstop › Administração com a flag crm_mcp", () => {
+    const admin = PITSTOP_GROUPS.find((g) => g.id === "admin")!.items;
+    expect(filterByGate(admin, gates).some((i) => i.path === IA_CONECTADA_PATH)).toBe(false);
+    expect(filterByGate(admin, { ...gates, crmMcp: true }).some((i) => i.path === IA_CONECTADA_PATH)).toBe(true);
+    expect(filterByGate(admin, { ...gates, cobranca: true, listaFria: true }).some((i) => i.path === IA_CONECTADA_PATH)).toBe(false);
+  });
+
+  it("o atalho da IA conectada herda a permissão da tela de Configurações e cai na criação de token", () => {
+    expect(NAV_VIEW_PERMISSIONS[IA_CONECTADA_PATH]).toBe(NAV_VIEW_PERMISSIONS["/configuracoes"]);
+    const semConfiguracoes = makeCanViewRoute({ isMaster: false, isAdmin: false, featurePerms: { "settings.view": false } });
+    const comConfiguracoes = makeCanViewRoute({ isMaster: false, isAdmin: false, featurePerms: { "settings.view": true } });
+    expect(semConfiguracoes(IA_CONECTADA_PATH)).toBe(false);
+    expect(comConfiguracoes(IA_CONECTADA_PATH)).toBe(true);
+    expect(IA_CONECTADA_DESTINO).toBe("/configuracoes/api-webhooks?secao=mcp&novo=1");
   });
 
   it("Cobrança exige a permissão própria cobranca.view (setor separado)", () => {
@@ -298,7 +318,7 @@ describe("native metrics navigation", () => {
   it.each([false, true])("shows metrics to a regular member (outbound=%s)", (outbound) => {
     const visible = filterByGate(
       filterByMaster(filterByOutbound(SIDEBAR_PRIMARY, outbound), false),
-      { metaPagesConnected: false, cobranca: false, listaFria: false },
+      { metaPagesConnected: false, cobranca: false, listaFria: false, crmMcp: false },
     );
     expect(visible.some((item) => item.path === "/metricas")).toBe(true);
   });
