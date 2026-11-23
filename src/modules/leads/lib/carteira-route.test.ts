@@ -34,7 +34,14 @@ describe("carteiraFiltersFromLeads", () => {
         filterQualification: "ouro",
         filterResponsible: "tm-1",
       }),
-    ).toEqual({ searchQuery: "ana", filterOrigin: "site", filterQualification: "ouro", filterResponsible: "tm-1" });
+    ).toEqual({
+      searchQuery: "ana",
+      filterOrigin: "site",
+      filterQualification: "ouro",
+      filterResponsible: "tm-1",
+      createdFrom: "",
+      createdTo: "",
+    });
   });
 
   it("visão salva antiga sem a chave cai no padrão (Select nunca fica não-controlado)", () => {

@@ -14,6 +14,7 @@ import { LeadPanelLayout } from "@/modules/platform/components/layout/LeadPanelL
 import { useCanDo, useOrganization, useResponsibleMembers } from "@/modules/identity";
 import { trackModuleVisit } from "@/lib/analytics";
 import { ClientPortfolioSection } from "../components/client-portfolio/ClientPortfolioSection";
+import { FiltroPeriodoDeCriacao } from "../components/FiltroPeriodoDeCriacao";
 import { LeadCardNewDeal } from "../components/lead-card/LeadCardNewDeal";
 import { LeadCardPanel } from "../components/lead-card/LeadCardPanel";
 import { LeadPanelProvider, useLeadSheet } from "../components/lead-detail";
@@ -55,13 +56,16 @@ function CarteiraInner() {
     DEFAULT_CARTEIRA_FILTERS,
   );
   const { searchQuery, filterOrigin, filterQualification, filterResponsible } = filterState;
+  // Estado persistido antes do filtro de período não tem os campos.
+  const createdFrom = filterState.createdFrom || undefined;
+  const createdTo = filterState.createdTo || undefined;
   const usaCadastroErpCafeJurere = useClassificacaoCafeJurere();
   // Fonte da verdade sobre "é cliente?": cadastro no ERP para quem tem a
   // integração, a lei da Relação para o resto — a mesma da aba de Leads.
   const { usaLeiDoErp } = useOrgUsaLeiDoErp();
   const { allowed: canCreate } = useCanDo("create_lead");
   const responsibleMembers = useResponsibleMembers();
-  const { organizationId } = useOrganization();
+  const { organizationId, timezone: orgTimezone } = useOrganization();
 
   useEffect(() => { setNewDealLeadId(null); }, [organizationId]);
   useEffect(() => { trackModuleVisit("carteira", organizationId); }, [organizationId]);
@@ -91,6 +95,8 @@ function CarteiraInner() {
     usaLeiDoErp,
     usaCadastroErpCafeJurere,
     filterResponsible,
+    createdFrom,
+    createdTo,
   };
 
   return (
@@ -135,6 +141,14 @@ function CarteiraInner() {
                 ))}
               </SelectContent>
             </Select>
+            <FiltroPeriodoDeCriacao
+              from={createdFrom}
+              to={createdTo}
+              timeZone={orgTimezone || "America/Sao_Paulo"}
+              onChange={(periodo) =>
+                setFilterState((f) => ({ ...f, createdFrom: periodo?.from ?? "", createdTo: periodo?.to ?? "" }))
+              }
+            />
             <Button
               variant="outline"
               onClick={() => {
