@@ -129,3 +129,31 @@ Esta emenda revoga a D11 ("v1 só leitura") para escopos explícitos. A escrita 
 - pgTAP da fundação 26/26: escopo na emissão, uso único, outro token não confirma, plano vencido, permissão retirada depois do plano, flag desligada, trilha não forjável.
 - Allowlist 13/13.
 - Canary do funil 15/15. Regressão: v1 31/31 e métricas 12/12.
+
+---
+
+## Emenda 2026-11-23 (4) — fatia 3 do v2: disparo pela IA
+
+**Decisão:** o MCP não reimplementa disparo. Ele entrega o plano ao **motor de Disparos do app** (`blast-plan-create`), chamando a função **como o usuário**, com o JWT de 60 s da requisição. Medido: o GoTrue aceita esse JWT (`/auth/v1/user` → 200). Assim valem os mesmos limites diários (org e número), o espaçamento anti-ban e a janela da tela de Disparos. Status e cancelamento passam por `blast_plans` (RLS) e `blast-plan-control`. O teste para o próprio celular usa `whatsapp-api-proxy` (`sendText`, com a org explícita).
+
+**Ferramentas:**
+- `audience.preview` (leitura): cards abertos do funil, por etapa, parados há pelo menos N dias. A régua é a do quadro: `COALESCE(stage_changed_at, entered_at, created_at)`.
+- `broadcast.plan` (`messages:send`): guarda o plano com lista de leads, mensagem e números; mostra 3 exemplos renderizados pelo `resolveBlastMessage` do motor.
+- `broadcast.test`: envia para o celular de quem pede.
+- `broadcast.confirm`.
+- `broadcast.status` (leitura).
+- `broadcast.cancel`.
+
+**Guardas que o motor não tem, aplicadas aqui:**
+- **Número de setor** (`reserved_for`, ex.: cobrança) nunca entra. O motor criaria o plano e falharia depois.
+- **Janela de envio:** a confirmação só roda de segunda a sábado, das 8h às 20h, no horário da org. O motor manda o 1º lote no ato, a qualquer hora. A checagem acontece antes de consumir o plano.
+- **Multi-org:** recusado com explicação. O motor resolve a org pelo primeiro vínculo e não aceita org explícita; isso é uma limitação do app, a corrigir lá.
+- **Plano órfão:** o motor grava o plano antes de enviar o 1º lote. Se o envio falha, ele devolve erro sem o id. O MCP procura o plano pela marca `source.action_id` e relata "criado, 1º lote não saiu", com o id. A ação fica `partial`.
+- Só números Uazapi conectados. O Canal Oficial exige template e fica para depois.
+
+**Fora desta fatia:** opt-out. A lista de supressão da ADR-0029 §4 ainda não existe no app.
+
+**Evidência (preview, com `blast-plan-create`, `blast-plan-control` e `whatsapp-api-proxy` deployadas):**
+- Canary 11/11.
+- Na preview não há provedor de WhatsApp. O motor cria o plano como o usuário e falha o 1º lote por `UAZAPI_BASE_URL not set`, exatamente o caminho do plano órfão, que o MCP relatou com o id.
+- Deno 243/243, incluindo o type-check dos arquivos de teste.

@@ -35,10 +35,36 @@ import {
   parsePat,
   toSigningJwk,
 } from "./lib/pat.ts";
-import type { ActionStore, WriteScope } from "./tools/actions.ts";
+import type { ActionStore, EdgeInvoker, WriteScope } from "./tools/actions.ts";
 import { CUSTOMER_TOOLS, customerToolFilter } from "./tools/index.ts";
 
 const SERVER_INFO = { name: "torque-crm", version: "1.1.0" }; // NO project — no env reconnaissance
+
+/**
+ * Calls one of the app's own edge functions AS THE USER, with the 60 s JWT minted for this
+ * request (GoTrue accepts it — measured). Only the functions named in EdgeInvoker.
+ */
+function edgeInvoker(supabaseUrl: string, anonKey: string, userJwt: string): EdgeInvoker {
+  return async (fn, body) => {
+    const r = await fetch(`${supabaseUrl}/functions/v1/${fn}`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${userJwt}`,
+        apikey: anonKey,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(60_000),
+    });
+    let parsed: Record<string, unknown> | null = null;
+    try {
+      parsed = await r.json();
+    } catch {
+      parsed = null;
+    }
+    return { status: r.status, body: parsed };
+  };
+}
 
 /** Plan/confirm store bound to THIS request's token, through the resolver role. */
 function actionStore(resolverDb: SupabaseClient, tokenHash: string): ActionStore {
@@ -293,6 +319,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
         scopes: principal.scopes,
         patId: principal.patId,
         actions: tokenHash ? actionStore(booted.resolverDb, tokenHash) : undefined,
+        edge: edgeInvoker(config.supabaseUrl, config.supabaseAnonKey, userJwt),
       },
       logContext: { pat_id: principal.patId, org_id: principal.orgId },
     };

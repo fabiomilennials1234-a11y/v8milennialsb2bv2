@@ -122,9 +122,28 @@ const VALID_ARGS: Record<string, Record<string, unknown>> = {
   },
   "deal.move.confirm": { confirm_token: LEAD },
   "deal.move.undo": { undo_token: LEAD },
+  "audience.preview": { pipeline_id: LEAD, idle_days_min: 3 },
+  "broadcast.status": { blast_plan_id: LEAD },
+  "broadcast.plan": {
+    audience: { pipeline_id: LEAD, idle_days_min: 3 },
+    message: "Oi {{primeiro_nome}}",
+  },
+  "broadcast.test": { message: "Oi {{primeiro_nome}}" },
+  "broadcast.confirm": { confirm_token: LEAD },
+  "broadcast.cancel": { blast_plan_id: LEAD },
 };
 
-const WRITE_TOOLS = new Set(["deal.move.plan", "deal.move.confirm", "deal.move.undo"]);
+/** Write tool → the scope it must declare. */
+const WRITE_SCOPE: Record<string, string> = {
+  "deal.move.plan": "crm:write",
+  "deal.move.confirm": "crm:write",
+  "deal.move.undo": "crm:write",
+  "broadcast.plan": "messages:send",
+  "broadcast.test": "messages:send",
+  "broadcast.confirm": "messages:send",
+  "broadcast.cancel": "messages:send",
+};
+const WRITE_TOOLS = new Set(Object.keys(WRITE_SCOPE));
 
 /** An action store that records calls and hands back a fixed plan. */
 function fakeStore(plan: unknown = null) {
@@ -152,7 +171,12 @@ function fakeStore(plan: unknown = null) {
 }
 
 function writeCtx(db: unknown, store = fakeStore()): ToolContext {
-  return { ...ctx(db), scopes: ["read", "crm:write"], actions: store };
+  return {
+    ...ctx(db),
+    scopes: ["read", "crm:write", "messages:send"],
+    actions: store,
+    edge: () => Promise.resolve({ status: 500, body: null }),
+  };
 }
 
 // --- surface invariants ----------------------------------------------------------------
@@ -164,7 +188,7 @@ Deno.test("surface: read tools are readonly; write tools declare a scope and are
     assertEquals(t.inputSchema.additionalProperties, false, `${t.name} must reject unknown args`);
     if (WRITE_TOOLS.has(t.name)) {
       assertEquals(t.readonly, false, t.name);
-      assertEquals(t.requiredScope, "crm:write", t.name);
+      assertEquals(t.requiredScope, WRITE_SCOPE[t.name], t.name);
       assertEquals(t.annotations?.readOnlyHint, false, t.name);
     } else {
       assertEquals(t.readonly, true, t.name);
@@ -172,8 +196,10 @@ Deno.test("surface: read tools are readonly; write tools declare a scope and are
       assertEquals(t.annotations?.readOnlyHint, true, t.name);
     }
   }
-  // apply/undo change data: the client must ask the human first
-  for (const n of ["deal.move.confirm", "deal.move.undo"]) {
+  // apply/undo/send change data or reach people: the client must ask the human first
+  for (
+    const n of ["deal.move.confirm", "deal.move.undo", "broadcast.confirm", "broadcast.cancel"]
+  ) {
     assertEquals(CUSTOMER_TOOLS.find((t) => t.name === n)?.annotations?.destructiveHint, true, n);
   }
 });
@@ -182,7 +208,11 @@ Deno.test("scope filter: a read-only token never sees a write tool; a scoped one
   const readOnly = CUSTOMER_TOOLS.filter(customerToolFilter(["read"])).map((t) => t.name);
   for (const w of WRITE_TOOLS) assertEquals(readOnly.includes(w), false, w);
   const crm = CUSTOMER_TOOLS.filter(customerToolFilter(["read", "crm:write"])).map((t) => t.name);
-  for (const w of WRITE_TOOLS) assertEquals(crm.includes(w), true, w);
+  for (const w of WRITE_TOOLS) assertEquals(crm.includes(w), WRITE_SCOPE[w] === "crm:write", w);
+  const msg = CUSTOMER_TOOLS.filter(customerToolFilter(["read", "messages:send"])).map((t) =>
+    t.name
+  );
+  for (const w of WRITE_TOOLS) assertEquals(msg.includes(w), WRITE_SCOPE[w] === "messages:send", w);
   // fail-closed: a write tool that forgot its scope is invisible even to a full token
   const orphan = {
     ...CUSTOMER_TOOLS[0],
@@ -218,9 +248,22 @@ Deno.test("isolation: every tool filters by the TOKEN org on every table and RPC
     );
     await t.handler(VALID_ARGS[t.name], WRITE_TOOLS.has(t.name) ? writeCtx(db) : ctx(db));
     // confirm/undo with an unknown token stop at the store, before any query
-    if (t.name === "deal.move.confirm" || t.name === "deal.move.undo") continue;
+    if (
+      ["deal.move.confirm", "deal.move.undo", "broadcast.confirm", "broadcast.cancel"].includes(
+        t.name,
+      )
+    ) continue;
     assertEquals(calls.length + rpcArgs.length > 0, true, `${t.name} made no query`);
     for (const c of calls) {
+      // Reviewed exceptions: the caller's OWN memberships are read by user_id (to count their
+      // orgs), and recipients of a broadcast only after its parent plan was found in the org.
+      if (
+        c.table === "team_members" && c.chain.some(([m, a]) => m === "eq" && a[0] === "user_id")
+      ) {
+        const hasOrg = c.chain.some(([m, a]) => m === "eq" && a[0] === "organization_id");
+        if (!hasOrg) continue;
+      }
+      if (c.table === "blast_plan_recipients") continue;
       // `organizations` is keyed by its own id; every other table by organization_id.
       const col = c.table === "organizations" ? "id" : "organization_id";
       const orgEq = c.chain.find(([m, a]) => m === "eq" && a[0] === col);
