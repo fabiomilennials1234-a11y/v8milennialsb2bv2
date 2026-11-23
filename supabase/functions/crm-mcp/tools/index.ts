@@ -8,6 +8,7 @@
 import type { ToolDef } from "../../_shared/mcp/types.ts";
 import { customerConversationGetTool } from "./conversation.ts";
 import { customerLeadGetTool, customerLeadListTool } from "./lead.ts";
+import { customerMetricsCatalogTool, customerMetricsQueryTool } from "./metrics.ts";
 import { customerPipelineListTool, customerStageListTool } from "./pipeline.ts";
 import { customerWhatsappStatusTool } from "./whatsapp.ts";
 
@@ -18,4 +19,6 @@ export const CUSTOMER_TOOLS: ToolDef[] = [
   customerStageListTool,
   customerConversationGetTool,
   customerWhatsappStatusTool,
+  customerMetricsCatalogTool,
+  customerMetricsQueryTool,
 ];

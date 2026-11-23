@@ -1,0 +1,58 @@
+/**
+ * The ONLY door from a customer tool to a Postgres function (ADR 0012, emenda "allowlist de
+ * RPC"). v1 banned `.rpc(` outright: a SECURITY DEFINER function runs as its owner and can
+ * ignore the caller's RLS — the anti-bypass rule. The metrics engine the app itself uses is
+ * DEFINER, so the rule became an allowlist with a stated gate per entry:
+ *
+ *  - DEFINER entries must authorize the CALLER as their first act (assert_org_access /
+ *    auth.uid()) — the same function the app calls with the same user session;
+ *  - INVOKER entries run under the caller's RLS like any table read.
+ *
+ * Adding a name here is a security decision: tools.test.ts pins this list, and
+ * supabase/tests/crm_mcp_rpc_allowlist_test.sql proves each gate on the real database.
+ * Never add an RPC that takes an organization id WITHOUT checking the caller against it.
+ */
+import type { SupabaseClient } from "@supabase/supabase-js";
+import type { ToolContext } from "../../_shared/mcp/types.ts";
+
+export const RPC_ALLOWLIST = {
+  /** INVOKER — reads the metric catalog tables (readable by authenticated). */
+  fn_metric_catalog: "invoker",
+  /** DEFINER — first statement is assert_org_access(p_org_id). The Métricas engine. */
+  fn_metric_measure: "definer:assert_org_access",
+  /** DEFINER — answers for auth.uid() inside the given org (team_members of the caller). */
+  has_feature_permission: "definer:auth.uid",
+} as const;
+
+export type AllowedRpc = keyof typeof RPC_ALLOWLIST;
+
+export class RpcNotAllowedError extends Error {
+  constructor(name: string) {
+    super(`RPC not allowed from a customer tool: ${name}`);
+    this.name = "RpcNotAllowedError";
+  }
+}
+
+/** Call an allowlisted function through the caller's own client. */
+export async function callRpc<T = unknown>(
+  ctx: ToolContext,
+  name: AllowedRpc,
+  args: Record<string, unknown>,
+): Promise<{ data: T | null; error: { message?: string; code?: string } | null }> {
+  if (!Object.hasOwn(RPC_ALLOWLIST, name)) throw new RpcNotAllowedError(name);
+  const db = ctx.db as SupabaseClient;
+  const { data, error } = await db.rpc(name, args);
+  return { data: (data as T) ?? null, error: error ?? null };
+}
+
+/**
+ * Feature permission of the CALLER in the TOKEN's org (two-argument form — the one-argument
+ * overload resolves the user's FIRST org and is wrong for multi-org users).
+ */
+export async function callerHasFeature(ctx: ToolContext, featureKey: string): Promise<boolean> {
+  const { data, error } = await callRpc<boolean>(ctx, "has_feature_permission", {
+    p_feature_key: featureKey,
+    p_org_id: ctx.orgId,
+  });
+  return !error && data === true;
+}

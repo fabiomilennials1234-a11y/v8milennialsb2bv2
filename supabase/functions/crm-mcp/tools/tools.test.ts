@@ -5,6 +5,8 @@ import { CUSTOMER_TOOLS } from "./index.ts";
 import { leadListOrFilter, parseLeadListArgs } from "./lead.ts";
 import { shapeThread } from "./conversation.ts";
 import { instanceHealth } from "./whatsapp.ts";
+import { _resetCatalogCache } from "./metrics.ts";
+import { RPC_ALLOWLIST } from "./rpc.ts";
 import {
   clampLimit,
   combineOrGroups,
@@ -30,9 +32,48 @@ type Call = { table: string; chain: Array<[string, unknown[]]> };
  * and resolves to `rows` when awaited (or via maybeSingle/single). `.rpc` is recorded too,
  * so a test can assert it is never used.
  */
+const FAKE_CATALOG = {
+  measures: [
+    {
+      id: "receita",
+      label: "Receita",
+      unit: "currency",
+      compatible_recortes: ["total", "tempo", "origem"],
+    },
+    {
+      id: "num_vendas",
+      label: "Nº de vendas",
+      unit: "count",
+      compatible_recortes: ["total", "origem"],
+    },
+    {
+      id: "leads_criados",
+      label: "Leads criados",
+      unit: "count",
+      compatible_recortes: ["total", "tempo"],
+    },
+  ],
+  ratios: [{
+    id: "ticket_medio",
+    label: "Ticket médio",
+    num: "receita",
+    den: "num_vendas",
+    unit: "currency",
+  }],
+  recortes: [{ id: "total", label: "Total" }],
+};
+
+function fakeRpc(name: string): unknown {
+  if (name === "has_feature_permission") return true;
+  if (name === "fn_metric_catalog") return FAKE_CATALOG;
+  if (name === "fn_metric_measure") return { unit: "currency", value: 1000 };
+  return null;
+}
+
 function fakeDb(rows: (table: string) => unknown[] = () => []) {
   const calls: Call[] = [];
   const rpcCalls: string[] = [];
+  const rpcArgs: Array<{ name: string; args: Record<string, unknown> }> = [];
   const db = {
     from(table: string) {
       const call: Call = { table, chain: [] };
@@ -53,12 +94,13 @@ function fakeDb(rows: (table: string) => unknown[] = () => []) {
       });
       return proxy;
     },
-    rpc(name: string) {
+    rpc(name: string, args: Record<string, unknown> = {}) {
       rpcCalls.push(name);
-      return Promise.resolve({ data: null, error: null });
+      rpcArgs.push({ name, args });
+      return Promise.resolve({ data: fakeRpc(name), error: null });
     },
   };
-  return { db, calls, rpcCalls };
+  return { db, calls, rpcCalls, rpcArgs };
 }
 
 function ctx(db: unknown): ToolContext {
@@ -72,6 +114,8 @@ const VALID_ARGS: Record<string, Record<string, unknown>> = {
   "stage.list": { pipeline_id: LEAD },
   "conversation.get": { phone: "+55 (11) 99999-8888" },
   "whatsapp.instance_status": {},
+  "metrics.catalog": {},
+  "metrics.query": { metrics: ["receita", "ticket_medio", "cac"], period: "month" },
 };
 
 // --- surface invariants ----------------------------------------------------------------
@@ -86,43 +130,65 @@ Deno.test("surface: every customer tool is readonly, customerExposed and adverti
   }
 });
 
-Deno.test("isolation: every tool filters by the TOKEN org on every table it touches", async () => {
+Deno.test("isolation: every tool filters by the TOKEN org on every table and RPC it touches", async () => {
   for (const t of CUSTOMER_TOOLS) {
-    const { db, calls } = fakeDb((table) =>
+    _resetCatalogCache();
+    const { db, calls, rpcArgs } = fakeDb((table) =>
       table === "leads" ? [{ id: LEAD, normalized_phone: "11999998888" }] : []
     );
     await t.handler(VALID_ARGS[t.name], ctx(db));
-    assertEquals(calls.length > 0, true, `${t.name} made no query`);
+    assertEquals(calls.length + rpcArgs.length > 0, true, `${t.name} made no query`);
     for (const c of calls) {
-      const orgEq = c.chain.find(([m, a]) => m === "eq" && a[0] === "organization_id");
+      // `organizations` is keyed by its own id; every other table by organization_id.
+      const col = c.table === "organizations" ? "id" : "organization_id";
+      const orgEq = c.chain.find(([m, a]) => m === "eq" && a[0] === col);
       assertEquals(orgEq?.[1][1], ORG, `${t.name} → ${c.table} is not scoped to the token org`);
+    }
+    for (const r of rpcArgs) {
+      if (r.name === "fn_metric_catalog") continue; // global catalog, takes no org
+      const org = r.args.p_org_id;
+      assertEquals(org, ORG, `${t.name} → rpc ${r.name} is not called with the token org`);
     }
   }
 });
 
 Deno.test("isolation: an org_id argument that differs from the token is refused before any query", async () => {
   for (const t of CUSTOMER_TOOLS) {
-    const { db, calls } = fakeDb();
+    const { db, calls, rpcCalls } = fakeDb();
     // tools whose schema has no org_id still get it through a lenient client; the guard holds
     const res = await t.handler({ ...VALID_ARGS[t.name], org_id: OTHER_ORG }, ctx(db));
     assertEquals(res.isError, true, t.name);
-    assertEquals(calls.length, 0, `${t.name} queried despite a foreign org_id`);
+    assertEquals(calls.length + rpcCalls.length, 0, `${t.name} queried despite a foreign org_id`);
   }
 });
 
-Deno.test("anti-bypass: no customer tool ever calls a SECURITY DEFINER RPC through the user client", async () => {
+Deno.test("anti-bypass: the RPC allowlist is exactly the reviewed set", () => {
+  // Adding a function here is a security decision — see rpc.ts and
+  // supabase/tests/crm_mcp_rpc_allowlist_test.sql, which proves each gate on the real DB.
+  assertEquals(RPC_ALLOWLIST, {
+    fn_metric_catalog: "invoker",
+    fn_metric_measure: "definer:assert_org_access",
+    has_feature_permission: "definer:auth.uid",
+  });
+});
+
+Deno.test("anti-bypass: tools only reach Postgres functions through the allowlist", async () => {
   for (const t of CUSTOMER_TOOLS) {
+    _resetCatalogCache();
     const { db, rpcCalls } = fakeDb(() => [{ id: LEAD, normalized_phone: "11999998888" }]);
     await t.handler(VALID_ARGS[t.name], ctx(db));
-    assertEquals(rpcCalls, [], t.name);
+    for (const name of rpcCalls) {
+      assertEquals(Object.hasOwn(RPC_ALLOWLIST, name), true, `${t.name} called ${name}`);
+    }
   }
-  // …and the source agrees (a code path the fake did not exercise still cannot hide one).
+  // …and the source agrees: `.rpc(` lives only in rpc.ts (a path the fake did not exercise
+  // still cannot hide a direct call).
   for await (const e of Deno.readDir(new URL("./", import.meta.url))) {
-    if (!e.name.endsWith(".ts") || e.name.endsWith(".test.ts")) continue;
+    if (!e.name.endsWith(".ts") || e.name.endsWith(".test.ts") || e.name === "rpc.ts") continue;
     const src = (await Deno.readTextFile(new URL(e.name, import.meta.url)))
       .replace(/\/\*[\s\S]*?\*\//g, "") // block comments
       .replace(/\/\/.*$/gm, ""); // line comments — prose may say "never db.rpc (…)"
-    assertEquals(/\.rpc\s*\(/.test(src), false, `${e.name} contains .rpc(`);
+    assertEquals(/\.rpc\s*\(/.test(src), false, `${e.name} contains .rpc( — use callRpc`);
   }
 });
 

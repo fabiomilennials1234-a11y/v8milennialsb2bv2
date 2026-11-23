@@ -81,3 +81,24 @@ A C2 de 2026-06-25 foi mesclada mas **nunca rodou em lugar nenhum**: a migration
 - Canary HTTP na preview: 31/31. Cobre emissão, protocolo, mesmo telefone em duas orgs, MCP igual ao app para membro e admin, flag, revogação, hash e resolver.
 - Invariantes de RLS: zero violações dos objetos novos em INV-1/2/3/4/6.
 - Deno: crm-mcp, create-pat, espinha e torque-mcp verdes.
+
+---
+
+## Emenda 2026-11-23 (2) — fatia 1 do v2: métricas e a allowlist de RPC
+
+**Regra nova (substitui a decisão 6, "zero `.rpc` no client do usuário").** A tela de Métricas do app usa um motor SECURITY DEFINER (`fn_metric_measure`). Proibir toda RPC deixaria o MCP de fora dele, ou empurraria para uma cópia do cálculo, que diverge. A regra passa a ser uma **allowlist** em `crm-mcp/tools/rpc.ts`. Entra uma função só se as três condições valerem:
+- o app já a chama com a mesma sessão do usuário;
+- sendo DEFINER, ela autoriza o chamador antes de qualquer outra coisa (`assert_org_access`, `auth.uid()`);
+- o MCP passa sempre a org do token.
+
+A lista fica fixada em teste (`tools.test.ts`). Cada portão é provado no banco real (`supabase/tests/crm_mcp_rpc_allowlist_test.sql`): org alheia recusada, segunda org de um multi-org aceita, permissão respondida pela org pedida. Hoje a lista tem `fn_metric_catalog` (INVOKER), `fn_metric_measure` (DEFINER com `assert_org_access`) e `has_feature_permission(text, uuid)`, sempre na forma de dois argumentos. A de um argumento resolve a "primeira org" e erra para quem é multi-org.
+
+**Ferramentas.**
+- `metrics.catalog`: o catálogo do Estúdio de Métricas mais o CAC derivado.
+- `metrics.query`: até 8 métricas; períodos `today`, `week`, `month`, `quarter`, `year` e `range` no fuso da org; comparação com o período anterior; recortes do catálogo; filtros da allowlist do motor.
+
+**Permissão.** O app checa `metrics.view` só no navegador. Aqui ela é checada no servidor, por org.
+
+**CAC.** O motor não tem CAC. O MCP calcula: investimento cadastrado em Métricas › Marketing (`mkt_origin_config`, por origem e mês, rateado pelos dias do período) ÷ `num_vendas` do motor. O gasto do Meta Ads não fica guardado no Torque e não entra. Sem investimento, ou sem venda, o valor é `null` com `empty_reason`, nunca zero.
+
+**Evidência (preview):** pgTAP da allowlist 12/12; canary 12/12, com `leads_criados` e `receita` iguais aos do motor chamado com a sessão do usuário, CAC indisponível com motivo e membro sem `metrics.view` barrado; Deno 55/55 no crm-mcp.
