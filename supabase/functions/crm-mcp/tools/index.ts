@@ -7,6 +7,12 @@
  */
 import type { ToolDef } from "../../_shared/mcp/types.ts";
 import {
+  customerAutomationActivateTool,
+  customerAutomationDeactivateTool,
+  customerAutomationDraftTool,
+  customerAutomationListTool,
+} from "./automation.ts";
+import {
   customerAudiencePreviewTool,
   customerBroadcastCancelTool,
   customerBroadcastConfirmTool,
@@ -45,6 +51,10 @@ export const CUSTOMER_TOOLS: ToolDef[] = [
   customerBroadcastTestTool,
   customerBroadcastConfirmTool,
   customerBroadcastCancelTool,
+  customerAutomationListTool,
+  customerAutomationDraftTool,
+  customerAutomationActivateTool,
+  customerAutomationDeactivateTool,
 ];
 
 /**

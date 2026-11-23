@@ -157,3 +157,32 @@ Esta emenda revoga a D11 ("v1 só leitura") para escopos explícitos. A escrita 
 - Canary 11/11.
 - Na preview não há provedor de WhatsApp. O motor cria o plano como o usuário e falha o 1º lote por `UAZAPI_BASE_URL not set`, exatamente o caminho do plano órfão, que o MCP relatou com o id.
 - Deno 243/243, incluindo o type-check dos arquivos de teste.
+
+---
+
+## Emenda 2026-11-23 (5) — fatia 4 do v2: automação recorrente pela IA
+
+**Decisão: nenhum gatilho novo no motor.** A automação "card parado N dias na etapa S → WhatsApp" é montada com peças que o executor e o editor visual já rodam e editam:
+1. gatilho `stage_changed` (`pipeline_id` + `to_stage` = id exato da etapa);
+2. espera de N dias;
+3. condição "ainda em S" (`stage_id equals`);
+4. condição "parado N+ dias" (`days_in_stage ≥ N`, que lê `stage_changed_at`; sair e voltar reinicia a contagem);
+5. `send_whatsapp`.
+
+O spec passa pelo mesmo `safeParseSpec → compileWorkflow → validateWorkflow` que a tool de workflow do time usa (ADR-0013). Um gatilho de varredura `stage_idle` atingiria também os cards **já** parados, mas seria código novo no executor, um caminho de envio em massa sem as travas do motor de Disparos. Para esses cards, a resposta é o disparo avulso da fatia 3.
+
+**Tools:**
+- `automation.list` (leitura).
+- `automation.draft` (`automations:write`): grava **desligada**, aparece em Automações para revisão e edição.
+- `automation.activate`: em dois passos, `workflow_id` → plano, depois `confirm_token` → liga.
+- `automation.deactivate`.
+
+**Permissão:** a RLS de `workflows` deixa qualquer membro inserir e alterar; `workflows.create` e `workflows.edit` só eram checadas no navegador. O crm-mcp as checa no servidor (`has_feature_permission`) antes de cada escrita. A emissão do escopo já exige `workflows.create` (`crm_mcp_scope_check`).
+
+**Armadilha evitada:** `loop_limit` é o teto de **passos** por execução (`workflow-executor.ts`, `maxSteps`), não de repetições. Com 1, a automação pararia no primeiro nó. Usamos 100, o padrão do app.
+
+**Evidência (preview):**
+- Canary 12/12.
+- U8: com a automação ligada, um card entrando na etapa cria execução no **motor real**, então o gatilho gerado é aceito. U4: desligada, não cria.
+- Regressão: v1 31/31, métricas 12/12, funil 15/15, disparo 11/11.
+- Deno 84/84 no crm-mcp (282 no conjunto MCP + workflow-schema).
