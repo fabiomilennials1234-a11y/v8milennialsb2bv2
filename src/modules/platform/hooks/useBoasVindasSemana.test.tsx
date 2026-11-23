@@ -72,8 +72,6 @@ describe("useBoasVindasSemana", () => {
   it.each([
     ["sem metrics.view", () => { mocks.pode = { allowed: false, isLoading: false }; }],
     ["permissão ainda carregando", () => { mocks.pode = { allowed: false, isLoading: true }; }],
-    ["master (membro virtual)", () => { mocks.membro = { id: "master-virtual-u1" }; }],
-    ["gestor de portfólio (membro virtual)", () => { mocks.membro = { id: "gestor-virtual-u1" }; }],
     ["sem membro na org", () => { mocks.membro = null; }],
     ["org ainda não resolvida", () => { mocks.pronto = false; }],
     ["sem organização", () => { mocks.org = null; }],
@@ -84,6 +82,20 @@ describe("useBoasVindasSemana", () => {
     await new Promise((r) => setTimeout(r, 30));
     expect(mocks.rpc).not.toHaveBeenCalled();
     expect(result.current.data).toBeUndefined();
+  });
+
+  // A regra "uma vez por org, por semana" é do banco; aqui só se prova que o
+  // operador chega até a RPC.
+  it.each([
+    ["master", "master-virtual-u1"],
+    ["gestor de portfólio", "gestor-virtual-u1"],
+  ])("%s (membro virtual) reivindica a semana da org aberta", async (_nome, id) => {
+    mocks.membro = { id };
+    const { result } = render();
+    await waitFor(() => expect(result.current.data).not.toBeUndefined());
+    expect(mocks.rpc).toHaveBeenCalledTimes(1);
+    expect(mocks.rpc).toHaveBeenCalledWith("boas_vindas_semana_reivindicar", { p_org_id: "org-a" });
+    expect(result.current.data?.leads).toBe(5);
   });
 
   it("já viu esta semana: sem animação", async () => {

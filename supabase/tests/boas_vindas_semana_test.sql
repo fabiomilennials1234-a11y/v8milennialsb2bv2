@@ -20,6 +20,8 @@
 --       mesmo número de asserts nos dois caminhos.
 --         · uma vez por USUÁRIO (o 2º usuário da mesma org ainda recebe);
 --         · a 2ª chamada do mesmo usuário já não recebe.
+--   (f) operador: master e gestor de portfólio (não são membros) recebem como
+--       qualquer usuário — uma vez por org, por semana; org sem dado não gasta a semana.
 --   (d) isolamento: quem não é da org leva access_denied; sem login, 42501.
 --
 -- Run:
@@ -33,7 +35,7 @@ BEGIN;
 
 CREATE EXTENSION IF NOT EXISTS pgtap;
 
-SELECT plan(46);
+SELECT plan(53);
 
 -- ---------------------------------------------------------------------------
 -- (a) Estrutura e grants
@@ -85,7 +87,8 @@ VALUES
   ('b0a5b0a5-aaaa-0000-0000-000000000001', 'BV Org A', 'bv-org-a-aoa', 'America/Sao_Paulo'),
   ('b0a5b0a5-bbbb-0000-0000-000000000001', 'BV Org B', 'bv-org-b-aoa', 'America/Sao_Paulo'),
   ('b0a5b0a5-cccc-0000-0000-000000000001', 'BV Org C', 'bv-org-c-aoa', 'America/Sao_Paulo'),
-  ('b0a5b0a5-dddd-0000-0000-000000000001', 'BV Org D', 'bv-org-d-aoa', 'America/Sao_Paulo')
+  ('b0a5b0a5-dddd-0000-0000-000000000001', 'BV Org D', 'bv-org-d-aoa', 'America/Sao_Paulo'),
+  ('b0a5b0a5-ffff-0000-0000-000000000001', 'BV Org F', 'bv-org-f-aoa', 'America/Sao_Paulo')
 ON CONFLICT (id) DO UPDATE SET timezone = EXCLUDED.timezone;
 
 INSERT INTO auth.users (
@@ -103,7 +106,9 @@ FROM (VALUES
   ('b0a5b0a5-0001-0000-0000-000000000001'::uuid, 'bv-ua@test.local'),
   ('b0a5b0a5-0002-0000-0000-000000000001'::uuid, 'bv-ub@test.local'),
   ('b0a5b0a5-0003-0000-0000-000000000001'::uuid, 'bv-ud1@test.local'),
-  ('b0a5b0a5-0004-0000-0000-000000000001'::uuid, 'bv-ud2@test.local')
+  ('b0a5b0a5-0004-0000-0000-000000000001'::uuid, 'bv-ud2@test.local'),
+  ('b0a5b0a5-0005-0000-0000-000000000001'::uuid, 'bv-master@test.local'),
+  ('b0a5b0a5-0006-0000-0000-000000000001'::uuid, 'bv-gestor@test.local')
 ) AS u(id, email)
 ON CONFLICT (id) DO NOTHING;
 
@@ -193,6 +198,26 @@ SELECT 'b0a5b0a5-dddd-0000-0000-000000000001', 'b0a5b0a5-dddd-2000-0000-00000000
        (((date_trunc('week', (now() AT TIME ZONE 'America/Sao_Paulo'))::date - 5) + time '12:00')
          AT TIME ZONE 'America/Sao_Paulo'),
        777, 'novo_negocio', 'backfill';
+
+-- ── Org F — também RELATIVA a agora, só um lead: 2ª org com dado para o operador.
+INSERT INTO public.leads (organization_id, name, created_at)
+SELECT 'b0a5b0a5-ffff-0000-0000-000000000001', 'L F',
+       (((date_trunc('week', (now() AT TIME ZONE 'America/Sao_Paulo'))::date - 5) + time '12:00')
+         AT TIME ZONE 'America/Sao_Paulo');
+
+-- ── Operadores: master e gestor de portfólio NÃO são membros de nenhuma org.
+INSERT INTO public.master_users (user_id, is_active)
+VALUES ('b0a5b0a5-0005-0000-0000-000000000001', true)
+ON CONFLICT (user_id) DO UPDATE SET is_active = true;
+
+INSERT INTO public.gestores (id, user_id, is_active)
+VALUES ('b0a5b0a5-5555-0000-0000-000000000001', 'b0a5b0a5-0006-0000-0000-000000000001', true)
+ON CONFLICT (user_id) DO UPDATE SET is_active = true;
+
+INSERT INTO public.gestor_organizations (gestor_id, organization_id)
+VALUES ('b0a5b0a5-5555-0000-0000-000000000001', 'b0a5b0a5-dddd-0000-0000-000000000001'),
+       ('b0a5b0a5-5555-0000-0000-000000000001', 'b0a5b0a5-ffff-0000-0000-000000000001')
+ON CONFLICT (gestor_id, organization_id) DO NOTHING;
 
 -- ── O que é do Torque (org A, semana 25/10 a 31/10 de 2027) ─────────────────
 -- Gente: Membro A (já existe), Ana (ativa), Inativo (desativado), e a Eva da org E.
@@ -502,6 +527,56 @@ SELECT is(
      AND semana <> date_trunc('week', (now() AT TIME ZONE 'America/Sao_Paulo'))::date),
   0,
   '(c) a semana gravada é a segunda-feira corrente, no fuso da org');
+
+-- ---------------------------------------------------------------------------
+-- (f) Operador — master e gestor de portfólio (não são membros de nenhuma org)
+--     recebem a abertura UMA vez por org, por semana, como qualquer usuário.
+--     Mesmo plano nos dois caminhos (segunda / outro dia), como em (c).
+-- ---------------------------------------------------------------------------
+SET LOCAL role authenticated;
+SELECT set_config('request.jwt.claims',
+  '{"sub":"b0a5b0a5-0005-0000-0000-000000000001","role":"authenticated"}', true);
+
+SELECT is(
+  (public.boas_vindas_semana_reivindicar('b0a5b0a5-cccc-0000-0000-000000000001'))->>'motivo',
+  CASE WHEN extract(isodow FROM (now() AT TIME ZONE 'America/Sao_Paulo')) = 1 THEN 'sem_dados' ELSE 'nao_e_segunda' END,
+  '(f) master numa org SEM dado: nada a mostrar e nada é marcado');
+
+SELECT is(
+  (public.boas_vindas_semana_reivindicar('b0a5b0a5-dddd-0000-0000-000000000001'))->>'elegivel',
+  CASE WHEN extract(isodow FROM (now() AT TIME ZONE 'America/Sao_Paulo')) = 1 THEN 'true' ELSE 'false' END,
+  '(f) master (não é membro) recebe a abertura da org D');
+
+SELECT is(
+  (public.boas_vindas_semana_reivindicar('b0a5b0a5-dddd-0000-0000-000000000001'))->>'motivo',
+  CASE WHEN extract(isodow FROM (now() AT TIME ZONE 'America/Sao_Paulo')) = 1 THEN 'ja_vista' ELSE 'nao_e_segunda' END,
+  '(f) …e não recebe a da org D de novo');
+
+SELECT is(
+  (public.boas_vindas_semana_reivindicar('b0a5b0a5-ffff-0000-0000-000000000001'))->>'elegivel',
+  CASE WHEN extract(isodow FROM (now() AT TIME ZONE 'America/Sao_Paulo')) = 1 THEN 'true' ELSE 'false' END,
+  '(f) …mas recebe a da org F: é uma vez POR ORG');
+
+SELECT set_config('request.jwt.claims',
+  '{"sub":"b0a5b0a5-0006-0000-0000-000000000001","role":"authenticated"}', true);
+
+SELECT is(
+  (public.boas_vindas_semana_reivindicar('b0a5b0a5-dddd-0000-0000-000000000001'))->>'elegivel',
+  CASE WHEN extract(isodow FROM (now() AT TIME ZONE 'America/Sao_Paulo')) = 1 THEN 'true' ELSE 'false' END,
+  '(f) gestor de portfólio recebe a abertura da org D');
+
+SELECT is(
+  (public.boas_vindas_semana_reivindicar('b0a5b0a5-ffff-0000-0000-000000000001'))->>'elegivel',
+  CASE WHEN extract(isodow FROM (now() AT TIME ZONE 'America/Sao_Paulo')) = 1 THEN 'true' ELSE 'false' END,
+  '(f) …e a da org F do portfólio');
+
+SET LOCAL role postgres;
+
+SELECT is(
+  (SELECT count(*)::int FROM public.boas_vindas_semana_vistas
+   WHERE user_id = 'b0a5b0a5-0005-0000-0000-000000000001'),
+  CASE WHEN extract(isodow FROM (now() AT TIME ZONE 'America/Sao_Paulo')) = 1 THEN 2 ELSE 0 END,
+  '(f) o caderno tem uma linha por org para o master (a org vazia não gasta a semana)');
 
 SELECT * FROM finish();
 ROLLBACK;
