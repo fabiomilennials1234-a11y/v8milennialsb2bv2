@@ -37,9 +37,10 @@ A 0011 entregou o `torque-mcp` (MCP interno de ops, ops-master cross-org) e **ad
 
 A C2 de 2026-06-25 foi mesclada mas **nunca rodou em lugar nenhum**: a migration ficou arquivada sem aplicar, a UI (#890) ficou órfã numa branch empilhada, e o boot recusaria subir em qualquer projeto Supabase (item 1 abaixo). Esta emenda registra o que mudou ao levar o v1 até um ambiente real. Tudo foi medido na preview `qa-studio-pgtap-permanente`. O dev `bcfadphgsibjzivtbjvc` está aposentado e com o serviço restrito (`402 exceed_db_size_quota`).
 
-1. **Decisão 1, assert-absent, corrigida.** A plataforma injeta `SUPABASE_SERVICE_ROLE_KEY` e `SUPABASE_DB_URL` em toda edge function, e o runtime **ignora `Deno.env.delete`**. Medido: boot com 503, estágio `scrub`, "could not remove SUPABASE_SERVICE_ROLE_KEY". Por isso recusar o boot com a chave presente torna a função impossível de deployar.
-   - Os secrets de ops setados à mão (`MCP_MASTER_*`, `MCP_GATEWAY_SECRET`) continuam recusando o boot.
-   - Os secrets da plataforma ficam no env. A garantia passa a ser de código: nenhum módulo do crm-mcp os nomeia (teste de invariante de fonte em `lib/config.test.ts`) e nenhum client é construído com eles.
+1. **Decisão 1, assert-absent, e decisão 3, "namespace de secrets separado", corrigidas.** No Supabase, os secrets de edge são do **projeto inteiro**. Medido duas vezes:
+   - a plataforma injeta `SUPABASE_SERVICE_ROLE_KEY` e `SUPABASE_DB_URL` em toda função, e o runtime ignora `Deno.env.delete` (preview: boot 503 no estágio `scrub`);
+   - em produção, os secrets do torque-mcp (`MCP_MASTER_*`, `MCP_GATEWAY_SECRET`) chegam ao crm-mcp. A trava da C2 recusou o boot no primeiro deploy (503, estágio `config`).
+   Não existe namespace por função nessa plataforma. A garantia passou a ser de código: o boot tenta tirar esses valores do isolate e registra o que ficou; nenhum módulo do crm-mcp ou da create-pat os nomeia (teste de invariante de fonte em `lib/config.test.ts`, com controle negativo); nenhum client é construído com eles. Um namespace de verdade exigiria outro projeto Supabase.
 2. **Decisão 2 e residual R1, raio de dano da chave corrigido.** Uma chave em que o projeto confia valida **qualquer** claim `role`, inclusive `service_role`. A frase "forja qualquer usuário, não service_role" estava errada: vazar `CRM_MCP_JWT_SIGNING_KEY` equivale a vazar a service_role.
    - O que a chave dedicada ainda compra é isolamento: ela vive só no env do crm-mcp e é revogável na hora (`PATCH .../signing-keys/{kid} {status: revoked}`) sem tocar na chave que assina as sessões dos usuários.
    - Alternativa estrutural continua descartada: `generateLink`+`verifyOtp` exigiria service_role dentro da função.
