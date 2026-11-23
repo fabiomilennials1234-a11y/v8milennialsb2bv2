@@ -122,61 +122,149 @@ export async function hashToken(token: string, pepper?: string): Promise<string>
   return Array.from(new Uint8Array(sig)).map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
-// --- resolution decision logic (PURE; index.ts injects the DB results) ----------------
+// --- resolution decision logic (PURE; index.ts injects the DB result) -----------------
 
-/** The identity row crm_mcp_resolve_token returns (DESIGN §7.6). */
-export interface PatRow {
-  id: string;
+/**
+ * The row `crm_mcp_authenticate(p_token_hash)` returns for a KNOWN token (migration
+ * 20280124013100). An unknown hash returns no row at all.
+ */
+export interface AuthRow {
+  pat_id: string;
   user_id: string;
   organization_id: string;
-  scopes: string[];
-  expires_at: string | null;
-  revoked_at: string | null;
+  scopes: string[] | null;
   audience: string;
+  expires_at: string;
+  revoked_at: string | null;
+  /** crm_mcp_principal_check(user, org): 'ok' | master_principal | not_member | org_blocked | org_disabled */
+  principal: string;
+  /** The DB verdict: 'ok' | revoked | expired | rate_limited | one of the principal reasons. */
+  outcome: string;
+  retry_after_seconds: number | null;
 }
 
-export type ResolveOutcome =
-  | { kind: "ok"; row: PatRow }
-  | { kind: "unauthorized"; reason: "malformed" | "not_found" | "revoked" | "expired" }
-  | { kind: "forbidden"; reason: "audience" | "scope" | "master_principal" | "org_drift" };
+export interface Principal {
+  patId: string;
+  userId: string;
+  orgId: string;
+  scopes: string[];
+}
+
+export type ForbiddenReason =
+  | "master_principal"
+  | "not_member"
+  | "org_blocked"
+  | "org_disabled"
+  | "audience"
+  | "scope"
+  | "inconsistent";
+
+export type AuthDecision =
+  | { kind: "ok"; principal: Principal }
+  | { kind: "unauthorized"; reason: "not_found" | "revoked" | "expired" }
+  | { kind: "forbidden"; reason: ForbiddenReason }
+  | { kind: "rate_limited"; retryAfterSeconds: number };
 
 const AUDIENCE = "crm-mcp";
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const PRINCIPAL_REASONS = new Set<string>([
+  "master_principal",
+  "not_member",
+  "org_blocked",
+  "org_disabled",
+]);
 
 /**
- * Pure status checks over the resolved row. Never differentiates "not found" from a wrong
- * hash (both → not_found) so the endpoint is not a token-existence oracle (DESIGN §4.3/§7.6).
+ * Turn the resolver row into a decision. The DB verdict is necessary but NOT sufficient:
+ * an `ok` passes only if the raw facts it returned agree (not revoked, not expired, principal
+ * ok, right audience, a read scope, well-formed ids). A future SQL regression that says `ok`
+ * for a revoked or master token therefore still fails closed here.
+ *
+ * "Not found" and "wrong hash" are the same answer, so the endpoint is never a
+ * token-existence oracle (DESIGN §4.3).
  */
-export function classifyTokenRow(row: PatRow | null, nowMs: number): ResolveOutcome {
+export function classifyAuthRow(row: AuthRow | null, nowMs: number): AuthDecision {
   if (!row) return { kind: "unauthorized", reason: "not_found" };
-  if (row.revoked_at) return { kind: "unauthorized", reason: "revoked" };
-  if (row.expires_at && Date.parse(row.expires_at) < nowMs) {
+
+  // Facts that end the token's life take precedence over any verdict.
+  if (row.outcome === "revoked" || row.revoked_at) {
+    return { kind: "unauthorized", reason: "revoked" };
+  }
+  const exp = Date.parse(row.expires_at);
+  if (row.outcome === "expired" || !Number.isFinite(exp) || exp <= nowMs) {
     return { kind: "unauthorized", reason: "expired" };
   }
+
+  if (row.outcome === "rate_limited") {
+    const s = Number(row.retry_after_seconds);
+    return {
+      kind: "rate_limited",
+      retryAfterSeconds: Number.isFinite(s) && s >= 1 ? Math.ceil(s) : 60,
+    };
+  }
+  if (PRINCIPAL_REASONS.has(row.outcome)) {
+    return { kind: "forbidden", reason: row.outcome as ForbiddenReason };
+  }
+  if (row.outcome !== "ok") return { kind: "forbidden", reason: "inconsistent" };
+
+  // Independent re-check of the facts behind an `ok`.
+  if (row.principal !== "ok") {
+    return {
+      kind: "forbidden",
+      reason: PRINCIPAL_REASONS.has(row.principal)
+        ? row.principal as ForbiddenReason
+        : "inconsistent",
+    };
+  }
   if (row.audience !== AUDIENCE) return { kind: "forbidden", reason: "audience" };
-  return { kind: "ok", row };
+  const scopes = Array.isArray(row.scopes) ? row.scopes : [];
+  if (!scopes.includes("read")) return { kind: "forbidden", reason: "scope" };
+  if (
+    !UUID_RE.test(row.pat_id) || !UUID_RE.test(row.user_id) || !UUID_RE.test(row.organization_id)
+  ) {
+    return { kind: "forbidden", reason: "inconsistent" };
+  }
+
+  return {
+    kind: "ok",
+    principal: { patId: row.pat_id, userId: row.user_id, orgId: row.organization_id, scopes },
+  };
 }
 
+// --- signing key ----------------------------------------------------------------------
+
 /**
- * Pure eligibility gate run AFTER the row is valid (DESIGN §4.3.1 H1 + §4.3.2 M5):
- *  - a PAT whose owner is a master is REJECTED — crm-mcp must never operate with
- *    master-ghost cross-org semantics (the one way a customer endpoint becomes a
- *    cross-tenant reader);
- *  - the PAT's frozen org must still be a current membership of the owner (a re-org'd or
- *    offboarded user must not keep reading via a stale org binding).
+ * Reduce the signing-key secret to a WebCrypto-importable ES256 private JWK.
+ *
+ * The secret holds the SAME JWK that was imported into the project's signing keys, and the
+ * Supabase API requires `key_ops: ["sign","verify"]` there — which WebCrypto rejects for a
+ * private key ("Invalid key usage"). Only the curve parameters are kept; anything that is not
+ * a P-256 private key fails the boot with a clear message instead of a bare WORKER_ERROR.
  */
-export function assertEligiblePrincipal(input: {
-  isMaster: unknown;
-  currentOrgIds: unknown;
-  patOrgId: string;
-}): ResolveOutcome | null {
-  // FAIL CLOSED on the master gate: only a STRICT `false` is allowed through. A master
-  // (true) is rejected; a malformed/missing/non-boolean flag (NULL, undefined, anything the
-  // resolver might return if is_master_user ever drifted) is ALSO rejected — it is never
-  // read as "not master". This makes H1 robust independent of the is_master_user pin state.
-  if (input.isMaster !== false) return { kind: "forbidden", reason: "master_principal" };
-  const orgs = Array.isArray(input.currentOrgIds) ? input.currentOrgIds : [];
-  if (!orgs.includes(input.patOrgId)) return { kind: "forbidden", reason: "org_drift" };
-  return null; // eligible
+export interface Es256PrivateJwk {
+  kty: "EC";
+  crv: "P-256";
+  x: string;
+  y: string;
+  d: string;
+}
+
+export function toSigningJwk(secret: string): Es256PrivateJwk {
+  let jwk: Record<string, unknown>;
+  try {
+    jwk = JSON.parse(secret);
+  } catch {
+    throw new Error("CRM_MCP_JWT_SIGNING_KEY is not JSON");
+  }
+  if (jwk.kty !== "EC" || jwk.crv !== "P-256") {
+    throw new Error("CRM_MCP_JWT_SIGNING_KEY must be an EC P-256 JWK (ES256)");
+  }
+  for (const k of ["x", "y", "d"] as const) {
+    if (typeof jwk[k] !== "string" || !jwk[k]) {
+      throw new Error(`CRM_MCP_JWT_SIGNING_KEY is missing "${k}" (must be the PRIVATE key)`);
+    }
+  }
+  return { kty: "EC", crv: "P-256", x: jwk.x as string, y: jwk.y as string, d: jwk.d as string };
 }
 
 // --- per-user JWT mint (DESIGN §4.4) --------------------------------------------------
@@ -184,7 +272,10 @@ export function assertEligiblePrincipal(input: {
 /** Hard cap on the minted JWT lifetime, in seconds. This is the revocation-propagation ceiling. */
 export const MINT_TTL_SEC = 60;
 
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+/** The dedicated DB role that may execute crm_mcp_authenticate — and nothing else. */
+export const RESOLVER_ROLE = "crm_mcp_resolver";
+/** The resolver JWT lives just long enough for one RPC round-trip. */
+export const RESOLVER_TTL_SEC = 30;
 
 export interface MintInput {
   userId: string;
@@ -215,6 +306,25 @@ export async function mintUserJwt(input: MintInput, nowSec: number): Promise<str
     .setSubject(input.userId)
     .setIssuedAt(nowSec)
     .setExpirationTime(nowSec + MINT_TTL_SEC)
+    .sign(input.signingKey);
+}
+
+/**
+ * Mint the pre-auth JWT for the resolver call. Role `crm_mcp_resolver` can execute exactly
+ * one function (crm_mcp_authenticate) and read no table; there is no `sub`, so auth.uid()
+ * is NULL for the whole call. This is what keeps the resolver unreachable from a browser
+ * (anon/authenticated have no EXECUTE) while the function still needs no service_role.
+ */
+export async function mintResolverJwt(
+  input: Omit<MintInput, "userId" | "email">,
+  nowSec: number,
+): Promise<string> {
+  return await new SignJWT({ role: RESOLVER_ROLE })
+    .setProtectedHeader({ alg: "ES256", typ: "JWT", kid: input.kid })
+    .setIssuer(`https://${input.projectRef}.supabase.co/auth/v1`)
+    .setAudience("authenticated")
+    .setIssuedAt(nowSec)
+    .setExpirationTime(nowSec + RESOLVER_TTL_SEC)
     .sign(input.signingKey);
 }
 
@@ -250,5 +360,19 @@ export function assertWellFormedJwt(jwt: string): void {
   const ttl = (p.exp as number) - (p.iat as number);
   if (ttl <= 0 || ttl > MINT_TTL_SEC) {
     throw new Error(`assertWellFormedJwt: ttl ${ttl}s outside (0, ${MINT_TTL_SEC}]`);
+  }
+}
+
+/** Same hard-fail guard for the resolver JWT: exact role, no subject, ≤30 s. */
+export function assertWellFormedResolverJwt(jwt: string): void {
+  const p = decodeJwtPayload(jwt);
+  if (p.role !== RESOLVER_ROLE) throw new Error("assertWellFormedResolverJwt: wrong role");
+  if (p.sub !== undefined) throw new Error("assertWellFormedResolverJwt: must not carry a sub");
+  if (!Number.isInteger(p.iat) || !Number.isInteger(p.exp)) {
+    throw new Error("assertWellFormedResolverJwt: iat/exp missing or non-integer");
+  }
+  const ttl = (p.exp as number) - (p.iat as number);
+  if (ttl <= 0 || ttl > RESOLVER_TTL_SEC) {
+    throw new Error(`assertWellFormedResolverJwt: ttl ${ttl}s outside (0, ${RESOLVER_TTL_SEC}]`);
   }
 }

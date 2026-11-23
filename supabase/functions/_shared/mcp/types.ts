@@ -63,10 +63,25 @@ export interface ToolContext {
   scopes?: string[];
 }
 
+/**
+ * MCP tool annotations (spec 2025-06-18): hints the client uses to decide how to present
+ * a call (e.g. skip the confirmation prompt for a read-only tool). Hints, not guarantees —
+ * the server-side `readonly`/`customerExposed` gates are what actually enforce behavior.
+ */
+export interface ToolAnnotations {
+  title?: string;
+  readOnlyHint?: boolean;
+  destructiveHint?: boolean;
+  idempotentHint?: boolean;
+  openWorldHint?: boolean;
+}
+
 export interface ToolDef {
   name: string;
   description: string;
   readonly: boolean;
+  /** Advertised in tools/list when present. */
+  annotations?: ToolAnnotations;
   requiresServiceRole?: boolean;
   /**
    * Opt-in (default false = fail-closed): only tools explicitly marked may surface on the
