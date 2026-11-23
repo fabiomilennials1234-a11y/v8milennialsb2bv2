@@ -7,6 +7,12 @@
  */
 import type { ToolDef } from "../../_shared/mcp/types.ts";
 import { customerConversationGetTool } from "./conversation.ts";
+import {
+  customerDealMoveConfirmTool,
+  customerDealMovePlanTool,
+  customerDealMoveUndoTool,
+  customerFunnelReviewTool,
+} from "./funnel.ts";
 import { customerLeadGetTool, customerLeadListTool } from "./lead.ts";
 import { customerMetricsCatalogTool, customerMetricsQueryTool } from "./metrics.ts";
 import { customerPipelineListTool, customerStageListTool } from "./pipeline.ts";
@@ -21,4 +27,20 @@ export const CUSTOMER_TOOLS: ToolDef[] = [
   customerWhatsappStatusTool,
   customerMetricsCatalogTool,
   customerMetricsQueryTool,
+  customerFunnelReviewTool,
+  customerDealMovePlanTool,
+  customerDealMoveConfirmTool,
+  customerDealMoveUndoTool,
 ];
+
+/**
+ * Fail-closed positive allowlist, per request: a customer tool is visible when it is
+ * customerExposed AND either read-only, or a write tool whose declared scope this token holds.
+ * A write tool without a declared scope is never visible.
+ */
+export function customerToolFilter(scopes: string[]) {
+  return (t: ToolDef) =>
+    t.customerExposed === true &&
+    (t.readonly === true ||
+      (typeof t.requiredScope === "string" && scopes.includes(t.requiredScope)));
+}

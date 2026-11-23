@@ -74,3 +74,13 @@ describe("revokeReasonLabel", () => {
     expect(revokeReasonLabel("???")).toBe("revogado");
   });
 });
+
+describe("escopos", () => {
+  it("só oferece escopos de escrita que já têm ferramentas; rótulos em pt-BR com fallback", async () => {
+    const { WRITE_SCOPE_OPTIONS, scopeLabel } = await import("@/modules/platform/lib/mcp-connect");
+    expect(WRITE_SCOPE_OPTIONS.map((o) => o.id)).toEqual(["crm:write"]);
+    expect(scopeLabel("read")).toBe("Ler");
+    expect(scopeLabel("crm:write")).toBe("Organizar o funil");
+    expect(scopeLabel("x:y")).toBe("x:y");
+  });
+});

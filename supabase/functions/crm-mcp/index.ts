@@ -21,7 +21,7 @@ import { getCorsHeaders } from "../_shared/cors.ts";
 import { logError } from "../_shared/error-boundary.ts";
 import { handleRpcPayload } from "../_shared/mcp/http.ts";
 import type { DispatchContext } from "../_shared/mcp/dispatch.ts";
-import type { JsonRpcRequest, ToolDef } from "../_shared/mcp/types.ts";
+import type { JsonRpcRequest } from "../_shared/mcp/types.ts";
 import { type CrmMcpConfig, loadConfig, scrubPrivilegedEnv } from "./lib/config.ts";
 import {
   assertWellFormedJwt,
@@ -35,10 +35,64 @@ import {
   parsePat,
   toSigningJwk,
 } from "./lib/pat.ts";
-import { CUSTOMER_TOOLS } from "./tools/index.ts";
+import type { ActionStore, WriteScope } from "./tools/actions.ts";
+import { CUSTOMER_TOOLS, customerToolFilter } from "./tools/index.ts";
 
-const SERVER_INFO = { name: "torque-crm", version: "1.0.0" }; // NO project — no env reconnaissance
-const CUSTOMER_TOOL_FILTER = (t: ToolDef) => t.readonly === true && t.customerExposed === true;
+const SERVER_INFO = { name: "torque-crm", version: "1.1.0" }; // NO project — no env reconnaissance
+
+/** Plan/confirm store bound to THIS request's token, through the resolver role. */
+function actionStore(resolverDb: SupabaseClient, tokenHash: string): ActionStore {
+  const one = <T>(data: unknown): T | null => (Array.isArray(data) ? (data[0] as T) ?? null : null);
+  return {
+    async open(tool: string, scope: WriteScope, summary: string, plan: unknown) {
+      const { data, error } = await resolverDb.rpc("crm_mcp_action_open", {
+        p_token_hash: tokenHash,
+        p_tool: tool,
+        p_scope: scope,
+        p_summary: summary,
+        p_plan: plan,
+      });
+      if (error) throw new Error(error.message);
+      const row = one<{ action_id: string; expires_at: string }>(data);
+      if (!row) throw new Error("crm_mcp_action_open returned no row");
+      return { actionId: row.action_id, expiresAt: row.expires_at };
+    },
+    async take(actionId: string) {
+      const { data, error } = await resolverDb.rpc("crm_mcp_action_take", {
+        p_token_hash: tokenHash,
+        p_action_id: actionId,
+      });
+      if (error) return null;
+      const row = one<{ tool: string; plan: unknown }>(data);
+      return row ? { tool: row.tool, plan: row.plan } : null;
+    },
+    async finish(actionId: string, status: "applied" | "partial" | "failed", result: unknown) {
+      const { data, error } = await resolverDb.rpc("crm_mcp_action_finish", {
+        p_token_hash: tokenHash,
+        p_action_id: actionId,
+        p_status: status,
+        p_result: result,
+      });
+      return !error && data === true;
+    },
+    async getApplied(actionId: string) {
+      const { data, error } = await resolverDb.rpc("crm_mcp_action_get_applied", {
+        p_token_hash: tokenHash,
+        p_action_id: actionId,
+      });
+      if (error) return null;
+      const row = one<{ tool: string; plan: unknown; result: unknown }>(data);
+      return row ? { tool: row.tool, plan: row.plan, result: row.result } : null;
+    },
+    async markUndone(actionId: string) {
+      const { data, error } = await resolverDb.rpc("crm_mcp_action_mark_undone", {
+        p_token_hash: tokenHash,
+        p_action_id: actionId,
+      });
+      return !error && data === true;
+    },
+  };
+}
 const MAX_BODY_BYTES = 256 * 1024;
 const nowSec = () => Math.floor(Date.now() / 1000);
 
@@ -122,15 +176,18 @@ function bearer(header: string | null): string | null {
 const WWW_AUTH = 'Bearer realm="torque-crm", error="invalid_token"';
 
 /** Full PAT resolution: offline parse → hash → resolver RPC → pure re-check. */
-async function authenticate(b: Booted, token: string): Promise<AuthDecision> {
+async function authenticate(
+  b: Booted,
+  token: string,
+): Promise<{ decision: AuthDecision; tokenHash: string | null }> {
   const parsed = parsePat(token);
-  if (!parsed) return { kind: "unauthorized", reason: "not_found" }; // malformed/bad CRC: no DB hit
+  if (!parsed) return { decision: { kind: "unauthorized", reason: "not_found" }, tokenHash: null };
 
   const hash = await hashToken(parsed.full, b.config.patPepper);
   const { data, error } = await b.resolverDb.rpc("crm_mcp_authenticate", { p_token_hash: hash });
   if (error) throw new Error(`crm_mcp_authenticate failed: ${error.code ?? ""} ${error.message}`);
   const rows = (Array.isArray(data) ? data : []) as AuthRow[];
-  return classifyAuthRow(rows[0] ?? null, Date.now());
+  return { decision: classifyAuthRow(rows[0] ?? null, Date.now()), tokenHash: hash };
 }
 
 Deno.serve(async (req: Request): Promise<Response> => {
@@ -165,8 +222,9 @@ Deno.serve(async (req: Request): Promise<Response> => {
   if (!token) return rpcError(-32001, "Unauthorized", 401, cors, { "WWW-Authenticate": WWW_AUTH });
 
   let decision: AuthDecision;
+  let tokenHash: string | null;
   try {
-    decision = await authenticate(booted, token);
+    ({ decision, tokenHash } = await authenticate(booted, token));
   } catch (e) {
     await logError(e, { functionName: "crm-mcp", extra: { stage: "authenticate" } });
     return rpcError(-32603, "Internal error", 500, cors);
@@ -224,14 +282,17 @@ Deno.serve(async (req: Request): Promise<Response> => {
     const ctx: DispatchContext = {
       serverInfo: SERVER_INFO,
       tools: CUSTOMER_TOOLS,
-      allowMutations: false, // hard-pinned: no customer mutations in v1
-      toolFilter: CUSTOMER_TOOL_FILTER, // fail-closed positive allowlist (readonly && customerExposed)
+      // Writes are possible only through scoped tools; the filter below is the gate.
+      allowMutations: true,
+      toolFilter: customerToolFilter(principal.scopes),
       toolContext: {
         db,
         serviceDb: undefined, // never
         orgId: principal.orgId,
         userId: principal.userId,
         scopes: principal.scopes,
+        patId: principal.patId,
+        actions: tokenHash ? actionStore(booted.resolverDb, tokenHash) : undefined,
       },
       logContext: { pat_id: principal.patId, org_id: principal.orgId },
     };

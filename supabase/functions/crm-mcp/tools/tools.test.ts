@@ -1,7 +1,7 @@
 import { assertEquals, assertMatch } from "@std/assert";
 import { textOf } from "../../_shared/mcp/content.ts";
 import type { ToolContext } from "../../_shared/mcp/types.ts";
-import { CUSTOMER_TOOLS } from "./index.ts";
+import { CUSTOMER_TOOLS, customerToolFilter } from "./index.ts";
 import { leadListOrFilter, parseLeadListArgs } from "./lead.ts";
 import { shapeThread } from "./conversation.ts";
 import { instanceHealth } from "./whatsapp.ts";
@@ -116,17 +116,97 @@ const VALID_ARGS: Record<string, Record<string, unknown>> = {
   "whatsapp.instance_status": {},
   "metrics.catalog": {},
   "metrics.query": { metrics: ["receita", "ticket_medio", "cac"], period: "month" },
+  "funnel.review": { pipeline_id: LEAD },
+  "deal.move.plan": {
+    moves: [{ entry_id: LEAD, to_stage_key: "proposta", reason: "pediu proposta" }],
+  },
+  "deal.move.confirm": { confirm_token: LEAD },
+  "deal.move.undo": { undo_token: LEAD },
 };
+
+const WRITE_TOOLS = new Set(["deal.move.plan", "deal.move.confirm", "deal.move.undo"]);
+
+/** An action store that records calls and hands back a fixed plan. */
+function fakeStore(plan: unknown = null) {
+  const calls: string[] = [];
+  return {
+    calls,
+    open: (tool: string) => {
+      calls.push(`open:${tool}`);
+      return Promise.resolve({
+        actionId: "77777777-7777-4777-8777-777777777777",
+        expiresAt: "2099-01-01T00:00:00Z",
+      });
+    },
+    take: () => {
+      calls.push("take");
+      return Promise.resolve(plan ? { tool: "deal.move", plan } : null);
+    },
+    finish: () => {
+      calls.push("finish");
+      return Promise.resolve(true);
+    },
+    getApplied: () => Promise.resolve(null),
+    markUndone: () => Promise.resolve(true),
+  };
+}
+
+function writeCtx(db: unknown, store = fakeStore()): ToolContext {
+  return { ...ctx(db), scopes: ["read", "crm:write"], actions: store };
+}
 
 // --- surface invariants ----------------------------------------------------------------
 
-Deno.test("surface: every customer tool is readonly, customerExposed and advertises readOnlyHint", () => {
+Deno.test("surface: read tools are readonly; write tools declare a scope and are not marked read-only", () => {
   assertEquals(CUSTOMER_TOOLS.map((t) => t.name).sort(), Object.keys(VALID_ARGS).sort());
   for (const t of CUSTOMER_TOOLS) {
-    assertEquals(t.readonly, true, t.name);
     assertEquals(t.customerExposed, true, t.name);
-    assertEquals(t.annotations?.readOnlyHint, true, t.name);
     assertEquals(t.inputSchema.additionalProperties, false, `${t.name} must reject unknown args`);
+    if (WRITE_TOOLS.has(t.name)) {
+      assertEquals(t.readonly, false, t.name);
+      assertEquals(t.requiredScope, "crm:write", t.name);
+      assertEquals(t.annotations?.readOnlyHint, false, t.name);
+    } else {
+      assertEquals(t.readonly, true, t.name);
+      assertEquals(t.requiredScope, undefined, t.name);
+      assertEquals(t.annotations?.readOnlyHint, true, t.name);
+    }
+  }
+  // apply/undo change data: the client must ask the human first
+  for (const n of ["deal.move.confirm", "deal.move.undo"]) {
+    assertEquals(CUSTOMER_TOOLS.find((t) => t.name === n)?.annotations?.destructiveHint, true, n);
+  }
+});
+
+Deno.test("scope filter: a read-only token never sees a write tool; a scoped one sees only its scope", () => {
+  const readOnly = CUSTOMER_TOOLS.filter(customerToolFilter(["read"])).map((t) => t.name);
+  for (const w of WRITE_TOOLS) assertEquals(readOnly.includes(w), false, w);
+  const crm = CUSTOMER_TOOLS.filter(customerToolFilter(["read", "crm:write"])).map((t) => t.name);
+  for (const w of WRITE_TOOLS) assertEquals(crm.includes(w), true, w);
+  // fail-closed: a write tool that forgot its scope is invisible even to a full token
+  const orphan = {
+    ...CUSTOMER_TOOLS[0],
+    name: "x.write",
+    readonly: false,
+    requiredScope: undefined,
+  };
+  assertEquals(
+    customerToolFilter(["read", "crm:write", "messages:send", "automations:write"])(orphan),
+    false,
+  );
+});
+
+Deno.test("write tools refuse a token without the scope, before touching anything", async () => {
+  for (const t of CUSTOMER_TOOLS.filter((x) => WRITE_TOOLS.has(x.name))) {
+    const { db, calls, rpcCalls } = fakeDb();
+    const store = fakeStore();
+    const res = await t.handler(VALID_ARGS[t.name], {
+      ...ctx(db),
+      scopes: ["read"],
+      actions: store,
+    });
+    assertEquals(res.isError, true, t.name);
+    assertEquals(calls.length + rpcCalls.length + store.calls.length, 0, t.name);
   }
 });
 
@@ -136,7 +216,9 @@ Deno.test("isolation: every tool filters by the TOKEN org on every table and RPC
     const { db, calls, rpcArgs } = fakeDb((table) =>
       table === "leads" ? [{ id: LEAD, normalized_phone: "11999998888" }] : []
     );
-    await t.handler(VALID_ARGS[t.name], ctx(db));
+    await t.handler(VALID_ARGS[t.name], WRITE_TOOLS.has(t.name) ? writeCtx(db) : ctx(db));
+    // confirm/undo with an unknown token stop at the store, before any query
+    if (t.name === "deal.move.confirm" || t.name === "deal.move.undo") continue;
     assertEquals(calls.length + rpcArgs.length > 0, true, `${t.name} made no query`);
     for (const c of calls) {
       // `organizations` is keyed by its own id; every other table by organization_id.
@@ -156,7 +238,10 @@ Deno.test("isolation: an org_id argument that differs from the token is refused 
   for (const t of CUSTOMER_TOOLS) {
     const { db, calls, rpcCalls } = fakeDb();
     // tools whose schema has no org_id still get it through a lenient client; the guard holds
-    const res = await t.handler({ ...VALID_ARGS[t.name], org_id: OTHER_ORG }, ctx(db));
+    const res = await t.handler(
+      { ...VALID_ARGS[t.name], org_id: OTHER_ORG },
+      WRITE_TOOLS.has(t.name) ? writeCtx(db) : ctx(db),
+    );
     assertEquals(res.isError, true, t.name);
     assertEquals(calls.length + rpcCalls.length, 0, `${t.name} queried despite a foreign org_id`);
   }
@@ -169,6 +254,7 @@ Deno.test("anti-bypass: the RPC allowlist is exactly the reviewed set", () => {
     fn_metric_catalog: "invoker",
     fn_metric_measure: "definer:assert_org_access",
     has_feature_permission: "definer:auth.uid",
+    mover_negocio: "invoker",
   });
 });
 
@@ -176,7 +262,7 @@ Deno.test("anti-bypass: tools only reach Postgres functions through the allowlis
   for (const t of CUSTOMER_TOOLS) {
     _resetCatalogCache();
     const { db, rpcCalls } = fakeDb(() => [{ id: LEAD, normalized_phone: "11999998888" }]);
-    await t.handler(VALID_ARGS[t.name], ctx(db));
+    await t.handler(VALID_ARGS[t.name], WRITE_TOOLS.has(t.name) ? writeCtx(db) : ctx(db));
     for (const name of rpcCalls) {
       assertEquals(Object.hasOwn(RPC_ALLOWLIST, name), true, `${t.name} called ${name}`);
     }

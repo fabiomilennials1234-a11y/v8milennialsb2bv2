@@ -102,3 +102,30 @@ A lista fica fixada em teste (`tools.test.ts`). Cada portão é provado no banco
 **CAC.** O motor não tem CAC. O MCP calcula: investimento cadastrado em Métricas › Marketing (`mkt_origin_config`, por origem e mês, rateado pelos dias do período) ÷ `num_vendas` do motor. O gasto do Meta Ads não fica guardado no Torque e não entra. Sem investimento, ou sem venda, o valor é `null` com `empty_reason`, nunca zero.
 
 **Evidência (preview):** pgTAP da allowlist 12/12; canary 12/12, com `leads_criados` e `receita` iguais aos do motor chamado com a sessão do usuário, CAC indisponível com motivo e membro sem `metrics.view` barrado; Deno 55/55 no crm-mcp.
+
+---
+
+## Emenda 2026-11-23 (3) — fatia 2 do v2: a IA organiza o funil (primeira escrita)
+
+Esta emenda revoga a D11 ("v1 só leitura") para escopos explícitos. A escrita chega com uma fundação comum (`20280124013300_crm_mcp_escrita.sql`), que as fatias 3 e 4 reusam.
+
+1. **Escopos no token:** `read`, que é sempre incluído, mais `crm:write`, `messages:send` e `automations:write`. Só entra escopo que a pessoa já pode exercer no app:
+   - `crm:write` exige a permissão `pipeline.move_cards`;
+   - `automations:write` exige `workflows.create`;
+   - `messages:send` é só para admin da org (Disparos não tem chave própria);
+   - todos exigem a flag `crm_mcp_write` na org, além de `crm_mcp`.
+   A regra é aplicada na emissão (policy) e de novo a cada plano e a cada confirmação. O resolver de permissão (`_crm_mcp_member_feature`) segue a mesma ordem de `has_feature_permission`: override do membro, padrão da org, padrão da chave.
+2. **Plano de uso único:** toda escrita é `plan` → `confirm`. O plano fica em `crm_mcp_actions`, gravado por funções que só o papel `crm_mcp_resolver` executa e amarrado ao hash do token. A confirmação só manda o id; aplica o que o servidor validou, uma vez, em até 5 minutos, para o mesmo token e com o escopo ainda válido.
+3. **Auditoria:** a mesma tabela é a trilha. Quem agiu, o admin da org e o master leem. O navegador não escreve nela.
+4. **Ferramentas:**
+   - `funnel.review`: lote com etapas e regras, cards, dias na etapa e o fim da conversa.
+   - `deal.move.plan`: valida as regras de etapa (ganho pode exigir valor, perda exige motivo), lista as automações e o WhatsApp automático que disparam, e guarda o plano.
+   - `deal.move.confirm`: aplica por `mover_negocio`, a mesma escrita do app, da API e dos gatilhos, rodando como o usuário; pula card que mudou desde o plano; grava `lead_history` com `source='agent'` e o motivo.
+   - `deal.move.undo`: em 24 h, devolve o que ainda está onde a IA pôs. Automação e mensagem já disparadas não voltam, e a ferramenta diz isso.
+5. **Allowlist de RPC:** ganha `mover_negocio`, que é INVOKER.
+6. **Annotations:** `plan` é não-destrutivo; `confirm` e `undo` são `destructiveHint`, então o cliente pede OK ao humano.
+
+**Evidência (preview, `mover_negocio` real):**
+- pgTAP da fundação 26/26: escopo na emissão, uso único, outro token não confirma, plano vencido, permissão retirada depois do plano, flag desligada, trilha não forjável.
+- Allowlist 13/13.
+- Canary do funil 15/15. Regressão: v1 31/31 e métricas 12/12.
