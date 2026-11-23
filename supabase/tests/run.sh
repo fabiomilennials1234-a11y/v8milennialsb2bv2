@@ -625,7 +625,8 @@ run_with_pg_prove() {
     "$SCRIPT_DIR/telefone_nn_compartilhar_test.sql" \
     "$SCRIPT_DIR/cobranca_fundacao_test.sql" \
     "$SCRIPT_DIR/cobranca_regua_test.sql" \
-    "$SCRIPT_DIR/trava_de_valor_religar_org_test.sql"
+    "$SCRIPT_DIR/trava_de_valor_religar_org_test.sql" \
+    "$SCRIPT_DIR/corrigir_venda_ganha_sem_valor_test.sql"
 }
 
 run_with_psql() {
