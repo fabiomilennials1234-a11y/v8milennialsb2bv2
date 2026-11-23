@@ -22,6 +22,7 @@ import { ProtectedRoute } from "@/modules/identity/auth";
 import { PermissionProtectedRoute } from "@/modules/identity/permissions";
 import { CobrancaRoute } from "@/modules/cobranca";
 import { ListaFriaRoute } from "@/modules/lista-fria";
+import { IaConectadaRoute } from "@/modules/platform/components/IaConectadaRoute";
 import { MainLayout } from "@/modules/platform/components/layout/MainLayout";
 import { TorqueIntro } from "@/modules/platform/components/layout/TorqueIntro";
 import { BoasVindasSemanaGate } from "@/modules/platform/components/boas-vindas-semana/BoasVindasSemanaGate";
@@ -190,6 +191,7 @@ registrarRotas({
   "/faq": importarFaq,
   "/configuracoes": importarConfiguracoes,
   "/configuracoes/:tab": importarConfiguracoes,
+  "/ia-conectada": importarConfiguracoes,
 });
 // Carga fria: o chunk da rota em que o app abriu começa a descer AGORA, em
 // paralelo à sessão e aos gates — não depois deles. Só baixa; quem decide se a
@@ -895,6 +897,16 @@ function AppRoutes() {
             <LayoutWrapper>
               <Pitstop />
             </LayoutWrapper>
+          </ProtectedRoute>
+        }
+      />
+      {/* Atalho do Pitstop › Administração: abre a criação de token de IA (crm-mcp).
+          Só redireciona; a permissão é a da tela de Configurações, no destino. */}
+      <Route
+        path="/ia-conectada"
+        element={
+          <ProtectedRoute>
+            <IaConectadaRoute />
           </ProtectedRoute>
         }
       />

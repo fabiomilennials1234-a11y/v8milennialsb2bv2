@@ -24,6 +24,7 @@ import {
   HandCoins,
   Snowflake,
   MoreHorizontal,
+  Sparkles,
   Package,
   Send,
   Settings,
@@ -56,7 +57,7 @@ export interface NavNode {
    * piloto da org (`organizations.feature_flags`) para áreas que não existem
    * fora dela — sem cadeado, sem upsell: o item simplesmente não aparece.
    */
-  gate?: "meta_pages_connected" | "cobranca" | "lista_fria";
+  gate?: "meta_pages_connected" | "cobranca" | "lista_fria" | "crm_mcp";
   /** Cor própria do item. Nenhum item usa hoje — funil não tem mais classe. */
   color?: string;
   /**
@@ -163,6 +164,14 @@ export const SIDEBAR_PITSTOP: NavNode = {
  */
 export const PITSTOP_HUB_PATH = "/pitstop";
 
+/**
+ * Atalho para criar um token de IA (crm-mcp, ADR 0012). Os tokens moram numa seção de
+ * Configurações › API & Webhooks, fundo demais para quem só quer ligar a própria IA ao
+ * CRM; esta rota leva direto para lá com o diálogo "Novo token" aberto (`novo=1`).
+ */
+export const IA_CONECTADA_PATH = "/ia-conectada";
+export const IA_CONECTADA_DESTINO = "/configuracoes/api-webhooks?secao=mcp&novo=1";
+
 export interface PitstopGroup {
   id: string;
   title: string;
@@ -208,6 +217,8 @@ export const PITSTOP_GROUPS: PitstopGroup[] = [
       { label: "Pilotos", icon: Flag, path: "/equipe" },
       { label: "Produtos", icon: Package, path: "/produtos" },
       { label: "TV Dashboard", icon: Tv, path: "/tv" },
+      // Só aparece com a flag `crm_mcp` da org (o banco recusa token fora dela).
+      { label: "IA conectada", icon: Sparkles, path: IA_CONECTADA_PATH, gate: "crm_mcp" },
     ],
   },
 ];
@@ -313,6 +324,8 @@ export const NAV_VIEW_PERMISSIONS: Record<string, string> = {
   "/produtos": "products.view",
   "/negocios": "deals.view",
   "/configuracoes": "settings.view",
+  // O atalho cai numa seção de Configurações: mesma porta, mesma permissão.
+  [IA_CONECTADA_PATH]: "settings.view",
   // Cada aba virou rota; todas herdam o mesmo gate da tela que as hospeda —
   // senão o Pitstop mostraria itens que a rota depois recusa.
   ...Object.fromEntries(SETTINGS_TAB_PATHS.map((path) => [path, "settings.view"])),
