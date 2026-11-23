@@ -24,6 +24,7 @@ import { reconcileWorkflowButtonSends } from "../_shared/workflow-buttons/recove
 import { executeWorkflow } from "../_shared/workflow-executor.ts";
 import { fireTrigger, processCronTriggers, processScheduledDateTriggers, matchesTriggerConfig } from "../_shared/workflow-trigger.ts";
 import { tryResolvePipelineId } from "../_shared/pipeline-adapter.ts";
+import { overdueFollowupLeadIds } from "./overdue-followups.ts";
 import { getOrgDefaultPipelineRef } from "../_shared/pipeline-destination.ts";
 import { resolveWorkflowTriggerScope } from "../_shared/workflow-trigger-scope.ts";
 import {
@@ -669,28 +670,23 @@ async function processPeriodicTriggers(
 
     if (followupWorkflows?.length) {
       for (const wf of followupWorkflows) {
-        const { data: overdue } = await supabase
-          .from("follow_ups")
-          .select("lead_id")
-          .lt("due_date", new Date().toISOString())
-          .is("completed_at", null)
-          .limit(50);
+        // Só os follow-ups da org do workflow (a varredura roda sem RLS).
+        const overdueLeadIds = await overdueFollowupLeadIds(supabase, wf.organization_id);
 
-        if (overdue?.length) {
-          for (const row of overdue) {
-            if (!row.lead_id) continue;
+        if (overdueLeadIds.length) {
+          for (const leadId of overdueLeadIds) {
             const { count: existingCount } = await supabase
               .from("workflow_executions")
               .select("*", { count: "exact", head: true })
               .eq("workflow_id", wf.id)
-              .eq("lead_id", row.lead_id)
+              .eq("lead_id", leadId)
               .gte("started_at", new Date(Date.now() - 24 * 3_600_000).toISOString());
 
             if ((existingCount ?? 0) === 0) {
               await supabase.from("workflow_executions").insert({
                 workflow_id: wf.id,
                 organization_id: wf.organization_id,
-                lead_id: row.lead_id,
+                lead_id: leadId,
                 status: "running",
                 context: { trigger_type: "followup_overdue" },
               });
