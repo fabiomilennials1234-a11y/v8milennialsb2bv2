@@ -1,9 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { FunctionsHttpError } from "@supabase/supabase-js";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useOrganization } from "@/modules/identity";
+import { notifyError } from "@/shared/errors";
 
 /**
  * Tokens pessoais do crm-mcp (ADR 0012, DESIGN §7.5).
@@ -74,19 +74,6 @@ export function usePersonalAccessTokens() {
   });
 }
 
-/** A mensagem da edge fn (403/409 com `error`), não o genérico do supabase-js. */
-async function mensagemDaFuncao(error: unknown): Promise<string> {
-  if (error instanceof FunctionsHttpError) {
-    try {
-      const body = (await error.context.json()) as { error?: string };
-      if (body?.error) return body.error;
-    } catch {
-      /* corpo não-JSON: cai no genérico */
-    }
-  }
-  return "Não foi possível criar o token.";
-}
-
 export function useCreatePersonalAccessToken() {
   const queryClient = useQueryClient();
   const { organizationId } = useOrganization();
@@ -96,14 +83,15 @@ export function useCreatePersonalAccessToken() {
       const { data, error } = await supabase.functions.invoke("create-pat", {
         body: { ...input, organization_id: organizationId },
       });
-      if (error) throw new Error(await mensagemDaFuncao(error));
+      // O corpo da recusa (403/409) traz a frase em PT; notifyError a desembrulha.
+      if (error) throw error;
       return data as CreatedPersonalAccessToken;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [QUERY_KEY] });
     },
     onError: (e) => {
-      toast.error(e.message);
+      notifyError(e, { fallback: "Não foi possível criar o token." });
     },
   });
 }
@@ -132,7 +120,7 @@ export function useRevokePersonalAccessToken() {
       queryClient.invalidateQueries({ queryKey: [QUERY_KEY] });
     },
     onError: (e) => {
-      toast.error(e.message || "Erro ao revogar token");
+      notifyError(e, { fallback: "Não foi possível revogar o token." });
     },
   });
 }
