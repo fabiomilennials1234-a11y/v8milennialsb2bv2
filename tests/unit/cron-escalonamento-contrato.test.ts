@@ -189,6 +189,12 @@ describe('jobs agendados por migrations novas', () => {
     expect(AGENDADOS_DEPOIS.map((j) => j.jobname)).toContain('purge-system-alerts-resolvidos');
   });
 
+  it('considera apenas o agendamento vigente da limpeza do MCP', () => {
+    const limpeza = AGENDADOS_DEPOIS.filter((j) => j.jobname === 'crm-mcp-housekeeping');
+    expect(limpeza.map((j) => j.schedule)).toEqual(['11 6 * * *']);
+    expect(frequenciaSemanal(limpeza[0].schedule)).toBe(7);
+  });
+
   it('rotinas de tarefas mantêm quatro execuções por hora, sem lacunas maiores que 20 minutos', () => {
     const rotinas = AGENDADOS_DEPOIS.filter((j) => j.jobname === 'task-routines-roll-day');
     expect(rotinas).toHaveLength(1);

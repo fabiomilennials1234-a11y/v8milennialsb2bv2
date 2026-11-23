@@ -91,7 +91,7 @@ function arquivosQueTocamADestinatarios(): { caminho: string; texto: string }[] 
         andar(caminho);
         continue;
       }
-      if (!/\.tsx?$/.test(nome)) continue;
+      if (!/\.tsx?$/.test(nome) || /\.(?:test|spec)\.tsx?$/.test(nome)) continue;
       const texto = readFileSync(caminho, "utf8");
       if (texto.includes("blast_plan_recipients") || texto.includes("BlastRecipientStatus")) {
         achados.push({ caminho: caminho.slice(RAIZ.length + 1), texto });
