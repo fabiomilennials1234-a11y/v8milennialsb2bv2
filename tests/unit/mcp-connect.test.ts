@@ -78,7 +78,7 @@ describe("revokeReasonLabel", () => {
 describe("escopos", () => {
   it("só oferece escopos de escrita que já têm ferramentas; rótulos em pt-BR com fallback", async () => {
     const { WRITE_SCOPE_OPTIONS, scopeLabel } = await import("@/modules/platform/lib/mcp-connect");
-    expect(WRITE_SCOPE_OPTIONS.map((o) => o.id)).toEqual(["crm:write", "messages:send"]);
+    expect(WRITE_SCOPE_OPTIONS.map((o) => o.id)).toEqual(["crm:write", "messages:send", "automations:write"]);
     expect(WRITE_SCOPE_OPTIONS.find((o) => o.id === "messages:send")?.adminOnly).toBe(true);
     expect(scopeLabel("read")).toBe("Ler");
     expect(scopeLabel("crm:write")).toBe("Organizar o funil");

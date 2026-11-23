@@ -114,6 +114,13 @@ export const WRITE_SCOPE_OPTIONS: ReadonlyArray<{
       "A IA testa no seu celular e só dispara com sua confirmação.",
     adminOnly: true,
   },
+  {
+    id: "automations:write",
+    label: "Criar automações",
+    description:
+      "Montar automações (ex.: parado N dias numa etapa → WhatsApp). Nascem desligadas e só ligam " +
+      "com sua confirmação. Exige permissão de criar automações.",
+  },
 ];
 
 const SCOPE_LABEL: Record<string, string> = {

@@ -131,6 +131,15 @@ const VALID_ARGS: Record<string, Record<string, unknown>> = {
   "broadcast.test": { message: "Oi {{primeiro_nome}}" },
   "broadcast.confirm": { confirm_token: LEAD },
   "broadcast.cancel": { blast_plan_id: LEAD },
+  "automation.list": {},
+  "automation.draft": {
+    pipeline_id: LEAD,
+    stage_key: "novo",
+    idle_days: 3,
+    message: "Oi {{primeiro_nome}}",
+  },
+  "automation.activate": { workflow_id: LEAD },
+  "automation.deactivate": { workflow_id: LEAD },
 };
 
 /** Write tool → the scope it must declare. */
@@ -142,6 +151,9 @@ const WRITE_SCOPE: Record<string, string> = {
   "broadcast.test": "messages:send",
   "broadcast.confirm": "messages:send",
   "broadcast.cancel": "messages:send",
+  "automation.draft": "automations:write",
+  "automation.activate": "automations:write",
+  "automation.deactivate": "automations:write",
 };
 const WRITE_TOOLS = new Set(Object.keys(WRITE_SCOPE));
 
@@ -173,7 +185,7 @@ function fakeStore(plan: unknown = null) {
 function writeCtx(db: unknown, store = fakeStore()): ToolContext {
   return {
     ...ctx(db),
-    scopes: ["read", "crm:write", "messages:send"],
+    scopes: ["read", "crm:write", "messages:send", "automations:write"],
     actions: store,
     edge: () => Promise.resolve({ status: 500, body: null }),
   };
@@ -198,7 +210,13 @@ Deno.test("surface: read tools are readonly; write tools declare a scope and are
   }
   // apply/undo/send change data or reach people: the client must ask the human first
   for (
-    const n of ["deal.move.confirm", "deal.move.undo", "broadcast.confirm", "broadcast.cancel"]
+    const n of [
+      "deal.move.confirm",
+      "deal.move.undo",
+      "broadcast.confirm",
+      "broadcast.cancel",
+      "automation.activate",
+    ]
   ) {
     assertEquals(CUSTOMER_TOOLS.find((t) => t.name === n)?.annotations?.destructiveHint, true, n);
   }
@@ -209,6 +227,12 @@ Deno.test("scope filter: a read-only token never sees a write tool; a scoped one
   for (const w of WRITE_TOOLS) assertEquals(readOnly.includes(w), false, w);
   const crm = CUSTOMER_TOOLS.filter(customerToolFilter(["read", "crm:write"])).map((t) => t.name);
   for (const w of WRITE_TOOLS) assertEquals(crm.includes(w), WRITE_SCOPE[w] === "crm:write", w);
+  const auto = CUSTOMER_TOOLS.filter(customerToolFilter(["read", "automations:write"])).map((t) =>
+    t.name
+  );
+  for (const w of WRITE_TOOLS) {
+    assertEquals(auto.includes(w), WRITE_SCOPE[w] === "automations:write", w);
+  }
   const msg = CUSTOMER_TOOLS.filter(customerToolFilter(["read", "messages:send"])).map((t) =>
     t.name
   );
