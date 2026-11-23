@@ -1,6 +1,7 @@
 # Design: crm-mcp — servidor MCP customer-facing "bring-your-own-AI" (RLS-puro, per-user)
 
-**Status:** draft (2026-06-24) — aguardando revisão CTO. Endurecido após 3 reviews adversariais (lentes: multitenant, pat-forgery, rls-bypass).
+**Status:** v1 implementado (2026-11-23) — C2 fechada + C3 + C4 + C5, validado numa preview (pgTAP 59/59, canary HTTP 31/31). **Onde este documento e o código divergem, vale o código + a emenda de 2026-11-23 da `docs/adr/0012-crm-mcp-customer-facing-pat.md`.** As correções que importam: (1) o resolver é `crm_mcp_authenticate`, executável só pelo papel `crm_mcp_resolver` (não por anon), e já faz limite de uso + `last_used_at`; (2) a chave dedicada forja qualquer papel, inclusive service_role — R1 é "equivale à service_role", não "só usuários"; (3) a service_role injetada pela plataforma não sai do env (`Deno.env.delete` é ignorado) — a garantia é de código; (4) a migration é `20280124013100`/`013200` (a `20270101000000` arquivada nunca foi aplicada). Operação: `docs/runbooks/crm-mcp-prod.md`.
+_Histórico:_ draft (2026-06-24), endurecido após 3 reviews adversariais (lentes: multitenant, pat-forgery, rls-bypass).
 **Autor:** engenheiro (lead)
 **Relacionado:** `docs/adr/0011-torque-mcp-internal-ops-server.md` (cenário B, adiado lá → este doc), `.specs/features/torque-mcp/`, `supabase/functions/_shared/mcp/`
 

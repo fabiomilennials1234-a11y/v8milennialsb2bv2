@@ -30,3 +30,53 @@ A 0011 entregou o `torque-mcp` (MCP interno de ops, ops-master cross-org) e **ad
 - **Pré-requisito de deploy:** o projeto alvo precisa **confiar na chave pública ES256** do crm-mcp (JWT signing keys do Supabase) para a RLS honrar os JWTs mintados; secrets `CRM_MCP_JWT_SIGNING_KEY`/`CRM_MCP_JWT_KID` (+ `CRM_MCP_PAT_PEPPER` opcional) setados; canary round-trip valida no boot. Default **dev**; prod só com OK explícito.
 - **`is_master_user` em `search_path`:** já pinado pela `20261227000000` (dinâmica, dev+prod, `unpinned=0`); C2 re-confirma em prod como guard antes do ship (não bloqueador).
 - **Espinha agora serve dois callers** (ops-master e tenant) — o `toolFilter`/`customerExposed` mantêm o torque-mcp idêntico enquanto o crm-mcp estreita a superfície.
+
+---
+
+## Emenda 2026-11-23 — v1 (C2 fechada + C3 + C4 + C5), medida numa preview
+
+A C2 de 2026-06-25 foi mesclada mas **nunca rodou em lugar nenhum**: a migration ficou arquivada sem aplicar, a UI (#890) ficou órfã numa branch empilhada, e o boot recusaria subir em qualquer projeto Supabase (item 1 abaixo). Esta emenda registra o que mudou ao levar o v1 até um ambiente real. Tudo foi medido na preview `qa-studio-pgtap-permanente`. O dev `bcfadphgsibjzivtbjvc` está aposentado e com o serviço restrito (`402 exceed_db_size_quota`).
+
+1. **Decisão 1, assert-absent, corrigida.** A plataforma injeta `SUPABASE_SERVICE_ROLE_KEY` e `SUPABASE_DB_URL` em toda edge function, e o runtime **ignora `Deno.env.delete`**. Medido: boot com 503, estágio `scrub`, "could not remove SUPABASE_SERVICE_ROLE_KEY". Por isso recusar o boot com a chave presente torna a função impossível de deployar.
+   - Os secrets de ops setados à mão (`MCP_MASTER_*`, `MCP_GATEWAY_SECRET`) continuam recusando o boot.
+   - Os secrets da plataforma ficam no env. A garantia passa a ser de código: nenhum módulo do crm-mcp os nomeia (teste de invariante de fonte em `lib/config.test.ts`) e nenhum client é construído com eles.
+2. **Decisão 2 e residual R1, raio de dano da chave corrigido.** Uma chave em que o projeto confia valida **qualquer** claim `role`, inclusive `service_role`. A frase "forja qualquer usuário, não service_role" estava errada: vazar `CRM_MCP_JWT_SIGNING_KEY` equivale a vazar a service_role.
+   - O que a chave dedicada ainda compra é isolamento: ela vive só no env do crm-mcp e é revogável na hora (`PATCH .../signing-keys/{kid} {status: revoked}`) sem tocar na chave que assina as sessões dos usuários.
+   - Alternativa estrutural continua descartada: `generateLink`+`verifyOtp` exigiria service_role dentro da função.
+3. **Confiança da chave (pré-requisito de deploy), medido.**
+   - Chave ES256 importada em `standby` **ou** `previously_used` é aceita pelo PostgREST. O controle sem importar dá 401 `PGRST301`.
+   - Usamos `previously_used`: só verificação, e uma rotação feita no painel nunca a promove a chave de sessão.
+   - Só existe **um** `standby` por projeto. Criar um segundo dá 422 sem rebaixar o existente.
+   - Em prod o `standby` é o HS256 legado, que antes precisa ir para `previously_used`. Ele continua verificando: a chave anon legada funciona com o HS256 em `previously_used` na preview. Sequência no runbook `docs/runbooks/crm-mcp-prod.md`.
+   - O JWK que a API exige (`key_ops: ["sign","verify"]`) é recusado pelo WebCrypto ao importar a chave privada. A função reduz o JWK aos parâmetros da curva (`toSigningJwk`).
+4. **Decisão 4 substituída: o resolver não é mais chamável por anon.** O único caminho token → identidade é `crm_mcp_authenticate`, executável só pelo papel `crm_mcp_resolver`.
+   - O papel é NOLOGIN, sem BYPASSRLS, e não lê tabela nenhuma.
+   - Só é alcançável por um JWT de 30 s assinado pelo próprio crm-mcp.
+   - Navegador não chega nele: anon e authenticated não têm EXECUTE, e o INV-6 (folga zero) não muda.
+   - Medido: troca de papel 200, o papel lendo `leads` dá 403, usuário logado chamando o resolver dá erro.
+5. **Limite de uso, `last_used_at` e registro de recusas ficam dentro do resolver.** Um round-trip, e só quem tem o token consome o balde dele. Uma RPC separada chamável por authenticated deixaria um usuário esgotar o balde de outro.
+   - Limites: 120 por minuto por token, 600 por minuto por org, 20 000 por dia por org. Ao estourar: 429 com `Retry-After`.
+   - Token estourado não consome o balde da org.
+   - Token revogado que continua chegando fica registrado em `crm_mcp_auth_denials`, que é sinal de vazamento.
+6. **Emissão.** Só o dono insere. Admin e master leem e revogam, mas não emitem: inserir com `user_id` alheio seria virar aquele usuário.
+   - Gestor de portfólio não emite (é principal cross-org).
+   - O banco impõe por conta própria: escopo só `read`; validade de até 366 dias; revogação de mão única com carimbo e motivo do servidor; teto de 10 ativos; hash ilegível pelo navegador (grant por coluna).
+   - Pepper não é usado: um token de ~178 bits não tem pré-imagem a proteger, e o pepper só acoplaria um segredo a duas funções. O suporte opcional fica.
+7. **Ciclo de vida (C5).**
+   - Desligar ou apagar o membro revoga os tokens dele na org (`offboarding`).
+   - 90 dias sem uso revoga (`auto_unused`).
+   - Faxina diária via pg_cron às 06:17 UTC.
+   - Desligar a flag `crm_mcp` corta todos os tokens da org na próxima chamada.
+8. **Read pack (C3).** `lead.get`, `lead.list` (busca, funil/etapa, datas, cursor), `pipeline.list`, `stage.list`, `conversation.get` e `whatsapp.instance_status`.
+   - Toda tabela tocada usa o `get_my_organization_ids()` plural, então token da segunda org de um usuário multi-org funciona.
+   - Toda query leva `.eq(organization_id)` do token.
+   - Nenhuma `.rpc` no client do usuário (teste de fonte e de execução).
+   - Todas as tools anunciam `readOnlyHint`.
+   - O status de WhatsApp nunca seleciona `provider_config`, `qr_code` nem `metadata`.
+9. **Fora do v1 (C6):** OAuth 2.1 (conectores do claude.ai web e do ChatGPT), token de serviço por org e escopo de escrita.
+
+**Evidência:**
+- pgTAP `supabase/tests/crm_mcp_tokens_test.sql`: 59/59. O controle negativo (policy de INSERT sem checagem e master liberado) reprova 9.
+- Canary HTTP na preview: 31/31. Cobre emissão, protocolo, mesmo telefone em duas orgs, MCP igual ao app para membro e admin, flag, revogação, hash e resolver.
+- Invariantes de RLS: zero violações dos objetos novos em INV-1/2/3/4/6.
+- Deno: crm-mcp, create-pat, espinha e torque-mcp verdes.
