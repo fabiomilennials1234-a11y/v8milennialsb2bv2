@@ -4,8 +4,9 @@
  * .specs/features/crm-mcp/DESIGN.md.
  *
  * Pipeline (mirrors torque-mcp, swapping ONLY the auth layer for a per-PAT path):
- *   L0 BOOT   — scrub platform-injected privileged secrets from the isolate, fail loud on any
- *               ops secret, import the dedicated ES256 signing key once.
+ *   L0 BOOT   — try to drop the project-wide privileged secrets from the isolate (the runtime
+ *               keeps them; the code never reads them — see lib/config.ts), import the
+ *               dedicated ES256 signing key once.
  *   L1 HTTP   — CORS / OPTIONS / POST-only / body cap. The bearer PAT IS the credential.
  *   L2 AUTH   — parse PAT offline (format + CRC) → hash → crm_mcp_authenticate, called with a
  *               30 s JWT for the `crm_mcp_resolver` role (browser-unreachable resolver; it
@@ -21,7 +22,7 @@ import { logError } from "../_shared/error-boundary.ts";
 import { handleRpcPayload } from "../_shared/mcp/http.ts";
 import type { DispatchContext } from "../_shared/mcp/dispatch.ts";
 import type { JsonRpcRequest, ToolDef } from "../_shared/mcp/types.ts";
-import { type CrmMcpConfig, loadConfig, scrubPlatformSecrets } from "./lib/config.ts";
+import { type CrmMcpConfig, loadConfig, scrubPrivilegedEnv } from "./lib/config.ts";
 import {
   assertWellFormedJwt,
   assertWellFormedResolverJwt,
@@ -60,7 +61,7 @@ async function boot(): Promise<Booted | BootFailure> {
   try {
     // Order matters: the scrub runs before anything else reads the env, so no module — ours
     // or a dependency — can pick the platform's service_role key up later in this isolate.
-    const scrubbed = scrubPlatformSecrets(Deno.env);
+    const scrubbed = scrubPrivilegedEnv(Deno.env);
     stage = "config";
     const config = loadConfig(Deno.env.toObject()); // throws on ops secrets or missing reqs
     stage = "signing_key";

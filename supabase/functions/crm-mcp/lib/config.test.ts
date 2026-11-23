@@ -1,5 +1,5 @@
 import { assertEquals, assertThrows } from "@std/assert";
-import { loadConfig, PLATFORM_PRIVILEGED_SECRETS, scrubPlatformSecrets } from "./config.ts";
+import { loadConfig, PRIVILEGED_ENV, scrubPrivilegedEnv } from "./config.ts";
 
 const OK_ENV: Record<string, string> = {
   SUPABASE_URL: "https://jsjsmuncfkbsbzqzqhfq.supabase.co",
@@ -49,48 +49,39 @@ Deno.test("loadConfig: throws naming each missing required var", () => {
   }
 });
 
-Deno.test("loadConfig: ASSERT-ABSENT — boot refuses if an ops/master secret is present (H3)", () => {
-  for (const k of ["MCP_MASTER_EMAIL", "MCP_MASTER_PASSWORD", "MCP_GATEWAY_SECRET"]) {
-    assertThrows(() => loadConfig({ ...OK_ENV, [k]: "leaked" }), Error, "forbidden ops secret");
+Deno.test("loadConfig: project-wide privileged secrets do not block the boot (they cannot be removed)", () => {
+  // Supabase secrets are project-wide: torque-mcp's MCP_MASTER_* reach crm-mcp in production.
+  for (const k of PRIVILEGED_ENV) {
+    assertEquals(loadConfig({ ...OK_ENV, [k]: "present" }).projectRef, "jsjsmuncfkbsbzqzqhfq");
   }
 });
 
-Deno.test("loadConfig: the platform-injected secrets do not block the boot (they cannot be removed)", () => {
-  for (const k of PLATFORM_PRIVILEGED_SECRETS) {
-    assertEquals(loadConfig({ ...OK_ENV, [k]: "injected" }).projectRef, "jsjsmuncfkbsbzqzqhfq");
-  }
-});
-
-Deno.test("loadConfig: an empty forbidden var (set but blank) does not trip the guard", () => {
-  const cfg = loadConfig({ ...OK_ENV, MCP_GATEWAY_SECRET: "   " });
-  assertEquals(cfg.projectRef, "jsjsmuncfkbsbzqzqhfq");
-});
-
-Deno.test("scrubPlatformSecrets: removes what the runtime lets go, keeps the rest of the env", () => {
+Deno.test("scrubPrivilegedEnv: removes what the runtime lets go, keeps the rest of the env", () => {
   const env = fakeEnv({
     ...OK_ENV,
     SUPABASE_SERVICE_ROLE_KEY: "srk",
     SUPABASE_DB_URL: "postgres://x",
+    MCP_MASTER_PASSWORD: "pw",
   });
-  assertEquals(scrubPlatformSecrets(env), {
-    removed: ["SUPABASE_SERVICE_ROLE_KEY", "SUPABASE_DB_URL"],
+  assertEquals(scrubPrivilegedEnv(env), {
+    removed: ["SUPABASE_SERVICE_ROLE_KEY", "SUPABASE_DB_URL", "MCP_MASTER_PASSWORD"],
     kept: [],
   });
   assertEquals(env.has("SUPABASE_SERVICE_ROLE_KEY"), false);
   assertEquals(env.get("SUPABASE_URL"), OK_ENV.SUPABASE_URL);
 });
 
-Deno.test("scrubPlatformSecrets: reports (never throws on) what the runtime keeps — Supabase's case", () => {
+Deno.test("scrubPrivilegedEnv: reports (never throws on) what the runtime keeps — Supabase's case", () => {
   const env = fakeEnv({ ...OK_ENV, SUPABASE_SERVICE_ROLE_KEY: "srk" }, [
     "SUPABASE_SERVICE_ROLE_KEY",
   ]);
-  assertEquals(scrubPlatformSecrets(env), { removed: [], kept: ["SUPABASE_SERVICE_ROLE_KEY"] });
+  assertEquals(scrubPrivilegedEnv(env), { removed: [], kept: ["SUPABASE_SERVICE_ROLE_KEY"] });
 });
 
-Deno.test("source invariant: no crm-mcp module outside lib/config.ts names a privileged secret", async () => {
-  // The runtime keeps the platform secrets in the env, so THIS is the guarantee: no module
-  // ever reads them by name, and no client is built from them.
-  const root = new URL("../", import.meta.url);
+Deno.test("source invariant: no crm-mcp/create-pat module outside lib/config.ts names a privileged secret", async () => {
+  // The runtime keeps these in the env (project-wide secrets), so THIS is the guarantee: no
+  // module ever reads them by name, and no client is built from them.
+  const roots = [new URL("../", import.meta.url), new URL("../../create-pat/", import.meta.url)];
   const offenders: string[] = [];
   async function walk(dir: URL) {
     for await (const e of Deno.readDir(dir)) {
@@ -101,12 +92,15 @@ Deno.test("source invariant: no crm-mcp module outside lib/config.ts names a pri
         !e.name.endsWith(".test.ts")
       ) {
         const src = await Deno.readTextFile(u);
-        if (/SERVICE_ROLE|SUPABASE_DB_URL|SUPABASE_SECRET_KEYS|serviceDb\s*:\s*[^u\s]/.test(src)) {
+        if (
+          /SERVICE_ROLE|SUPABASE_DB_URL|SUPABASE_SECRET_KEYS|MCP_MASTER|MCP_GATEWAY|serviceDb\s*:\s*[^u\s]/
+            .test(src)
+        ) {
           offenders.push(u.pathname);
         }
       }
     }
   }
-  await walk(root);
+  for (const r of roots) await walk(r);
   assertEquals(offenders, []);
 });
