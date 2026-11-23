@@ -68,6 +68,11 @@ export interface ToolContext {
    * it. Absent in torque-mcp.
    */
   actions?: unknown;
+  /**
+   * Calls another edge function AS THE SAME USER (crm-mcp): the app's own engines (Disparos,
+   * WhatsApp proxy) are reused instead of duplicated. Opaque here; typed in crm-mcp.
+   */
+  edge?: unknown;
 }
 
 /**

@@ -32,6 +32,12 @@ export interface ActionStore {
   markUndone(actionId: string): Promise<boolean>;
 }
 
+/** Calls another edge function with the caller's own short-lived JWT. */
+export type EdgeInvoker = (
+  fn: "blast-plan-create" | "blast-plan-control" | "whatsapp-api-proxy",
+  body: unknown,
+) => Promise<{ status: number; body: Record<string, unknown> | null }>;
+
 /** Annotations for a write tool: the client must ask the human before calling it. */
 export const WRITE: ToolAnnotations = {
   readOnlyHint: false,

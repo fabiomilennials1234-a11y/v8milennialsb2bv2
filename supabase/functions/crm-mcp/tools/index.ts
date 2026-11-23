@@ -6,6 +6,14 @@
  * second, fail-closed barrier (DESIGN §6.1).
  */
 import type { ToolDef } from "../../_shared/mcp/types.ts";
+import {
+  customerAudiencePreviewTool,
+  customerBroadcastCancelTool,
+  customerBroadcastConfirmTool,
+  customerBroadcastPlanTool,
+  customerBroadcastStatusTool,
+  customerBroadcastTestTool,
+} from "./broadcast.ts";
 import { customerConversationGetTool } from "./conversation.ts";
 import {
   customerDealMoveConfirmTool,
@@ -31,6 +39,12 @@ export const CUSTOMER_TOOLS: ToolDef[] = [
   customerDealMovePlanTool,
   customerDealMoveConfirmTool,
   customerDealMoveUndoTool,
+  customerAudiencePreviewTool,
+  customerBroadcastStatusTool,
+  customerBroadcastPlanTool,
+  customerBroadcastTestTool,
+  customerBroadcastConfirmTool,
+  customerBroadcastCancelTool,
 ];
 
 /**

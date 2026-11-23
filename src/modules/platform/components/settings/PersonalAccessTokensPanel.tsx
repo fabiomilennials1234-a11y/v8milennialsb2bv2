@@ -445,7 +445,7 @@ export function PersonalAccessTokensPanel() {
               {escritaLiberada && (
                 <fieldset className="grid gap-2">
                   <legend className="mb-1 text-sm font-medium">O que a IA pode fazer além de ler</legend>
-                  {WRITE_SCOPE_OPTIONS.map((o) => (
+                  {WRITE_SCOPE_OPTIONS.filter((o) => !o.adminOnly || isAdmin).map((o) => (
                     <label
                       key={o.id}
                       className="flex cursor-pointer items-start gap-3 rounded-xl border border-border p-3 hover:bg-muted/50"
