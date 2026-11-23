@@ -2,6 +2,7 @@ import { assertEquals, assertMatch } from "@std/assert";
 import { textOf } from "../../_shared/mcp/content.ts";
 import type { ToolContext } from "../../_shared/mcp/types.ts";
 import {
+  clock,
   customerBroadcastConfirmTool,
   eligibleInstances,
   estimateDays,
@@ -170,25 +171,17 @@ const PLAN = {
   exclude_blasted_within_days: 7,
 };
 
-// Freeze "now" inside the window for these tests (Mon 2026-11-23 12:00 UTC).
-function atNoon<T>(fn: () => Promise<T>): Promise<T> {
-  const RealDate = Date;
-  const fixed = new RealDate("2026-11-23T12:00:00Z").getTime();
-  // deno-lint-ignore no-explicit-any
-  (globalThis as any).Date = class extends RealDate {
-    constructor(...a: unknown[]) {
-      // deno-lint-ignore no-explicit-any
-      super(...((a.length ? a : [fixed]) as [any]));
-    }
-    static override now() {
-      return fixed;
-    }
-  };
-  return fn().finally(() => {
-    // deno-lint-ignore no-explicit-any
-    (globalThis as any).Date = RealDate;
-  });
+// Pin the send-window clock (Mon 2026-11-23 12:00 UTC, inside the window by default).
+async function at<T>(iso: string, fn: () => Promise<T>): Promise<T> {
+  const real = clock.now;
+  clock.now = () => new Date(iso);
+  try {
+    return await fn();
+  } finally {
+    clock.now = real;
+  }
 }
+const atNoon = <T>(fn: () => Promise<T>) => at("2026-11-23T12:00:00Z", fn);
 
 Deno.test("confirm: hands the STORED plan to the Disparos engine and audits", () =>
   atNoon(async () => {
@@ -240,27 +233,11 @@ Deno.test("confirm: engine created the plan but lot 1 failed → reported honest
     assertEquals(f.store, ["take", "finish:partial"]);
   }));
 
-Deno.test("confirm: outside the send window nothing is consumed or sent", async () => {
-  const RealDate = Date;
-  const sunday = new RealDate("2026-11-22T15:00:00Z").getTime();
-  // deno-lint-ignore no-explicit-any
-  (globalThis as any).Date = class extends RealDate {
-    constructor(...a: unknown[]) {
-      // deno-lint-ignore no-explicit-any
-      super(...((a.length ? a : [sunday]) as [any]));
-    }
-    static override now() {
-      return sunday;
-    }
-  };
-  try {
+Deno.test("confirm: outside the send window nothing is consumed or sent", () =>
+  at("2026-11-22T15:00:00Z", async () => { // Sunday
     const f = fakes({ plan: PLAN });
     const res = await customerBroadcastConfirmTool.handler({ confirm_token: TOKEN }, f.ctx);
     assertEquals(res.isError, true);
     assertMatch(textOf(res), /janela de envio/);
     assertEquals([f.store.length, f.edgeCalls.length], [0, 0]);
-  } finally {
-    // deno-lint-ignore no-explicit-any
-    (globalThis as any).Date = RealDate;
-  }
-});
+  }));

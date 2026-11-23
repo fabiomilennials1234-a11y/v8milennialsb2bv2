@@ -171,6 +171,9 @@ export function inSendWindow(now: Date, timeZone: string): boolean {
   return minutes >= 8 * 60 && minutes < 20 * 60;
 }
 
+/** The send-window clock; tests pin it instead of patching the global Date. */
+export const clock = { now: (): Date => new Date() };
+
 /** Rough number of days the engine needs (org budget 200/day, 80/day per number). */
 export function estimateDays(recipients: number, numbers: number): number {
   const perDay = Math.max(1, Math.min(200, 80 * Math.max(1, numbers)));
@@ -533,7 +536,7 @@ export const customerBroadcastConfirmTool: ToolDef = {
 
     const db = ctx.db as SupabaseClient;
     // Checked BEFORE consuming the plan, so a refusal does not burn it.
-    if (!inSendWindow(new Date(), await orgTimezone(db, scope.orgId))) {
+    if (!inSendWindow(clock.now(), await orgTimezone(db, scope.orgId))) {
       return errorResult(
         "Fora da janela de envio (seg–sáb, 8h–20h no horário da organização). Confirme dentro da janela.",
       );
