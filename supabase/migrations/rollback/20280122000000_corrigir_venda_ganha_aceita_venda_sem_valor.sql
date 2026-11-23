@@ -1,0 +1,3 @@
+-- Rollback de 20280122000000_corrigir_venda_ganha_aceita_venda_sem_valor.sql
+-- Restaurar a versão anterior é reaplicar a definição de 20271106000020_corrigir_venda_ganha.sql
+-- (CREATE OR REPLACE da função). Voltar reintroduz o 23502 em venda ganha sem valor.
