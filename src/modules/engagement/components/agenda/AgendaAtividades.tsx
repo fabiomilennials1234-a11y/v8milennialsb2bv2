@@ -110,6 +110,8 @@ import { ScheduleMessageModal } from "@/modules/communication";
 import { IconChip } from "@/components/ui/bento";
 import { notifyError } from "@/shared/errors";
 import { useLeadResponsibles } from "@/modules/leads";
+import { useFeatureFlag } from "@/modules/platform/feature-flags";
+import { FLAG_AGENDA_ABRE_NO_ATENDENTE } from "../../lib/agenda-abre-no-atendente-flag";
 
 // ─── Google Calendar user colors (for shared calendars overlay) ───────────────
 
@@ -157,7 +159,10 @@ export function AgendaAtividades({ onClose }: AgendaAtividadesProps) {
 
   // ── Filtros da tela ─────────────────────────────────────────────────────────
   const [statusFilter, setStatusFilter] = useState<AgendaStatusFilter>("all");
-  const [ownerFilter, setOwnerFilter] = useState<string>(ALL_OPTION);
+  // `null` = o usuário ainda não escolheu; o valor efetivo (`ownerFilter`) é
+  // derivado mais abaixo, quando as opções de atendente já existem.
+  const [ownerChoice, setOwnerChoice] = useState<string | null>(null);
+  const abreNoAtendente = useFeatureFlag(FLAG_AGENDA_ABRE_NO_ATENDENTE).enabled;
 
   // Busca global (sem janela de datas). Com termo digitado, o painel de
   // resultados toma o lugar do calendário; o recorte de visibilidade é o do
@@ -222,6 +227,17 @@ export function AgendaAtividades({ onClose }: AgendaAtividadesProps) {
       .filter((m) => m.is_active !== false && !!m.name)
       .map((m) => ({ value: m.id, label: m.name as string }));
   }, [seesEveryone, teamMembers]);
+
+  // Com a flag da org, a agenda abre na visão individual de quem entrou. Só vale
+  // se o próprio membro estiver entre as opções oferecidas (senão o gatilho
+  // ficaria sem rótulo); qualquer escolha explícita — inclusive "Todos" — manda.
+  const ownerFilter =
+    ownerChoice ??
+    (abreNoAtendente &&
+    teamMemberId &&
+    ownerOptions.some((o) => o.value === teamMemberId)
+      ? teamMemberId
+      : ALL_OPTION);
 
   // O filtro de atendente escolhe um `team_members.id`, mas `created_by` chega
   // ora como id de membro ora como id de usuário — casar contra as duas chaves.
@@ -687,7 +703,7 @@ export function AgendaAtividades({ onClose }: AgendaAtividadesProps) {
         status={statusFilter}
         onStatusChange={setStatusFilter}
         owner={ownerFilter}
-        onOwnerChange={setOwnerFilter}
+        onOwnerChange={setOwnerChoice}
         ownerOptions={ownerOptions}
         activeTypes={activeTypes}
         onToggleType={toggleType}
