@@ -472,7 +472,7 @@ export class AgentEngine {
         tokens: {
           prompt: usage?.prompt_tokens,
           completion: usage?.completion_tokens,
-          model,
+          model: response.model ?? model,
         },
         payloadSnapshot: { agent_id: capabilities.id, turn: turn + 1 },
       }).catch(() => {/* non-fatal */});
