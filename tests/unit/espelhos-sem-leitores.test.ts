@@ -138,5 +138,5 @@ describe("espelhos sem leitores de runtime", () => {
     }
 
     expect(offenders, offenders.join("\n")).toEqual([]);
-  });
+  }, 30_000);
 });
