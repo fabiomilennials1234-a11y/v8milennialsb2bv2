@@ -201,6 +201,12 @@ export function saudacaoBrt(agora: Date = new Date()): string {
   return "Boa noite";
 }
 
+/** "2026-11-23": o dia do calendário em Brasília, não no aparelho. */
+export function diaBrt(agora: Date = new Date()): string {
+  // en-CA formata como AAAA-MM-DD.
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo" }).format(agora);
+}
+
 /** "outubro", a partir de mês 1–12 (o rótulo do ranking). */
 export function nomeDoMes(mes: number, ano: number): string {
   return new Intl.DateTimeFormat("pt-BR", { month: "long", timeZone: "UTC" }).format(new Date(Date.UTC(ano, mes - 1, 1)));

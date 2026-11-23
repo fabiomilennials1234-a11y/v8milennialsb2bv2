@@ -1,4 +1,4 @@
-import { cleanup, renderHook, waitFor } from "@testing-library/react";
+import { act, cleanup, renderHook, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -96,6 +96,31 @@ describe("useBoasVindasSemana", () => {
     expect(mocks.rpc).toHaveBeenCalledTimes(1);
     expect(mocks.rpc).toHaveBeenCalledWith("boas_vindas_semana_reivindicar", { p_org_id: "org-a" });
     expect(result.current.data?.leads).toBe(5);
+  });
+
+  // O app aberto desde o domingo: a 1ª chamada devolveu `nao_e_segunda` e ficou em
+  // cache. Na segunda de manhã, ao voltar à aba, a pergunta tem de ser refeita.
+  it("aba aberta desde antes de segunda: ao voltar ao foco num dia novo, reivindica de novo", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    try {
+      vi.setSystemTime(new Date("2026-11-22T15:00:00Z"));
+      mocks.rpc.mockResolvedValueOnce({ data: { elegivel: false, motivo: "nao_e_segunda" }, error: null });
+      const { result } = render();
+      await waitFor(() => expect(result.current.data).toBeNull());
+      expect(mocks.rpc).toHaveBeenCalledTimes(1);
+
+      // Mesmo dia, foco de novo: nada de nova chamada.
+      act(() => { window.dispatchEvent(new Event("focus")); });
+      await new Promise((r) => setTimeout(r, 30));
+      expect(mocks.rpc).toHaveBeenCalledTimes(1);
+
+      vi.setSystemTime(new Date("2026-11-23T12:00:00Z"));
+      act(() => { window.dispatchEvent(new Event("focus")); });
+      await waitFor(() => expect(result.current.data?.leads).toBe(5));
+      expect(mocks.rpc).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("já viu esta semana: sem animação", async () => {

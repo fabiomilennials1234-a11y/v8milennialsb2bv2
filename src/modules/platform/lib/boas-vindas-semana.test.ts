@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { mapearResumo, rotuloDoPeriodo } from "./boas-vindas-semana";
+import { diaBrt, mapearResumo, rotuloDoPeriodo } from "./boas-vindas-semana";
 
 /** O que `boas_vindas_semana_reivindicar` devolve quando entrega. */
 const entrega = {
@@ -87,5 +87,13 @@ describe("rotuloDoPeriodo", () => {
   it("data inválida não vira rótulo", () => {
     expect(rotuloDoPeriodo("amanhã", "2027-11-07")).toBeNull();
     expect(rotuloDoPeriodo(undefined, undefined)).toBeNull();
+  });
+});
+
+describe("diaBrt", () => {
+  it("é o dia de Brasília, e não o do aparelho (UTC)", () => {
+    // 01:30 UTC de 23/11 ainda é noite de domingo, 22/11, em Brasília.
+    expect(diaBrt(new Date("2026-11-23T01:30:00Z"))).toBe("2026-11-22");
+    expect(diaBrt(new Date("2026-11-23T03:00:00Z"))).toBe("2026-11-23");
   });
 });
