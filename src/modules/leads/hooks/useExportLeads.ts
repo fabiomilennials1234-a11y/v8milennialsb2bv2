@@ -6,9 +6,10 @@ import { useOrganization } from "@/modules/identity";
 import { useCanDo } from "@/modules/identity";
 import { applyLeadListFilters } from "../lib/lead-list-filters";
 import { coDonosDoFiltro } from "./useLeadOwners";
-import { loadVentimaisExport } from "../lib/load-ventimais-export";
+import { loadVentimaisExport, readExportPages } from "../lib/load-ventimais-export";
 import { buildVentimaisWorkbook } from "../lib/ventimais-export";
 import {
+  buildCustomFieldColumns,
   buildExportHeaders,
   buildFunnelCells,
   isStageUuid,
@@ -19,6 +20,36 @@ import {
   type ExportPipelineStage,
 } from "../lib/export-columns";
 const BATCH_SIZE = 500;
+const CUSTOM_FIELD_BATCH_SIZE = 200;
+
+async function loadCustomFieldColumns(organizationId: string, leadIds: string[]) {
+  if (!leadIds.length) return buildCustomFieldColumns([], []);
+
+  try {
+    const fields = await readExportPages((from, to) => supabase
+      .from("lead_custom_fields")
+      .select("id, field_name, display_order, created_at")
+      .eq("organization_id", organizationId)
+      .order("id")
+      .range(from, to));
+    const values: Array<{ lead_id: string; field_id: string; value: string | null }> = [];
+    if (!fields.length) return buildCustomFieldColumns([], []);
+    for (let i = 0; i < leadIds.length; i += CUSTOM_FIELD_BATCH_SIZE) {
+      const batch = leadIds.slice(i, i + CUSTOM_FIELD_BATCH_SIZE);
+      values.push(...await readExportPages((from, to) => supabase
+        .from("lead_custom_field_values")
+        .select("lead_id, field_id, value, leads!inner(organization_id), lead_custom_fields!inner(organization_id)")
+        .eq("leads.organization_id", organizationId)
+        .eq("lead_custom_fields.organization_id", organizationId)
+        .in("lead_id", batch)
+        .order("id")
+        .range(from, to)));
+    }
+    return buildCustomFieldColumns(fields, values);
+  } catch {
+    throw new Error("Não foi possível carregar os campos personalizados. Tente novamente.");
+  }
+}
 
 /**
  * Bloco FIXO do lead no arquivo exportado.
@@ -216,6 +247,7 @@ export function useExportLeads(): UseExportLeadsResult {
       if (leadsError) throw leadsError;
       const leadList = leads ?? [];
       const leadIds = leadList.map((l: { id: string }) => l.id);
+      const customColumns = await loadCustomFieldColumns(organizationId, leadIds);
 
       // 2) Team members para nomes
       const { data: members } = await supabase
@@ -280,6 +312,7 @@ export function useExportLeads(): UseExportLeadsResult {
           const entry = entryByFunnelAndLead.get(`${pipeline.id}:${lid}`);
           Object.assign(row, buildFunnelCells(pipeline.name ?? "", entry, cellCtx));
         }
+        Object.assign(row, customColumns.cellsByLead.get(lid));
         return row;
       });
 
@@ -287,16 +320,22 @@ export function useExportLeads(): UseExportLeadsResult {
       const filename = options.stageFilter
         ? `leads_funil_${slugify(options.stageTitle ?? options.stageFilter.stageId)}_${dateStamp}`
         : `leads_export_${dateStamp}`;
-      const headers = buildExportHeaders(EXPORT_LEAD_HEADERS, pipelines);
+      const headers = [...buildExportHeaders(EXPORT_LEAD_HEADERS, pipelines), ...customColumns.headers];
 
       if (options.format === "csv") {
         const escape = (v: string | number) => {
           const s = String(v ?? "");
-          if (s.includes(",") || s.includes('"') || s.includes("\n")) return `"${s.replace(/"/g, '""')}"`;
+          if (/[,"\r\n]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
           return s;
         };
-        const headerLine = headers.join(",");
-        const dataLines = rows.map((r) => headers.map((h) => escape((r as Record<string, string | number>)[h] ?? "")).join(","));
+        const customHeaders = new Set(customColumns.headers);
+        const headerLine = headers.map(escape).join(",");
+        const dataLines = rows.map((row) => headers.map((header) => {
+          const value = row[header] ?? "";
+          // Excel interpreta texto vindo de CSV como fórmula, mesmo entre aspas.
+          const formula = customHeaders.has(header) && /^\s*[=+@-]/.test(String(value));
+          return escape(formula ? `'${value}` : value);
+        }).join(","));
         const csv = [headerLine, ...dataLines].join("\n");
         const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8" });
         const url = URL.createObjectURL(blob);
