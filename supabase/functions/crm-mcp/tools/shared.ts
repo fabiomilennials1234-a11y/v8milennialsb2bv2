@@ -6,6 +6,7 @@
  * it EQUALS the token's org, and every query still carries `.eq("organization_id", orgId)` on
  * top of RLS — the barrier that contains an RLS regression.
  */
+import type { SupabaseClient } from "@supabase/supabase-js";
 import type { ToolAnnotations, ToolResult } from "../../_shared/mcp/types.ts";
 
 export type OrgScope =
@@ -263,4 +264,54 @@ export function createLimiter(limit: number) {
       if (active < limit) start();
       else queue.push(start);
     });
+}
+
+/** Milliseconds `tz` is ahead of UTC at instant `at` (São Paulo: −3 h). Pure. */
+function tzOffsetMs(tz: string, at: Date): number {
+  const p = Object.fromEntries(
+    new Intl.DateTimeFormat("en-US", {
+      timeZone: tz,
+      hourCycle: "h23",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+    }).formatToParts(at).map((x) => [x.type, x.value]),
+  );
+  const asUtc = Date.UTC(+p.year, +p.month - 1, +p.day, +p.hour, +p.minute, +p.second);
+  return asUtc - Math.floor(at.getTime() / 1000) * 1000;
+}
+
+/** The UTC instant of local midnight of `ymd` (YYYY-MM-DD) in `tz`, DST-safe. Pure. */
+export function localMidnightUtc(ymd: string, tz: string): Date {
+  const [y, m, d] = ymd.split("-").map(Number);
+  const guess = Date.UTC(y, m - 1, d);
+  const first = guess - tzOffsetMs(tz, new Date(guess));
+  return new Date(guess - tzOffsetMs(tz, new Date(first)));
+}
+
+/** `ymd` plus `days` (calendar arithmetic on the date only). Pure. */
+export function addDays(ymd: string, days: number): string {
+  const [y, m, d] = ymd.split("-").map(Number);
+  return new Date(Date.UTC(y, m - 1, d + days)).toISOString().slice(0, 10);
+}
+
+/**
+ * id → name of team members of the org, for the given ids. Names only (the view hides master
+ * users; never select pay columns). Best-effort: a failed lookup leaves ids without names.
+ */
+export async function memberNames(
+  db: SupabaseClient,
+  orgId: string,
+  ids: Array<string | null | undefined>,
+): Promise<Map<string, string>> {
+  const wanted = [...new Set(ids.filter((x): x is string => !!x))];
+  if (!wanted.length) return new Map();
+  const { data } = await db.from("org_visible_members").select("id,name")
+    .eq("organization_id", orgId).in("id", wanted);
+  return new Map(
+    ((data ?? []) as Array<{ id: string; name: string | null }>).map((r) => [r.id, r.name ?? ""]),
+  );
 }

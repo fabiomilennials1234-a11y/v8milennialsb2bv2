@@ -255,3 +255,32 @@ O spec passa pelo mesmo `safeParseSpec → compileWorkflow → validateWorkflow`
 - **Protocolo:** `title` no topo de cada tool (2025-06-18). As `instructions` ganham um roteiro de qual tool usar primeiro para cada tipo de pergunta.
 
 **Evidência:** Deno 182/182 no crm-mcp + `_shared/mcp`; suíte edge do CI 1239/1239. As asserções DEF7/DEF8 retornam `true` em prod (transação só leitura).
+
+---
+
+## Emenda 2026-11-24 (8) — fatia 7 do v2: o trabalho do dia e o lead completo (leitura)
+
+**Regra de visibilidade, achada no mapeamento.** Em `follow_ups`, `lead_history`, `lead_comments`, `lead_tags` e `lead_custom_field_values`, a RLS checa **só a org**, e não se a pessoa vê o lead. Por isso toda leitura dessas tabelas passa por `leads`, cuja RLS é a regra de visibilidade:
+- `followup.list` faz join `leads!inner`;
+- `lead.timeline` carrega o lead antes; se não o vê, responde "não encontrado" e não lê o resto;
+- tags e campos personalizados vêm por embed de `leads`;
+- negócios vêm pelo card (`pipeline_entries.deal_id`). A RLS de `deals` ignora os regimes de visibilidade do funil, então `deals` nunca é lida direto.
+
+**Tools novas (leitura):**
+- `followup.list`: atrasados, hoje, próximos N dias ou todos os abertos, no calendário da org. Filtros por responsável (`assigned_to` ou `mine`) ou por lead. Permissão `followups.view`.
+- `agenda.list`: a RPC da própria tela de Agenda (`get_agenda_events_scoped`), com o mesmo recorte: só os eventos da pessoa, salvo admin ou `agenda.view_all`. Permissão `agenda.view`; no máximo 62 dias por chamada.
+- `inbox.awaiting_reply`: a fila da aba Comando (`get_comando_fila`): cliente escreveu por último e ninguém da equipe respondeu; resposta da IA não conta. Só os números que a pessoa pode ler. Permissão `whatsapp.view`.
+- `lead.timeline`: histórico (com origem: manual, automação, agente ou sistema) e notas da equipe, do mais novo ao mais antigo, paginado por `before`.
+- `team.list`: id, nome, papel e cargo. `team_members` tem colunas de remuneração (`ote_*`, `commission_*`); elas nunca são selecionadas.
+
+**Tools que mudaram:**
+- `lead.get` passa a trazer dono (id + nome), tags, campos personalizados, nota, urgência e o negócio de cada card (valor e desfecho).
+- `lead.list` ganha `owner_id`.
+
+**Allowlist de RPC:** entram `get_agenda_events_scoped` e `get_comando_fila`, ambas INVOKER e com o portão como primeira instrução. As asserções DEF9–DEF13 no pgTAP retornam `true` em prod (transação só leitura).
+
+**Validação de schema sem dado:** os `select` novos foram enviados ao PostgREST de prod com a chave anon (pública). Relação ou coluna errada falha antes de executar (os controles deram PGRST200 e 42703); todos os `select` novos passaram do parse.
+
+**Evidência:**
+- Deno 199/199 no crm-mcp + `_shared/mcp`; suíte edge do CI 1254/1254.
+- Os 5 casos novos entram nos testes de superfície e de isolamento por org.

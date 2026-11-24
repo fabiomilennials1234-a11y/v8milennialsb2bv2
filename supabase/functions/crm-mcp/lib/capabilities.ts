@@ -66,8 +66,10 @@ export function serverInstructions(scopes: readonly string[]): string {
   lines.push(
     "Where to start: funnels → funnel.overview (counts and stalled cards of every funnel), then " +
       "funnel.review (the cards of one funnel/stage, with their last messages); results → " +
-      "metrics.catalog then metrics.query; a person → lead.list / lead.get, conversation.get; " +
-      "automations → automation.list then automation.get; a WhatsApp send → audience.preview.",
+      "metrics.catalog then metrics.query; today's work → followup.list, agenda.list, " +
+      "inbox.awaiting_reply; a person → lead.list / lead.get, lead.timeline, conversation.get; " +
+      "the team → team.list (ids for owner filters); automations → automation.list then " +
+      "automation.get; a WhatsApp send → audience.preview.",
     "Every change is plan → show the person → confirm. Never confirm without the person's explicit OK.",
   );
   return lines.join("\n");
