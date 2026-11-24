@@ -268,7 +268,7 @@ export function useFichaDoInadimplente(inadimplenteId: string | null) {
       const [resumo, base, titulos, eventos] = await Promise.all([
         supabase.from("cobranca_inadimplentes_resumo").select("*").eq("id", id).maybeSingle(),
         supabase.from("cobranca_inadimplentes").select("observacoes").eq("id", id).maybeSingle(),
-        supabase.from("cobranca_titulos_saldo").select("*").eq("inadimplente_id", id).order("vencimento"),
+        supabase.from("cobranca_titulos_saldo").select("*").eq("inadimplente_id", id).order("vencimento").order("created_at"),
         supabase
           .from("cobranca_eventos")
           .select("*")
@@ -313,6 +313,29 @@ export function useFichaDoInadimplente(inadimplenteId: string | null) {
         eventos: (eventos.data ?? []).map((e) => parseEvento(e as Record<string, unknown>)),
         compromisso,
       };
+    },
+  });
+}
+
+/**
+ * Os títulos em aberto de um inadimplente, na ordem em que o pagamento abate
+ * (vencimento, cadastro). Para o pagamento aberto fora da ficha — Fluxo e lista.
+ */
+export function useTitulosEmAberto(inadimplenteId: string | null) {
+  const { organizationId } = useOrganization();
+  return useQuery<TituloSaldo[]>({
+    queryKey: [CHAVE_COBRANCA, organizationId, "titulos", inadimplenteId],
+    enabled: !!organizationId && !!inadimplenteId,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("cobranca_titulos_saldo")
+        .select("*")
+        .eq("inadimplente_id", inadimplenteId as string)
+        .eq("status", "aberto")
+        .order("vencimento")
+        .order("created_at");
+      if (error) throw error;
+      return (data ?? []).map((t) => parseTitulo(t as Record<string, unknown>));
     },
   });
 }

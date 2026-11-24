@@ -101,12 +101,13 @@ SELECT is((SELECT count(*)::int FROM pg_policies WHERE schemaname = 'public' AND
   'GR3: nenhuma policy aberta (true)');
 
 SELECT ok(NOT has_function_privilege('anon', 'public.cobranca_importar(uuid, jsonb, boolean)', 'EXECUTE')
-      AND NOT has_function_privilege('anon', 'public.cobranca_pagamento_registrar(uuid, numeric, date, uuid)', 'EXECUTE')
+      AND NOT has_function_privilege('anon', 'public.cobranca_pagamento_registrar(uuid, numeric, date, uuid, uuid[])', 'EXECUTE')
       AND NOT has_function_privilege('anon', 'public.cobranca_inadimplente_salvar(uuid, uuid, jsonb)', 'EXECUTE')
       AND NOT has_function_privilege('anon', 'public.cobranca_metricas(uuid, date)', 'EXECUTE'),
   'GR4: anon não executa as RPCs');
 SELECT ok(has_function_privilege('authenticated', 'public.cobranca_importar(uuid, jsonb, boolean)', 'EXECUTE')
-      AND has_function_privilege('authenticated', 'public.cobranca_caso_mover(uuid, uuid, double precision, boolean)', 'EXECUTE'),
+      AND has_function_privilege('authenticated', 'public.cobranca_caso_mover(uuid, uuid, double precision, boolean)', 'EXECUTE')
+      AND has_function_privilege('authenticated', 'public.cobranca_pagamento_registrar(uuid, numeric, date, uuid, uuid[])', 'EXECUTE'),
   'GR5: authenticated executa as RPCs');
 SELECT ok(NOT has_function_privilege('authenticated', 'private.cobranca_exigir(uuid, text)', 'EXECUTE')
       AND NOT has_function_privilege('authenticated', 'private.cobranca_garantir_caso(uuid, uuid)', 'EXECUTE')
@@ -200,6 +201,20 @@ SELECT is((SELECT (public.cobranca_pagamento_registrar(
 SELECT is((SELECT c.desfecho FROM public.cobranca_casos c
             JOIN public.cobranca_inadimplentes i ON i.id = c.inadimplente_id
            WHERE i.documento = '08771245000163'), 'recuperado', 'KS7: caso fecha em Recuperado');
+
+-- 20280126000000: o pagamento baixa os títulos escolhidos, não o primeiro da fila.
+SELECT lives_ok(
+  $$ SELECT public.cobranca_inadimplente_salvar('c0b7a000-0000-4000-8000-00000000000a', NULL,
+       '{"nome":"Mercearia Escolha","telefone":"48999990002",
+         "titulos":[{"numero":"T1","valor":100,"vencimento":"2026-10-01"},
+                    {"numero":"T2","valor":200,"vencimento":"2026-10-01"}]}') $$,
+  'KS8: devedor com dois títulos do mesmo vencimento');
+SELECT is((SELECT public.cobranca_pagamento_registrar(
+             (SELECT caso_id FROM public.cobranca_inadimplentes_resumo WHERE nome = 'Mercearia Escolha'),
+             200, CURRENT_DATE,
+             p_titulos => ARRAY[(SELECT id FROM public.cobranca_titulos WHERE numero = 'T2')]) -> 'titulos' -> 0 ->> 'numero'),
+  'T2', 'KS9: baixa o título escolhido');
+SELECT is((SELECT status FROM public.cobranca_titulos WHERE numero = 'T1'), 'aberto', 'KS10: o outro segue em aberto');
 
 -- ===========================================================================
 -- (IX) invariantes de modelo
