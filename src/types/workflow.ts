@@ -1493,6 +1493,8 @@ export const WORKFLOW_VARIABLES: WorkflowVariable[] = [
   // Funil
   { key: "{{estagio}}",       label: "Etapa atual no funil",          category: "Funil" },
   { key: "{{data_reuniao}}",  label: "Data da reunião",               category: "Funil" },
+  { key: "{{dia_reuniao}}",   label: "Dia da reunião (hoje, amanhã, quinta)", category: "Funil" },
+  { key: "{{hora_reuniao}}",  label: "Hora da reunião (15h, 15h30)",  category: "Funil" },
   { key: "{{valor_proposta}}",label: "Valor da proposta",             category: "Funil" },
   // Responsável
   { key: "{{responsavel}}",            label: "Nome do responsável",          category: "Responsável" },

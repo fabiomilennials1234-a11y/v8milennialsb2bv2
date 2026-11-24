@@ -15,6 +15,8 @@ const PREVIEW_EXAMPLES: Record<string, string> = {
   "{{observacoes}}":        "Interessado no plano premium",
   "{{estagio}}":            "Novo lead",
   "{{data_reuniao}}":       "15/03/2026",
+  "{{dia_reuniao}}":        "quinta",
+  "{{hora_reuniao}}":       "15h",
   "{{valor_proposta}}":     "R$ 2.500",
   "{{responsavel}}":        "Maria Santos",
   "{{responsavel_telefone}}": "(11) 98888-8888",

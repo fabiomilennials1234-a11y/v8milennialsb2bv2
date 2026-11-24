@@ -7,6 +7,7 @@ import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getTimeBasedVariables } from "../time-variables.ts";
 import { getPipeEntry } from "../pipeline-adapter.ts";
 import { getStageDoNegocio, entryIdDoContexto } from "../negocio-subject.ts";
+import { meetingTemplateVariables } from "../meeting-variables.ts";
 import { getWhatsAppProvider } from "../whatsapp-client.ts";
 import { personalizationName, personalizationFirstName, isPlaceholderLeadName, tidyEmptyVarGaps } from "../lead-name.ts";
 import { normalizeBrazilianPhone } from "../whatsapp-dispatch.ts";
@@ -595,12 +596,25 @@ export async function resolveVariables(
     vars.nome_empresa_crm = org?.name || "";
   }
 
+  // Reunião: `{{dia_reuniao}}` e `{{hora_reuniao}}` vêm da agenda canônica
+  // (`meetings`), preferindo a reunião do negócio que disparou. Ver
+  // `meeting-variables.ts`.
+  const reuniao = await meetingTemplateVariables(supabase, template, {
+    leadId,
+    organizationId: lead.organization_id as string,
+    entryId: entryIdDoContexto(executionContext),
+  });
+  if (reuniao.dia_reuniao !== undefined) vars.dia_reuniao = reuniao.dia_reuniao;
+  if (reuniao.hora_reuniao !== undefined) vars.hora_reuniao = reuniao.hora_reuniao;
+
+  // `{{data_reuniao}}`: o caminho legado (funil `confirmacao`) continua tendo
+  // precedência para não mudar mensagem já em produção; fora dele, a agenda.
   if (template.includes("{{data_reuniao}}")) {
     const confEntry = await getPipeEntry(supabase, leadId, lead.organization_id, "confirmacao");
     const rawDate = (confEntry?.metadata as Record<string, unknown>)?.meeting_date as string | undefined;
     vars.data_reuniao = rawDate
       ? new Date(rawDate).toLocaleDateString("pt-BR")
-      : "";
+      : (reuniao.data_reuniao ?? "");
   }
 
   if (template.includes("{{valor_proposta}}")) {
