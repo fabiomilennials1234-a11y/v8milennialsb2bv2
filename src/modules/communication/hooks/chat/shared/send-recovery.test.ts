@@ -79,3 +79,18 @@ it('stops at the first 422 recipient_not_on_whatsapp, with no recovery cycle', a
   expect(onRetry).not.toHaveBeenCalled();
   expect(confirm).not.toHaveBeenCalled();
 });
+
+// Logged-out number: Uazapi answers 503, the proxy refuses with 409
+// { error, code: "instance_disconnected" }. Before, the 504 that came back
+// after ~10 s of reconciliation fed ten more confirmation rounds here
+// (Carol Distribuidora, 2026-11-24).
+it.each(['instance_disconnected', 'circuit_breaker_open'])('stops at the first 409 %s, with no recovery cycle', async code => {
+  const response = { data: null, error: { context: { status: 409 }, body: { error: 'A mensagem não foi enviada.', code } } };
+  const send = vi.fn().mockResolvedValue(response);
+  const confirm = vi.fn();
+  const onRetry = vi.fn();
+  expect(await sendWithBoundedRecovery({ send, confirm, onRetry, timeoutMs: 100, retryDelayMs: 1 })).toBe(response);
+  expect(send).toHaveBeenCalledOnce();
+  expect(onRetry).not.toHaveBeenCalled();
+  expect(confirm).not.toHaveBeenCalled();
+});

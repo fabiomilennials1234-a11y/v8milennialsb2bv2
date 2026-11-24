@@ -77,8 +77,17 @@ export function friendlyWhatsAppSendError(raw: string): string {
   if (s.includes("rate limit")) {
     return "Muitas mensagens em pouco tempo. Aguarde alguns segundos e tente de novo.";
   }
-  if (s.includes("instance") && (s.includes("not connected") || s.includes("disconnected"))) {
+  if (
+    (s.includes("instance") && (s.includes("not connected") || s.includes("disconnected"))) ||
+    s.includes("whatsapp disconnected") ||
+    s.includes("not reconnectable")
+  ) {
     return "A instância do WhatsApp está desconectada. Reconecte em Configurações > WhatsApp.";
+  }
+  // Pausa automática após falhas seguidas do provedor: nada foi enviado.
+  // Cru, o vendedor lia "Circuit breaker open for /send/text until …".
+  if (s.includes("circuit breaker open")) {
+    return "O envio por este número foi pausado por alguns instantes após falhas seguidas no serviço do WhatsApp. A mensagem não foi enviada. Tente de novo em até 2 minutos.";
   }
   return raw;
 }

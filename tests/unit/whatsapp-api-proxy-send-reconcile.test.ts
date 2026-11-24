@@ -226,10 +226,31 @@ describe("sendText com timeout ambíguo", () => {
     expect(writes.filter((w) => w.table === "whatsapp_messages")).toHaveLength(0);
   });
 
+  // Nada saiu: número deslogado (Uazapi 503) ou breaker aberto. Recusa 409 na
+  // hora, com código, sem reconciliar — antes o deslogado custava ~10 s aqui e
+  // virava 504 "não foi possível confirmar" (Carol Distribuidora, 24/11/2026).
+  it.each([
+    [{ status: 503, provider_code: "instance_disconnected", message: "Uazapi server error 503 on POST /send/text: WhatsApp disconnected: session is not reconnectable" }, "instance_disconnected"],
+    [{ status: 503, provider_code: "circuit_breaker_open", message: "open" }, "circuit_breaker_open"],
+  ])("erro %j recusa com 409 sem consultar o Uazapi", async (err, code) => {
+    const sendText = vi.fn().mockRejectedValue(err);
+    const findRecentMessages = vi.fn();
+    mockGetWhatsAppProvider.mockResolvedValue({ provider: "uazapi", sendText, findRecentMessages });
+    const handler = await loadProxy();
+
+    const res = await run(handler, sendTextRequest());
+    const body = await res.json();
+
+    expect(res.status).toBe(409);
+    expect(body.code).toBe(code);
+    expect(body.error).toContain("não foi enviada");
+    expect(findRecentMessages).not.toHaveBeenCalled();
+    expect(writes.filter((w) => w.table === "whatsapp_messages")).toHaveLength(0);
+  });
+
   it.each([
     [{ status: 429, message: "rate limited" }],
     [{ status: 400, message: "bad request" }],
-    [{ status: 503, provider_code: "circuit_breaker_open", message: "open" }],
   ])("erro %j não consulta o Uazapi (comportamento de hoje)", async (err) => {
     const sendText = vi.fn().mockRejectedValue(err);
     const findRecentMessages = vi.fn();
