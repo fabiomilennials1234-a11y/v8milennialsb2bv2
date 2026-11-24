@@ -186,3 +186,53 @@ Deno.test("dispatch — tools/call wraps a thrown handler error as isError resul
   assertEquals(result.isError, true);
   assertEquals(textOf(result).includes("boom from tool"), true);
 });
+
+Deno.test("dispatch — tools/list carries the top-level title when the tool has one", async () => {
+  const titled = { ...readTool, annotations: { title: "Get lead" } };
+  const res = await dispatch(
+    { jsonrpc: "2.0", id: 1, method: "tools/list" },
+    ctx({ tools: [titled, { ...readTool, name: "x.plain" }] }),
+  );
+  const tools = ((res as JsonRpcSuccess).result as { tools: Array<Record<string, unknown>> }).tools;
+  assertEquals(tools[0].title, "Get lead");
+  assertEquals("title" in tools[1], false);
+});
+
+Deno.test("dispatch — a call to a hidden, unknown or under-specified tool is logged by name only", async () => {
+  const lines: string[] = [];
+  const real = console.log;
+  console.log = (s: string) => lines.push(s);
+  try {
+    const c = ctx({
+      tools: [readTool, writeTool],
+      logContext: { pat_id: "p" },
+    });
+    await dispatch(
+      { jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "lead.restore" } },
+      c,
+    );
+    await dispatch(
+      { jsonrpc: "2.0", id: 2, method: "tools/call", params: { name: "nope" } },
+      c,
+    );
+    await dispatch(
+      {
+        jsonrpc: "2.0",
+        id: 3,
+        method: "tools/call",
+        params: { name: "lead.get", arguments: { secret: "value" } },
+      },
+      c,
+    );
+  } finally {
+    console.log = real;
+  }
+  const events = lines.map((l) => JSON.parse(l));
+  assertEquals(events.map((e) => [e.tool, e.outcome, e.pat_id]), [
+    ["lead.restore", "hidden", "p"],
+    ["nope", "unknown", "p"],
+    ["lead.get", "invalid_args", "p"],
+  ]);
+  assertEquals(events[2].missing, ["org_id"]);
+  assertEquals(lines.join("").includes("value"), false); // never argument values
+});

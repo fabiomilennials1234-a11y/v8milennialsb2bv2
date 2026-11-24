@@ -34,9 +34,9 @@ import { leadVars, unsupportedVariables, unsupportedVariablesMessage } from "./m
 import {
   dbErrorResult,
   errorResult,
+  idleOrFilter,
   jsonResult,
   optionalUuid,
-  pgrstQuote,
   READ_ONLY,
   resolveOrgScope,
 } from "./shared.ts";
@@ -75,16 +75,7 @@ export function parseAudience(
   return { ok: true, filter: { pipelineId, stageKeys, idleDaysMin: idle } };
 }
 
-/**
- * "Stalled since before X" over COALESCE(stage_changed_at, entered_at, created_at) — the
- * definition the funnel board uses — as one PostgREST `or` group.
- */
-export function idleOrFilter(cutoffIso: string): string {
-  const q = pgrstQuote(cutoffIso);
-  return `stage_changed_at.lt.${q},` +
-    `and(stage_changed_at.is.null,entered_at.lt.${q}),` +
-    `and(stage_changed_at.is.null,entered_at.is.null,created_at.lt.${q})`;
-}
+export { idleOrFilter } from "./shared.ts";
 
 export interface AudienceLead {
   id: string;
@@ -175,7 +166,10 @@ export function estimateDays(recipients: number, numbers: number): number {
 async function buildAudience(db: SupabaseClient, orgId: string, f: AudienceFilter) {
   let q = db
     .from("pipeline_entries")
-    .select("lead_id,leads(id,name,company,segment,normalized_phone,deleted_at)")
+    // count: the exact number of matching cards, so a cut at AUDIENCE_MAX is never silent
+    .select("lead_id,leads(id,name,company,segment,normalized_phone,deleted_at)", {
+      count: "exact",
+    })
     .eq("organization_id", orgId) // defense-in-depth on top of RLS
     .eq("pipeline_id", f.pipelineId)
     .is("closed_at", null);
@@ -183,10 +177,13 @@ async function buildAudience(db: SupabaseClient, orgId: string, f: AudienceFilte
   if (f.idleDaysMin > 0) {
     q = q.or(idleOrFilter(new Date(Date.now() - f.idleDaysMin * DAY_MS).toISOString()));
   }
-  const { data, error } = await q.order("created_at", { ascending: true }).limit(AUDIENCE_MAX);
+  const { data, error, count } = await q.order("created_at", { ascending: true }).limit(
+    AUDIENCE_MAX,
+  );
   if (error) return { error };
   const rows = (data ?? []) as unknown as EntryWithLead[];
-  return { ...shapeAudience(rows), truncated: rows.length === AUDIENCE_MAX };
+  const matching = count ?? rows.length;
+  return { ...shapeAudience(rows), matching, truncated: matching > rows.length };
 }
 
 interface InstanceRow {
@@ -211,19 +208,38 @@ async function loadInstances(db: SupabaseClient, orgId: string) {
     .limit(100);
 }
 
-async function memberships(db: SupabaseClient, ctx: ToolContext): Promise<number> {
-  const { data } = await db.from("team_members").select("organization_id").eq("user_id", ctx.userId)
-    .eq("is_active", true);
-  return new Set(((data ?? []) as Array<{ organization_id: string }>).map((r) => r.organization_id))
-    .size;
+function truncationNote(matching: number): string {
+  return `A audiência tem ${matching} cards e o disparo pela IA vai até ${AUDIENCE_MAX} por vez. ` +
+    "Restrinja (etapas, dias parado) e faça em partes, ou — com o OK da pessoa — passe " +
+    `accept_partial: true para enviar só aos ${AUDIENCE_MAX} mais antigos.`;
 }
 
 const MULTI_ORG =
   "Disparo pela IA ainda não funciona para quem participa de mais de uma organização (o motor de " +
   "Disparos escolhe a organização sozinho). Use a tela de Disparos.";
 
-async function orgTimezone(db: SupabaseClient, orgId: string): Promise<string> {
-  const { data } = await db.from("organizations").select("timezone").eq("id", orgId).maybeSingle();
+/**
+ * The engine picks the org from the caller's first membership, so a broadcast is refused for a
+ * multi-org caller — and FAIL-CLOSED: when the memberships cannot be read, it is refused too
+ * (counting an error as "zero orgs" would let it through to the wrong org).
+ */
+async function multiOrgRefusal(db: SupabaseClient, ctx: ToolContext): Promise<ToolResult | null> {
+  const { data, error } = await db.from("team_members").select("organization_id").eq(
+    "user_id",
+    ctx.userId,
+  ).eq("is_active", true);
+  if (error) return dbErrorResult(error);
+  const orgs = new Set(
+    ((data ?? []) as Array<{ organization_id: string }>).map((r) => r.organization_id),
+  );
+  return orgs.size > 1 ? errorResult(MULTI_ORG) : null;
+}
+
+/** The org's timezone; null when it cannot be read (the send window is then not assumed). */
+async function orgTimezone(db: SupabaseClient, orgId: string): Promise<string | null> {
+  const { data, error } = await db.from("organizations").select("timezone").eq("id", orgId)
+    .maybeSingle();
+  if (error) return null;
   return (data as { timezone?: string } | null)?.timezone || "America/Sao_Paulo";
 }
 
@@ -382,7 +398,9 @@ export const customerAudiencePreviewTool: ToolDef = {
     const r = aud as Exclude<typeof aud, { error: unknown }>;
     return jsonResult({
       total: r.leads.length,
-      truncated_at_1000: r.truncated,
+      matching_cards: r.matching,
+      truncated: r.truncated,
+      ...(r.truncated ? { note: truncationNote(r.matching) } : {}),
       excluded: r.excluded,
       sample: r.leads.slice(0, 10).map((l) => ({ id: l.id, name: l.name, company: l.company })),
     });
@@ -422,6 +440,11 @@ export const customerBroadcastPlanTool: ToolDef = {
         maximum: 90,
         description: "Default 7",
       },
+      accept_partial: {
+        type: "boolean",
+        description: `Only when the audience has more than ${AUDIENCE_MAX} cards and the person ` +
+          `agreed to send to the first ${AUDIENCE_MAX} (oldest) only`,
+      },
     },
     required: ["audience"],
     additionalProperties: false,
@@ -448,7 +471,8 @@ export const customerBroadcastPlanTool: ToolDef = {
     }
 
     const db = ctx.db as SupabaseClient;
-    if ((await memberships(db, ctx)) > 1) return errorResult(MULTI_ORG);
+    const refused = await multiOrgRefusal(db, ctx);
+    if (refused) return refused;
 
     const [content, aud, inst] = await Promise.all([
       resolveContent(db, scope.orgId, from.ref, message),
@@ -460,6 +484,8 @@ export const customerBroadcastPlanTool: ToolDef = {
     if ("error" in aud && aud.error) return dbErrorResult(aud.error);
     if (inst.error) return dbErrorResult(inst.error);
     const r = aud as Exclude<typeof aud, { error: unknown }>;
+    // Never a silent cut: a bigger audience needs the person's explicit OK for a partial send.
+    if (r.truncated && args.accept_partial !== true) return errorResult(truncationNote(r.matching));
     if (r.leads.length === 0) {
       return jsonResult({
         confirm_token: null,
@@ -508,7 +534,8 @@ export const customerBroadcastPlanTool: ToolDef = {
         confirm_token: actionId,
         expires_at: expiresAt,
         total: leadIds.length,
-        truncated_at_1000: r.truncated,
+        matching_cards: r.matching,
+        truncated: r.truncated,
         excluded: r.excluded,
         numbers: chosen.map((i) => ({ id: i.id, name: i.instance_name, phone: i.phone_number })),
         ...(source ? { from_automation: source } : {}),
@@ -681,12 +708,15 @@ export const customerBroadcastConfirmTool: ToolDef = {
 
     const db = ctx.db as SupabaseClient;
     // Checked BEFORE consuming the plan, so a refusal does not burn it.
-    if (!inSendWindow(clock.now(), await orgTimezone(db, scope.orgId))) {
+    const tz = await orgTimezone(db, scope.orgId);
+    if (!tz) return errorResult("Não foi possível ler o fuso da organização; nada foi enviado.");
+    if (!inSendWindow(clock.now(), tz)) {
       return errorResult(
         "Fora da janela de envio (seg–sáb, 8h–20h no horário da organização). Confirme dentro da janela.",
       );
     }
-    if ((await memberships(db, ctx)) > 1) return errorResult(MULTI_ORG);
+    const refused = await multiOrgRefusal(db, ctx);
+    if (refused) return refused;
 
     const taken = await w.store.take(args.confirm_token);
     if (!taken || taken.tool !== "broadcast.send") {
@@ -795,15 +825,17 @@ export const customerBroadcastStatusTool: ToolDef = {
       .maybeSingle();
     if (error) return dbErrorResult(error);
     if (!plan) return errorResult("Disparo não encontrado.");
-    const counts: Record<string, number> = {};
-    for (const s of ["sent", "failed", "skipped", "pending"]) {
-      const { count } = await db
+    const statuses = ["sent", "failed", "skipped", "pending"] as const;
+    const results = await Promise.all(statuses.map((s) =>
+      db
         .from("blast_plan_recipients")
         .select("id", { count: "exact", head: true })
         .eq("plan_id", args.blast_plan_id)
-        .eq("status", s);
-      counts[s] = count ?? 0;
-    }
+        .eq("status", s)
+    ));
+    const failed = results.find((r) => r.error);
+    if (failed?.error) return dbErrorResult(failed.error);
+    const counts = Object.fromEntries(statuses.map((s, i) => [s, results[i].count ?? 0]));
     return jsonResult({ ...plan, recipients: counts });
   },
 };

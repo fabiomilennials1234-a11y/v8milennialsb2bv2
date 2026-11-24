@@ -220,3 +220,38 @@ O spec passa pelo mesmo `safeParseSpec → compileWorkflow → validateWorkflow`
 - Deno 163/163 no crm-mcp + `_shared/mcp`, com type-check dos testes; suíte edge do CI 1219/1219.
 - vitest do resolver 31/31; travas de tsc, lint e dep-cruise sem nada novo.
 - O canary da preview **não** rodou nesta fatia: a preview efêmera e o script não existem mais.
+
+---
+
+## Emenda 2026-11-24 (7) — fatia 6 do v2: robustez e ergonomia das tools existentes
+
+**Origem:** uso real em prod (24 h).
+- A IA chamou `funnel.review` 10 vezes em rajadas paralelas: não havia visão de todos os funis, nem contagem por etapa.
+- Uma `metrics.query` levou 11,2 s e outra falhou.
+- Uma auditoria do código achou guardas que falham abertas e cortes silenciosos.
+
+**Decisões:**
+- **Falhar fechado:**
+  - A trava de multi-org do disparo recusa quando não consegue ler os vínculos. Antes, um erro contava como "zero orgs" e a trava passava.
+  - A confirmação recusa sem o fuso da org.
+  - `deal.move.plan` falha se a consulta de automações falhar, em vez de prometer "sem efeitos".
+  - `broadcast.status` não transforma erro em zero.
+- **Nada cortado em silêncio:**
+  - A audiência traz a contagem exata (`count: exact`). Acima de 1000 cards, `broadcast.plan` recusa sem `accept_partial: true`, que só vale com o OK da pessoa.
+  - A série de métricas cortada informa `series_total`.
+  - `jsonResult` encolhe arrays e strings e mantém o JSON válido, listando o que saiu em `_truncated`. Antes, cortava o texto no meio da estrutura.
+- **`funnel.overview`** (nova): todos os funis numa chamada, com cards por etapa e parados há N+ dias. Usa `get_pipeline_stage_counts_by_id`, a contagem do próprio quadro: INVOKER, `authenticated` executa, `anon` não (DEF7/DEF8 no pgTAP, conferidos em prod).
+- **`funnel.review`:**
+  - Uma consulta de mensagens **por telefone**. Antes, um contato falante esgotava o limite comum e deixava os outros cards sem mensagens.
+  - Novos parâmetros `messages_per_card` (0 = nenhuma) e `idle_days_min`.
+  - `outbound` também conta como nosso, como no `conversation.get`.
+- **`metrics.query`:**
+  - Permissão, fuso e catálogo em paralelo.
+  - A mesma medida no mesmo período roda uma vez por requisição; `num_vendas` repetia até 6 vezes.
+  - Período atual e anterior em paralelo, com no máximo 6 chamadas ao motor ao mesmo tempo.
+  - Uma comparação que falha devolve `previous.error`, e não `null`.
+- **`lead.get` / `lead.list`:** devolvem o `id` do card (é o que `deal.move.plan` recebe) e o nome da etapa.
+- **Observabilidade:** chamada a tool escondida, inexistente ou com argumento faltando agora gera log, só com o nome (`hidden` / `unknown` / `invalid_args`), nunca com valores. Mede o que os clientes tentam fazer.
+- **Protocolo:** `title` no topo de cada tool (2025-06-18). As `instructions` ganham um roteiro de qual tool usar primeiro para cada tipo de pergunta.
+
+**Evidência:** Deno 182/182 no crm-mcp + `_shared/mcp`; suíte edge do CI 1239/1239. As asserções DEF7/DEF8 retornam `true` em prod (transação só leitura).

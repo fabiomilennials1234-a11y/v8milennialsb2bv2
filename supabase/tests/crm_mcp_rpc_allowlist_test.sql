@@ -60,6 +60,13 @@ SELECT ok((SELECT prosecdef AND prosrc ~ 'auth\.uid\(\)' FROM pg_proc
   'DEF4 has_feature_permission(text, uuid) é DEFINER e responde por auth.uid()');
 SELECT ok(NOT (SELECT prosecdef FROM pg_proc WHERE oid = 'public.mover_negocio(uuid,uuid,text,text,uuid)'::regprocedure),
   'DEF6 mover_negocio é INVOKER (a movimentação roda sob a RLS de quem move)');
+SELECT ok((SELECT count(*) > 0 AND bool_and(NOT prosecdef) FROM pg_proc
+            WHERE proname = 'get_pipeline_stage_counts_by_id' AND pronamespace = 'public'::regnamespace),
+  'DEF7 get_pipeline_stage_counts_by_id é INVOKER (conta os cards sob a RLS de quem pede)');
+SELECT ok((SELECT bool_and(has_function_privilege('authenticated', oid, 'EXECUTE')
+                     AND NOT has_function_privilege('anon', oid, 'EXECUTE')) FROM pg_proc
+            WHERE proname = 'get_pipeline_stage_counts_by_id' AND pronamespace = 'public'::regnamespace),
+  'DEF8 get_pipeline_stage_counts_by_id: authenticated executa, anon não');
 SELECT ok(has_function_privilege('authenticated', 'public.fn_metric_measure(uuid,jsonb,text,text,date,date,date,jsonb)', 'EXECUTE')
       AND has_function_privilege('authenticated', 'public.fn_metric_catalog()', 'EXECUTE')
       AND has_function_privilege('authenticated', 'public.has_feature_permission(text,uuid)', 'EXECUTE'),

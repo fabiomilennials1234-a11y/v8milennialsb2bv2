@@ -25,3 +25,10 @@ Deno.test("missingScopeHint: names the option on the token screen; admin-only fo
   assertMatch(missingScopeHint("messages:send"), /"Enviar mensagens".*Só um admin/s);
   assertEquals(missingScopeHint("crm:write").includes("admin"), false);
 });
+
+Deno.test("instructions: route each kind of question to its first tool", () => {
+  const text = serverInstructions(["read"]);
+  for (const t of ["funnel.overview", "funnel.review", "metrics.catalog", "automation.get"]) {
+    assertStringIncludes(text, t);
+  }
+});

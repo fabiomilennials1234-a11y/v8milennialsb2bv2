@@ -36,13 +36,77 @@ export const READ_ONLY: ToolAnnotations = {
 /** Hard ceiling on a single tool result, so one call cannot flood the model's context. */
 export const MAX_RESULT_CHARS = 120_000;
 
+/**
+ * A tool result as compact JSON (the reader is a model: indentation only costs context).
+ * Over the ceiling it is shrunk by `fitToBudget`, never sliced mid-structure — a result the
+ * model cannot parse is worse than a shorter one that says what was left out.
+ */
 export function jsonResult(value: unknown): ToolResult {
-  let text = JSON.stringify(value, null, 2);
-  if (text.length > MAX_RESULT_CHARS) {
-    text = text.slice(0, MAX_RESULT_CHARS) +
-      "\n… [truncated: narrow the query or lower `limit`]";
-  }
+  let text = JSON.stringify(value) ?? "null";
+  if (text.length > MAX_RESULT_CHARS) text = JSON.stringify(fitToBudget(value, MAX_RESULT_CHARS));
   return { content: [{ type: "text", text }] };
+}
+
+type Path = Array<string | number>;
+interface Target {
+  path: Path;
+  size: number;
+  isArray: boolean;
+}
+
+/** The biggest shrinkable node: an array of 2+ items beats any string; then by size. */
+function biggest(v: unknown, path: Path, best: Target | null): Target | null {
+  const better = (t: Target) =>
+    !best || (t.isArray && !best.isArray) || (t.isArray === best.isArray && t.size > best.size);
+  if (typeof v === "string") {
+    const t = { path, size: v.length, isArray: false };
+    return v.length > 40 && better(t) ? t : best; // short strings are not worth clipping
+  }
+  if (Array.isArray(v)) {
+    const t = { path, size: JSON.stringify(v).length, isArray: true };
+    if (v.length > 1 && better(t)) best = t;
+    v.forEach((x, i) => (best = biggest(x, [...path, i], best)));
+    return best;
+  }
+  if (v && typeof v === "object") {
+    for (const [k, x] of Object.entries(v)) best = biggest(x, [...path, k], best);
+  }
+  return best;
+}
+
+/**
+ * Shrink `value` until its JSON fits `max`, keeping it valid: halve the biggest array (its
+ * tail goes), and only when no array has 2+ items left, halve the longest string. What was
+ * cut is listed in `_truncated.cut` (path → original length). Pure.
+ */
+export function fitToBudget(value: unknown, max: number): Record<string, unknown> {
+  const holder: Record<string, unknown> = { r: JSON.parse(JSON.stringify(value ?? null)) };
+  const cut: Record<string, number> = {};
+  const shaped = () => {
+    const r = holder.r;
+    const base = r && typeof r === "object" && !Array.isArray(r)
+      ? r as Record<string, unknown>
+      : { result: r };
+    return {
+      ...base,
+      _truncated: { cut, hint: "Result too large: narrow the query (filters, limit) or page." },
+    };
+  };
+  for (let i = 0; i < 400 && JSON.stringify(shaped()).length > max; i++) {
+    const t = biggest(holder.r, ["r"], null);
+    if (!t) break;
+    const parent = t.path.slice(0, -1).reduce<Record<string | number, unknown>>(
+      (o, k) => o[k] as Record<string | number, unknown>,
+      holder,
+    );
+    const last = t.path[t.path.length - 1];
+    const cur = parent[last] as unknown[] | string;
+    cut[t.path.slice(1).join(".") || "(root)"] ??= cur.length;
+    parent[last] = Array.isArray(cur)
+      ? cur.slice(0, Math.ceil(cur.length / 2))
+      : `${cur.slice(0, Math.floor(cur.length / 2))}…`;
+  }
+  return shaped();
 }
 
 export function errorResult(message: string): ToolResult {
@@ -145,4 +209,58 @@ export function combineOrGroups(groups: string[]): string | null {
 export function clip(v: unknown, max: number): string | null {
   if (typeof v !== "string") return null;
   return v.length > max ? v.slice(0, max) + "…" : v;
+}
+
+/**
+ * "Stalled since before X" over COALESCE(stage_changed_at, entered_at, created_at) — the
+ * definition the funnel board uses — as one PostgREST `or` group.
+ */
+export function idleOrFilter(cutoffIso: string): string {
+  const q = pgrstQuote(cutoffIso);
+  return `stage_changed_at.lt.${q},` +
+    `and(stage_changed_at.is.null,entered_at.lt.${q}),` +
+    `and(stage_changed_at.is.null,entered_at.is.null,created_at.lt.${q})`;
+}
+
+/** Whether a WhatsApp message was sent by the org. Both spellings exist in the data. */
+export function isFromUs(direction: string | null | undefined): boolean {
+  return direction === "outgoing" || direction === "outbound";
+}
+
+/** `fn` over `items` with at most `limit` in flight; results in input order. */
+export async function mapLimit<T, R>(
+  items: readonly T[],
+  limit: number,
+  fn: (item: T, index: number) => PromiseLike<R>,
+): Promise<R[]> {
+  const out = new Array<R>(items.length);
+  let next = 0;
+  const worker = async () => {
+    while (next < items.length) {
+      const i = next++;
+      out[i] = await fn(items[i], i);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+  return out;
+}
+
+/** A semaphore: `run(fn)` starts `fn` once fewer than `limit` runs are in flight. */
+export function createLimiter(limit: number) {
+  let active = 0;
+  const queue: Array<() => void> = [];
+  const release = () => {
+    active--;
+    queue.shift()?.();
+  };
+  return <T>(fn: () => Promise<T>): Promise<T> =>
+    new Promise<T>((resolve, reject) => {
+      const start = () => {
+        active++;
+        // through a promise, so a synchronous throw also releases the slot
+        Promise.resolve().then(fn).then(resolve, reject).finally(release);
+      };
+      if (active < limit) start();
+      else queue.push(start);
+    });
 }

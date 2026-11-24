@@ -51,12 +51,14 @@ export function leadSelector(args: Record<string, unknown>): LeadSelector | null
 /** Shape a fetched lead row (or absence) into an MCP tool result. */
 export function formatLead(lead: Record<string, unknown> | null): ToolResult {
   if (!lead) return { content: [{ type: "text", text: "No lead found." }] };
-  return { content: [{ type: "text", text: JSON.stringify(lead, null, 2) }] };
+  return jsonResult(lead);
 }
 
 const LEAD_SELECT = "id,name,company,email,phone,origin,segment,organization_id,created_at," +
   "updated_at,deleted_at," +
-  "pipeline_entries(stage_key,pipeline_id,entered_at,stage_changed_at,closed_at,pipelines(slug,name,type))";
+  // entry id = what deal.move.plan takes; the stage name saves a stage.list round-trip
+  "pipeline_entries(id,deal_id,stage_key,pipeline_id,entered_at,stage_changed_at,closed_at," +
+  "pipelines(slug,name,type),pipeline_stages(name))";
 
 export const customerLeadGetTool: ToolDef = {
   name: "lead.get",
@@ -232,9 +234,9 @@ export const customerLeadListTool: ToolDef = {
 
     // With a funnel filter the embed is INNER (only leads with an entry there) and shows just
     // that funnel's position; without it, every position the lead has.
-    const embed = q.pipelineId
-      ? "pipeline_entries!inner(pipeline_id,stage_key,entered_at,closed_at)"
-      : "pipeline_entries(pipeline_id,stage_key,entered_at,closed_at)";
+    const cols = "id,deal_id,pipeline_id,stage_key,entered_at,stage_changed_at,closed_at," +
+      "pipeline_stages(name)";
+    const embed = q.pipelineId ? `pipeline_entries!inner(${cols})` : `pipeline_entries(${cols})`;
 
     const db = ctx.db as SupabaseClient;
     let req = db

@@ -17,6 +17,7 @@ import {
   clip,
   dbErrorResult,
   errorResult,
+  isFromUs,
   jsonResult,
   optionalIsoDate,
   optionalUuid,
@@ -46,14 +47,12 @@ export function shapeThread(rows: MessageRow[]): Array<Record<string, unknown>> 
     .reverse()
     .map((m) => ({
       at: m.timestamp ?? m.created_at,
-      from: m.direction === "outgoing" || m.direction === "outbound" ? "us" : "contact",
+      from: isFromUs(m.direction) ? "us" : "contact",
       ...(m.sent_by_ai ? { by_ai: true } : {}),
       type: m.message_type ?? "text",
       text: clip(m.content, MESSAGE_CHARS),
       ...(m.transcription_text ? { transcription: clip(m.transcription_text, MESSAGE_CHARS) } : {}),
-      ...(m.push_name && m.direction !== "outgoing" && m.direction !== "outbound"
-        ? { name: m.push_name }
-        : {}),
+      ...(m.push_name && !isFromUs(m.direction) ? { name: m.push_name } : {}),
     }));
 }
 
