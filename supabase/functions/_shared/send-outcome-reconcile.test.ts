@@ -32,6 +32,8 @@ Deno.test("isAmbiguousSendFailure: timeout e 5xx sim; 4xx, 429 e breaker aberto 
   assertEquals(isAmbiguousSendFailure({ status: 400 }), false);
   assertEquals(isAmbiguousSendFailure({ status: 422 }), false);
   assertEquals(isAmbiguousSendFailure({ status: 503, provider_code: "circuit_breaker_open" }), false);
+  // Número deslogado: o Uazapi diz 503, mas recusou antes de enviar.
+  assertEquals(isAmbiguousSendFailure({ status: 503, provider_code: "instance_disconnected" }), false);
   assertEquals(isAmbiguousSendFailure(new Error("boom")), false);
 });
 

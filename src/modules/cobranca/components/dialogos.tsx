@@ -1,6 +1,7 @@
 /**
  * Os diálogos de registro da cobrança: inadimplente (novo/editar), título,
- * promessa/acordo, pagamento, contato e confirmação com motivo.
+ * promessa/acordo, contato e confirmação com motivo. O pagamento mora em
+ * PagamentoDialog.tsx.
  *
  * Todos seguem o mesmo contrato: validam na tela o que dá para validar (CPF,
  * valor, data), chamam UMA RPC e mostram a recusa que o banco escreveu.
@@ -33,14 +34,13 @@ import { documentoValido, formatarDocumento, formatarTelefone, telefoneValido } 
 import { useRegua } from "../hooks/useRegua";
 import { recusaDaCobranca } from "../lib/erros";
 import { ROTULO_CANAL, ROTULO_RESULTADO, reais } from "../lib/formato";
-import type { CanalDeContato, Etapa, InadimplenteResumo, ResultadoDoContato, TipoDeCompromisso, TituloSaldo } from "../lib/tipos";
+import type { CanalDeContato, Etapa, InadimplenteResumo, ResultadoDoContato, TipoDeCompromisso } from "../lib/tipos";
 import {
   type DadosDoInadimplente,
   type TituloNovo,
   useIncluirTitulo,
   useRegistrarCompromisso,
   useRegistrarContato,
-  useRegistrarPagamento,
   useSalvarInadimplente,
 } from "../hooks/useCobrancaMutacoes";
 import { CampoDeReais } from "./atomos";
@@ -76,7 +76,7 @@ export function Campo({
   );
 }
 
-function BotaoSalvar({ salvando, children, disabled }: { salvando: boolean; children: ReactNode; disabled?: boolean }) {
+export function BotaoSalvar({ salvando, children, disabled }: { salvando: boolean; children: ReactNode; disabled?: boolean }) {
   return (
     <Button type="submit" disabled={salvando || disabled}>
       {salvando && <Loader2 className="animate-spin" />}
@@ -589,112 +589,6 @@ export function CompromissoDialog({
               Cancelar
             </Button>
             <BotaoSalvar salvando={registrar.isPending} disabled={!valido}>
-              Registrar
-            </BotaoSalvar>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-// ───────────────────────────────────────────────────────────────────────────
-// Pagamento
-// ───────────────────────────────────────────────────────────────────────────
-
-export function PagamentoDialog({
-  aberto,
-  onFechar,
-  caso,
-  titulos,
-}: {
-  aberto: boolean;
-  onFechar: () => void;
-  caso: InadimplenteResumo;
-  /** Para escolher um título específico; sem a lista, abate do mais antigo. */
-  titulos?: TituloSaldo[];
-}) {
-  const registrar = useRegistrarPagamento();
-  const baixaveis = (titulos ?? []).filter((t) => t.saldo > 0 && t.origem !== "erp");
-  const [valor, setValor] = useState<number | null>(null);
-  const [data, setData] = useState(isoDia(new Date()));
-  const [titulo, setTitulo] = useState("__fifo");
-
-  useEffect(() => {
-    if (!aberto) return;
-    setValor(caso.saldoAberto || null);
-    setData(isoDia(new Date()));
-    setTitulo("__fifo");
-  }, [aberto, caso.saldoAberto]);
-
-  const limite = titulo === "__fifo" ? caso.saldoAberto : (baixaveis.find((t) => t.id === titulo)?.saldo ?? 0);
-  const erro =
-    valor == null || valor <= 0
-      ? "Informe o valor recebido."
-      : valor - limite > 0.009
-        ? `Passa do saldo em aberto (${reais(limite)}).`
-        : undefined;
-
-  const enviar = (ev: FormEvent) => {
-    ev.preventDefault();
-    if (erro || !caso.casoId) return;
-    registrar.mutate(
-      { casoId: caso.casoId, valor: valor as number, pagoEm: data, tituloId: titulo === "__fifo" ? undefined : titulo },
-      {
-        onSuccess: (r) => {
-          toast.success(r.quitado ? "Saldo quitado. O caso foi para Recuperado." : `Pagamento registrado. Saldo: ${reais(r.saldoRestante)}.`);
-          onFechar();
-        },
-        onError: (err) =>
-          notifyError(err, {
-            fallback: "Não foi possível registrar o pagamento.",
-            message: recusaDaCobranca(err as { code?: string; message?: string }),
-            context: { feature: "cobranca" },
-          }),
-      },
-    );
-  };
-
-  return (
-    <Dialog open={aberto} onOpenChange={(v) => !v && onFechar()}>
-      <DialogContent className="sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle>Registrar pagamento</DialogTitle>
-          <DialogDescription>
-            Para dívida que não veio do ERP. Abate do título mais antigo para o mais novo; saldo zero leva o caso para Recuperado.
-          </DialogDescription>
-        </DialogHeader>
-        <form onSubmit={enviar} className="space-y-4" noValidate>
-          <div className="grid gap-4 sm:grid-cols-2">
-            <Campo id="pg-valor" rotulo="Valor recebido" erro={erro && valor != null ? erro : undefined}>
-              <CampoDeReais id="pg-valor" valor={valor} onValor={setValor} />
-            </Campo>
-            <Campo id="pg-data" rotulo="Data do pagamento">
-              <Input id="pg-data" type="date" max={isoDia(new Date())} value={data} onChange={(e) => setData(e.target.value)} />
-            </Campo>
-          </div>
-          {baixaveis.length > 1 && (
-            <Campo id="pg-titulo" rotulo="Abater de">
-              <Select value={titulo} onValueChange={setTitulo}>
-                <SelectTrigger id="pg-titulo">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__fifo">Do mais antigo para o mais novo</SelectItem>
-                  {baixaveis.map((t) => (
-                    <SelectItem key={t.id} value={t.id}>
-                      {(t.numero ?? "Título") + ` · ${t.vencimento.split("-").reverse().join("/")} · ${reais(t.saldo)}`}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </Campo>
-          )}
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={onFechar}>
-              Cancelar
-            </Button>
-            <BotaoSalvar salvando={registrar.isPending} disabled={!!erro}>
               Registrar
             </BotaoSalvar>
           </DialogFooter>

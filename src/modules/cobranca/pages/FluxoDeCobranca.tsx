@@ -39,7 +39,8 @@ import { CHAVE_COBRANCA, useCasosAbertos, useCasosEncerrados, useEtapas, useMetr
 import { useCobrancaAcesso } from "../hooks/useCobrancaAcesso";
 import { useMoverCaso } from "../hooks/useCobrancaMutacoes";
 import { CobrancaTabs } from "../components/CobrancaTabs";
-import { ConfirmarDialog, InadimplenteDialog, PagamentoDialog } from "../components/dialogos";
+import { ConfirmarDialog, InadimplenteDialog } from "../components/dialogos";
+import { PagamentoDialog } from "../components/PagamentoDialog";
 import { FluxoQuadro } from "../components/FluxoQuadro";
 import { InadimplenteGaveta } from "../components/InadimplenteGaveta";
 import { MoverEEnviarDialog } from "../components/MoverEEnviarDialog";
