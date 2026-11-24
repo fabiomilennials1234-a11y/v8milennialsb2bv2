@@ -1,3 +1,5 @@
+import { isAllowedAvatarUrl } from "./contact-avatar.ts";
+
 type Data = Record<string, unknown>;
 const record = (value: unknown): Data => value !== null && typeof value === "object" && !Array.isArray(value) ? value as Data : {};
 
@@ -13,6 +15,40 @@ export function uazapiEventMessage(payload: Data): Data {
   const phoneJid = typeof candidate === "string" && /^\d+@(s\.whatsapp\.net|g\.us)$/.test(candidate)
     ? candidate : undefined;
   return { ...record(message), ...(phoneJid ? { _phone_jid: phoneJid } : {}) };
+}
+
+export interface UazapiChatAvatarCandidate {
+  /** Dígitos do JID 1:1 (`5511999999999`), ainda sem normalizar. */
+  phone: string;
+  /** URL do CDN do WhatsApp que passou na allowlist. */
+  url: string;
+}
+
+const ONE_TO_ONE_JID = /^(\d+)@s\.whatsapp\.net$/;
+
+/**
+ * Foto de perfil do contato carregada no envelope `messages` da Uazapi
+ * (`chat.imagePreview`, senão `chat.image`). Só conversa 1:1 recebida, de
+ * caixa Uazapi, com URL na allowlist; o resto (grupo, @lid, fromMe, URL vazia
+ * ou de outro host) é `null`. Puro: não lê banco nem rede.
+ */
+export function uazapiChatAvatarCandidate(
+  payload: Data,
+  provider?: string | null,
+): UazapiChatAvatarCandidate | null {
+  if ((provider?.trim() || "uazapi") !== "uazapi") return null;
+  const chat = record(payload.chat);
+  if (chat.wa_isGroup === true) return null;
+  const chatId = chat.wa_chatid;
+  if (typeof chatId !== "string") return null;
+  const jid = ONE_TO_ONE_JID.exec(chatId);
+  if (!jid) return null;
+  const message = record(payload.data ?? payload.message);
+  if (message.fromMe === true) return null;
+  const url = [chat.imagePreview, chat.image].find((value) => typeof value === "string" && value.trim() !== "");
+  if (typeof url !== "string") return null;
+  const trimmed = url.trim();
+  return isAllowedAvatarUrl(trimmed) ? { phone: jid[1], url: trimmed } : null;
 }
 
 export interface UazapiReaction {
