@@ -36,6 +36,7 @@ import {
 } from "@/modules/platform/components/settings/settings-ui";
 import { vidroNaTinta } from "@/modules/platform/components/settings/settings-classes";
 import { useOrgFeatures } from "@/contexts/OrgFeaturesContext";
+import { useFeatureFlag } from "@/modules/platform/feature-flags";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { PreferenciasDeAviso } from "@/modules/platform/components/notifications/PreferenciasDeAviso";
 import { Switch } from "@/components/ui/switch";
@@ -133,6 +134,11 @@ const OraculoPerfilSettings = lazy(() =>
 const ApiKeysPanel = lazy(() =>
   import("@/modules/platform/components/settings/ApiKeysPanel").then((m) => ({
     default: m.ApiKeysPanel,
+  }))
+);
+const PersonalAccessTokensPanel = lazy(() =>
+  import("@/modules/platform/components/settings/PersonalAccessTokensPanel").then((m) => ({
+    default: m.PersonalAccessTokensPanel,
   }))
 );
 
@@ -802,6 +808,9 @@ export default function Configuracoes() {
 
   const [slotDeAcoes, setSlotDeAcoes] = useState<HTMLElement | null>(null);
 
+  // Piloto do crm-mcp: a seção só existe para org liberada (o banco recusa o resto).
+  const { enabled: mcpLiberado } = useFeatureFlag("crm_mcp");
+
   const isOutboundOrg = orgType === "outbound";
   const visibilidade = useMemo(() => ({ isAdmin, isOutboundOrg }), [isAdmin, isOutboundOrg]);
   const tabs = useMemo(() => visibleSettingsTabs(visibilidade), [visibilidade]);
@@ -927,6 +936,13 @@ export default function Configuracoes() {
               <ApiKeysPanel />
             </Suspense>
           </SecaoDeConfiguracao>
+          {mcpLiberado && (
+            <SecaoDeConfiguracao id="mcp" titulo="IA conectada (MCP)" oculto>
+              <Suspense fallback={<TabFallback label="IA conectada" />}>
+                <PersonalAccessTokensPanel />
+              </Suspense>
+            </SecaoDeConfiguracao>
+          )}
           <SecaoDeConfiguracao id="webhooks" titulo="Webhooks de saída" oculto>
             <Suspense fallback={<TabFallback label="Webhooks" />}>
               <SettingsCard>

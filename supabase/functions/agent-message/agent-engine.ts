@@ -1,5 +1,6 @@
 import { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { OpenRouterClient } from "./openrouter-client.ts";
+import { resolveCopilotModel } from "../_shared/copilot/openrouter-sampling.ts";
 import { generateEmbedding } from "../_shared/embeddings.ts";
 import { enqueueAiAction } from "../_shared/ai-queue.ts";
 import { isDeliveredSend, sentDocumentLabel } from "../_shared/copilot/document-delivery.ts";
@@ -415,7 +416,7 @@ export class AgentEngine {
     console.log('[AgentEngine] Total messages to send:', allMessages.length);
     
     // Obter modelo e temperatura do banco ou usar padrões
-    const model = capabilities.llm_model || Deno.env.get('OPENROUTER_DEFAULT_MODEL') || 'openai/gpt-4.1-mini';
+    const model = resolveCopilotModel(capabilities.llm_model, Deno.env.get('OPENROUTER_DEFAULT_MODEL'));
     const temperatureModeMap: Record<string, number> = { criativo: 0.9, balanceado: 0.7, preciso: 0.2 };
     const temperature = temperatureModeMap[capabilities.llm_temperature_mode] ?? 0.8;
     console.log('[AgentEngine] Using model:', model, '| temperature:', temperature, `(${capabilities.llm_temperature_mode ?? 'balanceado'})`);
@@ -472,7 +473,7 @@ export class AgentEngine {
         tokens: {
           prompt: usage?.prompt_tokens,
           completion: usage?.completion_tokens,
-          model,
+          model: response.model ?? model,
         },
         payloadSnapshot: { agent_id: capabilities.id, turn: turn + 1 },
       }).catch(() => {/* non-fatal */});
@@ -1393,7 +1394,7 @@ export class AgentEngine {
     ].filter(Boolean).join('\n');
 
     const systemPrompt = basePrompt + '\n' + followupInstruction;
-    const model = capabilities.llm_model || Deno.env.get('OPENROUTER_DEFAULT_MODEL') || 'openai/gpt-4.1-mini';
+    const model = resolveCopilotModel(capabilities.llm_model, Deno.env.get('OPENROUTER_DEFAULT_MODEL'));
 
     const messages = [
       ...lastMessages,

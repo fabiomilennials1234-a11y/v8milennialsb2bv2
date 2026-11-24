@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
+  buildCustomFieldColumns,
   buildExportHeaders,
   buildFunnelCells,
   funnelColumnHeaders,
@@ -13,6 +14,24 @@ import {
 } from "@/modules/leads/lib/export-columns";
 
 const LEAD_HEADERS = ["ID Lead", "Nome"] as const;
+
+it("ordena campos preenchidos, diferencia nomes repetidos e preserva o valor de cada lead", () => {
+  const { headers, cellsByLead } = buildCustomFieldColumns([
+    { id: "f3", field_name: "Linha (2)", display_order: 3, created_at: null },
+    { id: "f2", field_name: " Linha: ", display_order: 2, created_at: null },
+    { id: "f4", field_name: "Vazio", display_order: 0, created_at: null },
+    { id: "f1", field_name: "Linha", display_order: 1, created_at: null },
+  ], [
+    { field_id: "f1", lead_id: "l1", value: "Banheiro" },
+    { field_id: "f2", lead_id: "l1", value: "0" },
+    { field_id: "f3", lead_id: "l2", value: "Cozinha" },
+    { field_id: "f4", lead_id: "l1", value: " " },
+  ]);
+
+  expect(headers).toEqual(["Campo: Linha", "Campo: Linha (2)", "Campo: Linha (2) (2)"]);
+  expect(cellsByLead.get("l1")).toEqual({ "Campo: Linha": "Banheiro", "Campo: Linha (2)": "0" });
+  expect(cellsByLead.get("l2")).toEqual({ "Campo: Linha (2) (2)": "Cozinha" });
+});
 
 const FUNIS: ExportPipeline[] = [
   { id: "c2", name: "Zeta Custom", slug: "zeta", type: "custom" },

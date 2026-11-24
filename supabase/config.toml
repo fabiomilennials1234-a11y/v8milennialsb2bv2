@@ -33,6 +33,11 @@ verify_jwt = false
 [functions.crm-mcp]
 verify_jwt = false
 
+# create-pat: emite o token pessoal do crm-mcp (ADR 0012). Sessão validada dentro da fn
+# (auth.getUser) e INSERT sob a RLS do próprio usuário; sem service_role.
+[functions.create-pat]
+verify_jwt = false
+
 # meta: leadgen polling cron (ADR-0009); auth via x-cron-secret inside fn
 [functions.meta-leadgen-poll]
 verify_jwt = false

@@ -50,6 +50,35 @@ Deno.test("dispatch — initialize negotiates to the server's latest on an unsup
   assertEquals(result.protocolVersion, "2025-06-18");
 });
 
+Deno.test("dispatch — initialize echoes the older 2025-03-26 revision it also implements", async () => {
+  const res = await dispatch(
+    { jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: "2025-03-26" } },
+    ctx(),
+  );
+  const result = (res as JsonRpcSuccess).result as Record<string, unknown>;
+  assertEquals(result.protocolVersion, "2025-03-26");
+});
+
+Deno.test("dispatch — ping answers {} (spec liveness check)", async () => {
+  const res = await dispatch({ jsonrpc: "2.0", id: 9, method: "ping" }, ctx());
+  assertEquals((res as JsonRpcSuccess).result, {});
+});
+
+Deno.test("dispatch — tools/list advertises annotations only when the tool declares them", async () => {
+  const annotated: ToolDef = {
+    ...readTool,
+    name: "lead.list",
+    annotations: { readOnlyHint: true, openWorldHint: false },
+  };
+  const res = await dispatch(
+    { jsonrpc: "2.0", id: 2, method: "tools/list" },
+    ctx({ tools: [readTool, annotated] }),
+  );
+  const tools = ((res as JsonRpcSuccess).result as { tools: Record<string, unknown>[] }).tools;
+  assertEquals("annotations" in tools[0], false);
+  assertEquals(tools[1].annotations, { readOnlyHint: true, openWorldHint: false });
+});
+
 Deno.test("dispatch — a notification (no id) yields no response", async () => {
   const res = await dispatch({ jsonrpc: "2.0", method: "notifications/initialized" }, ctx());
   assertEquals(res, null);

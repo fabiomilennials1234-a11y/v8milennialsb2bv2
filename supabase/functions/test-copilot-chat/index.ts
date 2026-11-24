@@ -17,6 +17,7 @@ import { sanitizeAssistantMessage, splitByDelimiter } from "../_shared/message-s
 import { getCorsHeaders } from "../_shared/cors.ts";
 import { withSecurityHeaders } from "../_shared/security-headers.ts";
 import { requireAuth, AuthError, authErrorResponse, type AuthContext } from "../_shared/user-auth.ts";
+import { copilotSamplingOptions } from "../_shared/copilot/openrouter-sampling.ts";
 import { hasQuoteSimulation } from "./quote-simulation.ts";
 
 const OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions";
@@ -176,7 +177,7 @@ async function callOpenRouter(
   const payload: Record<string, unknown> = {
     model,
     messages: llmMessages,
-    temperature,
+    ...copilotSamplingOptions(model, temperature),
     max_tokens: maxTokens,
   };
 
@@ -373,7 +374,11 @@ Deno.serve(withErrorBoundary('test-copilot-chat', async (req) => {
         module: "copilot",
         action: "test_chat",
         status: "success",
-        payloadSnapshot: { mode: "proactive", model, hasTemplate: !!firstMessageTemplate },
+        payloadSnapshot: {
+          mode: "proactive",
+          model: result.model ?? model,
+          hasTemplate: !!firstMessageTemplate,
+        },
       });
 
       return new Response(
@@ -487,7 +492,13 @@ Deno.serve(withErrorBoundary('test-copilot-chat', async (req) => {
       module: "copilot",
       action: "test_chat",
       status: "success",
-      payloadSnapshot: { mode: "reactive", model, historyLength: recentHistory.length, hasAttachment, toolCallCount: toolCalls.length },
+      payloadSnapshot: {
+        mode: "reactive",
+        model: result.model ?? model,
+        historyLength: recentHistory.length,
+        hasAttachment,
+        toolCallCount: toolCalls.length,
+      },
     });
 
     return new Response(

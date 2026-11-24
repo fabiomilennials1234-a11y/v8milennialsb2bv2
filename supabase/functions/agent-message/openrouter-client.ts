@@ -5,6 +5,8 @@
  * Formato compatível com OpenAI Chat Completions API
  */
 
+import { copilotSamplingOptions } from "../_shared/copilot/openrouter-sampling.ts";
+
 export interface OpenRouterMessage {
   role: 'system' | 'user' | 'assistant' | 'tool';
   content: string | null;
@@ -40,6 +42,7 @@ export interface OpenRouterRequest {
 
 export interface OpenRouterResponse {
   id: string;
+  model?: string;
   choices: Array<{
     index: number;
     message: {
@@ -117,7 +120,8 @@ export class OpenRouterClient {
       headers['anthropic-beta'] = 'prompt-caching-2024-07-31';
     }
 
-    const body = { ...request };
+    const { temperature, ...options } = request;
+    const body = { ...options, ...copilotSamplingOptions(request.model, temperature) };
     if (isAnthropic && body.messages) {
       body.messages = body.messages.map((msg) =>
         msg.role === 'system'

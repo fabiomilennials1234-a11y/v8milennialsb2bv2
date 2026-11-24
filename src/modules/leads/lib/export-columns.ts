@@ -102,6 +102,52 @@ export function buildExportHeaders(
   return [...leadHeaders, ...ordered.flatMap((p) => funnelColumnHeaders(p.name ?? ""))];
 }
 
+interface ExportCustomField {
+  id: string;
+  field_name: string;
+  display_order: number | null;
+  created_at: string | null;
+}
+
+interface ExportCustomFieldValue {
+  field_id: string;
+  lead_id: string;
+  value: string | null;
+}
+
+export function buildCustomFieldColumns(
+  fields: ExportCustomField[],
+  values: ExportCustomFieldValue[],
+): { headers: string[]; cellsByLead: Map<string, Record<string, string>> } {
+  const filledFields = new Set(values.filter(({ value }) => value?.trim()).map(({ field_id }) => field_id));
+  const orderedFields = fields.filter(({ id }) => filledFields.has(id)).sort((a, b) =>
+    (a.display_order ?? 0) - (b.display_order ?? 0) ||
+    (a.created_at ?? "").localeCompare(b.created_at ?? "") ||
+    a.id.localeCompare(b.id),
+  );
+  const headersByField = new Map<string, string>();
+  const usedHeaders = new Set<string>();
+  for (const field of orderedFields) {
+    const base = `Campo: ${field.field_name.trim().replace(/[:\s]+$/, "")}`;
+    let header = base;
+    for (let suffix = 2; usedHeaders.has(header); suffix++) {
+      header = `${base} (${suffix})`;
+    }
+    usedHeaders.add(header);
+    headersByField.set(field.id, header);
+  }
+
+  const cellsByLead = new Map<string, Record<string, string>>();
+  for (const { field_id, lead_id, value } of values) {
+    const header = headersByField.get(field_id);
+    if (!header || !value?.trim()) continue;
+    const cells = cellsByLead.get(lead_id) ?? {};
+    cells[header] = value;
+    cellsByLead.set(lead_id, cells);
+  }
+  return { headers: [...usedHeaders], cellsByLead };
+}
+
 function metaStr(meta: Record<string, unknown> | null | undefined, key: string): string {
   const v = meta?.[key];
   if (v == null || v === "") return "";
