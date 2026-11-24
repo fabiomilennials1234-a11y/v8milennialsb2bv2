@@ -14,6 +14,8 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 const read = (p: string) => readFileSync(new URL(`../../${p}`, import.meta.url), "utf8");
 const MIGRATION = read("supabase/migrations/20280128000000_avatar_do_contato_whatsapp.sql");
 const ROLLBACK = read("supabase/migrations/rollback/20280128000000_avatar_do_contato_whatsapp.sql");
+const CRON = read("supabase/migrations/20280128000100_cron_avatar_do_contato.sql");
+const CRON_ROLLBACK = read("supabase/migrations/rollback/20280128000100_cron_avatar_do_contato.sql");
 const BASELINE = read("supabase/migrations/20260101000000_baseline_prod_schema.sql").split("\n");
 const slice = (from: number, to: number) => BASELINE.slice(from - 1, to).join("\n");
 const NORMALIZE = slice(15406, 15443);
@@ -396,6 +398,43 @@ describe("podar_avatares_orfaos", () => {
   it("cursor inválido não quebra", async () => {
     await db.exec("INSERT INTO public.cron_config VALUES ('contact_avatar_orphan_cursor', 'lixo')");
     expect(await as("service_role", "SELECT public.podar_avatares_orfaos(10) AS n")).toEqual([{ n: 0 }]);
+  });
+});
+
+describe("invocador do cron (20280128000100)", () => {
+  beforeAll(async () => {
+    await db.exec(`
+      CREATE SCHEMA IF NOT EXISTS net;
+      CREATE TABLE IF NOT EXISTS net.calls (url text, headers jsonb);
+      CREATE OR REPLACE FUNCTION net.http_post(url text, headers jsonb, body jsonb, timeout_milliseconds integer)
+      RETURNS bigint LANGUAGE sql AS $$ INSERT INTO net.calls VALUES (url, headers) RETURNING 1::bigint $$;
+    `);
+    await db.exec(CRON);
+  });
+  const calls = async () => (await db.query<{ url: string; headers: Record<string, string> }>("SELECT * FROM net.calls")).rows;
+
+  it("sem trabalho não chama; com pendente chama a edge fn com o segredo", async () => {
+    await db.exec("DELETE FROM net.calls");
+    await db.exec(`INSERT INTO public.cron_config VALUES
+      ('campaign_rule_dispatch_url', 'https://p.supabase.co/functions/v1/campaign-rule-dispatch'), ('cron_secret', 's')`);
+    await as("service_role", "SELECT public.invoke_contact_avatar_sync()");
+    expect(await calls()).toEqual([]);
+    await register(ORG1, BOX1, "5511999990001", URL1);
+    await as("service_role", "SELECT public.invoke_contact_avatar_sync()");
+    expect(await calls()).toEqual([{ url: "https://p.supabase.co/functions/v1/contact-avatar-sync", headers: { "Content-Type": "application/json", "x-cron-secret": "s" } }]);
+  });
+
+  it("anon e authenticated não executam", async () => {
+    for (const role of ["anon", "authenticated"]) {
+      const r = await db.query<{ ok: boolean }>(`SELECT has_function_privilege('${role}', 'public.invoke_contact_avatar_sync()', 'EXECUTE') AS ok`);
+      expect(r.rows[0].ok).toBe(false);
+    }
+  });
+
+  it("rollback do cron remove o invocador (sem pg_cron não quebra)", async () => {
+    await db.exec(CRON_ROLLBACK);
+    expect((await db.query("SELECT 1 FROM pg_proc WHERE proname = 'invoke_contact_avatar_sync'")).rows).toEqual([]);
+    await db.exec(CRON);
   });
 });
 

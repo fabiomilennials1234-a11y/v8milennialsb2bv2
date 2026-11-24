@@ -206,6 +206,25 @@ describe('jobs agendados por migrations novas', () => {
     expect(Math.max(...intervalos)).toBeLessThanOrEqual(20);
   });
 
+  it('foto do contato: 2 rodadas/h nos únicos minutos livres (30 e 41), sem colisão', () => {
+    const job = AGENDADOS_DEPOIS.filter((j) => j.jobname === 'contact-avatar-sync');
+    expect(job.map((j) => j.schedule)).toEqual(['30,41 * * * *']);
+    expect(frequenciaSemanal(job[0].schedule)).toBe(2 * 24 * 7);
+    // Prova de que um passo de 10 min não cabia: toda fase 0–9 estoura o TETO
+    // ou cai em minuto de purga pesada.
+    const semAvatar = comNovos.filter((j) => j.jobname !== 'contact-avatar-sync');
+    const pesados = new Set<number>();
+    for (const nome of PESADAS_RECORRENTES) {
+      for (const t of disparosNaSemana(depois.find((j) => j.jobname === nome)!.schedule)) pesados.add(t);
+    }
+    for (let fase = 0; fase < 10; fase += 1) {
+      const agenda = `${fase}-59/10 * * * *`;
+      const estoura = pico(cargaSemanal([...semAvatar, { jobid: 0, jobname: 'x', schedule: agenda, avgSeconds: null }])) > TETO;
+      const colide = disparosNaSemana(agenda).some((t) => pesados.has(t));
+      expect(estoura || colide, agenda).toBe(true);
+    }
+  });
+
   it(`pico de disparos não-por-minuto continua no máximo ${TETO}`, () => {
     expect(pico(cargaSemanal(comNovos))).toBeLessThanOrEqual(TETO);
   });
