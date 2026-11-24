@@ -211,4 +211,6 @@ CREATE TRIGGER proteger_venda_avulsa
   WHEN (OLD.metadata->>'venda_avulsa' = 'true')
   EXECUTE FUNCTION private.proteger_venda_avulsa();
 
+NOTIFY pgrst, 'reload schema';
+
 COMMIT;
