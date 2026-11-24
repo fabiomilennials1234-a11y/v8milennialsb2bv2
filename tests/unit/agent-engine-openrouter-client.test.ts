@@ -48,6 +48,42 @@ describe("OpenRouterClient.chat — transient retry (Bug 2 cause)", () => {
     expect(mockFetch).toHaveBeenCalledTimes(1);
   });
 
+  it("envia Haiku 5.5 com raciocínio adaptativo desligado e omite temperatura", async () => {
+    mockFetch.mockResolvedValueOnce(okResp());
+    await retryClient.chat({
+      ...req,
+      model: "anthropic/claude-haiku-5.5",
+      max_tokens: 300,
+      temperature: 0.7,
+    });
+
+    const body = JSON.parse(mockFetch.mock.calls[0][1].body);
+    expect(body).toMatchObject({
+      model: "anthropic/claude-haiku-5.5",
+      max_tokens: 300,
+      reasoning: { enabled: false },
+    });
+    expect(body).not.toHaveProperty("temperature");
+  });
+
+  it("preserva a temperatura no fallback e o modelo retornado pelo provedor", async () => {
+    mockFetch.mockResolvedValueOnce(errResp(400)).mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ id: "r2", model: "openai/gpt-4.1-mini", choices: [] }),
+    });
+
+    const response = await retryClient.chat({
+      ...req,
+      model: "anthropic/claude-haiku-5.5",
+      temperature: 0.7,
+    });
+
+    const body = JSON.parse(mockFetch.mock.calls[1][1].body);
+    expect(body).toMatchObject({ model: "openai/gpt-4.1-mini", temperature: 0.7 });
+    expect(body).not.toHaveProperty("reasoning");
+    expect(response.model).toBe("openai/gpt-4.1-mini");
+  });
+
   it("retries on 503 then succeeds", async () => {
     mockFetch.mockResolvedValueOnce(errResp(503));
     mockFetch.mockResolvedValueOnce(okResp("recovered"));

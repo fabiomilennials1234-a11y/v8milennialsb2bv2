@@ -14,6 +14,7 @@ import { withSecurityHeaders } from "../_shared/security-headers.ts";
 import { sendOutboundDispatch } from "../_shared/outbound-sender.ts";
 import { logRuntime } from "../_shared/logger.ts";
 import { personalizationFirstName } from "../_shared/lead-name.ts";
+import { copilotSamplingOptions, resolveCopilotModel } from "../_shared/copilot/openrouter-sampling.ts";
 
 interface OutboundTriggerPayload {
   lead_id: string;
@@ -419,6 +420,7 @@ ${systemPromptBase.substring(0, 1500)}
 DADOS DO LEAD:
 ${leadContext || "Nenhum dado adicional disponível"}`;
 
+  const model = resolveCopilotModel(agent.llm_model);
   try {
     const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
       method: "POST",
@@ -429,11 +431,11 @@ ${leadContext || "Nenhum dado adicional disponível"}`;
         "X-Title": "V8 Millennials Outbound",
       },
       body: JSON.stringify({
-        model: "openai/gpt-4.1-mini",
+        model,
         messages: [
           { role: "user", content: generationPrompt },
         ],
-        temperature: 0.8,
+        ...copilotSamplingOptions(model, 0.8),
         max_tokens: 300,
       }),
     });
