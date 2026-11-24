@@ -16064,7 +16064,7 @@ export type Database = {
           deal_id: string | null
           event_type: string
           id: string
-          lead_id: string | null
+          lead_id: string
           organization_id: string
           origin_record_id: string | null
           pipeline_id: string | null
@@ -16086,7 +16086,7 @@ export type Database = {
           deal_id?: string | null
           event_type: string
           id?: string
-          lead_id?: string | null
+          lead_id: string
           organization_id: string
           origin_record_id?: string | null
           pipeline_id?: string | null
@@ -16108,7 +16108,7 @@ export type Database = {
           deal_id?: string | null
           event_type?: string
           id?: string
-          lead_id?: string | null
+          lead_id?: string
           organization_id?: string
           origin_record_id?: string | null
           pipeline_id?: string | null
@@ -21201,18 +21201,6 @@ export type Database = {
       }
     }
     Functions: {
-      registrar_venda_avulsa: {
-        Args: {
-          p_organization_id: string
-          p_pipeline_id: string
-          p_request_id: string
-          p_title: string
-          p_value: number
-          p_date: string
-          p_owner_id?: string | null
-        }
-        Returns: string
-      }
       _fn_reseed_legacy_to_native_unchecked: {
         Args: { p_org_id: string }
         Returns: Json
