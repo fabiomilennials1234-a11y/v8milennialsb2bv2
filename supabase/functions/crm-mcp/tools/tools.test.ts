@@ -132,6 +132,7 @@ const VALID_ARGS: Record<string, Record<string, unknown>> = {
   "broadcast.confirm": { confirm_token: LEAD },
   "broadcast.cancel": { blast_plan_id: LEAD },
   "automation.list": {},
+  "automation.get": { workflow_id: LEAD },
   "automation.draft": {
     pipeline_id: LEAD,
     stage_key: "novo",

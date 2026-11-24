@@ -110,8 +110,9 @@ export const WRITE_SCOPE_OPTIONS: ReadonlyArray<{
     id: "messages:send",
     label: "Enviar mensagens",
     description:
-      "Disparos de WhatsApp para uma audiência, pelo motor de Disparos (limites e anti-ban valem). " +
-      "A IA testa no seu celular e só dispara com sua confirmação.",
+      "Disparos de WhatsApp para uma audiência — inclusive uma mensagem de automação para quem já " +
+      "está na etapa —, pelo motor de Disparos (limites e anti-ban valem). A IA testa no seu " +
+      "celular e só dispara com sua confirmação.",
     adminOnly: true,
   },
   {

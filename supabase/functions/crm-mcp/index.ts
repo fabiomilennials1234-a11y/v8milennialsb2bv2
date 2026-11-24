@@ -22,6 +22,7 @@ import { logError } from "../_shared/error-boundary.ts";
 import { handleRpcPayload } from "../_shared/mcp/http.ts";
 import type { DispatchContext } from "../_shared/mcp/dispatch.ts";
 import type { JsonRpcRequest } from "../_shared/mcp/types.ts";
+import { serverInstructions } from "./lib/capabilities.ts";
 import { type CrmMcpConfig, loadConfig, scrubPrivilegedEnv } from "./lib/config.ts";
 import {
   assertWellFormedJwt,
@@ -38,7 +39,7 @@ import {
 import type { ActionStore, EdgeInvoker, WriteScope } from "./tools/actions.ts";
 import { CUSTOMER_TOOLS, customerToolFilter } from "./tools/index.ts";
 
-const SERVER_INFO = { name: "torque-crm", version: "1.1.0" }; // NO project — no env reconnaissance
+const SERVER_INFO = { name: "torque-crm", version: "1.2.0" }; // NO project — no env reconnaissance
 
 /**
  * Calls one of the app's own edge functions AS THE USER, with the 60 s JWT minted for this
@@ -307,6 +308,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
   try {
     const ctx: DispatchContext = {
       serverInfo: SERVER_INFO,
+      instructions: serverInstructions(principal.scopes),
       tools: CUSTOMER_TOOLS,
       // Writes are possible only through scoped tools; the filter below is the gate.
       allowMutations: true,

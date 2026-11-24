@@ -48,3 +48,14 @@ export function resolveBlastMessage(
 ): string {
   return expandSpintax(substituteVariables(template, data), rng);
 }
+
+/**
+ * The variable names a template references, in first-seen order, deduped — read with the
+ * same token rule `resolveBlastMessage` substitutes by, so a caller can refuse a template
+ * whose variables this resolver would blank out.
+ */
+export function templateVariables(template: string): string[] {
+  const seen = new Set<string>();
+  for (const m of template.matchAll(VARIABLE_TOKEN)) seen.add(m[1] ?? m[2]);
+  return [...seen];
+}
