@@ -47,6 +47,7 @@ const FIELD_OPTIONS = [
   { value: "deal_value", label: "Valor do negócio" },
   { value: "has_open_deal", label: "Tem negócio aberto (true/false)" },
   { value: "days_in_stage", label: "Dias parado na etapa" },
+  { value: "days_until_meeting", label: "Dias até a reunião" },
   { value: "pre_sale_responsible_id", label: "Responsável Pré-vendas" },
   { value: "sale_responsible_id", label: "Responsável Vendas" },
   { value: "any_responsible", label: "Responsável (qualquer)" },

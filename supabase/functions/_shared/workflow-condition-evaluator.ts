@@ -6,6 +6,7 @@
  */
 
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { daysUntilNextMeeting } from "./meeting-variables.ts";
 import { getStageDoNegocio } from "./negocio-subject.ts";
 
 export interface ConditionParams {
@@ -140,6 +141,20 @@ export async function evaluateCondition(
      * estagnação que zera porque alguém editou uma observação não mede nada.
      */
     fieldValue = await daysInStage(supabase, leadId, leadData.organization_id as string, entryId ?? null);
+  } else if (field === "days_until_meeting") {
+    /**
+     * Dias de CALENDÁRIO (America/Sao_Paulo) até a próxima reunião agendada —
+     * a do negócio da execução, senão a do lead. Hoje = 0, amanhã = 1.
+     *
+     * Sem reunião o campo fica AUSENTE (`undefined`), nunca 0: `Number(null)` é
+     * 0 e "sem reunião" passaria em "menor que 3". Ausente reprova toda
+     * comparação numérica e casa com "está vazio".
+     */
+    fieldValue = await daysUntilNextMeeting(supabase, {
+      leadId,
+      organizationId: leadData.organization_id as string,
+      entryId: entryId ?? null,
+    });
   } else if (field === "score") {
     fieldValue = leadData.qualification_score ?? 0;
   } else if (field === "any_responsible") {
