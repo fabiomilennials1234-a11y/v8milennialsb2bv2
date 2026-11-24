@@ -42,6 +42,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Switch } from "@/components/ui/switch";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useTeamMembers } from "@/modules/identity";
 import { GavetaLateral } from "@/shared/components/GavetaLateral";
 import { notifyError } from "@/shared/errors";
@@ -52,6 +53,7 @@ import { atrasoDe, diaCurto, haQuantoTempo } from "../lib/atraso";
 import { formatarDocumento, formatarTelefone } from "../lib/documento";
 import { recusaDaCobranca } from "../lib/erros";
 import { ROTULO_CANAL, ROTULO_DESFECHO, ROTULO_ORIGEM, ROTULO_RESULTADO, plural, reais } from "../lib/formato";
+import { descreverBaixas, parseBaixas } from "../lib/pagamento";
 import type { CanalDeContato, Etapa, EventoDoCaso, ResultadoDoContato, TipoDeCompromisso } from "../lib/tipos";
 import { useFichaDoInadimplente, type FichaDoInadimplente } from "../hooks/useCobrancaDados";
 import { useRegua } from "../hooks/useRegua";
@@ -62,14 +64,8 @@ import {
   useNaoContatar,
 } from "../hooks/useCobrancaMutacoes";
 import { AtrasoSelo, EtapaPill, IniciaisAvatar } from "./atomos";
-import {
-  CompromissoDialog,
-  ConfirmarDialog,
-  ContatoDialog,
-  InadimplenteDialog,
-  PagamentoDialog,
-  TituloDialog,
-} from "./dialogos";
+import { CompromissoDialog, ConfirmarDialog, ContatoDialog, InadimplenteDialog, TituloDialog } from "./dialogos";
+import { PagamentoDialog } from "./PagamentoDialog";
 
 type Secao = "resumo" | "titulos" | "historico";
 
@@ -118,7 +114,8 @@ function ConteudoDaFicha({
     | { tipo: "editar" }
     | { tipo: "titulo" }
     | { tipo: "compromisso"; inicial: TipoDeCompromisso }
-    | { tipo: "pagamento" }
+    /** `tituloId`: aberto pela linha do título, que já vem marcado. */
+    | { tipo: "pagamento"; tituloId?: string }
     | { tipo: "contato" }
     | { tipo: "arquivar" }
     | { tipo: "cancelar-titulo"; tituloId: string }
@@ -363,7 +360,7 @@ function ConteudoDaFicha({
 
         {secao === "titulos" && (
           <section className="rounded-[18px] border border-border bg-sunken p-3.5">
-            <div className="mb-1 grid grid-cols-[1.3fr_0.8fr_0.9fr_1fr_28px] text-[10.5px] font-bold uppercase tracking-[.06em] text-muted-foreground">
+            <div className="mb-1 grid grid-cols-[1.3fr_0.8fr_0.9fr_1fr_58px] text-[10.5px] font-bold uppercase tracking-[.06em] text-muted-foreground">
               <span>Título</span>
               <span>Vence</span>
               <span>Atraso</span>
@@ -375,7 +372,7 @@ function ConteudoDaFicha({
               <div
                 key={t.id}
                 className={cn(
-                  "grid grid-cols-[1.3fr_0.8fr_0.9fr_1fr_28px] items-center border-t border-border/60 py-2 text-[12.5px]",
+                  "grid grid-cols-[1.3fr_0.8fr_0.9fr_1fr_58px] items-center border-t border-border/60 py-2 text-[12.5px]",
                   t.status !== "aberto" && "text-muted-foreground",
                 )}
               >
@@ -401,17 +398,39 @@ function ConteudoDaFicha({
                     <span className="block text-[10.5px] font-medium text-muted-foreground">pago {reais(t.valorPago)}</span>
                   )}
                 </span>
-                <span>
+                <span className="flex justify-end gap-0.5">
+                  {/* Título do ERP baixa pelo ERP: aqui só o que a equipe lançou. */}
+                  {podeEditar && temCaso && t.status === "aberto" && t.saldo > 0 && t.origem !== "erp" && (
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7 text-success-strong hover:text-success-strong"
+                          aria-label={`Registrar pagamento do título ${t.numero ?? ""}`.trim()}
+                          onClick={() => setDialogo({ tipo: "pagamento", tituloId: t.id })}
+                        >
+                          <Receipt />
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>Registrar pagamento</TooltipContent>
+                    </Tooltip>
+                  )}
                   {podeEditar && t.status === "aberto" && (
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-7 w-7"
-                      aria-label={`Cancelar título ${t.numero ?? ""}`}
-                      onClick={() => setDialogo({ tipo: "cancelar-titulo", tituloId: t.id })}
-                    >
-                      <X />
-                    </Button>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7"
+                          aria-label={`Cancelar título ${t.numero ?? ""}`.trim()}
+                          onClick={() => setDialogo({ tipo: "cancelar-titulo", tituloId: t.id })}
+                        >
+                          <X />
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>Cancelar título</TooltipContent>
+                    </Tooltip>
                   )}
                 </span>
               </div>
@@ -444,7 +463,13 @@ function ConteudoDaFicha({
             caso={r}
             etapas={etapas}
           />
-          <PagamentoDialog aberto={dialogo?.tipo === "pagamento"} onFechar={fechar} caso={r} titulos={ficha.titulos} />
+          <PagamentoDialog
+            aberto={dialogo?.tipo === "pagamento"}
+            onFechar={fechar}
+            caso={r}
+            titulos={ficha.titulos}
+            tituloInicial={dialogo?.tipo === "pagamento" ? dialogo.tituloId : undefined}
+          />
           <ContatoDialog aberto={dialogo?.tipo === "contato"} onFechar={fechar} caso={r} />
         </>
       )}
@@ -584,8 +609,11 @@ function textoDoEvento(e: EventoDoCaso, nomeDe: (id: string | null) => string, e
     case "compromisso_encerrado":
       if (d.origem === "regua") return "Compromisso quebrado: parcela vencida sem pagamento";
       return `Compromisso ${d.status === "quebrado" ? "quebrado" : d.status === "cumprido" ? "cumprido" : "cancelado"}`;
-    case "pagamento_registrado":
-      return `${quem} registrou pagamento · ${reais(Number(d.valor ?? 0))}`;
+    case "pagamento_registrado": {
+      // Eventos de antes de 20280126000000 não dizem os títulos.
+      const quais = descreverBaixas(parseBaixas(d.titulos));
+      return `${quem} registrou pagamento · ${reais(Number(d.valor ?? 0))}${quais ? ` · ${quais}` : ""}`;
+    }
     case "contato_registrado":
       return `${quem}: ${ROTULO_CANAL[d.canal as CanalDeContato] ?? "contato"} · ${ROTULO_RESULTADO[d.resultado as ResultadoDoContato] ?? ""}`;
     case "nao_contatar_alterado":

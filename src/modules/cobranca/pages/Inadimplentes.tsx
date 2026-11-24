@@ -39,7 +39,8 @@ import {
 import { useCobrancaAcesso } from "../hooks/useCobrancaAcesso";
 import { BarraDeLote } from "../components/BarraDeLote";
 import { CobrancaTabs } from "../components/CobrancaTabs";
-import { ContatoDialog, InadimplenteDialog, PagamentoDialog } from "../components/dialogos";
+import { ContatoDialog, InadimplenteDialog } from "../components/dialogos";
+import { PagamentoDialog } from "../components/PagamentoDialog";
 import { ImportarPlanilhaDialog } from "../components/ImportarPlanilhaDialog";
 import { InadimplenteGaveta } from "../components/InadimplenteGaveta";
 import { InadimplentesTabela } from "../components/InadimplentesTabela";

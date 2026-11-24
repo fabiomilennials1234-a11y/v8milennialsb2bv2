@@ -39,8 +39,10 @@ export interface FuncoesDaCobranca {
   cobranca_inadimplente_salvar: { Args: { p_org: string; p_id: string | null; p_dados: Json }; Returns: string };
   cobranca_metricas: { Args: { p_org: string; p_hoje?: string }; Returns: Json };
   cobranca_nao_contatar: { Args: { p_inadimplente: string; p_valor: boolean; p_motivo?: string }; Returns: string };
+  // p_titulos = os títulos que o cliente pagou (20280126000000); sem eles, abate do mais antigo.
+  // Devolve { lote, saldo_restante, quitado, titulos: [{ id, numero, valor, quitado }] }.
   cobranca_pagamento_registrar: {
-    Args: { p_caso: string; p_valor: number; p_pago_em: string; p_titulo?: string };
+    Args: { p_caso: string; p_valor: number; p_pago_em: string; p_titulos?: string[] };
     Returns: Json;
   };
   cobranca_titulo_cancelar: { Args: { p_titulo: string; p_motivo: string }; Returns: string };

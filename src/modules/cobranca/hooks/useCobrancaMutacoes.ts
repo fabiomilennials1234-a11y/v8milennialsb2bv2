@@ -4,6 +4,7 @@ import type { Json } from "@/integrations/supabase/types";
 import { useOrganization } from "@/modules/identity";
 
 import { normalizarTelefone, soDigitos } from "../lib/documento";
+import { parseBaixas } from "../lib/pagamento";
 import type { LinhaParaImportar } from "../lib/planilha";
 import type { ResultadoDoEnvioManual } from "../lib/regua";
 import {
@@ -219,16 +220,16 @@ export function useEncerrarCompromisso() {
 export function useRegistrarPagamento() {
   const invalidar = useInvalidarCobranca();
   return useMutation({
-    mutationFn: async ({ casoId, valor, pagoEm, tituloId }: { casoId: string; valor: number; pagoEm: string; tituloId?: string }) => {
+    mutationFn: async ({ casoId, valor, pagoEm, tituloIds }: { casoId: string; valor: number; pagoEm: string; tituloIds: string[] }) => {
       const { data, error } = await rpcCobranca("cobranca_pagamento_registrar", {
         p_caso: casoId,
         p_valor: valor,
         p_pago_em: pagoEm,
-        p_titulo: tituloId,
+        p_titulos: tituloIds,
       });
       if (error) throw error;
-      const r = (data ?? {}) as { saldo_restante?: number | string; quitado?: boolean };
-      return { saldoRestante: Number(r.saldo_restante ?? 0), quitado: r.quitado === true };
+      const r = (data ?? {}) as { saldo_restante?: number | string; quitado?: boolean; titulos?: unknown };
+      return { saldoRestante: Number(r.saldo_restante ?? 0), quitado: r.quitado === true, titulos: parseBaixas(r.titulos) };
     },
     onSettled: invalidar,
   });
