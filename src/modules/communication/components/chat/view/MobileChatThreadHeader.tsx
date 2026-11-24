@@ -1,7 +1,8 @@
 import { ArrowLeft } from "lucide-react";
 import type { ReactNode } from "react";
 import { Button } from "@/components/ui/button";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { useContactAvatarUrl } from "@/modules/communication/hooks/chat/useContactAvatarUrl";
 import { ChatCallButton } from "@/modules/communication/components/voice/ChatCallButton";
 import {
   legendaDoTelefone,
@@ -34,6 +35,7 @@ export function MobileChatThreadHeader({
   // `210028246085780`. Ver `lib/identificadorOculto.ts`.
   const displayName = contactName || telefoneParaExibicao(phoneNumber) || "";
   const initial = (displayName.charAt(0) || "?").toUpperCase();
+  const fotoDoContato = useContactAvatarUrl(isGroup ? null : phoneNumber);
 
   return (
     <div className="flex items-center gap-3 h-12 px-3 border-b border-border/60 bg-background shrink-0">
@@ -57,6 +59,14 @@ export function MobileChatThreadHeader({
         }}
       >
         <Avatar className="w-8 h-8 shrink-0">
+          {fotoDoContato && (
+            <AvatarImage
+              src={fotoDoContato}
+              alt=""
+              referrerPolicy="no-referrer"
+              className="animate-in fade-in-0 duration-300 motion-reduce:animate-none"
+            />
+          )}
           <AvatarFallback className="bg-primary-soft text-sm font-bold text-primary-soft-foreground">
             {initial}
           </AvatarFallback>

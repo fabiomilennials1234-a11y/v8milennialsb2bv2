@@ -25,6 +25,8 @@ import { NEGOCIO_MAGRO, NEGOCIO_GANHO } from "@/modules/leads/components/deal-ca
 
 /** O que o cabeçalho do celular passou ao botão, render a render. */
 let propsRecebidas: Array<Record<string, unknown>> = [];
+// Foto do contato: coberta em tests/unit/contact-avatar-surfaces.test.tsx.
+vi.mock("@/modules/communication/hooks/chat/useContactAvatarUrl", () => ({ useContactAvatarUrl: () => null }));
 vi.mock("@/modules/communication/components/voice/ChatCallButton", () => ({
   ChatCallButton: (props: Record<string, unknown>) => {
     propsRecebidas.push(props);

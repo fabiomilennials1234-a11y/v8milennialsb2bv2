@@ -66,6 +66,8 @@ import { useMessageLimits } from "@/modules/communication/hooks/useMessageLimits
 import { getAvatarGradient } from "@/modules/communication/components/chat/list/avatarGradient";
 import { ChatCallButton } from "@/modules/communication/components/voice/ChatCallButton";
 import { legendaDoTelefone } from "@/modules/communication/lib/identificadorOculto";
+import { ContactAvatarImage } from "@/modules/communication/components/chat/list/ContactAvatarImage";
+import { useContactAvatarUrl } from "@/modules/communication/hooks/chat/useContactAvatarUrl";
 
 export interface SzChatSession {
   sz_chat_session_id: string;
@@ -200,6 +202,7 @@ export function ChatHeader({
   const chatCreation = useChatLeadCreation();
   const chatJid = phoneNumber ? `${phoneNumber.replace(/\D/g, "")}@s.whatsapp.net` : null;
   const avatarGradient = getAvatarGradient(phoneNumber || contactName);
+  const fotoDoContato = useContactAvatarUrl(isGroup ? null : phoneNumber);
   const [syncOpen, setSyncOpen] = useState(false);
 
   const podeSincronizar = !!instanceId && !!chatJid;
@@ -237,6 +240,7 @@ export function ChatHeader({
           >
             {(contactName.charAt(0) || "?").toUpperCase()}
           </div>
+          <ContactAvatarImage url={fotoDoContato} />
           <ChannelBadge channel="whatsapp" size={16} overlay />
         </div>
         <div className="flex-1 min-w-0">

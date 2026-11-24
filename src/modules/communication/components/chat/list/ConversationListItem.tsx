@@ -50,6 +50,8 @@ import {
 import { ChannelBadge } from "../ChannelBadge";
 import { instanceColor } from "../bubble/utils/instanceColor";
 import { getAvatarGradient } from "./avatarGradient";
+import { ContactAvatarImage } from "./ContactAvatarImage";
+import { useContactAvatarUrl } from "@/modules/communication/hooks/chat/useContactAvatarUrl";
 import { useNomeDoLeadPrimeiro } from "@/modules/communication/hooks/chat/useNomeDoLeadPrimeiro";
 import { useNomeCodContatoLead } from "@/modules/communication/hooks/chat/useNomeCodContatoLead";
 import type { CaixaDaLinha } from "@/modules/communication/lib/caixaUnificada";
@@ -397,6 +399,11 @@ export function ConversationListItem({
   // `whatsapp_conversations`. Não existe tabela equivalente para canal social,
   // então o menu não é renderizado — melhor ausente do que presente e inerte.
   const isWhatsApp = contact.channel === "whatsapp";
+  // Foto do contato (Uazapi): só conversa 1:1. Grupo e canal social não
+  // consultam — o social segue com `contact.avatar_url`.
+  const fotoDoContato = useContactAvatarUrl(
+    contact.channel === "whatsapp" && !contact.is_group ? contact.phone_number : null,
+  );
   const naoLida = contact.unread_count > 0 && !isSelected;
   // A última mensagem saiu do Copilot — o selo "IA" vai ao lado do nome, como
   // no mockup. Só o WhatsApp grava a origem (`last_message_sent_source`).
@@ -457,6 +464,7 @@ export function ConversationListItem({
               {(displayName.replace("@", "").charAt(0) || "?").toUpperCase()}
             </div>
           )}
+          {isWhatsApp && <ContactAvatarImage url={fotoDoContato} />}
           {/* O selo deixa de ser chumbado: é ele que faz a segunda caixa ser
               lida como Instagram, e não como "mais um número". */}
           <ChannelBadge channel={contact.channel} size={18} overlay />

@@ -22,6 +22,8 @@ import type { CaixaDaLinha } from "@/modules/communication/lib/caixaUnificada";
 import type { ResponsavelDaLinha } from "@/modules/communication/lib/responsavelDaLinha";
 import { ChannelBadge } from "../ChannelBadge";
 import { getAvatarGradient } from "./avatarGradient";
+import { ContactAvatarImage } from "./ContactAvatarImage";
+import { useContactAvatarUrl } from "@/modules/communication/hooks/chat/useContactAvatarUrl";
 import { useNomeDoLeadPrimeiro } from "@/modules/communication/hooks/chat/useNomeDoLeadPrimeiro";
 import { useNomeCodContatoLead } from "@/modules/communication/hooks/chat/useNomeCodContatoLead";
 import { contactDisplayName, formatContactTime, SegmentoResponsavel } from "./ConversationListItem";
@@ -74,6 +76,7 @@ export function MobileConversationRow({
   // ESTREITA a uniao — sem isso o TS perde `last_message_sent_source` e
   // `avatar_url`. Ver o comentario de `isWhatsAppContact`.
   const isWhatsApp = isWhatsAppContact(contact);
+  const fotoDoContato = useContactAvatarUrl(isWhatsApp && !contact.is_group ? contact.phone_number : null);
 
   const isOutgoingManual =
     contact.last_message_direction === "outgoing" &&
@@ -142,6 +145,7 @@ export function MobileConversationRow({
             {initials}
           </div>
         )}
+        {isWhatsApp && <ContactAvatarImage url={fotoDoContato} />}
         <ChannelBadge channel={contact.channel} size={16} overlay />
       </div>
 

@@ -16,6 +16,8 @@ import type React from "react";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { TooltipProvider } from "@/components/ui/tooltip";
 const chatCreation = vi.hoisted(() => ({ allowed: true, isLoading: false }));
+// Foto do contato: coberta em tests/unit/contact-avatar-surfaces.test.tsx.
+vi.mock("@/modules/communication/hooks/chat/useContactAvatarUrl", () => ({ useContactAvatarUrl: () => null }));
 vi.mock("@/modules/identity", () => ({ useChatLeadCreation: () => chatCreation }));
 
 // Radix (dropdown + Popper) usa APIs de ponteiro e ResizeObserver que o jsdom
