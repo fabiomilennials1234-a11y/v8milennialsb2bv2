@@ -51,7 +51,7 @@ function memoryStore(batches: ClaimedAvatar[][], opts: { queue?: string[]; live?
     removed: [] as string[], dequeued: [] as string[], enqueued: [] as string[],
     uploads: [] as Array<{ path: string; contentType: string; size: number }>,
     closes: [] as Array<{ id: string; patch: Record<string, unknown> }>,
-    released: [] as string[], tokens: [] as string[], pruned: 0,
+    released: [] as string[], tokens: [] as string[], pruned: 0, excludes: [] as string[][],
   };
   const store: AvatarStore = {
     listDeletionQueue: async () => opts.queue ?? [],
@@ -60,7 +60,7 @@ function memoryStore(batches: ClaimedAvatar[][], opts: { queue?: string[]; live?
     dequeueDeletions: async (paths) => void calls.dequeued.push(...paths),
     enqueueDeletion: async (path) => void calls.enqueued.push(path),
     pruneOrphans: async () => (calls.pruned += 1, 0),
-    claim: async () => batches.shift() ?? [],
+    claim: async (_limit, exclude) => (calls.excludes.push([...exclude]), batches.shift() ?? []),
     close: async (row, patch) => {
       calls.closes.push({ id: row.id, patch });
       return (opts.vanished ?? []).includes(row.id) ? 0 : 1;
@@ -174,7 +174,7 @@ describe("runContactAvatarSync", () => {
   it("no máximo 1 chamada por caixa por rodada; token lido uma vez por caixa", async () => {
     const rows = [1, 2, 3].map((n) => claimed(n, { candidate_url: null, details_instance_id: "box-A" }));
     const { store, calls } = memoryStore([rows]);
-    const { d, detailCalls } = deps(store, cdn({}), () => ({}));
+    const { d, detailCalls } = deps(store, cdn({}), () => ({ image: "" }));
     const report = await runContactAvatarSync(d);
     expect(detailCalls).toHaveLength(1);
     expect(calls.tokens).toEqual(["box-A"]);
@@ -205,6 +205,20 @@ describe("runContactAvatarSync", () => {
     const { store, calls } = memoryStore([[row]]);
     await runContactAvatarSync(deps(store, cdn({}), () => ({ imagePreview: "", image: "" })).d);
     expect(calls.closes[0].patch).toMatchObject({ status: "none", storage_path: null, content_sha256: null });
+  });
+
+  it.each([
+    ["{}", {}],
+    ["{ error }", { error: "not found" }],
+    ["não-objeto", "ok"],
+  ])("foto ok + /chat/details com formato desconhecido (%s): mantém a foto", async (_n, body) => {
+    const row = claimed(1, { candidate_url: null, status: "ok", storage_path: `${ORG}/avatars/x.jpg`, content_sha256: "a".repeat(64) });
+    const { store, calls } = memoryStore([[row]]);
+    await runContactAvatarSync(deps(store, cdn({}), () => body).d);
+    const patch = calls.closes[0].patch;
+    expect(patch).toMatchObject({ status: "ok", last_error: "details_shape_unknown", attempts: 1 });
+    expect(patch).not.toHaveProperty("storage_path");
+    expect(patch).not.toHaveProperty("content_sha256");
   });
 
   it("URL do /chat/details fora da allowlist: não baixa", async () => {
@@ -238,6 +252,14 @@ describe("runContactAvatarSync", () => {
     expect(calls.dequeued).toEqual(["o/avatars/a.jpg", "o/avatars/b.jpg"]);
     expect(calls.pruned).toBe(1);
     expect(report.deleted_objects).toBe(1);
+  });
+
+  it("lotes seguintes da rodada excluem os ids já vistos (adiada não volta)", async () => {
+    const full = Array.from({ length: CLAIM_BATCH }, (_, i) => claimed(i + 1, { candidate_url: null, details_instance_id: "box-A" }));
+    const { store, calls } = memoryStore([full, []]);
+    await runContactAvatarSync(deps(store, cdn({}), () => ({ image: "" })).d);
+    expect(calls.excludes[0]).toEqual([]);
+    expect(calls.excludes[1]).toEqual(full.map((r) => r.id));
   });
 
   it("reivindica lotes cheios em sequência e para no lote incompleto", async () => {
@@ -298,13 +320,15 @@ describe("supabaseAvatarStore", () => {
     ]);
   });
 
-  it("token pela caixa E organização; kill switch ausente = ligado, 'off' desliga", async () => {
+  it("token pela caixa E organização; kill switch só liga com 'on' explícito", async () => {
     const { client, log } = recordingClient({ whatsapp_instance_secrets: { uazapi_token: "t" } });
     const store = supabaseAvatarStore(client);
     expect(await store.instanceToken("box", ORG)).toBe("t");
     expect(log).toContain(`whatsapp_instance_secrets.eq("organization_id","${ORG}")`);
-    expect(await store.detailsEnabled()).toBe(true);
+    // ausente = DESLIGADO até existir fixture real do /chat/details
+    expect(await store.detailsEnabled()).toBe(false);
     expect(await supabaseAvatarStore(recordingClient({ cron_config: { value: "off" } }).client).detailsEnabled()).toBe(false);
+    expect(await supabaseAvatarStore(recordingClient({ cron_config: { value: " ON " } }).client).detailsEnabled()).toBe(true);
   });
 
   it("upload upsert com tipo detectado e cache de 1 h no bucket privado", async () => {
@@ -317,9 +341,9 @@ describe("supabaseAvatarStore", () => {
   it("RPCs de service_role com os nomes da migration", async () => {
     const { client, log } = recordingClient({ "rpc:reivindicar_avatares": [claimed(1)], "rpc:podar_avatares_orfaos": 3 });
     const store = supabaseAvatarStore(client);
-    expect(await store.claim(25)).toHaveLength(1);
+    expect(await store.claim(25, ["a"])).toHaveLength(1);
     expect(await store.pruneOrphans(200)).toBe(3);
-    expect(log).toEqual(['rpc(reivindicar_avatares,{"p_limit":25})', 'rpc(podar_avatares_orfaos,{"p_limit":200})']);
+    expect(log).toEqual(['rpc(reivindicar_avatares,{"p_limit":25,"p_exclude":["a"]})', 'rpc(podar_avatares_orfaos,{"p_limit":200})']);
   });
 });
 

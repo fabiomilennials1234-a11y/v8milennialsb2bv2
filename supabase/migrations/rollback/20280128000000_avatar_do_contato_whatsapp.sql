@@ -14,7 +14,7 @@ END $$;
 
 DROP FUNCTION public.avatares_das_conversas(uuid, text[]);
 DROP FUNCTION public.podar_avatares_orfaos(integer);
-DROP FUNCTION public.reivindicar_avatares(integer);
+DROP FUNCTION public.reivindicar_avatares(integer, uuid[]);
 DROP FUNCTION public.registrar_avatar_candidato(uuid, uuid, text, text);
 
 DROP POLICY contact_avatars_select ON storage.objects;

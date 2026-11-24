@@ -114,9 +114,9 @@ VALUES ('contact-avatars', 'contact-avatars', false, 2097152,
         ARRAY['image/jpeg', 'image/png', 'image/webp'])
 ON CONFLICT (id) DO NOTHING;
 
--- Quem pode LER um objeto: membro da org dona E com acesso de leitura a uma
--- caixa que conversou com o telefone dono da foto — a mesma regra de quem vê a
--- conversa. Path malformado = false (não quebra leitura de outros buckets).
+-- Quem pode LER um objeto: membro da org dona, com acesso de leitura a uma
+-- caixa que conversou com o telefone dono da foto E dentro do escopo de
+-- responsável (can_see_chat_scope) — a mesma regra de quem vê a conversa. Path malformado = false (não quebra leitura de outros buckets).
 CREATE SCHEMA IF NOT EXISTS private;
 GRANT USAGE ON SCHEMA private TO authenticated, service_role;
 
@@ -150,7 +150,10 @@ BEGIN
     FROM unnest(public.whatsapp_readable_instance_ids(v_org, NULL)) b(id)
     JOIN public.whatsapp_conversation_summary s
       ON s.organization_id = v_org AND s.instance_id = b.id AND s.normalized_phone = v_phone
-  );
+  )
+  -- Escopo por responsável (chat_restrict_to_owner, strict_lead_owner_access,
+  -- chat_scope_for_recipient): o mesmo predicado da lista de conversas.
+  AND COALESCE(public.can_see_chat_scope(v_org, NULL, v_phone), false);
 END;
 $$;
 REVOKE ALL ON FUNCTION private.contact_avatar_object_readable(text) FROM PUBLIC, anon;
@@ -220,10 +223,12 @@ GRANT EXECUTE ON FUNCTION public.registrar_avatar_candidato(uuid, uuid, text, te
 -- Pendentes (com recuo de 1 h por tentativa) e depois as vencidas há 7 dias.
 -- Só contato com conversa nos últimos 30 dias. Cada parte usa o seu índice; a
 -- conversa é achada pela PK do resumo (org, caixa, telefone) via caixas da org.
+-- `p_exclude`: ids já vistos nesta rodada do cron — linha adiada (teto do
+-- /chat/details) não volta no lote seguinte da mesma rodada.
 -- Devolve também a caixa elegível para o fallback /chat/details: a de origem se
 -- estiver apta, senão a da conversa mais recente — sempre connected, sessão viva,
 -- Uazapi e COM conversa com o telefone.
-CREATE FUNCTION public.reivindicar_avatares(p_limit integer DEFAULT 25)
+CREATE FUNCTION public.reivindicar_avatares(p_limit integer DEFAULT 25, p_exclude uuid[] DEFAULT '{}')
 RETURNS TABLE (
   id uuid, organization_id uuid, normalized_phone text, candidate_url text,
   storage_path text, content_sha256 text, status text, attempts smallint,
@@ -240,6 +245,7 @@ BEGIN
     SELECT a.id FROM public.whatsapp_contact_avatars a
     WHERE a.status = 'pending'
       AND (a.claimed_until IS NULL OR a.claimed_until < now())
+      AND NOT (a.id = ANY (coalesce(p_exclude, '{}')))
       AND (a.avatar_updated_at IS NULL
            OR a.avatar_updated_at < now() - make_interval(hours => a.attempts::integer))
       AND EXISTS (
@@ -260,6 +266,7 @@ BEGIN
       WHERE a.status <> 'pending'
         AND a.avatar_updated_at < now() - interval '7 days'
         AND (a.claimed_until IS NULL OR a.claimed_until < now())
+        AND NOT (a.id = ANY (coalesce(p_exclude, '{}')))
         AND EXISTS (
           SELECT 1 FROM public.whatsapp_instances wi
           JOIN public.whatsapp_conversation_summary s
@@ -304,8 +311,8 @@ BEGIN
   ORDER BY (a.status = 'pending') DESC, a.avatar_updated_at ASC NULLS FIRST;
 END;
 $$;
-REVOKE ALL ON FUNCTION public.reivindicar_avatares(integer) FROM PUBLIC, anon, authenticated;
-GRANT EXECUTE ON FUNCTION public.reivindicar_avatares(integer) TO service_role;
+REVOKE ALL ON FUNCTION public.reivindicar_avatares(integer, uuid[]) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.reivindicar_avatares(integer, uuid[]) TO service_role;
 
 -- ── Cron: podar órfãs ────────────────────────────────────────────────────────
 -- Linha sem NENHUMA conversa (org, telefone) é apagada; o trigger enfileira o
@@ -410,6 +417,9 @@ BEGIN
       JOIN public.whatsapp_conversation_summary s
         ON s.organization_id = p_org AND s.instance_id = b.id
        AND s.normalized_phone = a.normalized_phone)
+    -- Escopo por responsável, depois dos filtros baratos: o mesmo predicado
+    -- da lista (20280119010000). Vendedor fora do escopo não recebe path.
+    AND COALESCE(public.can_see_chat_scope(p_org, NULL, a.normalized_phone), false)
   ORDER BY p.phone;
 END;
 $$;

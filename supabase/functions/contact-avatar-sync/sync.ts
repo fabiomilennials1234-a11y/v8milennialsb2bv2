@@ -7,7 +7,8 @@
  *   3. reivindica lotes de ≤ 25 e, para cada linha, baixa a candidata do
  *      webhook se o `oe=` não venceu; 403/404 ou vencida → fallback
  *      POST /chat/details pela caixa elegível, com teto 5/rodada, 1/caixa,
- *      jitter 2–4 s e kill switch `cron_config.contact_avatar_chat_details`;
+ *      jitter 2–4 s e kill switch `cron_config.contact_avatar_chat_details`
+ *      (só 'on' liga; ausente = desligado até haver fixture real);
  *   4. fecha cada linha (sempre carimba). UPDATE que não acha a linha (apagada
  *      no meio) enfileira o arquivo que acabou de subir.
  *
@@ -47,7 +48,8 @@ export interface AvatarStore {
   dequeueDeletions(paths: string[]): Promise<void>;
   enqueueDeletion(path: string): Promise<void>;
   pruneOrphans(limit: number): Promise<number>;
-  claim(limit: number): Promise<ClaimedAvatar[]>;
+  /** `exclude`: ids já vistos nesta rodada (adiada não volta no lote seguinte). */
+  claim(limit: number, exclude: string[]): Promise<ClaimedAvatar[]>;
   /** Linhas atualizadas (0 = a linha sumiu ou trocou de org). */
   close(row: ClaimedAvatar, patch: Record<string, unknown>): Promise<number>;
   releaseClaims(ids: string[]): Promise<void>;
@@ -96,8 +98,10 @@ export async function runContactAvatarSync(deps: SyncDeps): Promise<SyncReport> 
   report.pruned_orphans = await deps.store.pruneOrphans(ORPHAN_BATCH);
 
   const details = new DetailsBudget(deps);
+  const seen: string[] = [];
   for (let round = 0; round < MAX_CLAIM_ROUNDS && !overBudget(); round += 1) {
-    const rows = await deps.store.claim(CLAIM_BATCH);
+    const rows = await deps.store.claim(CLAIM_BATCH, seen);
+    seen.push(...rows.map((r) => r.id));
     report.claimed += rows.length;
     for (let i = 0; i < rows.length; i += 1) {
       if (overBudget()) {
@@ -219,6 +223,7 @@ async function processRow(
   }
   const image = extractDetailsImageUrl(body);
   if (image.kind === "none") return { outcome: { kind: "none" }, uploaded: null };
+  if (image.kind === "unknown") return { outcome: { kind: "error", reason: "details_shape_unknown" }, uploaded: null };
   if (image.kind === "rejected") return { outcome: { kind: "error", reason: "details_url_rejected" }, uploaded: null };
   const got = await downloadAvatar(image.url, fetchOpts);
   if (got.kind === "gone") return { outcome: { kind: "error", reason: `details_${got.reason}` }, uploaded: null };
@@ -321,8 +326,11 @@ export function supabaseAvatarStore(db: SupabaseLike): AvatarStore {
       const n = must<number>(await db.rpc("podar_avatares_orfaos", { p_limit: limit }), "podar órfãs");
       return typeof n === "number" ? n : 0;
     },
-    async claim(limit) {
-      const rows = must<ClaimedAvatar[]>(await db.rpc("reivindicar_avatares", { p_limit: limit }), "reivindicar");
+    async claim(limit, exclude) {
+      const rows = must<ClaimedAvatar[]>(
+        await db.rpc("reivindicar_avatares", { p_limit: limit, p_exclude: exclude }),
+        "reivindicar",
+      );
       return rows ?? [];
     },
     async close(row, patch) {
@@ -356,8 +364,10 @@ export function supabaseAvatarStore(db: SupabaseLike): AvatarStore {
         await db.from("cron_config").select("value").eq("key", KILL_SWITCH_KEY).maybeSingle(),
         "kill switch",
       );
-      // Ausente = ligado. Qualquer valor diferente de 'on' desliga.
-      return row?.value == null || row.value.trim().toLowerCase() === "on";
+      // Só 'on' explícito liga. Ausente = DESLIGADO até existir fixture real
+      // do /chat/details (ligar: cron_config key=contact_avatar_chat_details,
+      // value='on').
+      return row?.value?.trim().toLowerCase() === "on";
     },
   };
 }

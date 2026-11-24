@@ -68,6 +68,12 @@ beforeAll(async () => {
              OR wi.id::text = ANY(string_to_array(current_setting('test.boxes', true), ','))));
     END $$;
 
+    -- Dublê do escopo por responsável (prod: chat_restrict_to_owner, strict,
+    -- chat_scope_for_recipient). test.scope_blocked = telefones fora do escopo.
+    CREATE FUNCTION public.can_see_chat_scope(p_org uuid, p_lead uuid, p_phone text)
+    RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER AS $$
+      SELECT NOT (p_phone = ANY(string_to_array(COALESCE(NULLIF(current_setting('test.scope_blocked', true), ''), ''), ','))) $$;
+
     CREATE SCHEMA storage;
     CREATE TABLE storage.buckets (id text PRIMARY KEY, name text, public boolean, file_size_limit bigint, allowed_mime_types text[]);
     CREATE TABLE storage.objects (bucket_id text, name text);
@@ -99,7 +105,7 @@ beforeEach(async () => {
       ('${ORG1}', '${BOX1B}', '11999990002', '5511999990002', now() - interval '2 hours'),
       ('${ORG1}', '${BOX1}', '11999990003', '5511999990003', now() - interval '60 days'),
       ('${ORG2}', '${BOX2}', '11999990001', '5511999990001', now());
-    SELECT set_config('test.orgs', '', false), set_config('test.master', '', false), set_config('test.boxes', '*', false);
+    SELECT set_config('test.orgs', '', false), set_config('test.master', '', false), set_config('test.boxes', '*', false), set_config('test.scope_blocked', '', false);
   `);
 });
 
@@ -130,6 +136,7 @@ async function markOk(org: string, phone: string) {
 }
 const queue = async () =>
   (await db.query<{ object_path: string }>("SELECT object_path FROM public.contact_avatar_storage_deletions ORDER BY 1")).rows.map((r) => r.object_path);
+const outOfScope = (phones: string) => db.exec(`SELECT set_config('test.scope_blocked', '${phones}', false)`);
 const member = (orgs: string, boxes = "*") =>
   db.exec(`SELECT set_config('test.orgs', '${orgs}', false), set_config('test.boxes', '${boxes}', false)`);
 
@@ -150,7 +157,7 @@ describe("privilégios", () => {
 
   it.each([
     ["registrar_avatar_candidato(uuid, uuid, text, text)", false, false, true],
-    ["reivindicar_avatares(integer)", false, false, true],
+    ["reivindicar_avatares(integer, uuid[])", false, false, true],
     ["podar_avatares_orfaos(integer)", false, false, true],
     ["avatares_das_conversas(uuid, text[])", false, true, false],
     ["enfileirar_remocao_avatar()", false, false, false],
@@ -247,6 +254,12 @@ describe("avatares_das_conversas", () => {
     expect(await call(ORG1, ["5511999990001"])).toEqual([]);
   });
 
+  it("membro com a caixa mas fora do escopo de responsável não recebe path", async () => {
+    await member(ORG1);
+    await outOfScope("11999990001");
+    expect(await call(ORG1, ["5511999990001"])).toEqual([]);
+  });
+
   it("mais de 500 telefones → 22023", async () => {
     await member(ORG1);
     await expect(call(ORG1, Array.from({ length: 501 }, (_, i) => `55119${String(i).padStart(8, "0")}`))).rejects.toMatchObject({ code: "22023" });
@@ -278,6 +291,12 @@ describe("policy de leitura do Storage", () => {
     await member(ORG2);
     expect(await visible()).toEqual([]);
     await member(ORG1, BOX1B);
+    expect(await visible()).toEqual([]);
+  });
+
+  it("membro com a caixa mas fora do escopo de responsável não lê", async () => {
+    await member(ORG1);
+    await outOfScope("11999990001");
     expect(await visible()).toEqual([]);
   });
 
@@ -335,8 +354,8 @@ describe("fila de remoção", () => {
 });
 
 describe("reivindicar_avatares", () => {
-  const claim = (n = 25) =>
-    as<Record<string, unknown>>("service_role", "SELECT * FROM public.reivindicar_avatares($1)", [n]);
+  const claim = (n = 25, exclude: string[] = []) =>
+    as<Record<string, unknown>>("service_role", "SELECT * FROM public.reivindicar_avatares($1, $2)", [n, exclude]);
 
   beforeEach(async () => {
     await register(ORG1, BOX1, "5511999990001", URL1);
@@ -351,6 +370,14 @@ describe("reivindicar_avatares", () => {
       details_instance_id: BOX1, details_number: "5511999990001", status: "pending",
     });
     expect(await claim()).toEqual([]);
+  });
+
+  it("p_exclude: id já visto na rodada não volta", async () => {
+    const first = await claim(1);
+    await db.exec("UPDATE public.whatsapp_contact_avatars SET claimed_until = NULL");
+    const again = await claim(25, [first[0].id as string]);
+    expect(again.map((r) => r.id)).not.toContain(first[0].id);
+    expect(again).toHaveLength(1);
   });
 
   it("respeita o limite e o teto de 25", async () => {
@@ -424,6 +451,31 @@ describe("invocador do cron (20280128000100)", () => {
     expect(await calls()).toEqual([{ url: "https://p.supabase.co/functions/v1/contact-avatar-sync", headers: { "Content-Type": "application/json", "x-cron-secret": "s" } }]);
   });
 
+  it.each([
+    ["pendente em recuo", "UPDATE public.whatsapp_contact_avatars SET attempts = 2, avatar_updated_at = now()"],
+    ["já reivindicada", "UPDATE public.whatsapp_contact_avatars SET claimed_until = now() + interval '5 minutes'"],
+    ["ok revisitada há menos de 7 dias", "UPDATE public.whatsapp_contact_avatars SET status = 'none', avatar_updated_at = now() - interval '1 day'"],
+    ["conversa de mais de 30 dias", "UPDATE public.whatsapp_conversation_summary SET last_message_time = now() - interval '40 days'"],
+  ])("gate igual ao claim: %s não chama", async (_n, sql) => {
+    await db.exec("DELETE FROM net.calls");
+    await db.exec(`INSERT INTO public.cron_config VALUES
+      ('campaign_rule_dispatch_url', 'https://p.supabase.co/functions/v1/campaign-rule-dispatch'), ('cron_secret', 's')`);
+    await register(ORG1, BOX1, "5511999990001", URL1);
+    await db.exec(sql);
+    expect(await as("service_role", "SELECT * FROM public.reivindicar_avatares(25, '{}')")).toEqual([]);
+    await as("service_role", "SELECT public.invoke_contact_avatar_sync()");
+    expect(await calls()).toEqual([]);
+  });
+
+  it("fila de remoção sozinha também chama", async () => {
+    await db.exec("DELETE FROM net.calls");
+    await db.exec(`INSERT INTO public.cron_config VALUES
+      ('campaign_rule_dispatch_url', 'https://p.supabase.co/functions/v1/campaign-rule-dispatch'), ('cron_secret', 's')`);
+    await db.exec("INSERT INTO public.contact_avatar_storage_deletions (object_path) VALUES ('x/avatars/y.jpg')");
+    await as("service_role", "SELECT public.invoke_contact_avatar_sync()");
+    expect(await calls()).toHaveLength(1);
+  });
+
   it("anon e authenticated não executam", async () => {
     for (const role of ["anon", "authenticated"]) {
       const r = await db.query<{ ok: boolean }>(`SELECT has_function_privilege('${role}', 'public.invoke_contact_avatar_sync()', 'EXECUTE') AS ok`);
@@ -431,9 +483,12 @@ describe("invocador do cron (20280128000100)", () => {
     }
   });
 
-  it("rollback do cron remove o invocador (sem pg_cron não quebra)", async () => {
+  it("a migration não liga o /chat/details; o rollback do cron remove invocador e chave", async () => {
+    expect((await db.query("SELECT * FROM public.cron_config WHERE key = 'contact_avatar_chat_details'")).rows).toEqual([]);
+    await db.exec("INSERT INTO public.cron_config VALUES ('contact_avatar_chat_details', 'on')");
     await db.exec(CRON_ROLLBACK);
     expect((await db.query("SELECT 1 FROM pg_proc WHERE proname = 'invoke_contact_avatar_sync'")).rows).toEqual([]);
+    expect((await db.query("SELECT * FROM public.cron_config WHERE key = 'contact_avatar_chat_details'")).rows).toEqual([]);
     await db.exec(CRON);
   });
 });

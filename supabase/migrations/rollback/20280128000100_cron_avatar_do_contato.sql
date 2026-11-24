@@ -12,4 +12,5 @@ BEGIN
   END IF;
 END $$;
 DROP FUNCTION IF EXISTS public.invoke_contact_avatar_sync();
+DELETE FROM public.cron_config WHERE key = 'contact_avatar_chat_details';
 COMMIT;

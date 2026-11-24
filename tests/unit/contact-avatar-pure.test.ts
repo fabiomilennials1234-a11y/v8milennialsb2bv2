@@ -152,12 +152,22 @@ describe("extractDetailsImageUrl (formato da resposta não verificado)", () => {
     expect(extractDetailsImageUrl(body)).toEqual({ kind: "url", url: ok });
   });
   it.each([
-    ["vazio", {}],
     ["campos vazios (privacidade)", { image: "", imagePreview: "" }],
+    ["campo null", { imagePreview: null }],
+    ["vazio aninhado", { chat: { image: "" } }],
+  ])("campo presente e vazio (%s) → none", (_n, body) => {
+    expect(extractDetailsImageUrl(body)).toEqual({ kind: "none" });
+  });
+  it.each([
+    ["objeto vazio", {}],
+    ["erro do provedor", { error: "not found" }],
+    ["sem campo de foto", { name: "Maria", wa_chatid: "5511@s.whatsapp.net" }],
     ["null", null],
     ["texto", "ok"],
-  ])("%s → none", (_n, body) => {
-    expect(extractDetailsImageUrl(body)).toEqual({ kind: "none" });
+    ["array vazio", []],
+    ["campo com tipo inesperado", { image: { url: "x" } }],
+  ])("formato desconhecido (%s) → unknown, nunca none", (_n, body) => {
+    expect(extractDetailsImageUrl(body)).toEqual({ kind: "unknown" });
   });
   it("host fora da allowlist → rejected", () => {
     expect(extractDetailsImageUrl({ imagePreview: "https://evil.example/x.jpg" })).toEqual({ kind: "rejected" });

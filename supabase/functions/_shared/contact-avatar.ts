@@ -261,39 +261,51 @@ function errorName(err: unknown): string {
 
 export type DetailsImage =
   | { kind: "url"; url: string }
-  /** Sem campo de foto, ou vazio: contato sem foto ou com privacidade. */
+  /** O campo de foto VEIO, vazio ou null: contato sem foto ou com privacidade. */
   | { kind: "none" }
   /** Veio algo que não passa na allowlist: não baixa, conta como erro. */
-  | { kind: "rejected" };
+  | { kind: "rejected" }
+  /**
+   * Nenhum campo de foto (inclusive `{}`, `{ error }` ou corpo não-objeto):
+   * formato desconhecido. NUNCA vira `none` — `none` apaga a foto gravada.
+   */
+  | { kind: "unknown" };
 
 const DETAILS_NESTED_KEYS = ["chat", "data", "contact", "details", "result", "info"] as const;
+const DETAILS_IMAGE_FIELDS = ["imagePreview", "image"] as const;
 
 /**
  * Lê a foto da resposta de POST /chat/details. O formato NÃO foi verificado
  * contra uma resposta real (falta fixture): procura `imagePreview`/`image` no
  * topo e em um nível de objeto aninhado comum. A URL passa pela MESMA
- * allowlist do webhook.
+ * allowlist do webhook. "Sem foto" só quando o campo existe e veio vazio/null;
+ * ausência do campo é formato desconhecido (erro, a foto fica).
  */
 export function extractDetailsImageUrl(body: unknown): DetailsImage {
   const layers: Record<string, unknown>[] = [];
   const asRecord = (v: unknown) =>
     v !== null && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, unknown>) : null;
   const root = asRecord(Array.isArray(body) ? body[0] : body);
-  if (!root) return { kind: "none" };
+  if (!root) return { kind: "unknown" };
   layers.push(root);
   for (const key of DETAILS_NESTED_KEYS) {
     const nested = asRecord(root[key]);
     if (nested) layers.push(nested);
   }
+  let emptyField = false;
   for (const layer of layers) {
-    for (const field of ["imagePreview", "image"]) {
+    for (const field of DETAILS_IMAGE_FIELDS) {
+      if (!Object.prototype.hasOwnProperty.call(layer, field)) continue;
       const value = layer[field];
-      if (typeof value === "string" && value.trim() !== "") {
-        return isAllowedAvatarUrl(value.trim()) ? { kind: "url", url: value.trim() } : { kind: "rejected" };
+      if (value === null || (typeof value === "string" && value.trim() === "")) {
+        emptyField = true;
+        continue;
       }
+      if (typeof value !== "string") return { kind: "unknown" };
+      return isAllowedAvatarUrl(value.trim()) ? { kind: "url", url: value.trim() } : { kind: "rejected" };
     }
   }
-  return { kind: "none" };
+  return emptyField ? { kind: "none" } : { kind: "unknown" };
 }
 
 export type AvatarOutcome =
