@@ -50,7 +50,9 @@ export function useClientPortfolioPurchases(leadId: string | null) {
           .order("id")
           .range(from, from + 499);
         if (error) throw error;
-        rows.push(...(data ?? []));
+        for (const row of data ?? []) {
+          if (row.lead_id) rows.push({ ...row, lead_id: row.lead_id });
+        }
         if ((data?.length ?? 0) < 500) break;
       }
       const sales = portfolioSalesHistory(rows);

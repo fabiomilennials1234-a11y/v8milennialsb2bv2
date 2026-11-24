@@ -70,6 +70,7 @@ import { FunilAnalytics } from "@/modules/pipelines/components/funis/FunilAnalyt
 import { FunilListTable } from "@/modules/pipelines/components/funis/FunilListTable";
 import { KanbanFilterPanel, FilterChips, type FilterSectionConfig } from "@/modules/pipelines/components/kanban/KanbanFilterPanel";
 import { PipelineListView } from "@/modules/pipelines/components/kanban/PipelineListView";
+import { VendaAvulsaButton } from "@/modules/pipelines/components/shared/VendaAvulsaButton";
 import { CreateOpportunityModal } from "@/modules/pipelines/components/kanban/CreateOpportunityModal";
 import { FunilMeetingTimeline } from "@/modules/pipelines/components/funis/FunilMeetingTimeline";
 import { AddMeetingModal } from "@/modules/pipelines/components/legacy/confirmacao/AddMeetingModal";
@@ -1065,7 +1066,12 @@ function FunilPageInner() {
             )}
           </>
         }
-        primaryAction={primaryAction}
+        primaryAction={
+          <>
+            <VendaAvulsaButton key={pipeline.id} pipelineId={pipeline.id} pipelineName={pipeline.name} />
+            {primaryAction}
+          </>
+        }
         chips={
           viewMode !== "analytics" ? (
             <FilterChips sections={filterSections} onClearAll={handleClearFilters} />
