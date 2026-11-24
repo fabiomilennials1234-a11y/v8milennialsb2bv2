@@ -8,6 +8,7 @@ import { applyLeadListFilters } from "../lib/lead-list-filters";
 import { coDonosDoFiltro } from "./useLeadOwners";
 import { loadVentimaisExport, readExportPages } from "../lib/load-ventimais-export";
 import { buildVentimaisWorkbook } from "../lib/ventimais-export";
+import { fetchByIdBatches } from "../lib/export-batching";
 import {
   buildCustomFieldColumns,
   buildExportHeaders,
@@ -19,7 +20,6 @@ import {
   type ExportPipelineEntry,
   type ExportPipelineStage,
 } from "../lib/export-columns";
-const BATCH_SIZE = 500;
 const CUSTOM_FIELD_BATCH_SIZE = 200;
 
 async function loadCustomFieldColumns(organizationId: string, leadIds: string[]) {
@@ -188,19 +188,20 @@ export function useExportLeads(): UseExportLeadsResult {
 
         // `as any` no from: pipeline_entries.stage_id (20270906002000) ainda
         // não está no types.ts gerado — mesmo padrão de usePipelines.
-        let entriesQuery = (supabase.from as any)("pipeline_entries")
-          .select("lead_id")
-          .eq("organization_id", organizationId)
-          .eq("pipeline_id", targetPipelineId);
-        // Etapa por uuid (canônico) ou stage_key (formato legado dos 3 pipes).
-        entriesQuery = isStageUuid(sf.stageId)
-          ? entriesQuery.eq("stage_id", sf.stageId)
-          : entriesQuery.eq("stage_key", sf.stageId);
-        const { data: entries, error: entriesError } = await entriesQuery;
-        if (entriesError) throw entriesError;
-        stageLeadIds = Array.from(
-          new Set(((entries ?? []) as Array<{ lead_id: string | null }>).map((e) => e.lead_id)),
-        ).filter(Boolean) as string[];
+        // Paginado: o PostgREST corta em 1.000 linhas sem erro, e etapas
+        // grandes (ex.: 2.958 leads) saíam truncadas.
+        const entries = await readExportPages<{ lead_id: string | null }>((from, to) => {
+          let entriesQuery = (supabase.from as any)("pipeline_entries")
+            .select("lead_id")
+            .eq("organization_id", organizationId)
+            .eq("pipeline_id", targetPipelineId);
+          // Etapa por uuid (canônico) ou stage_key (formato legado dos 3 pipes).
+          entriesQuery = isStageUuid(sf.stageId)
+            ? entriesQuery.eq("stage_id", sf.stageId)
+            : entriesQuery.eq("stage_key", sf.stageId);
+          return entriesQuery.order("id").range(from, to);
+        });
+        stageLeadIds = Array.from(new Set(entries.map((e) => e.lead_id))).filter(Boolean) as string[];
 
         // Etapa vazia: nada a exportar — retorna sem gerar arquivo.
         if (stageLeadIds.length === 0) {
@@ -221,31 +222,46 @@ export function useExportLeads(): UseExportLeadsResult {
       }
 
       // 1) Leads com todos os campos
-      let leadsQuery = supabase
-        .from("leads")
-        .select(
-          "id, name, company, email, phone, faturamento, segment, urgency, notes, origin, responsible_id, sdr_id, closer_id, compromisso_date, utm_campaign, utm_source, utm_medium, utm_content, utm_term, created_at, updated_at, metrics_period_at"
-        )
-        .eq("organization_id", organizationId);
-
-      if (stageLeadIds) {
-        leadsQuery = leadsQuery.in("id", stageLeadIds);
-      }
-
       // Espelha os filtros ativos da lista (busca, origem, qualificação,
       // UF) — mesma semântica da tela via helper compartilhado.
-      if (options.listFilters) {
-        // N donos (Chamado 793f4b05): o recorte por dono inclui co-donos, como na tela.
-        const coOwnedLeadIds = await coDonosDoFiltro(organizationId, options.listFilters);
-        leadsQuery = applyLeadListFilters(leadsQuery, { ...options.listFilters, coOwnedLeadIds });
-      }
+      // N donos (Chamado 793f4b05): o recorte por dono inclui co-donos, como na tela.
+      const listFilters = options.listFilters
+        ? { ...options.listFilters, coOwnedLeadIds: await coDonosDoFiltro(organizationId, options.listFilters) }
+        : null;
+      const buildLeadsQuery = () => {
+        const q = supabase
+          .from("leads")
+          .select(
+            "id, name, company, email, phone, faturamento, segment, urgency, notes, origin, responsible_id, sdr_id, closer_id, compromisso_date, utm_campaign, utm_source, utm_medium, utm_content, utm_term, created_at, updated_at, metrics_period_at"
+          )
+          .eq("organization_id", organizationId);
+        return listFilters ? applyLeadListFilters(q, listFilters) : q;
+      };
 
-      const { data: leads, error: leadsError } = await leadsQuery
-        .order("created_at", { ascending: false })
-        .limit(limit);
-
-      if (leadsError) throw leadsError;
-      const leadList = leads ?? [];
+      // Lotes de ids (URL do `.in()` tem teto) + paginação por range (o
+      // PostgREST corta em 1.000 linhas). Ordem total estável: created_at, id.
+      type LeadRow = Record<string, unknown> & { id: string; created_at: string | null };
+      const fetched: LeadRow[] = stageLeadIds
+        ? await fetchByIdBatches<LeadRow>(stageLeadIds, (batch, from, to) =>
+            buildLeadsQuery()
+              .in("id", batch)
+              .order("created_at", { ascending: false })
+              .order("id")
+              .range(from, to) as never,
+          )
+        : await readExportPages<LeadRow>((from, to) => {
+            if (from >= limit) return Promise.resolve({ data: [], error: null });
+            return buildLeadsQuery()
+              .order("created_at", { ascending: false })
+              .order("id")
+              .range(from, Math.min(to, limit - 1)) as never;
+          });
+      // Lotes chegam cada um ordenado; reordena o conjunto e aplica o limite.
+      const leadList = fetched
+        .sort((a, b) =>
+          (b.created_at ?? "").localeCompare(a.created_at ?? "") || a.id.localeCompare(b.id),
+        )
+        .slice(0, limit);
       const leadIds = leadList.map((l: { id: string }) => l.id);
       const customColumns = await loadCustomFieldColumns(organizationId, leadIds);
 
@@ -265,20 +281,20 @@ export function useExportLeads(): UseExportLeadsResult {
       //    (funil, lead) segue o legado: updated_at mais recente vence.
       const allEntries: ExportPipelineEntry[] = [];
       if (pipelineIds.length > 0) {
-        for (let i = 0; i < leadIds.length; i += BATCH_SIZE) {
-          const batch = leadIds.slice(i, i + BATCH_SIZE);
-          // `as any`: pipeline_entries.stage_id fora do types.ts (ver acima).
-          const { data: batchEntries, error: batchError } = await (supabase.from as any)(
-            "pipeline_entries",
-          )
-            .select(
-              "pipeline_id, lead_id, stage_id, stage_key, assigned_to, notes, closed_at, created_at, updated_at, metadata",
-            )
-            .eq("organization_id", organizationId)
-            .in("lead_id", batch);
-          if (batchError) throw batchError;
-          allEntries.push(...((batchEntries ?? []) as ExportPipelineEntry[]));
-        }
+        // Paginado por lote: N funis por lead estouram as 1.000 linhas do PostgREST.
+        allEntries.push(
+          ...(await fetchByIdBatches<ExportPipelineEntry>(leadIds, (batch, from, to) =>
+            // `as any`: pipeline_entries.stage_id fora do types.ts (ver acima).
+            (supabase.from as any)("pipeline_entries")
+              .select(
+                "pipeline_id, lead_id, stage_id, stage_key, assigned_to, notes, closed_at, created_at, updated_at, metadata",
+              )
+              .eq("organization_id", organizationId)
+              .in("lead_id", batch)
+              .order("id")
+              .range(from, to),
+          )),
+        );
       }
       const entryByFunnelAndLead = pickLatestEntryPerFunnel(allEntries);
 
