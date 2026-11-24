@@ -41,6 +41,7 @@ import type {
 } from "./uazapi-types.ts";
 import { buildPixButtonBody } from "./uazapi-pix.ts";
 import { isRecipientNotOnWhatsApp, RECIPIENT_NOT_ON_WHATSAPP } from "./uazapi-recipient-error.ts";
+import { INSTANCE_DISCONNECTED, isInstanceDisconnected, uazapiErrorText } from "./uazapi-instance-error.ts";
 
 // ---------------------------------------------------------------------------
 // Sender status mapping — Uazapi vocabulary → app canonical enum
@@ -937,8 +938,9 @@ export class UazapiClient {
           // { error, error_source, provider_code:int, error_key:string, ... }.
           // error_key is the stable, human-readable marker; fall back to legacy
           // code/error_code, then to the numeric provider_code as a last resort.
-          const providerMsg =
-            (errBody as any)?.error ?? (errBody as any)?.message ?? null;
+          // `error` may be the boolean `true` (disconnected instance); the
+          // reason then lives in `message`.
+          const providerMsg = uazapiErrorText(errBody);
           const rawProviderCode =
             (errBody as any)?.error_key ??
             (errBody as any)?.code ??
@@ -955,6 +957,17 @@ export class UazapiClient {
             throw {
               provider_code: RECIPIENT_NOT_ON_WHATSAPP,
               status: 422,
+              message,
+              raw: errBody,
+            } satisfies UazapiError;
+          }
+          // The instance's WhatsApp session is down: refused before sending.
+          // Retrying cannot help and the provider is healthy, so no breaker
+          // increment; the status stays 5xx (see uazapi-instance-error.ts).
+          if (isInstanceDisconnected(errBody)) {
+            throw {
+              provider_code: INSTANCE_DISCONNECTED,
+              status: res.status,
               message,
               raw: errBody,
             } satisfies UazapiError;
@@ -998,7 +1011,11 @@ export class UazapiClient {
           continue;
         }
 
-        // 4xx re-throw immediately (no retry, no circuit breaker increment)
+        // Disconnected instance and 4xx re-throw immediately (no retry, no
+        // circuit breaker increment)
+        if ((e as UazapiError | null)?.provider_code === INSTANCE_DISCONNECTED) {
+          throw e;
+        }
         if (
           typeof (e as any)?.status === "number" &&
           (e as any).status >= 400 &&

@@ -1,4 +1,5 @@
 import { SendRichContactActions } from "./SendRichContactActions";
+import { InstanceOfflineNotice } from "./InstanceOfflineNotice";
 import { readMediaAsDataUrl } from "@/modules/communication/lib/media-operation";
 import { ReplyPreview } from "../ReplyContext";
 import { ComposerEmojiPicker } from "./ComposerEmojiPicker";
@@ -391,6 +392,7 @@ export function MobileComposerContextual({
       style={{ paddingBottom: offset || undefined }}
     >
       <ReplyPreview />
+      <InstanceOfflineNotice instanceId={instanceId} className="mx-3 mb-0 mt-2" />
       {/* Hidden file inputs */}
       <input
         ref={cameraInputRef}

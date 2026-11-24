@@ -34,8 +34,9 @@ export async function sendWithBoundedRecovery(options: {
     (r?.error as { context?: { status?: number } } | null)?.context?.status;
   // These responses reject the request before delivery. Preserve the provider's
   // actionable error and allow a new attempt after the user fixes its cause.
+  // 409: the number is logged out or its sends are paused — nothing went out.
   const rejected = (r: SendResponse | undefined) =>
-    [400, 401, 403, 404, 405, 413, 415, 422].includes(httpStatus(r) ?? 0);
+    [400, 401, 403, 404, 405, 409, 413, 415, 422].includes(httpStatus(r) ?? 0);
   if (successful(result)) return result!;
   if (rejected(result)) return result!;
   for (let attempt = 1; attempt <= MAX_SEND_RETRIES; attempt++) {

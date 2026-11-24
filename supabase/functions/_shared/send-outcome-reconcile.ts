@@ -14,6 +14,8 @@
  * Funções puras com dependências injetadas, para testar sem rede.
  */
 
+import { INSTANCE_DISCONNECTED } from "./uazapi-instance-error.ts";
+
 export const SEND_OUTCOME_UNKNOWN = "send_outcome_unknown";
 
 /** Origem gravada pelo proxy nos envios do composer (ver `trackSource` no proxy). */
@@ -33,12 +35,14 @@ export interface RecentOutgoing {
 
 /**
  * Falha que PODE ter entregue: timeout ou 5xx. Circuit breaker aberto é
- * recusa antes do envio (nada saiu); 4xx idem.
+ * recusa antes do envio (nada saiu); 4xx idem; número desconectado também
+ * (o Uazapi responde 503, mas recusou antes de enviar).
  */
 export function isAmbiguousSendFailure(error: unknown): boolean {
   if (typeof error !== "object" || error === null) return false;
   const e = error as { status?: unknown; provider_code?: unknown };
   if (e.provider_code === "circuit_breaker_open") return false;
+  if (e.provider_code === INSTANCE_DISCONNECTED) return false;
   if (e.provider_code === "timeout") return true;
   return typeof e.status === "number" && e.status >= 500;
 }

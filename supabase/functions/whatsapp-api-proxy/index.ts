@@ -1,7 +1,7 @@
 import { InstanceProvisioningUncertainError, provisionWhatsAppInstance } from "../_shared/instance-provisioning.ts";
 import { requestGroupCapture } from "../_shared/uazapi-webhook-policy.ts";
 import { UazapiIngressWriteGuardError } from "../_shared/uazapi-ingress-write-guard.ts";
-import { providerPassthroughStatus } from "../_shared/provider-error-status.ts";
+import { providerPassthroughStatus, providerRefusal } from "../_shared/provider-error-status.ts";
 import { transcribeChatAudio, TranscriptionError } from "../_shared/whatsapp-transcription.ts";
 import { authorizeGroupListing, listInstanceGroups } from "../_shared/whatsapp-group-list.ts";
 import { sanitizeMentions } from "../_shared/group-mentions.ts";
@@ -1872,6 +1872,24 @@ Deno.serve(
         return jsonResponse(e.status, { error: e.message, code: e.code }, corsHeaders);
       }
       const msg = (e as Error).message ?? "Internal error";
+      // Nothing was sent (number logged out, breaker open): answer at once so
+      // the chat stops recovering and the seller learns the real cause. The
+      // provider's raw reason stays in the log.
+      const refusal = providerRefusal(e);
+      if (refusal) {
+        console.warn(`[whatsapp-api-proxy] action=${action} refused before delivery (${refusal.code}): ${msg}`);
+        await logRuntime({
+          organizationId: callerOrgId,
+          module: "whatsapp",
+          action,
+          status: "skipped",
+          errorMessage: msg,
+          entityType: instanceId ? "whatsapp_instances" : undefined,
+          entityId: instanceId,
+          payloadSnapshot: { code: refusal.code },
+        });
+        return jsonResponse(refusal.status, { error: refusal.message, code: refusal.code }, corsHeaders);
+      }
       const passthrough = providerPassthroughStatus(e);
       if (passthrough) {
         console.warn(`[whatsapp-api-proxy] action=${action} provider rejected (${passthrough}): ${msg}`);
