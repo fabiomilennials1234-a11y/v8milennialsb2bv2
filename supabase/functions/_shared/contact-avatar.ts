@@ -335,17 +335,30 @@ export interface ClaimedAvatar {
  * Erro numa linha já resolvida (`ok`/`none`) é transitório: mantém o estado e a
  * foto, só conta a tentativa. Pendente com 3 erros vira `error` (revisita em 7d).
  */
+export const RETRY_AFTER_ERROR_MS_PER_ATTEMPT = 60 * 60 * 1000;
+/** Teto do /chat/details estourado: tenta na próxima rodada (2 por hora). */
+export const RETRY_AFTER_CAP_MS = 20 * 60 * 1000;
+/** Kill switch desligado: sem fallback possível; espera candidata nova do webhook. */
+export const RETRY_AFTER_DISABLED_MS = 24 * 60 * 60 * 1000;
+
 export function closePatch(row: ClaimedAvatar, outcome: AvatarOutcome, nowIso: string): Record<string, unknown> {
   const base = { avatar_updated_at: nowIso, claimed_until: null };
+  const after = (ms: number) => new Date(Date.parse(nowIso) + ms).toISOString();
   switch (outcome.kind) {
     case "ok":
-      return { ...base, status: "ok", storage_path: outcome.storagePath, content_sha256: outcome.sha256, attempts: 0, last_error: null };
+      return { ...base, status: "ok", storage_path: outcome.storagePath, content_sha256: outcome.sha256, attempts: 0, last_error: null, retry_after: null };
     case "same":
-      return { ...base, status: "ok", attempts: 0, last_error: null };
+      return { ...base, status: "ok", attempts: 0, last_error: null, retry_after: null };
     case "none":
-      return { ...base, status: "none", storage_path: null, content_sha256: null, attempts: 0, last_error: null };
+      return { ...base, status: "none", storage_path: null, content_sha256: null, attempts: 0, last_error: null, retry_after: null };
     case "deferred":
-      return { ...base, last_error: outcome.reason.slice(0, 500) };
+      // Sem recuo, a adiada voltaria em toda rodada (CDN de novo, gate do cron
+      // sempre verdadeiro). Não conta tentativa nem muda estado.
+      return {
+        ...base,
+        last_error: outcome.reason.slice(0, 500),
+        retry_after: after(outcome.reason === "details_disabled" ? RETRY_AFTER_DISABLED_MS : RETRY_AFTER_CAP_MS),
+      };
     case "error": {
       const attempts = Math.min(row.attempts + 1, 32767);
       const settled = row.status === "ok" || row.status === "none";
@@ -354,6 +367,7 @@ export function closePatch(row: ClaimedAvatar, outcome: AvatarOutcome, nowIso: s
         attempts,
         last_error: outcome.reason.slice(0, 500),
         status: settled ? row.status : attempts >= AVATAR_MAX_ATTEMPTS ? "error" : "pending",
+        retry_after: after(attempts * RETRY_AFTER_ERROR_MS_PER_ATTEMPT),
       };
     }
   }

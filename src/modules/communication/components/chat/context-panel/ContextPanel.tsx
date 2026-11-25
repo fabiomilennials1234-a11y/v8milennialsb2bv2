@@ -69,6 +69,12 @@ export interface ContextPanelProps {
    * e o painel é byte a byte o de sempre.
    */
   identitySlot?: ReactNode;
+  /**
+   * Foto do contato (Uazapi). `false` no canal oficial/NotificaMe: o painel é
+   * o mesmo, mas a foto é só do canal Uazapi — mostrar ali seria foto de outro
+   * canal. Default `true` (caixa Uazapi).
+   */
+  fotoDoContato?: boolean;
 }
 
 export type ContextPanelTab = "info" | "history" | "ai";
@@ -81,6 +87,7 @@ export function ContextPanel({
   ehGrupo = false,
   placeholder,
   identitySlot,
+  fotoDoContato: comFoto = true,
 }: ContextPanelProps) {
   const [activeTab, setActiveTab] = useState<ContextPanelTab>("info");
   const { data: leadByPhone, isLoading: loadingByPhone } = useLeadByPhone(
@@ -99,9 +106,9 @@ export function ContextPanel({
   const leadLoading = loadingByPhone || loadingById;
   const activeLeadId = lead?.id ?? leadId ?? null;
   const [fichaAberta, setFichaAberta] = useState(false);
-  // Foto do contato (Uazapi). Hook antes dos retornos antecipados; grupo e
-  // conversa sem telefone (Instagram) não consultam.
-  const fotoDoContato = useContactAvatarUrl(ehGrupo ? null : phoneNumber ?? null);
+  // Foto do contato (Uazapi). Hook antes dos retornos antecipados; grupo,
+  // canal oficial e conversa sem telefone (Instagram) não consultam.
+  const fotoDoContato = useContactAvatarUrl(ehGrupo || !comFoto ? null : phoneNumber ?? null);
 
   // O Negócio do bloco de ouro (CTO, P8a): a MESMA leitura da ficha do lead
   // (`useLeadsDeals`), só leitura. Hook antes dos retornos antecipados.

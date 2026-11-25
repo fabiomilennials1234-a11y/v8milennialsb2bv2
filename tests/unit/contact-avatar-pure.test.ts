@@ -185,12 +185,12 @@ describe("closePatch", () => {
 
   it("ok grava path e sha, zera tentativas e solta o claim", () => {
     expect(closePatch(row({ attempts: 2 }), { kind: "ok", storagePath: "o/avatars/a.jpg", sha256: sha }, at)).toEqual({
-      avatar_updated_at: at, claimed_until: null, status: "ok", storage_path: "o/avatars/a.jpg", content_sha256: sha, attempts: 0, last_error: null,
+      avatar_updated_at: at, claimed_until: null, status: "ok", storage_path: "o/avatars/a.jpg", content_sha256: sha, attempts: 0, last_error: null, retry_after: null,
     });
   });
   it("same só carimba", () => {
     expect(closePatch(row({ status: "ok" }), { kind: "same" }, at)).toEqual({
-      avatar_updated_at: at, claimed_until: null, status: "ok", attempts: 0, last_error: null,
+      avatar_updated_at: at, claimed_until: null, status: "ok", attempts: 0, last_error: null, retry_after: null,
     });
   });
   it("none limpa o arquivo (o trigger enfileira)", () => {
@@ -208,10 +208,17 @@ describe("closePatch", () => {
     expect(p).toMatchObject({ status: "ok", attempts: 6 });
     expect(p).not.toHaveProperty("storage_path");
   });
-  it("deferred não conta tentativa nem muda estado", () => {
+  it("deferred não conta tentativa nem muda estado, mas recua (teto: 20 min; kill switch: 24 h)", () => {
     expect(closePatch(row({ attempts: 1 }), { kind: "deferred", reason: "details_cap" }, at)).toEqual({
-      avatar_updated_at: at, claimed_until: null, last_error: "details_cap",
+      avatar_updated_at: at, claimed_until: null, last_error: "details_cap", retry_after: "2026-11-24T12:20:00.000Z",
     });
+    expect(closePatch(row(), { kind: "deferred", reason: "details_disabled" }, at)).toMatchObject({
+      retry_after: "2026-11-25T12:00:00.000Z",
+    });
+  });
+  it("erro recua 1 h por tentativa; ok/none limpam o recuo", () => {
+    expect(closePatch(row({ attempts: 1 }), { kind: "error", reason: "x" }, at)).toMatchObject({ retry_after: "2026-11-24T14:00:00.000Z" });
+    expect(closePatch(row(), { kind: "none" }, at)).toMatchObject({ retry_after: null });
   });
 });
 

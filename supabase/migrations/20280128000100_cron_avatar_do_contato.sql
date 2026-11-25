@@ -39,9 +39,7 @@ BEGIN
      AND NOT EXISTS (
        SELECT 1 FROM public.whatsapp_contact_avatars a
        WHERE (a.claimed_until IS NULL OR a.claimed_until < now())
-         AND ((a.status = 'pending'
-               AND (a.avatar_updated_at IS NULL
-                    OR a.avatar_updated_at < now() - make_interval(hours => a.attempts::integer)))
+         AND ((a.status = 'pending' AND (a.retry_after IS NULL OR a.retry_after <= now()))
               OR (a.status <> 'pending' AND a.avatar_updated_at < now() - interval '7 days'))
          AND EXISTS (
            SELECT 1 FROM public.whatsapp_instances wi

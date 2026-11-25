@@ -193,4 +193,10 @@ describe("painel de contexto", () => {
     render(<TooltipProvider><ContextPanel leadId="lead-1" /></TooltipProvider>);
     expect(avatar.calls.every((p) => p == null)).toBe(true);
   });
+
+  it("caixa oficial (fotoDoContato={false}) não consulta, mesmo com telefone", () => {
+    render(<TooltipProvider><ContextPanel phoneNumber={PHONE} pushName="Maria" fotoDoContato={false} /></TooltipProvider>);
+    expect(avatar.calls.length).toBeGreaterThan(0);
+    expect(avatar.calls.every((p) => p == null)).toBe(true);
+  });
 });

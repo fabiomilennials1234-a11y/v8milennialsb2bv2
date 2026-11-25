@@ -4,10 +4,9 @@ import {
   uazapiMessageEdit,
   uazapiMessageReaction,
   mergeUazapiReaction,
-  uazapiChatAvatarCandidate,
   type UazapiMessageEdit,
 } from "../_shared/uazapi-event.ts";
-import { registerAvatarCandidate } from "../_shared/contact-avatar.ts";
+import { scheduleContactAvatarCandidate } from "../_shared/contact-avatar-schedule.ts";
 import { storedUazapiConnectionState } from "../_shared/uazapi-connection-state.ts";
 import { messageTimestamp } from "./message-timestamp.ts";
 import { recordQuotePresentation, completeQuotePresentations } from "../_shared/quotes/presentation.ts";
@@ -1720,40 +1719,6 @@ async function maybeAutoSync(
 // ============================================================================
 // HTTP handler
 // ============================================================================
-
-/**
- * Foto do contato: só registra a URL candidata (zero download no caminho do
- * ack). Fire-and-forget DEPOIS da mensagem persistida — erro aqui nunca muda a
- * resposta do webhook. O cron contact-avatar-sync baixa e grava.
- */
-function scheduleContactAvatarCandidate(
-  supabase: SupabaseClient,
-  instance: ResolvedInstance,
-  payload: Record<string, unknown>,
-): void {
-  let candidate: ReturnType<typeof uazapiChatAvatarCandidate>;
-  try {
-    candidate = uazapiChatAvatarCandidate(payload, instance.provider);
-  } catch {
-    return;
-  }
-  if (!candidate) return;
-  const task = registerAvatarCandidate(supabase, instance.organization_id, instance.id, candidate)
-    .catch((err) => {
-      void logRuntime({
-        organizationId: instance.organization_id,
-        module: "webhook",
-        action: "contact_avatar_register_error",
-        status: "error",
-        payloadSnapshot: {
-          instance_id: instance.id,
-          error: (err instanceof Error ? err.message : String(err)).slice(0, 300),
-        },
-      });
-    });
-  (globalThis as { EdgeRuntime?: { waitUntil?: (task: Promise<unknown>) => void } })
-    .EdgeRuntime?.waitUntil?.(task);
-}
 
 function genericResponse(status: number, body?: unknown): Response {
   return new Response(body ? JSON.stringify(body) : null, {

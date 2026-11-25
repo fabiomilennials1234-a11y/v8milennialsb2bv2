@@ -36,6 +36,9 @@ CREATE TABLE public.whatsapp_contact_avatars (
   last_error         text CHECK (last_error IS NULL OR char_length(last_error) <= 500),
   avatar_updated_at  timestamptz,
   claimed_until      timestamptz,
+  -- Recuo de pendente: erro (1 h por tentativa) e adiada (teto/kill switch do
+  -- /chat/details). Candidata nova ou renovada pelo webhook zera — fura o recuo.
+  retry_after        timestamptz,
   created_at         timestamptz NOT NULL DEFAULT now(),
   updated_at         timestamptz NOT NULL DEFAULT now(),
   CONSTRAINT whatsapp_contact_avatars_org_phone_key UNIQUE (organization_id, normalized_phone),
@@ -208,7 +211,9 @@ BEGIN
     candidate_seen_at  = EXCLUDED.candidate_seen_at,
     source_instance_id = EXCLUDED.source_instance_id,
     status   = CASE WHEN a.candidate_key IS DISTINCT FROM EXCLUDED.candidate_key THEN 'pending' ELSE a.status END,
-    attempts = CASE WHEN a.candidate_key IS DISTINCT FROM EXCLUDED.candidate_key THEN 0 ELSE a.attempts END
+    attempts = CASE WHEN a.candidate_key IS DISTINCT FROM EXCLUDED.candidate_key THEN 0 ELSE a.attempts END,
+    -- URL nova ou renovada (oe novo) merece tentativa já: fura o recuo.
+    retry_after = NULL
   WHERE a.candidate_key IS DISTINCT FROM EXCLUDED.candidate_key
      OR a.candidate_seen_at IS NULL
      OR a.candidate_seen_at < now() - interval '1 day';
@@ -220,7 +225,7 @@ REVOKE ALL ON FUNCTION public.registrar_avatar_candidato(uuid, uuid, text, text)
 GRANT EXECUTE ON FUNCTION public.registrar_avatar_candidato(uuid, uuid, text, text) TO service_role;
 
 -- ── Cron: reivindicar o lote ─────────────────────────────────────────────────
--- Pendentes (com recuo de 1 h por tentativa) e depois as vencidas há 7 dias.
+-- Pendentes fora do recuo (`retry_after`) e depois as vencidas há 7 dias.
 -- Só contato com conversa nos últimos 30 dias. Cada parte usa o seu índice; a
 -- conversa é achada pela PK do resumo (org, caixa, telefone) via caixas da org.
 -- `p_exclude`: ids já vistos nesta rodada do cron — linha adiada (teto do
@@ -246,8 +251,7 @@ BEGIN
     WHERE a.status = 'pending'
       AND (a.claimed_until IS NULL OR a.claimed_until < now())
       AND NOT (a.id = ANY (coalesce(p_exclude, '{}')))
-      AND (a.avatar_updated_at IS NULL
-           OR a.avatar_updated_at < now() - make_interval(hours => a.attempts::integer))
+      AND (a.retry_after IS NULL OR a.retry_after <= now())
       AND EXISTS (
         SELECT 1 FROM public.whatsapp_instances wi
         JOIN public.whatsapp_conversation_summary s

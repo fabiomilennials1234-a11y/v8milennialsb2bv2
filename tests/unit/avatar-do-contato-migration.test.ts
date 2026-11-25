@@ -393,11 +393,19 @@ describe("reivindicar_avatares", () => {
     expect(r.every((x) => x.details_instance_id === null)).toBe(true);
   });
 
-  it("recuo por tentativa: pendente que falhou agora espera", async () => {
-    await db.exec("UPDATE public.whatsapp_contact_avatars SET attempts = 1, avatar_updated_at = now()");
+  it("recuo (retry_after): pendente em recuo espera; vencido volta", async () => {
+    await db.exec("UPDATE public.whatsapp_contact_avatars SET attempts = 1, avatar_updated_at = now(), retry_after = now() + interval '1 hour'");
     expect(await claim()).toEqual([]);
-    await db.exec("UPDATE public.whatsapp_contact_avatars SET avatar_updated_at = now() - interval '2 hours'");
+    await db.exec("UPDATE public.whatsapp_contact_avatars SET retry_after = now() - interval '1 second'");
     expect(await claim()).toHaveLength(2);
+  });
+
+  it("adiada (retry_after) não volta; candidata NOVA do webhook fura o recuo na hora", async () => {
+    await db.exec("UPDATE public.whatsapp_contact_avatars SET avatar_updated_at = now(), retry_after = now() + interval '24 hours', last_error = 'details_disabled'");
+    expect(await claim()).toEqual([]);
+    expect(await register(ORG1, BOX1, "5511999990001", URL2)).toEqual([{ ok: true }]);
+    expect(await row(ORG1, "11999990001")).toMatchObject({ status: "pending", retry_after: null });
+    expect((await claim()).map((r) => r.normalized_phone)).toEqual(["11999990001"]);
   });
 
   it("ok revisita só depois de 7 dias; none também", async () => {
@@ -452,7 +460,8 @@ describe("invocador do cron (20280128000100)", () => {
   });
 
   it.each([
-    ["pendente em recuo", "UPDATE public.whatsapp_contact_avatars SET attempts = 2, avatar_updated_at = now()"],
+    ["pendente em recuo de erro", "UPDATE public.whatsapp_contact_avatars SET attempts = 2, avatar_updated_at = now(), retry_after = now() + interval '2 hours'"],
+    ["pendente adiada (kill switch)", "UPDATE public.whatsapp_contact_avatars SET avatar_updated_at = now(), retry_after = now() + interval '24 hours'"],
     ["já reivindicada", "UPDATE public.whatsapp_contact_avatars SET claimed_until = now() + interval '5 minutes'"],
     ["ok revisitada há menos de 7 dias", "UPDATE public.whatsapp_contact_avatars SET status = 'none', avatar_updated_at = now() - interval '1 day'"],
     ["conversa de mais de 30 dias", "UPDATE public.whatsapp_conversation_summary SET last_message_time = now() - interval '40 days'"],
@@ -509,5 +518,24 @@ describe("rollback", () => {
     expect((await db.query("SELECT * FROM pg_policies WHERE policyname = 'contact_avatars_select'")).rows).toEqual([]);
     // reaplica: a migration é a mesma que roda em prod depois de um rollback
     await db.exec(MIGRATION);
+  });
+
+  it("round-trip completo: 000100 + 000000 desfeitos não deixam nada e reaplicam limpo", async () => {
+    await db.exec(CRON);
+    await db.exec("INSERT INTO public.cron_config VALUES ('contact_avatar_chat_details', 'on'), ('contact_avatar_orphan_cursor', '00000000-0000-4000-8000-000000000001') ON CONFLICT (key) DO NOTHING");
+    await db.exec("DELETE FROM storage.objects");
+    await db.exec(CRON_ROLLBACK);
+    await db.exec(ROLLBACK);
+    const left = await db.query<{ n: number }>(`SELECT
+      (SELECT count(*) FROM pg_proc WHERE proname IN ('avatares_das_conversas','reivindicar_avatares','registrar_avatar_candidato',
+        'podar_avatares_orfaos','enfileirar_remocao_avatar','contact_avatar_object_readable','invoke_contact_avatar_sync'))
+      + (SELECT count(*) FROM pg_class WHERE relname IN ('whatsapp_contact_avatars','contact_avatar_storage_deletions'))
+      + (SELECT count(*) FROM pg_policies WHERE policyname = 'contact_avatars_select')
+      + (SELECT count(*) FROM storage.buckets WHERE id = 'contact-avatars')
+      + (SELECT count(*) FROM public.cron_config WHERE key LIKE 'contact_avatar%') AS n`);
+    expect(Number(left.rows[0].n)).toBe(0);
+    await db.exec(MIGRATION);
+    await db.exec(CRON);
+    expect((await db.query("SELECT count(*)::int AS n FROM pg_proc WHERE proname IN ('avatares_das_conversas', 'invoke_contact_avatar_sync')")).rows).toEqual([{ n: 2 }]);
   });
 });

@@ -1681,6 +1681,8 @@ export function ChatShellWithContext() {
                   leadId={selectedSocialContact.lead_id ?? undefined}
                   phoneNumber={selectedSocialContact.external_user_id}
                   pushName={selectedSocialContact.display_name}
+                  // Foto do contato é só do canal Uazapi.
+                  fotoDoContato={false}
                 />
               ) : undefined
             ) : isSocialBox ? (
