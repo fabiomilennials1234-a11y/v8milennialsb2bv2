@@ -29,6 +29,8 @@ import {
   type FilePreviewResult,
 } from "../../hooks/useImportLeads";
 import { useImportTagRules } from "../../hooks/useImportTagRules";
+import { buildResultWorkbook, downloadResultWorkbook, resultLines } from "../../lib/import-result-sheet";
+import { sourceRowOf } from "../../lib/import-source-row";
 import { useTags } from "../../hooks/useTags";
 import { ImportTagByColumnField } from "./ImportTagByColumnField";
 import {
@@ -265,6 +267,26 @@ export function ImportLeadsContent({ onDone }: ImportLeadsContentProps) {
     } catch (error) {
       notifyError(error, { fallback: "Não foi possível revisar a planilha." });
       setStep("preview");
+    }
+  };
+
+  /** A planilha enviada, com Resultado, Motivo e Link na linha de cada lead. */
+  const handleDownloadResult = async () => {
+    if (!file || !lastReport) return;
+    try {
+      const ExcelJS = await import("exceljs");
+      const lines = resultLines(lastReport, review, window.location.origin);
+      const source = (file.name || "").toLowerCase().endsWith(".csv")
+        ? await parseFileToRows(file).then((rows) => ({
+            kind: "csv" as const,
+            rows,
+            sourceRows: rows.map((r) => sourceRowOf(r)),
+          }))
+        : { kind: "xlsx" as const, buffer: await file.arrayBuffer() };
+      const workbook = await buildResultWorkbook(ExcelJS, source, lines);
+      await downloadResultWorkbook(workbook, file.name || "importacao");
+    } catch (error) {
+      notifyError(error, { fallback: "Não foi possível gerar a planilha de resultado." });
     }
   };
 
@@ -688,6 +710,12 @@ export function ImportLeadsContent({ onDone }: ImportLeadsContentProps) {
           <p className="text-sm text-center text-muted-foreground">
             Os leads já estão no cadastro. Nenhum negócio foi criado.
           </p>
+          {previewEnabled && lastReport?.rows && (
+            <Button variant="outline" className="w-full gap-2" onClick={handleDownloadResult}>
+              <FileDown className="w-4 h-4" />
+              Baixar resultado linha a linha
+            </Button>
+          )}
           <Button className="w-full" onClick={handleClose}>
             Fechar
           </Button>
