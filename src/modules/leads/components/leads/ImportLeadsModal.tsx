@@ -506,7 +506,7 @@ export function ImportLeadsContent({ onDone }: ImportLeadsContentProps) {
                   <div className="space-y-1 px-3 pb-3">
                     {lastReport.errors.map((err, i) => (
                       <div key={i} className="text-xs text-muted-foreground flex gap-2">
-                        <span className="text-destructive font-mono shrink-0">{err.row > 0 ? `L${err.row}` : ""}</span>
+                        <span className="text-destructive tabular-nums shrink-0">{err.row > 0 ? `Linha ${err.row}` : ""}</span>
                         <span>{err.reason}</span>
                       </div>
                     ))}
