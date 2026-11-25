@@ -1,6 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import type React from "react";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { CallableVoiceNumber } from "@/modules/communication/hooks/useVoipSession";
@@ -385,6 +386,31 @@ describe("VoiceCallButton — o acabamento do grupo", () => {
 });
 
 describe("VoiceCallButton — a escolha do número chega até a chamada", () => {
+  it("o item do menu liga pelo TorqueCalls pela sessão selecionada e fecha o menu", async () => {
+    numbers = [COMERCIAL, SUPORTE];
+    lembrar("tc-2");
+    const user = userEvent.setup();
+    render(comQueryClient(
+      <VoiceCallProvider>
+        <DropdownMenu>
+          <DropdownMenuTrigger>Opções do negócio</DropdownMenuTrigger>
+          <DropdownMenuContent>
+            <VoiceCallButton variant="menu-item" leadId="lead-do-negocio" />
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </VoiceCallProvider>,
+    ));
+
+    await user.click(screen.getByRole("button", { name: "Opções do negócio" }));
+    const item = screen.getByRole("menuitem", { name: "Ligar" });
+    expect(item).toHaveAttribute("title", "Ligar por Suporte");
+    await user.click(item);
+
+    expect(start).toHaveBeenCalledExactlyOnceWith("lead-do-negocio");
+    expect(sessaoAtual()).toBe("tc-2");
+    expect(screen.queryByRole("menuitem", { name: "Ligar" })).not.toBeInTheDocument();
+  });
+
   it("escolher outro número troca a sessão por onde a ligação sai", async () => {
     numbers = [COMERCIAL, SUPORTE];
     const user = userEvent.setup();

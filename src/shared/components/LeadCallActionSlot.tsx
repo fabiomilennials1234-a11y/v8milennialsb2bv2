@@ -21,6 +21,7 @@ import { createContext, useContext, type ReactNode } from "react";
 export interface LeadCallActionTarget {
   id: string;
   nome: string | null;
+  variant?: "icon" | "menu-item";
 }
 
 export type LeadCallActionRenderer = (lead: LeadCallActionTarget) => ReactNode;
