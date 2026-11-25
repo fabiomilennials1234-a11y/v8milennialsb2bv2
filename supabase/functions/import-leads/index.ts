@@ -286,11 +286,6 @@ function resolveStageFromName(
   return defaultStageKey;
 }
 
-function truncateErr(msg: string | undefined | null, max = 200): string {
-  if (!msg) return "erro desconhecido";
-  return msg.length <= max ? msg : `${msg.slice(0, max)}…`;
-}
-
 function resolveSellerToId(
   sellerName: string | undefined,
   members: { id: string; name: string }[],
@@ -872,7 +867,7 @@ async function importToPipeline(
         // erro HTTP — cada linha sai rejeitada com a explicação de como ativar.
         for (let i = 0; i < leads.length; i++) {
           report.rejected++;
-          report.errors.push({ row: i + 1, reason: motivoFalhaDeFunil("no_pipeline", legacyFunnelLabel) });
+          report.errors.push({ row: reportRow(leads[i], i), reason: motivoFalhaDeFunil("no_pipeline", legacyFunnelLabel) });
         }
         return;
       }
@@ -1162,11 +1157,11 @@ async function importToPipeline(
               const ok = await updatePipeEntryById(supabase, currentEntry.id, entryUpdates);
               if (!ok) {
                 report.rejected++;
-                report.errors.push({ row: rowIndex + 1, reason: motivoFalhaDeFunil("write_failed", funnelLabel) });
+                report.errors.push({ row: rowNumber, reason: motivoFalhaDeFunil("write_failed", funnelLabel) });
                 continue;
               }
             }
-            if (formattedPhone) processedPhones.add(formattedPhone);
+            if (formattedPhone) processedPhones.set(formattedPhone, rowNumber);
             continue;
           }
         }
