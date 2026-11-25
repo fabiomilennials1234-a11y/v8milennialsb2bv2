@@ -58,6 +58,43 @@ describe("texto da régua: edge e prévia da tela dizem a mesma coisa", () => {
   });
 });
 
+describe("texto da régua: linhas de título se repetem por título em aberto", () => {
+  const LISTA = [
+    { vencimento: "2026-10-11", valor: 233.15, numero: "NF 10" },
+    { vencimento: "2026-10-11", valor: "69.97", numero: null },
+  ];
+  const vars = { primeiro_nome: "Joana", valor: 303.12, vencimento: "2026-10-11", titulos: 2, lista_titulos: LISTA };
+  const casos: [string, string, Record<string, unknown>][] = [
+    // O formato que o cliente pediu: bloco de duas linhas, um por título.
+    [
+      "Dados dos Documentos:\n\nVencimento: {titulo_vencimento}\n• Valor de: {titulo_valor}\n\nAgradecemos a parceria!",
+      "Dados dos Documentos:\n\nVencimento: 11/10/2026\n• Valor de: R$ 233,15\n\nVencimento: 11/10/2026\n• Valor de: R$ 69,97\n\nAgradecemos a parceria!",
+      vars,
+    ],
+    // Uma linha vira lista; variável do caso dentro da linha segue valendo.
+    ["Títulos:\n• {titulo_vencimento}: {titulo_valor} ({primeiro_nome})\nTotal: {valor}",
+      "Títulos:\n• 11/10/2026: R$ 233,15 (Joana)\n• 11/10/2026: R$ 69,97 (Joana)\nTotal: R$ 303,12", vars],
+    // Título sem número: a linha só com o número some naquele título.
+    ["{titulo_numero}\n{titulo_vencimento}", "NF 10\n11/10/2026\n\n11/10/2026", vars],
+    // {titulos} é a contagem, não marca linha de título.
+    ["São {titulos} títulos.", "São 2 títulos.", vars],
+    // Sem título em aberto (ou edge/banco sem a lista): o bloco some, o resto fica.
+    ["A\nVencimento: {titulo_vencimento}\nB", "A\nB", { ...vars, lista_titulos: [] }],
+    ["A\nVencimento: {titulo_vencimento}\nB", "A\nB", { primeiro_nome: "Joana" }],
+    // Lista cortada pelo banco (20): fecha com quantos ficaram de fora.
+    ["• {titulo_valor}", "• R$ 233,15\n• R$ 69,97\nE mais 21 títulos em aberto.", { ...vars, titulos: 23 }],
+    ["V: {titulo_vencimento}\nR: {titulo_valor}",
+      "V: 11/10/2026\nR: R$ 233,15\n\nV: 11/10/2026\nR: R$ 69,97\n\nE mais 1 título em aberto.", { ...vars, titulos: 3 }],
+  ];
+  it.each(casos)("%j", (modelo, esperado, v) => {
+    expect(renderEdge(modelo, v)).toBe(esperado);
+    expect(renderFront(modelo, v)).toBe(esperado);
+  });
+  it("variáveis de título são conhecidas", () => {
+    expect(variaveisDesconhecidas("{titulo_vencimento} {titulo_valor} {titulo_numero} {titulo_juros}")).toEqual(["titulo_juros"]);
+  });
+});
+
 describe("laço da régua", () => {
   const RESERVADO: EnvioReservado = {
     envio_id: "e-1", organization_id: "org", instancia_id: "inst", telefone: "5548999990001",

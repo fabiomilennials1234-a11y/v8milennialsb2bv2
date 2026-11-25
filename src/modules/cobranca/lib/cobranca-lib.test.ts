@@ -285,6 +285,13 @@ describe("colunas da régua", () => {
     expect(variaveisDesconhecidas("até {prazo_data} às {prazo_horario}")).toEqual([]);
   });
 
+  it("a prévia do editor lista os títulos do exemplo, que somam o {valor}", () => {
+    const v = variaveisDeExemplo(null);
+    expect(renderizarMensagem("Total {valor}\n{titulo_numero}: {titulo_vencimento} · {titulo_valor}", v)).toBe(
+      "Total R$ 1.840,50\nNF 4821: 05/10/2026 · R$ 1.380,50\nNF 4907: 20/10/2026 · R$ 460,00",
+    );
+  });
+
   it("tipo da coluna: dias, pausa (mesmo com dias, como o Jurídico) e entrada", () => {
     expect(tipoDaColuna({ pausaRegua: false, entradaDias: 7 })).toBe("dias");
     expect(tipoDaColuna({ pausaRegua: true, entradaDias: 60 })).toBe("pausa");
