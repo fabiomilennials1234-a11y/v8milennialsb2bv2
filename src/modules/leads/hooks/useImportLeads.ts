@@ -6,6 +6,7 @@ import { useOrganization } from "@/modules/identity";
 import { withNameFallback } from "../lib/import-name";
 import { parsePhoneCell } from "../lib/import-phones";
 import { isBlankRow, markSourceRow, sourceRowOf } from "../lib/import-source-row";
+import { countDuplicates, type ImportReportError } from "../lib/import-errors";
 /** Campos conhecidos do sistema (leads + UTM + funil). Custom fields são passados separadamente. */
 export const KNOWN_LEAD_FIELDS = [
   "name",
@@ -295,7 +296,7 @@ export interface EdgeFunctionReport {
   rejected: number;
   /** Leads importados sem telefone e sem email. */
   incomplete?: number;
-  errors: { row: number; reason: string }[];
+  errors: ImportReportError[];
   distribution?: Record<string, number>;
   /** Presente quando o import levou etiquetas. */
   tags?: { leads: number; failed: number };
@@ -1263,8 +1264,7 @@ export function useImportLeads() {
 
       setLastReport(report);
 
-      const duplicatePattern = /duplicado|ja existe|já existe|sem dados novos/i;
-      const duplicatesCount = report.errors.filter((e) => duplicatePattern.test(e.reason)).length;
+      const duplicatesCount = countDuplicates(report.errors);
       const invalidCount = report.rejected - duplicatesCount;
 
       const result: ImportResult = {
@@ -1325,8 +1325,7 @@ export function useImportLeads() {
 
       setLastReport(report);
 
-      const duplicatePatternFunnel = /duplicado|ja existe|já existe|sem dados novos/i;
-      const duplicatesFunnel = report.errors.filter((e) => duplicatePatternFunnel.test(e.reason)).length;
+      const duplicatesFunnel = countDuplicates(report.errors);
       const invalidFunnel = report.rejected - duplicatesFunnel;
 
       const funnelResult: ImportFunnelResult = {
@@ -1381,8 +1380,7 @@ export function useImportLeads() {
 
       setLastReport(report);
 
-      const duplicatePattern = /duplicado|ja existe|já existe|sem dados novos/i;
-      const duplicates = report.errors.filter((e) => duplicatePattern.test(e.reason)).length;
+      const duplicates = countDuplicates(report.errors);
       const invalid = report.rejected - duplicates;
 
       const importResult: ImportFunnelResult = {
@@ -1446,8 +1444,7 @@ export function useImportLeads() {
 
       setLastReport(report);
 
-      const duplicatePattern = /duplicado|ja existe|já existe|sem dados novos/i;
-      const duplicates = report.errors.filter((e) => duplicatePattern.test(e.reason)).length;
+      const duplicates = countDuplicates(report.errors);
       const invalid = report.rejected - duplicates;
 
       const importResult: ImportFunnelResult = {
@@ -1511,8 +1508,7 @@ export function useImportLeads() {
 
       setLastReport(report);
 
-      const duplicatePattern = /duplicado|ja existe|já existe|sem dados novos/i;
-      const duplicates = report.errors.filter((e) => duplicatePattern.test(e.reason)).length;
+      const duplicates = countDuplicates(report.errors);
       const invalid = report.rejected - duplicates;
 
       const importResult: ImportFunnelResult = {

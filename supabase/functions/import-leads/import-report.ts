@@ -25,14 +25,18 @@ export function reportRow(lead: { source_row?: number }, index: number): number 
  * telefone vira "já existe" (com o nome de quem segura o número, quando dá para achar);
  * o resto segue como erro truncado.
  */
+/** O INSERT bateu no índice único do telefone (outro lead vivo já é dono do número). */
+export function isPhoneUniqueViolation(err: { message?: string; code?: string }): boolean {
+  return err.code === "23505" || /idx_leads_org_phone_unique/.test(err.message ?? "");
+}
+
 export async function motivoFalhaDeInsercao(
   supabase: SupabaseClient,
   organizationId: string,
   err: { message?: string; code?: string },
   phone: string | undefined,
 ): Promise<string> {
-  const unique = err.code === "23505" || /idx_leads_org_phone_unique/.test(err.message ?? "");
-  if (!unique) return `Erro ao inserir lead: ${truncateErr(err.message)}`;
+  if (!isPhoneUniqueViolation(err)) return `Erro ao inserir lead: ${truncateErr(err.message)}`;
   try {
     if (phone) {
       // Cliente sem tipos do banco: a assinatura de rpc() chega como `undefined`.
