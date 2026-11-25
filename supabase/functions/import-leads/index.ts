@@ -34,7 +34,15 @@ import { unauthorizedResponse } from "../_shared/auth.ts";
 import { applyImportTags, resolveImportTagIds, type ImportTagsReport } from "./import-tags.ts";
 import { withNameFallback } from "./import-name.ts";
 import { extraPhonesOf, parsePhoneCell, saveExtraPhones } from "./import-phones.ts";
-import { motivoFalhaDeInsercao, reportRow } from "./import-report.ts";
+import { isPhoneUniqueViolation, motivoFalhaDeInsercao, reportRow } from "./import-report.ts";
+import {
+  erpClientReason,
+  type ExistingLead,
+  fieldsToFill,
+  findExistingLeads,
+  isErpClient,
+  phoneKey,
+} from "./import-match.ts";
 
 /**
  * Explica, na linha do relatório de importação, por que a linha não entrou no funil.
@@ -139,6 +147,18 @@ interface ImportPayload {
   tag_ids?: unknown;
 }
 
+/**
+ * Por que a linha não entrou. A tela conta "duplicados" por aqui; antes contava por
+ * regex no texto do motivo, que quebrava a cada frase nova.
+ */
+type ImportErrorKind = "duplicado" | "ja_cadastrado" | "invalido" | "falha";
+
+interface ImportError {
+  row: number;
+  reason: string;
+  kind?: ImportErrorKind;
+}
+
 interface ImportReport {
   total: number;
   created: number;
@@ -146,7 +166,7 @@ interface ImportReport {
   rejected: number;
   /** Leads importados sem telefone e sem email (são criados, mas marcados como incompletos). */
   incomplete: number;
-  errors: { row: number; reason: string }[];
+  errors: ImportError[];
   distribution?: Record<string, number>;
   tags?: ImportTagsReport;
   /** Telefones extras da planilha gravados em `lead_phones`. Presente só quando alguma linha trouxe mais de um número. */
@@ -193,6 +213,8 @@ async function applyCustomFields(
   leadId: string,
   customFields: Record<string, string> | undefined,
   fieldMap: Map<string, string>,
+  /** `fill`: lead que já existia — grava só o campo que ainda não tem valor. */
+  mode: "replace" | "fill" = "replace",
 ): Promise<void> {
   if (!customFields || fieldMap.size === 0) return;
   const rows: { lead_id: string; field_id: string; value: string }[] = [];
@@ -206,7 +228,7 @@ async function applyCustomFields(
   if (rows.length === 0) return;
   const { error } = await supabase
     .from("lead_custom_field_values")
-    .upsert(rows, { onConflict: "lead_id,field_id" });
+    .upsert(rows, { onConflict: "lead_id,field_id", ignoreDuplicates: mode === "fill" });
   if (error) {
     console.error("[import-leads] applyCustomFields falhou", { leadId, error: error.message });
   }
@@ -344,35 +366,6 @@ function normalizeFaturamento(value: string): string {
   return normalized;
 }
 
-function isEmptyLike(v: string | null | undefined): boolean {
-  if (!v) return true;
-  const t = v.trim();
-  if (!t) return true;
-  return /^(?:-+|n\/a|na|nao informado|não informado|sem info|sem informação|0)$/i.test(t);
-}
-
-function shouldReplaceValue(
-  existingValue: string | null | undefined,
-  incomingValue: string | undefined,
-  field: "name" | "company" | "email" | "phone" | "faturamento" | "segment" | "utm",
-): boolean {
-  if (!incomingValue?.trim()) return false;
-  if (isEmptyLike(existingValue)) return true;
-
-  const existing = (existingValue || "").trim();
-  const incoming = incomingValue.trim();
-  if (existing === incoming) return false;
-
-  if (field === "email") return !existing.includes("@") && incoming.includes("@");
-  if (field === "phone") return existing.replace(/\D/g, "").length < incoming.replace(/\D/g, "").length;
-  if (field === "faturamento") {
-    const eDigits = existing.replace(/\D/g, "").length;
-    const iDigits = incoming.replace(/\D/g, "").length;
-    return iDigits > eDigits || incoming.length > existing.length;
-  }
-  return incoming.length > existing.length;
-}
-
 const KOMMO_BLOCK_START = "--- Kommo (campos) ---";
 const KOMMO_BLOCK_END = "--- /Kommo (campos) ---";
 
@@ -457,30 +450,13 @@ async function importToCampaign(
 
   const customFieldMap = await loadCustomFieldMap(supabase, organizationId);
 
-  // Pre-fetch existing leads by phone for dedup
-  const phones = leads.filter((l) => l.phone).map((l) => formatPhone(l.phone!));
-  const { data: existingLeads } = await supabase
-    .from("leads")
-    .select("id, phone, name, company, email, faturamento, segment, notes, rating, utm_campaign, utm_source, utm_medium, utm_content, utm_term")
-    .eq("organization_id", organizationId)
-    .in("phone", phones);
-
-  const existingMap = new Map<string, NonNullable<typeof existingLeads>[number]>();
-  existingLeads?.forEach((l) => { if (l.phone) existingMap.set(l.phone, l); });
-
-  // Pre-fetch existing leads by email for leads without phone
-  const emailsOnly = leads
-    .filter((l) => !l.phone && l.email)
-    .map((l) => l.email!.toLowerCase().trim());
-  const existingEmailMap = new Map<string, NonNullable<typeof existingLeads>[number]>();
-  if (emailsOnly.length > 0) {
-    const { data: existingByEmail } = await supabase
-      .from("leads")
-      .select("id, phone, name, company, email, faturamento, segment, notes, rating, utm_campaign, utm_source, utm_medium, utm_content, utm_term")
-      .eq("organization_id", organizationId)
-      .in("email", emailsOnly);
-    existingByEmail?.forEach((l) => { if (l.email) existingEmailMap.set(l.email.toLowerCase(), l); });
-  }
+  // Quem já existe: telefone normalizado (principal e extras); email para quem não tem telefone.
+  const existing = await findExistingLeads(
+    supabase,
+    organizationId,
+    leads.map((l) => (l.phone ? formatPhone(l.phone) : null)),
+    leads.filter((l) => !l.phone).map((l) => l.email),
+  );
 
   // Create/get import tag
   const now = new Date();
@@ -515,11 +491,12 @@ async function importToCampaign(
       const rowIndex = leads.indexOf(lead);
       const rowNumber = reportRow(lead, rowIndex);
       const formattedPhone = lead.phone ? formatPhone(lead.phone) : undefined;
+      const phoneId = phoneKey(formattedPhone);
 
       // Skip dups within this import
-      if (formattedPhone && processedPhones.has(formattedPhone)) {
+      if (phoneId && processedPhones.has(phoneId)) {
         report.rejected++;
-        report.errors.push({ row: rowNumber, reason: `Telefone duplicado neste arquivo (mesmo número da linha ${processedPhones.get(formattedPhone)})` });
+        report.errors.push({ row: rowNumber, reason: `Telefone duplicado neste arquivo (mesmo número da linha ${processedPhones.get(phoneId)})`, kind: "duplicado" });
         continue;
       }
 
@@ -528,39 +505,44 @@ async function importToCampaign(
           ? resolveStageFromName(lead.stage, campaignStages.map((s) => ({ stage_key: s.id, name: s.name })), stageId)
           : stageId;
 
-      const existingLead = formattedPhone
-        ? existingMap.get(formattedPhone)
+      const existingLead: ExistingLead | null | undefined = phoneId
+        ? existing.byPhone.get(phoneId)
         : lead.email
-          ? existingEmailMap.get(lead.email.toLowerCase().trim())
+          ? existing.byEmail.get(lead.email.toLowerCase().trim())
           : null;
 
       try {
         if (existingLead) {
-          // Update existing lead with better data
-          const updates: Record<string, unknown> = {};
-          if (shouldReplaceValue(existingLead.name, lead.name, "name")) updates.name = lead.name;
-          if (shouldReplaceValue(existingLead.company, lead.company, "company")) updates.company = lead.company;
-          if (shouldReplaceValue(existingLead.email, lead.email, "email")) updates.email = lead.email;
-          if (shouldReplaceValue(existingLead.phone, formattedPhone, "phone")) updates.phone = formattedPhone;
-          if (shouldReplaceValue(existingLead.faturamento, lead.faturamento ? normalizeFaturamento(lead.faturamento) : undefined, "faturamento"))
-            updates.faturamento = normalizeFaturamento(lead.faturamento!);
-          if (shouldReplaceValue(existingLead.segment, lead.segment, "segment")) updates.segment = lead.segment;
-          if (shouldReplaceValue((existingLead as any).utm_campaign, lead.utm_campaign, "utm")) updates.utm_campaign = lead.utm_campaign;
-          if (shouldReplaceValue((existingLead as any).utm_source, lead.utm_source, "utm")) updates.utm_source = lead.utm_source;
-          if (shouldReplaceValue((existingLead as any).utm_medium, lead.utm_medium, "utm")) updates.utm_medium = lead.utm_medium;
-          if (shouldReplaceValue((existingLead as any).utm_content, lead.utm_content, "utm")) updates.utm_content = lead.utm_content;
-          if (shouldReplaceValue((existingLead as any).utm_term, lead.utm_term, "utm")) updates.utm_term = lead.utm_term;
-          if (lead.rating && (!existingLead.rating || existingLead.rating < lead.rating)) updates.rating = lead.rating;
-
-          const mergedNotes = mergeNotes(existingLead.notes, lead.notes, lead.kommoBlock);
-          if (mergedNotes && mergedNotes !== (existingLead.notes || "")) updates.notes = mergedNotes;
+          const erpClient = isErpClient(existingLead);
+          // Só completa o que está vazio; cliente do ERP não recebe nada.
+          const updates = fieldsToFill(existingLead, {
+            name: lead.name,
+            company: lead.company,
+            email: lead.email,
+            faturamento: lead.faturamento ? normalizeFaturamento(lead.faturamento) : undefined,
+            segment: lead.segment,
+            rating: lead.rating,
+            utm_campaign: lead.utm_campaign,
+            utm_source: lead.utm_source,
+            utm_medium: lead.utm_medium,
+            utm_content: lead.utm_content,
+            utm_term: lead.utm_term,
+          });
+          if (!erpClient) {
+            const mergedNotes = mergeNotes(existingLead.notes, lead.notes, lead.kommoBlock);
+            if (mergedNotes && mergedNotes !== (existingLead.notes || "")) updates.notes = mergedNotes;
+          }
 
           if (Object.keys(updates).length > 0) {
             await supabase.from("leads").update(updates).eq("id", existingLead.id);
             report.updated++;
           } else {
             report.rejected++;
-            report.errors.push({ row: rowNumber, reason: "Lead já existe sem dados novos para atualizar" });
+            report.errors.push({
+              row: rowNumber,
+              reason: erpClient ? erpClientReason(existingLead) : "Lead já existe sem dados novos para atualizar",
+              kind: "ja_cadastrado",
+            });
           }
 
           // Add to campaign if not already there
@@ -592,7 +574,8 @@ async function importToCampaign(
             if (responsibleId) leadUpdates.responsible_id = responsibleId;
             if (assignedSdrId) leadUpdates.pre_sale_responsible_id = assignedSdrId;
             if (assignedCloserId) leadUpdates.sale_responsible_id = assignedCloserId;
-            if (Object.keys(leadUpdates).length > 0) {
+            // O responsável de cliente do ERP é do ERP; a campanha guarda o seu.
+            if (!erpClient && Object.keys(leadUpdates).length > 0) {
               await supabase.from("leads").update(leadUpdates).eq("id", existingLead.id);
             }
 
@@ -604,10 +587,12 @@ async function importToCampaign(
             }
           }
 
-          await applyCustomFields(supabase, existingLead.id, lead.customFields, customFieldMap);
-          await importExtraPhones(supabase, report, organizationId, existingLead.id, lead);
+          if (!erpClient) {
+            await applyCustomFields(supabase, existingLead.id, lead.customFields, customFieldMap, "fill");
+            await importExtraPhones(supabase, report, organizationId, existingLead.id, lead);
+          }
           importedLeadIds.add(existingLead.id);
-          if (formattedPhone) processedPhones.set(formattedPhone, rowNumber);
+          if (phoneId) processedPhones.set(phoneId, rowNumber);
           continue;
         }
 
@@ -636,7 +621,11 @@ async function importToCampaign(
 
         if (leadError) {
           report.rejected++;
-          report.errors.push({ row: rowNumber, reason: await motivoFalhaDeInsercao(supabase, organizationId, leadError, formattedPhone) });
+          report.errors.push({
+            row: rowNumber,
+            reason: await motivoFalhaDeInsercao(supabase, organizationId, leadError, formattedPhone),
+            kind: isPhoneUniqueViolation(leadError) ? "ja_cadastrado" : "falha",
+          });
           continue;
         }
 
@@ -672,7 +661,7 @@ async function importToCampaign(
         await applyCustomFields(supabase, newLead.id, lead.customFields, customFieldMap);
         await importExtraPhones(supabase, report, organizationId, newLead.id, lead);
         importedLeadIds.add(newLead.id);
-        if (formattedPhone) processedPhones.set(formattedPhone, rowNumber);
+        if (phoneId) processedPhones.set(phoneId, rowNumber);
 
         report.created++;
         createdLeadIds.push(newLead.id);
@@ -943,28 +932,13 @@ async function importToPipeline(
     productsForPropostas = (productsFromDb || []).map((p: any) => ({ id: p.id, name: p.name || "" }));
   }
 
-  // ── 4. Pré-carrega leads existentes (telefone; email pra quem não tem) ─────
-  const phones = leads.filter((l) => l.phone).map((l) => formatPhone(l.phone!));
-  const existingMap = new Map<string, any>();
-  if (phones.length > 0) {
-    const { data: existingLeads } = await supabase
-      .from("leads")
-      .select("id, phone, name, company, email, faturamento, segment, notes, rating, utm_campaign, utm_source, utm_medium, utm_content, utm_term")
-      .eq("organization_id", organizationId)
-      .in("phone", phones);
-    existingLeads?.forEach((l: any) => { if (l.phone) existingMap.set(l.phone, l); });
-  }
-
-  const emailsOnly = leads.filter((l) => !l.phone && l.email).map((l) => l.email!.toLowerCase().trim());
-  const existingEmailMap = new Map<string, any>();
-  if (emailsOnly.length > 0) {
-    const { data: existingByEmail } = await supabase
-      .from("leads")
-      .select("id, phone, name, company, email, faturamento, segment, notes, rating, utm_campaign, utm_source, utm_medium, utm_content, utm_term")
-      .eq("organization_id", organizationId)
-      .in("email", emailsOnly);
-    existingByEmail?.forEach((l: any) => { if (l.email) existingEmailMap.set(l.email.toLowerCase(), l); });
-  }
+  // ── 4. Quem já existe: telefone normalizado (principal e extras); email pra quem não tem ─
+  const existing = await findExistingLeads(
+    supabase,
+    organizationId,
+    leads.map((l) => (l.phone ? formatPhone(l.phone) : null)),
+    leads.filter((l) => !l.phone).map((l) => l.email),
+  );
 
   /** Telefone já processado nesta execução → linha da planilha que o trouxe primeiro. */
   const processedPhones = new Map<string, number>();
@@ -979,18 +953,20 @@ async function importToPipeline(
       const rowIndex = leads.indexOf(lead);
       const rowNumber = reportRow(lead, rowIndex);
       const formattedPhone = lead.phone ? formatPhone(lead.phone) : undefined;
+      const phoneId = phoneKey(formattedPhone);
 
-      if (formattedPhone && processedPhones.has(formattedPhone)) {
+      if (phoneId && processedPhones.has(phoneId)) {
         report.rejected++;
-        report.errors.push({ row: rowNumber, reason: `Telefone duplicado neste arquivo (mesmo número da linha ${processedPhones.get(formattedPhone)})` });
+        report.errors.push({ row: rowNumber, reason: `Telefone duplicado neste arquivo (mesmo número da linha ${processedPhones.get(phoneId)})`, kind: "duplicado" });
         continue;
       }
 
-      const existingLead = formattedPhone
-        ? existingMap.get(formattedPhone)
+      const existingLead: ExistingLead | null | undefined = phoneId
+        ? existing.byPhone.get(phoneId)
         : lead.email
-          ? existingEmailMap.get(lead.email.toLowerCase().trim())
+          ? existing.byEmail.get(lead.email.toLowerCase().trim())
           : null;
+      const erpClient = !!existingLead && isErpClient(existingLead);
 
       try {
         let leadId: string;
@@ -998,22 +974,26 @@ async function importToPipeline(
 
         if (existingLead) {
           leadId = existingLead.id;
-          const updates: Record<string, unknown> = {};
-          if (shouldReplaceValue(existingLead.name, lead.name, "name")) updates.name = lead.name;
-          if (shouldReplaceValue(existingLead.company, lead.company, "company")) updates.company = lead.company;
-          if (shouldReplaceValue(existingLead.email, lead.email, "email")) updates.email = lead.email;
-          if (shouldReplaceValue(existingLead.phone, formattedPhone, "phone")) updates.phone = formattedPhone;
-          if (shouldReplaceValue(existingLead.faturamento, lead.faturamento ? normalizeFaturamento(lead.faturamento) : undefined, "faturamento"))
-            updates.faturamento = normalizeFaturamento(lead.faturamento!);
-          if (shouldReplaceValue(existingLead.segment, lead.segment, "segment")) updates.segment = lead.segment;
-          if (metricsPeriodAt != null) updates.metrics_period_at = metricsPeriodAt;
+          // Só completa o que está vazio; cliente do ERP não recebe nada (nem o período de métricas).
+          const updates = fieldsToFill(existingLead, {
+            name: lead.name,
+            company: lead.company,
+            email: lead.email,
+            faturamento: lead.faturamento ? normalizeFaturamento(lead.faturamento) : undefined,
+            segment: lead.segment,
+          });
+          if (!erpClient && metricsPeriodAt != null) updates.metrics_period_at = metricsPeriodAt;
 
           if (Object.keys(updates).length > 0) {
             await supabase.from("leads").update(updates).eq("id", existingLead.id);
             report.updated++;
           } else {
             report.rejected++;
-            report.errors.push({ row: rowNumber, reason: "Lead já existe sem dados novos para atualizar" });
+            report.errors.push({
+              row: rowNumber,
+              reason: erpClient ? erpClientReason(existingLead) : "Lead já existe sem dados novos para atualizar",
+              kind: "ja_cadastrado",
+            });
           }
         } else {
           const leadInsert: Record<string, unknown> = {
@@ -1040,7 +1020,11 @@ async function importToPipeline(
 
           if (leadError) {
             report.rejected++;
-            report.errors.push({ row: rowNumber, reason: await motivoFalhaDeInsercao(supabase, organizationId, leadError, formattedPhone) });
+            report.errors.push({
+            row: rowNumber,
+            reason: await motivoFalhaDeInsercao(supabase, organizationId, leadError, formattedPhone),
+            kind: isPhoneUniqueViolation(leadError) ? "ja_cadastrado" : "falha",
+          });
             continue;
           }
           leadId = newLead.id;
@@ -1049,9 +1033,12 @@ async function importToPipeline(
           createdLeadIds.push(newLead.id);
         }
 
-        // Campos personalizados → lead_custom_field_values (upsert por lead+field)
-        await applyCustomFields(supabase, leadId, lead.customFields, customFieldMap);
-        await importExtraPhones(supabase, report, organizationId, leadId, lead);
+        // Campos personalizados → lead_custom_field_values. Lead que já existia só
+        // ganha o campo que não tinha; cliente do ERP não ganha nada.
+        if (!erpClient) {
+          await applyCustomFields(supabase, leadId, lead.customFields, customFieldMap, leadWasCreated ? "replace" : "fill");
+          await importExtraPhones(supabase, report, organizationId, leadId, lead);
+        }
         importedLeadIds.add(leadId);
 
         // Etapa da linha (coluna Etapa da planilha) → stage_key
@@ -1082,7 +1069,8 @@ async function importToPipeline(
           if (sdrIdForLead) leadUpdates.pre_sale_responsible_id = sdrIdForLead;
           if (closerIdForLead) leadUpdates.sale_responsible_id = closerIdForLead;
         }
-        if (Object.keys(leadUpdates).length > 0) {
+        // O responsável de cliente do ERP é do ERP; o card do funil guarda o vendedor escolhido.
+        if (!erpClient && Object.keys(leadUpdates).length > 0) {
           await supabase.from("leads").update(leadUpdates).eq("id", leadId);
         }
 
@@ -1134,7 +1122,7 @@ async function importToPipeline(
         // SEM FUNIL: acabou aqui. A pessoa está cadastrada, com vendedor e
         // campos personalizados; nenhum negócio foi aberto em nome dela.
         if (semFunil) {
-          if (formattedPhone) processedPhones.set(formattedPhone, rowNumber);
+          if (phoneId) processedPhones.set(phoneId, rowNumber);
           continue;
         }
 
@@ -1161,7 +1149,7 @@ async function importToPipeline(
                 continue;
               }
             }
-            if (formattedPhone) processedPhones.set(formattedPhone, rowNumber);
+            if (phoneId) processedPhones.set(phoneId, rowNumber);
             continue;
           }
         }
@@ -1201,7 +1189,7 @@ async function importToPipeline(
           await supabase.from("pipe_proposta_items").insert(itemsToInsert);
         }
 
-        if (formattedPhone) processedPhones.set(formattedPhone, rowNumber);
+        if (phoneId) processedPhones.set(phoneId, rowNumber);
       } catch (err) {
         report.rejected++;
         report.errors.push({ row: rowNumber, reason: `Erro inesperado: ${(err as Error).message}` });
@@ -1346,7 +1334,7 @@ Deno.serve(
       const validationError = validateLead(body.leads[i], i);
       if (validationError) {
         report.rejected++;
-        report.errors.push({ row: reportRow(body.leads[i], i), reason: validationError });
+        report.errors.push({ row: reportRow(body.leads[i], i), reason: validationError, kind: "invalido" });
       } else {
         if (isIncomplete(body.leads[i])) report.incomplete++;
         validLeads.push(body.leads[i]);
