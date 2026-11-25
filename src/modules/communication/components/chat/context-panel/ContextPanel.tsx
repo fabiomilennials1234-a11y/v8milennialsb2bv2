@@ -16,7 +16,8 @@
  */
 import { useMemo, useState, type ReactNode } from "react";
 import { ArrowUpRight, Building2, Loader2 } from "lucide-react";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { useContactAvatarUrl } from "@/modules/communication/hooks/chat/useContactAvatarUrl";
 import { FocusCard, FocusTile } from "@/components/ui/bento";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -68,6 +69,12 @@ export interface ContextPanelProps {
    * e o painel é byte a byte o de sempre.
    */
   identitySlot?: ReactNode;
+  /**
+   * Foto do contato (Uazapi). `false` no canal oficial/NotificaMe: o painel é
+   * o mesmo, mas a foto é só do canal Uazapi — mostrar ali seria foto de outro
+   * canal. Default `true` (caixa Uazapi).
+   */
+  fotoDoContato?: boolean;
 }
 
 export type ContextPanelTab = "info" | "history" | "ai";
@@ -80,6 +87,7 @@ export function ContextPanel({
   ehGrupo = false,
   placeholder,
   identitySlot,
+  fotoDoContato: comFoto = true,
 }: ContextPanelProps) {
   const [activeTab, setActiveTab] = useState<ContextPanelTab>("info");
   const { data: leadByPhone, isLoading: loadingByPhone } = useLeadByPhone(
@@ -98,6 +106,9 @@ export function ContextPanel({
   const leadLoading = loadingByPhone || loadingById;
   const activeLeadId = lead?.id ?? leadId ?? null;
   const [fichaAberta, setFichaAberta] = useState(false);
+  // Foto do contato (Uazapi). Hook antes dos retornos antecipados; grupo,
+  // canal oficial e conversa sem telefone (Instagram) não consultam.
+  const fotoDoContato = useContactAvatarUrl(ehGrupo || !comFoto ? null : phoneNumber ?? null);
 
   // O Negócio do bloco de ouro (CTO, P8a): a MESMA leitura da ficha do lead
   // (`useLeadsDeals`), só leitura. Hook antes dos retornos antecipados.
@@ -168,6 +179,14 @@ export function ContextPanel({
       <FocusCard className="m-3 mb-0 shrink-0 gap-3 p-4">
         <div className="flex items-center gap-3">
           <Avatar className="h-11 w-11 shrink-0">
+            {fotoDoContato && (
+              <AvatarImage
+                src={fotoDoContato}
+                alt=""
+                referrerPolicy="no-referrer"
+                className="animate-in fade-in-0 duration-300 motion-reduce:animate-none"
+              />
+            )}
             <AvatarFallback className="bg-primary-foreground/10 text-base font-bold text-primary-foreground">
               {initials}
             </AvatarFallback>

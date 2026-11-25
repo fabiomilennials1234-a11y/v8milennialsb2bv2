@@ -6,6 +6,7 @@ import {
   mergeUazapiReaction,
   type UazapiMessageEdit,
 } from "../_shared/uazapi-event.ts";
+import { scheduleContactAvatarCandidate } from "../_shared/contact-avatar-schedule.ts";
 import { storedUazapiConnectionState } from "../_shared/uazapi-connection-state.ts";
 import { messageTimestamp } from "./message-timestamp.ts";
 import { recordQuotePresentation, completeQuotePresentations } from "../_shared/quotes/presentation.ts";
@@ -2034,6 +2035,7 @@ export function createWhatsAppWebhookHandler(options: WhatsAppWebhookOptions = {
             case "messages": {
               const msgData = uazapiEventMessage(payload);
               await handleMessagesEvent(supabase, instance, msgData, replaySource);
+              scheduleContactAvatarCandidate(supabase, instance, payload);
               break;
             }
             case "messages_update": {

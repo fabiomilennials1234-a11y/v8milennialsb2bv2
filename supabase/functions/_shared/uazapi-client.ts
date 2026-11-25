@@ -423,6 +423,19 @@ export class UazapiClient {
     return this.request<UazapiNumberCheck[]>("POST", "/chat/check", { numbers });
   }
 
+  /**
+   * Detalhes do chat (POST /chat/details). Usado SÓ pelo cron da foto do
+   * contato quando a URL do webhook venceu — teto de chamadas por rodada e por
+   * caixa fica no chamador (risco de ban). Sem retry: uma tentativa por rodada.
+   * Formato da resposta não verificado em produção: devolve o corpo cru e quem
+   * lê (`extractDetailsImageUrl`) é tolerante.
+   */
+  async chatDetails(number: string, preview = true): Promise<unknown> {
+    const digits = number?.replace(/\D/g, "") ?? "";
+    if (!/^\d{8,15}$/.test(digits)) throw new Error("A valid phone number is required");
+    return this.request<unknown>("POST", "/chat/details", { number: digits, preview }, { noRetry: true, timeoutMs: 8_000 });
+  }
+
   // =========================================================================
   // Group
   // =========================================================================

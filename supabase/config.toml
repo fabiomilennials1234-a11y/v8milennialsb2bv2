@@ -432,6 +432,9 @@ verify_jwt = false
 # whatsapp-media-retry: drena whatsapp_media_jobs (CDN download + Storage upload); cron 2min; auth via x-cron-secret
 [functions.whatsapp-media-retry]
 verify_jwt = false
+# contact-avatar-sync: baixa a foto do contato (Uazapi) para o bucket privado contact-avatars; cron 2×/h; auth via x-cron-secret
+[functions.contact-avatar-sync]
+verify_jwt = false
 # whatsapp-media-retention: deleta whatsapp-media/ >30d via Storage API + marca media_expired; cron diário 04:00; auth via x-cron-secret
 # ATENÇÃO — drift: o fonte no repo usa RETENTION_DAYS=30, mas a versão rodando
 # em prod responde retention_days=90. Deployar daqui muda a janela de retenção

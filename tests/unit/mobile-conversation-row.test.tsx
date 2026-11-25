@@ -4,6 +4,8 @@ import { MobileConversationRow } from "@/modules/communication/components/chat/l
 import type { ChatContact } from "@/modules/communication/hooks/useWhatsAppChat";
 
 // Flags de nome da linha leem a org via AuthProvider, que este teste não monta.
+// Foto do contato: coberta em tests/unit/contact-avatar-surfaces.test.tsx.
+vi.mock("@/modules/communication/hooks/chat/useContactAvatarUrl", () => ({ useContactAvatarUrl: () => null }));
 vi.mock("@/modules/platform/hooks/useFeatureFlag", () => ({
   useFeatureFlag: () => ({ enabled: false }),
 }));

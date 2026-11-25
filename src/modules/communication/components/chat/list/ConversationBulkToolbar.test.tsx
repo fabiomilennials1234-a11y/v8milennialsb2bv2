@@ -11,6 +11,8 @@ import { batchContact } from "../../../../../../tests/helpers/conversationBatch"
 import { ConversationList } from "./ConversationList";
 
 const api = vi.hoisted(() => ({ upsert: vi.fn(), update: vi.fn(), eq: vi.fn(), rpc: vi.fn(), single: vi.fn(), org: "36971ff5-fd73-4f30-a733-04bf8c90e5b6" }));
+// Foto do contato: coberta em tests/unit/contact-avatar-surfaces.test.tsx.
+vi.mock("@/modules/communication/hooks/chat/useContactAvatarUrl", () => ({ useContactAvatarUrl: () => null }));
 vi.mock("@/modules/identity", () => ({ useCurrentTeamMember: () => ({ data: { organization_id: api.org } }) }));
 vi.mock("@/integrations/supabase/client", () => ({ supabase: {
   from: () => ({

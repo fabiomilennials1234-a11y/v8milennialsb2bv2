@@ -6,6 +6,8 @@ import type { ChatContact } from "@/modules/communication/hooks/chat/types";
 
 // As flags de nome (`chat_nome_do_lead`, `chat_nome_cod_contato_lead`) leem a
 // org via AuthProvider; desligadas aqui, a linha usa a regra de nome de sempre.
+// Foto do contato: coberta em tests/unit/contact-avatar-surfaces.test.tsx.
+vi.mock("@/modules/communication/hooks/chat/useContactAvatarUrl", () => ({ useContactAvatarUrl: () => null }));
 vi.mock("@/modules/platform/hooks/useFeatureFlag", () => ({
   useFeatureFlag: () => ({ enabled: false }),
 }));
