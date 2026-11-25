@@ -17,13 +17,13 @@ interface ScopeInfo {
 export const WRITE_SCOPES: Record<WriteScope, ScopeInfo> = {
   "crm:write": {
     label: "Organizar o funil",
-    does: "move cards between stages",
+    does: "move cards between stages, mark deals won/lost, add notes and follow-ups, and tag leads",
     who: "anyone allowed to move cards in Torque",
   },
   "messages:send": {
     label: "Enviar mensagens",
     does:
-      "send WhatsApp broadcasts — including a message taken from an automation — to the cards of a funnel/stage",
+      "send WhatsApp broadcasts — including a message taken from an automation — to the cards of a funnel/stage, and single messages to one lead",
     who: "an admin of the organization",
   },
   "automations:write": {
@@ -70,7 +70,9 @@ export function serverInstructions(scopes: readonly string[]): string {
       "inbox.awaiting_reply; a person → lead.list / lead.get, lead.timeline, conversation.get; " +
       "the team → team.list (ids for owner filters); automations → automation.list then " +
       "automation.get; a WhatsApp send → audience.preview.",
-    "Every change is plan → show the person → confirm. Never confirm without the person's explicit OK.",
+    "Changes that reach customers or fire automations (moves, outcomes, tags, messages, " +
+      "broadcasts) are plan → show the person → confirm; never confirm without their explicit " +
+      "OK. Notes and follow-ups are written at once — only when the person asked for them.",
   );
   return lines.join("\n");
 }

@@ -30,6 +30,15 @@ import {
   customerFunnelReviewTool,
 } from "./funnel.ts";
 import { customerLeadGetTool, customerLeadListTool, customerLeadTimelineTool } from "./lead.ts";
+import {
+  customerFollowupCompleteTool,
+  customerFollowupCreateTool,
+  customerLeadTagConfirmTool,
+  customerLeadTagPlanTool,
+  customerNoteAddTool,
+} from "./lead-write.ts";
+import { customerMessageConfirmTool, customerMessagePlanTool } from "./message.ts";
+import { customerDealOutcomeConfirmTool, customerDealOutcomePlanTool } from "./outcome.ts";
 import { customerMetricsCatalogTool, customerMetricsQueryTool } from "./metrics.ts";
 import { customerPipelineListTool, customerStageListTool } from "./pipeline.ts";
 import { customerTeamListTool } from "./team.ts";
@@ -59,6 +68,15 @@ export const CUSTOMER_TOOLS: ToolDef[] = [
   customerDealMovePlanTool,
   customerDealMoveConfirmTool,
   customerDealMoveUndoTool,
+  customerDealOutcomePlanTool,
+  customerDealOutcomeConfirmTool,
+  customerNoteAddTool,
+  customerFollowupCreateTool,
+  customerFollowupCompleteTool,
+  customerLeadTagPlanTool,
+  customerLeadTagConfirmTool,
+  customerMessagePlanTool,
+  customerMessageConfirmTool,
   customerAudiencePreviewTool,
   customerBroadcastStatusTool,
   customerBroadcastPlanTool,

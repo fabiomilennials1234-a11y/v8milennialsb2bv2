@@ -128,6 +128,19 @@ const VALID_ARGS: Record<string, Record<string, unknown>> = {
   },
   "deal.move.confirm": { confirm_token: LEAD },
   "deal.move.undo": { undo_token: LEAD },
+  "deal.outcome.plan": { items: [{ entry_id: LEAD, outcome: "won", value: 100 }] },
+  "deal.outcome.confirm": { confirm_token: LEAD },
+  "note.add": { lead_id: LEAD, text: "Pediu proposta" },
+  "followup.create": {
+    lead_id: LEAD,
+    title: "Ligar",
+    due_at: new Date(Date.now() + 3 * 86_400_000).toISOString().slice(0, 10),
+  },
+  "followup.complete": { followup_id: LEAD },
+  "lead.tag.plan": { lead_ids: [LEAD], add: ["VIP"] },
+  "lead.tag.confirm": { confirm_token: LEAD },
+  "message.plan": { lead_id: LEAD, text: "Oi {{primeiro_nome}}" },
+  "message.confirm": { confirm_token: LEAD },
   "audience.preview": { pipeline_id: LEAD, idle_days_min: 3 },
   "broadcast.status": { blast_plan_id: LEAD },
   "broadcast.plan": {
@@ -154,6 +167,15 @@ const WRITE_SCOPE: Record<string, string> = {
   "deal.move.plan": "crm:write",
   "deal.move.confirm": "crm:write",
   "deal.move.undo": "crm:write",
+  "deal.outcome.plan": "crm:write",
+  "deal.outcome.confirm": "crm:write",
+  "note.add": "crm:write",
+  "followup.create": "crm:write",
+  "followup.complete": "crm:write",
+  "lead.tag.plan": "crm:write",
+  "lead.tag.confirm": "crm:write",
+  "message.plan": "messages:send",
+  "message.confirm": "messages:send",
   "broadcast.plan": "messages:send",
   "broadcast.test": "messages:send",
   "broadcast.confirm": "messages:send",
@@ -223,6 +245,9 @@ Deno.test("surface: read tools are readonly; write tools declare a scope and are
       "broadcast.confirm",
       "broadcast.cancel",
       "automation.activate",
+      "deal.outcome.confirm",
+      "lead.tag.confirm",
+      "message.confirm",
     ]
   ) {
     assertEquals(CUSTOMER_TOOLS.find((t) => t.name === n)?.annotations?.destructiveHint, true, n);
@@ -280,9 +305,15 @@ Deno.test("isolation: every tool filters by the TOKEN org on every table and RPC
     await t.handler(VALID_ARGS[t.name], WRITE_TOOLS.has(t.name) ? writeCtx(db) : ctx(db));
     // confirm/undo with an unknown token stop at the store, before any query
     if (
-      ["deal.move.confirm", "deal.move.undo", "broadcast.confirm", "broadcast.cancel"].includes(
-        t.name,
-      )
+      [
+        "deal.move.confirm",
+        "deal.move.undo",
+        "broadcast.confirm",
+        "broadcast.cancel",
+        "deal.outcome.confirm",
+        "lead.tag.confirm",
+        "message.confirm",
+      ].includes(t.name)
     ) continue;
     assertEquals(calls.length + rpcArgs.length > 0, true, `${t.name} made no query`);
     for (const c of calls) {
@@ -295,6 +326,8 @@ Deno.test("isolation: every tool filters by the TOKEN org on every table and RPC
         if (!hasOrg) continue;
       }
       if (c.table === "blast_plan_recipients") continue;
+      // lead_tags has no organization_id: it is only touched for leads first read in the org.
+      if (c.table === "lead_tags") continue;
       // `organizations` is keyed by its own id; every other table by organization_id.
       const col = c.table === "organizations" ? "id" : "organization_id";
       const orgEq = c.chain.find(([m, a]) => m === "eq" && a[0] === col);
@@ -333,6 +366,7 @@ Deno.test("anti-bypass: the RPC allowlist is exactly the reviewed set", () => {
     get_pipeline_stage_counts_by_id: "invoker",
     get_agenda_events_scoped: "invoker",
     get_comando_fila: "invoker",
+    definir_desfecho_da_entrada: "definer:assert_org_access",
   });
 });
 

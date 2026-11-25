@@ -23,6 +23,7 @@ import type { WorkflowDefinition } from "../../_shared/workflow-schema/definitio
 import { resolveBlastMessage } from "../../_shared/quick-blast/message-resolver.ts";
 import {
   actionErrorMessage,
+  auditedWrite,
   type EdgeInvoker,
   isUuid,
   PLAN,
@@ -557,27 +558,6 @@ export const customerBroadcastPlanTool: ToolDef = {
   },
 };
 
-/** Record a one-shot write (no separate plan step) in the audit trail. */
-async function auditNow(
-  ctx: ToolContext,
-  tool: string,
-  summary: string,
-  payload: unknown,
-  run: () => Promise<{ ok: boolean; result: unknown }>,
-): Promise<{ ok: boolean; result: unknown } | { error: string }> {
-  const w = writeContext(ctx, "messages:send");
-  if (!w.ok) return { error: "sem escopo" };
-  try {
-    const { actionId } = await w.store.open(tool, "messages:send", summary, payload);
-    if (!(await w.store.take(actionId))) return { error: "Não foi possível registrar a ação." };
-    const out = await run();
-    await w.store.finish(actionId, out.ok ? "applied" : "failed", out.result);
-    return out;
-  } catch (e) {
-    return { error: actionErrorMessage(e) };
-  }
-}
-
 export const customerBroadcastTestTool: ToolDef = {
   name: "broadcast.test",
   description:
@@ -656,17 +636,24 @@ export const customerBroadcastTestTool: ToolDef = {
         },
       }
       : { action: "sendText", payload: { number, text } };
-    const out = await auditNow(ctx, "broadcast.test", `Teste de disparo para o próprio número`, {
-      instance_id: instance.id,
-      media_type: media?.type ?? null,
-    }, async () => {
-      const r = await edge("whatsapp-api-proxy", {
-        ...send,
+    const out = await auditedWrite(
+      ctx,
+      "messages:send",
+      "broadcast.test",
+      `Teste de disparo para o próprio número`,
+      {
         instance_id: instance.id,
-        organization_id: scope.orgId,
-      });
-      return { ok: r.status >= 200 && r.status < 300, result: { status: r.status } };
-    });
+        media_type: media?.type ?? null,
+      },
+      async () => {
+        const r = await edge("whatsapp-api-proxy", {
+          ...send,
+          instance_id: instance.id,
+          organization_id: scope.orgId,
+        });
+        return { ok: r.status >= 200 && r.status < 300, result: { status: r.status } };
+      },
+    );
     if ("error" in out) return errorResult(out.error);
     return out.ok
       ? jsonResult({
@@ -863,7 +850,7 @@ export const customerBroadcastCancelTool: ToolDef = {
     const edge = edgeOf(ctx);
     if (!edge) return errorResult("Indisponível neste servidor.");
     if (!isUuid(args.blast_plan_id)) return errorResult("blast_plan_id must be a UUID.");
-    const out = await auditNow(ctx, "broadcast.cancel", "Cancelar disparo", {
+    const out = await auditedWrite(ctx, "messages:send", "broadcast.cancel", "Cancelar disparo", {
       blast_plan_id: args.blast_plan_id,
     }, async () => {
       const r = await edge("blast-plan-control", { plan_id: args.blast_plan_id, action: "cancel" });

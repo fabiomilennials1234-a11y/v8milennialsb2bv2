@@ -42,6 +42,13 @@ export const RPC_ALLOWLIST = {
    * assert_org_access(p_org); only the WhatsApp numbers the caller may read are scanned.
    */
   get_comando_fila: "invoker",
+  /**
+   * DEFINER — the deal card's Won/Lost buttons. Its gate is assert_org_access(org of the
+   * card) BEFORE any write; it does NOT check that the caller sees the card nor
+   * pipeline.move_cards — deal.outcome.* reads each card under the caller's RLS in the token
+   * org and checks that permission first. Never call it with an entry id not so verified.
+   */
+  definir_desfecho_da_entrada: "definer:assert_org_access",
 } as const;
 
 export type AllowedRpc = keyof typeof RPC_ALLOWLIST;

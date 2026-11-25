@@ -82,6 +82,14 @@ SELECT ok((SELECT bool_and(has_function_privilege('authenticated', oid, 'EXECUTE
             WHERE oid IN ('public.get_agenda_events_scoped(uuid,timestamptz,timestamptz)'::regprocedure,
                           'public.get_comando_fila(uuid,uuid[],integer,integer)'::regprocedure)),
   'DEF13 agenda e fila: authenticated executa, anon não');
+SELECT ok((SELECT prosecdef FROM pg_proc WHERE oid = 'public.definir_desfecho_da_entrada(uuid,text,text,numeric)'::regprocedure),
+  'DEF14 definir_desfecho_da_entrada é DEFINER (por isso o crm-mcp lê o card sob a RLS antes de chamá-la)');
+SELECT ok((SELECT prosrc ~ 'PERFORM public\.assert_org_access\(v_org\);[\s\S]*UPDATE public\.deals'
+             FROM pg_proc WHERE oid = 'public.definir_desfecho_da_entrada(uuid,text,text,numeric)'::regprocedure),
+  'DEF15 definir_desfecho_da_entrada autoriza a org do card ANTES de escrever');
+SELECT ok(has_function_privilege('authenticated', 'public.definir_desfecho_da_entrada(uuid,text,text,numeric)', 'EXECUTE')
+      AND NOT has_function_privilege('anon', 'public.definir_desfecho_da_entrada(uuid,text,text,numeric)', 'EXECUTE'),
+  'DEF16 definir_desfecho_da_entrada: authenticated executa, anon não');
 SELECT ok(has_function_privilege('authenticated', 'public.fn_metric_measure(uuid,jsonb,text,text,date,date,date,jsonb)', 'EXECUTE')
       AND has_function_privilege('authenticated', 'public.fn_metric_catalog()', 'EXECUTE')
       AND has_function_privilege('authenticated', 'public.has_feature_permission(text,uuid)', 'EXECUTE'),

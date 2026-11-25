@@ -8,7 +8,8 @@ Deno.test("instructions: a read-only token is told what each write needs and whe
   }
   assertMatch(text, /broadcasts — including a message taken from an automation/);
   assertMatch(text, /cannot be widened/);
-  assertMatch(text, /Never confirm without the person's explicit OK/);
+  assertMatch(text, /never confirm without their explicit OK/);
+  assertMatch(text, /Notes and follow-ups are written at once/);
 });
 
 Deno.test("instructions: a full token lists what it can do and has no 'not enabled' part", () => {

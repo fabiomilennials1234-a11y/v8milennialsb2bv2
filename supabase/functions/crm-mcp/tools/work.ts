@@ -26,6 +26,7 @@ import {
   localMidnightUtc,
   memberNames,
   READ_ONLY,
+  readOrgTimezone,
   resolveOrgScope,
 } from "./shared.ts";
 
@@ -35,13 +36,6 @@ async function denyWithout(ctx: ToolContext, key: string, screen: string) {
   return (await callerHasFeature(ctx, key))
     ? null
     : errorResult(`Seu usuário não tem acesso a ${screen} no Torque (permissão ${key}).`);
-}
-
-async function orgTimezone(db: SupabaseClient, orgId: string) {
-  const { data, error } = await db.from("organizations").select("timezone").eq("id", orgId)
-    .maybeSingle();
-  if (error) return { error };
-  return { tz: (data as { timezone?: string } | null)?.timezone || "America/Sao_Paulo" };
 }
 
 const YMD = /^\d{4}-\d{2}-\d{2}$/;
@@ -133,7 +127,7 @@ export const customerFollowupListTool: ToolDef = {
     const db = ctx.db as SupabaseClient;
 
     const [tzR, meR] = await Promise.all([
-      orgTimezone(db, scope.orgId),
+      readOrgTimezone(db, scope.orgId),
       args.mine === true
         ? db.from("team_members").select("id").eq("organization_id", scope.orgId)
           .eq("user_id", ctx.userId).eq("is_active", true).maybeSingle()
@@ -260,7 +254,7 @@ export const customerAgendaListTool: ToolDef = {
     const denied = await denyWithout(ctx, "agenda.view", "Agenda");
     if (denied) return denied;
     const db = ctx.db as SupabaseClient;
-    const tzR = await orgTimezone(db, scope.orgId);
+    const tzR = await readOrgTimezone(db, scope.orgId);
     if ("error" in tzR) return dbErrorResult(tzR.error!);
 
     const from = (args.from as string | undefined) ?? todayIn(tzR.tz, new Date());

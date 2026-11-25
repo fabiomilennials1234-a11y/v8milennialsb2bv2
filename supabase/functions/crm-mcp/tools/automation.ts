@@ -25,7 +25,7 @@ import {
 } from "../../_shared/workflow-schema/index.ts";
 import type { WorkflowDefinition } from "../../_shared/workflow-schema/definition.ts";
 import { missingScopeHint } from "../lib/capabilities.ts";
-import { actionErrorMessage, isUuid, PLAN, WRITE, writeContext } from "./actions.ts";
+import { actionErrorMessage, auditedWrite, isUuid, PLAN, WRITE, writeContext } from "./actions.ts";
 import { asMessage, flowOverview, sendSteps } from "./automation-steps.ts";
 import { callerHasFeature } from "./rpc.ts";
 import {
@@ -129,27 +129,6 @@ async function denyWithout(
       key === "workflows.create" ? "criar" : "editar"
     } automações no Torque (permissão ${key}).`,
   );
-}
-
-/** One-shot audited write (no separate plan step). */
-async function audited(
-  ctx: ToolContext,
-  tool: string,
-  summary: string,
-  payload: unknown,
-  run: () => Promise<{ ok: boolean; result: unknown }>,
-): Promise<{ ok: boolean; result: unknown } | { error: string }> {
-  const w = writeContext(ctx, "automations:write");
-  if (!w.ok) return { error: "sem escopo" };
-  try {
-    const { actionId } = await w.store.open(tool, "automations:write", summary, payload);
-    if (!(await w.store.take(actionId))) return { error: "Não foi possível registrar a ação." };
-    const out = await run();
-    await w.store.finish(actionId, out.ok ? "applied" : "failed", out.result);
-    return out;
-  } catch (e) {
-    return { error: actionErrorMessage(e) };
-  }
 }
 
 export const customerAutomationListTool: ToolDef = {
@@ -360,20 +339,27 @@ export const customerAutomationDraftTool: ToolDef = {
     });
     if (!built.ok) return errorResult(`Automação inválida: ${built.message}`);
 
-    const out = await audited(ctx, "automation.draft", `Criar automação "${name}" (desligada)`, {
-      pipeline_id: pipelineId,
-      stage_id: st.id,
-      idle_days: idleDays,
-    }, async () => {
-      const ins = await db
-        .from("workflows")
-        .insert({ ...built.row, organization_id: scope.orgId, created_by: ctx.userId })
-        .select("id")
-        .single();
-      return ins.error || !ins.data
-        ? { ok: false, result: { error: ins.error?.message ?? "insert failed" } }
-        : { ok: true, result: { workflow_id: (ins.data as { id: string }).id } };
-    });
+    const out = await auditedWrite(
+      ctx,
+      "automations:write",
+      "automation.draft",
+      `Criar automação "${name}" (desligada)`,
+      {
+        pipeline_id: pipelineId,
+        stage_id: st.id,
+        idle_days: idleDays,
+      },
+      async () => {
+        const ins = await db
+          .from("workflows")
+          .insert({ ...built.row, organization_id: scope.orgId, created_by: ctx.userId })
+          .select("id")
+          .single();
+        return ins.error || !ins.data
+          ? { ok: false, result: { error: ins.error?.message ?? "insert failed" } }
+          : { ok: true, result: { workflow_id: (ins.data as { id: string }).id } };
+      },
+    );
     if ("error" in out) return errorResult(out.error);
     if (!out.ok) {
       return errorResult(
@@ -505,18 +491,25 @@ export const customerAutomationDeactivateTool: ToolDef = {
     const denied = await denyWithout(ctx, "workflows.edit");
     if (denied) return denied;
     const db = ctx.db as SupabaseClient;
-    const out = await audited(ctx, "automation.deactivate", "Desligar automação", {
-      workflow_id: args.workflow_id,
-    }, async () => {
-      const up = await db.from("workflows").update({ is_active: false }).eq(
-        "organization_id",
-        scope.orgId,
-      ).eq("id", args.workflow_id).select("id");
-      return {
-        ok: !up.error && (up.data ?? []).length === 1,
-        result: { workflow_id: args.workflow_id },
-      };
-    });
+    const out = await auditedWrite(
+      ctx,
+      "automations:write",
+      "automation.deactivate",
+      "Desligar automação",
+      {
+        workflow_id: args.workflow_id,
+      },
+      async () => {
+        const up = await db.from("workflows").update({ is_active: false }).eq(
+          "organization_id",
+          scope.orgId,
+        ).eq("id", args.workflow_id).select("id");
+        return {
+          ok: !up.error && (up.data ?? []).length === 1,
+          result: { workflow_id: args.workflow_id },
+        };
+      },
+    );
     if ("error" in out) return errorResult(out.error);
     return out.ok
       ? jsonResult({ active: false, workflow_id: args.workflow_id })
