@@ -12,7 +12,7 @@
  * coluna a mais obrigaria o vendedor a editar o arquivo do ERP antes de
  * importar, e o dado que interessa aqui — a pessoa — está lá do mesmo jeito.
  */
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect, useMemo } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -24,9 +24,19 @@ import { IconChip, KpiTile } from "@/components/ui/bento";
 import {
   useImportLeads,
   parseFilePreview,
+  parseFileToRows,
   KNOWN_LEAD_FIELDS,
   type FilePreviewResult,
 } from "../../hooks/useImportLeads";
+import { useImportTagRules } from "../../hooks/useImportTagRules";
+import { useTags } from "../../hooks/useTags";
+import { ImportTagByColumnField } from "./ImportTagByColumnField";
+import {
+  defaultTagColumn,
+  distinctValues,
+  savedMapFor,
+  type ValueTagMap,
+} from "../../lib/import-tag-rules";
 import { useLeadCustomFields } from "../../hooks/useLeadCustomFields";
 import { ImportTagsField, ImportTagsOutcome } from "./ImportTagsField";
 import { ImportPreviewReview } from "./ImportPreviewReview";
@@ -116,6 +126,25 @@ export function ImportLeadsContent({ onDone }: ImportLeadsContentProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { enabled: previewEnabled } = useFeatureFlag(IMPORT_PREVIEW_FLAG);
 
+  // Etiqueta por coluna (com a flag): a coluna, o mapa valor→etiqueta e as linhas cruas.
+  const [fileRows, setFileRows] = useState<Record<string, string>[]>([]);
+  const [tagColumn, setTagColumn] = useState<string | null>(null);
+  const [tagMap, setTagMap] = useState<ValueTagMap>({});
+  const [tagMapTouched, setTagMapTouched] = useState(false);
+  const { rules: savedRules, save: saveTagRules } = useImportTagRules(previewEnabled);
+  const { data: orgTags = [] } = useTags();
+  const orgTagIds = useMemo(() => new Set(orgTags.map((t) => t.id)), [orgTags]);
+  const columnValues = useMemo(
+    () => (tagColumn ? distinctValues(fileRows, tagColumn) : []),
+    [fileRows, tagColumn],
+  );
+
+  // O mapa salvo chega depois da planilha às vezes: preenche enquanto a pessoa não mexeu.
+  useEffect(() => {
+    if (!tagColumn || tagMapTouched) return;
+    setTagMap(savedMapFor(savedRules, tagColumn, orgTagIds));
+  }, [tagColumn, tagMapTouched, savedRules, orgTagIds]);
+
   const queryClient = useQueryClient();
   const { data: members = [] } = useTeamMembers();
   const { parseCSV, importLeadsOnly, previewLeadsOnly, resetImport, progress, result, lastReport } = useImportLeads();
@@ -154,6 +183,11 @@ export function ImportLeadsContent({ onDone }: ImportLeadsContentProps) {
         const preview = await parseFilePreview(selectedFile, customFieldNames);
         setPreviewResult(preview);
         setTotalLeads(preview.totalRows);
+        if (previewEnabled) {
+          setFileRows(await parseFileToRows(selectedFile));
+          setTagColumn(defaultTagColumn(preview.columns));
+          setTagMapTouched(false);
+        }
         if (preview.unmappedColumns.length > 0) {
           setStep("map_columns");
           return;
@@ -167,7 +201,7 @@ export function ImportLeadsContent({ onDone }: ImportLeadsContentProps) {
         toast.error("Erro ao processar arquivo. Verifique o formato (CSV ou XLSX).");
       }
     },
-    [parseCSV, customFieldNames, resumirLeads],
+    [parseCSV, customFieldNames, resumirLeads, previewEnabled],
   );
 
   const handleDrop = useCallback(
@@ -202,9 +236,16 @@ export function ImportLeadsContent({ onDone }: ImportLeadsContentProps) {
         metricsPeriodYear: metricsOpt?.year,
         tagIds: selectedTagIds,
         decisions,
+        rowTagRule: previewEnabled && tagColumn ? { column: tagColumn, byValue: tagMap } : undefined,
       });
       setStep("complete");
       await queryClient.invalidateQueries({ queryKey: ["leads"] });
+      if (previewEnabled && tagColumn && columnValues.length > 0) {
+        // Lembrar o mapa é conveniência: falhar aqui não desfaz a importação.
+        saveTagRules({ column: tagColumn, values: columnValues.map((v) => v.key), map: tagMap }).catch((err) =>
+          notifyError(err, { fallback: "A importação foi feita, mas não deu para lembrar as etiquetas por coluna." }),
+        );
+      }
     } catch (error) {
       console.error("Import error:", error);
       notifyError(error, { fallback: "Não foi possível importar os leads." });
@@ -243,6 +284,10 @@ export function ImportLeadsContent({ onDone }: ImportLeadsContentProps) {
     setSelectedTagIds([]);
     setReview(null);
     setChoices(initialChoices());
+    setFileRows([]);
+    setTagColumn(null);
+    setTagMap({});
+    setTagMapTouched(false);
     resetImport();
     onDone?.();
   };
@@ -465,6 +510,23 @@ export function ImportLeadsContent({ onDone }: ImportLeadsContentProps) {
 
           <ImportTagsField value={selectedTagIds} onChange={setSelectedTagIds} totalLeads={totalLeads} />
 
+          {previewEnabled && previewResult && (
+            <ImportTagByColumnField
+              columns={previewResult.columns}
+              column={tagColumn}
+              values={columnValues}
+              map={tagMap}
+              onColumnChange={(c) => {
+                setTagColumn(c);
+                setTagMapTouched(false);
+              }}
+              onMapChange={(m) => {
+                setTagMap(m);
+                setTagMapTouched(true);
+              }}
+            />
+          )}
+
           <div className="p-3 bg-muted/50 rounded-lg">
             <p className="text-xs text-muted-foreground">
               Estes leads entram <strong>sem negócio</strong>. Colunas de funil na planilha (Etapa, Valor, Produto) são
@@ -616,6 +678,12 @@ export function ImportLeadsContent({ onDone }: ImportLeadsContentProps) {
           )}
 
           <ImportTagsOutcome report={lastReport} />
+          {lastReport?.rowTags && (
+            <p className="text-xs text-center text-muted-foreground">
+              Etiqueta por coluna aplicada em {lastReport.rowTags.leads} {lastReport.rowTags.leads === 1 ? "lead" : "leads"}
+              {lastReport.rowTags.failed > 0 ? ` — ${lastReport.rowTags.failed} não receberam por falha ao gravar.` : "."}
+            </p>
+          )}
 
           <p className="text-sm text-center text-muted-foreground">
             Os leads já estão no cadastro. Nenhum negócio foi criado.

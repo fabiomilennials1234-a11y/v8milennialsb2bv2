@@ -8,6 +8,7 @@ import { parsePhoneCell } from "../lib/import-phones";
 import { isBlankRow, markSourceRow, sourceRowOf } from "../lib/import-source-row";
 import { countDuplicates, type ImportReportError } from "../lib/import-errors";
 import type { ImportPreview, RowDecision } from "../lib/import-preview";
+import { rowTagIds, type RowTagRule } from "../lib/import-tag-rules";
 /** Campos conhecidos do sistema (leads + UTM + funil). Custom fields são passados separadamente. */
 export const KNOWN_LEAD_FIELDS = [
   "name",
@@ -301,6 +302,8 @@ export interface EdgeFunctionReport {
   distribution?: Record<string, number>;
   /** Presente quando o import levou etiquetas. */
   tags?: { leads: number; failed: number };
+  /** Presente quando alguma linha levou etiqueta pela coluna da planilha. */
+  rowTags?: { leads: number; failed: number };
   /** Presente quando alguma linha trouxe mais de um número na célula de telefone. */
   extraPhones?: { added: number; failed: number };
   /** Linhas puladas por decisão na prévia. */
@@ -319,6 +322,8 @@ export interface ImportRowOutcome {
 interface ParsedLead {
   /** Linha da planilha de onde o lead saiu (cabeçalho = 1). A edge usa nos erros do relatório. */
   source_row?: number;
+  /** Etiquetas desta linha pela coluna da planilha (flag `importacao_previa`). */
+  row_tag_ids?: string[];
   name: string;
   company?: string;
   phone?: string;
@@ -413,6 +418,8 @@ export interface ImportLeadsOnlyOptions {
   tagIds?: string[];
   /** Decisão por linha vinda da prévia (flag `importacao_previa`). */
   decisions?: RowDecision[];
+  /** Etiqueta pela coluna da planilha (flag `importacao_previa`). */
+  rowTagRule?: RowTagRule;
 }
 
 export interface ImportLeadsToFunnelOptions {
@@ -769,7 +776,11 @@ export function useImportLeads() {
     return [KOMMO_BLOCK_START, ...lines, KOMMO_BLOCK_END].join("\n");
   };
 
-  const parseCSV = async (file: File, userColumnMapping?: Record<string, string>): Promise<ParsedLead[]> => {
+  const parseCSV = async (
+    file: File,
+    userColumnMapping?: Record<string, string>,
+    rowTagRule?: RowTagRule,
+  ): Promise<ParsedLead[]> => {
     const rows = await parseFileToRows(file);
     const leads: ParsedLead[] = [];
     if (rows.length > 0) {
@@ -1159,6 +1170,7 @@ export function useImportLeads() {
 
             leads.push({
               source_row: sourceRowOf(row),
+              row_tag_ids: rowTagIds(rowTagRule, row),
               name,
               company: company || undefined,
               phone: phone || undefined,
@@ -1529,7 +1541,7 @@ export function useImportLeads() {
     setResult(null);
 
     try {
-      const parsedLeads = await parseCSV(file, options.userColumnMapping);
+      const parsedLeads = await parseCSV(file, options.userColumnMapping, options.rowTagRule);
       if (parsedLeads.length === 0) {
         throw new Error("Nenhum lead válido encontrado no arquivo");
       }

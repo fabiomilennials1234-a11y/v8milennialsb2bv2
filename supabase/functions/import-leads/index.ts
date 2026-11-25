@@ -79,6 +79,11 @@ function motivoFalhaDeFunil(status: string, nomeNaTela: string): string {
 interface ParsedLead {
   /** Linha da planilha de onde o lead saiu (cabeçalho = 1). Os erros do relatório apontam esta linha. */
   source_row?: number;
+  /**
+   * Etiquetas desta linha, pela coluna da planilha (flag `importacao_previa`).
+   * Não confiável até `resolveImportTagIds`.
+   */
+  row_tag_ids?: unknown;
   name: string;
   company?: string;
   phone?: string;
@@ -197,6 +202,8 @@ interface ImportReport {
   skipped?: number;
   /** Resultado de cada linha, quando a importação veio da prévia (planilha de resultado). */
   rows?: RowOutcome[];
+  /** Etiquetas por linha (coluna da planilha). Presente só quando alguma linha trouxe. */
+  rowTags?: ImportTagsReport;
 }
 
 type RowOutcomeKind = "criado" | "compartilhado" | "atualizado" | "vinculado" | "pulado" | "recusado";
@@ -881,6 +888,8 @@ async function importToPipeline(
   payload: ImportPayload,
   report: ImportReport,
   importedLeadIds: Set<string>,
+  /** Etiqueta da linha → leads que a recebem (já validadas como da org). */
+  rowTagTargets: Map<string, Set<string>> = new Map(),
 ): Promise<void> {
   const {
     organization_id: organizationId,
@@ -1189,6 +1198,13 @@ async function importToPipeline(
           await importExtraPhones(supabase, report, organizationId, leadId, lead);
         }
         importedLeadIds.add(leadId);
+        if (Array.isArray(lead.row_tag_ids)) {
+          for (const tagId of lead.row_tag_ids as string[]) {
+            const key = tagId.toLowerCase();
+            if (!rowTagTargets.has(key)) rowTagTargets.set(key, new Set());
+            rowTagTargets.get(key)!.add(leadId);
+          }
+        }
 
         // Etapa da linha (coluna Etapa da planilha) → stage_key
         const stageKeyForLead = resolveRowStageKey(lead.stage, stageAliases, defaultStageKey);
@@ -1510,9 +1526,12 @@ Deno.serve(
       }
     }
 
-    // 5b. Prévia e decisões por linha: só com a flag da org, e nunca para campanha.
+    // 5b. Prévia, decisões e etiqueta por linha: só com a flag da org, e nunca para campanha.
     const wantsPreview = body.mode === "preview";
-    if (wantsPreview || body.decisions !== undefined) {
+    const rowTagRaw = body.leads.flatMap((l) =>
+      l.row_tag_ids === undefined || l.row_tag_ids === null ? [] : Array.isArray(l.row_tag_ids) ? l.row_tag_ids : [l.row_tag_ids],
+    );
+    if (wantsPreview || body.decisions !== undefined || rowTagRaw.length > 0) {
       if (!(await orgFlagEnabled(supabaseEarly, organizationId!, PREVIEW_FLAG))) {
         return new Response(
           JSON.stringify({ success: false, error: "A prévia da importação não está ligada para esta organização." }),
@@ -1522,6 +1541,17 @@ Deno.serve(
       if (body.destination === "campaign") {
         return new Response(
           JSON.stringify({ success: false, error: "A prévia não vale para importação em campanha." }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        );
+      }
+    }
+
+    // Etiquetas por linha: a mesma prova de "etiqueta desta org" das etiquetas do arquivo.
+    if (rowTagRaw.length > 0) {
+      const rowTags = await resolveImportTagIds(supabaseEarly, organizationId!, [...new Set(rowTagRaw)]);
+      if (!rowTags.ok) {
+        return new Response(
+          JSON.stringify({ success: false, error: rowTags.error }),
           { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
         );
       }
@@ -1547,6 +1577,7 @@ Deno.serve(
     // 6. Process valid leads
     const supabase = supabaseEarly; // reuse client created in step 3
     const importedLeadIds = new Set<string>();
+    const rowTagTargets = new Map<string, Set<string>>();
     let processingError: Error | null = null;
 
     try {
@@ -1562,6 +1593,7 @@ Deno.serve(
           { ...body, organization_id: organizationId, actor_user_id: userId },
           report,
           importedLeadIds,
+          rowTagTargets,
         );
       }
     } catch (err) {
@@ -1572,6 +1604,16 @@ Deno.serve(
     // as etiquetas, para o estado parcial bater com o que a pessoa pediu.
     if (importTags.tagIds.length > 0) {
       report.tags = await applyImportTags(supabase, importedLeadIds, importTags.tagIds);
+    }
+    if (rowTagTargets.size > 0) {
+      const tagged = new Set<string>();
+      let failed = 0;
+      for (const [tagId, leadIds] of rowTagTargets) {
+        const r = await applyImportTags(supabase, leadIds, [tagId]);
+        failed += r.failed;
+        leadIds.forEach((id) => tagged.add(id));
+      }
+      report.rowTags = { leads: tagged.size, failed };
     }
 
     if (processingError) {
