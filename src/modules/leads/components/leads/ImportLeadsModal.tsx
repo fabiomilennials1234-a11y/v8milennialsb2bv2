@@ -29,6 +29,17 @@ import {
 } from "../../hooks/useImportLeads";
 import { useLeadCustomFields } from "../../hooks/useLeadCustomFields";
 import { ImportTagsField, ImportTagsOutcome } from "./ImportTagsField";
+import { ImportPreviewReview } from "./ImportPreviewReview";
+import {
+  buildDecisions,
+  countWrites,
+  IMPORT_PREVIEW_FLAG,
+  initialChoices,
+  type ImportPreview,
+  type PreviewChoices,
+  type RowDecision,
+} from "../../lib/import-preview";
+import { useFeatureFlag } from "@/modules/platform/feature-flags";
 import { useCanDo, useTeamMembers } from "@/modules/identity";
 import { downloadLeadsImportTemplate } from "@/lib/leadsImportTemplate";
 import { toast } from "sonner";
@@ -47,6 +58,7 @@ import {
   ChevronDown,
   ChevronUp,
   UserX,
+  SkipForward,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { notifyError } from "@/shared/errors";
@@ -81,7 +93,7 @@ interface PreviewLead {
   email?: string;
 }
 
-type Step = "upload" | "map_columns" | "preview" | "importing" | "complete";
+type Step = "upload" | "map_columns" | "preview" | "reviewing" | "review" | "importing" | "complete";
 
 interface ImportLeadsContentProps {
   onDone?: () => void;
@@ -99,11 +111,14 @@ export function ImportLeadsContent({ onDone }: ImportLeadsContentProps) {
   const [selectedMetricsPeriod, setSelectedMetricsPeriod] = useState<string>("current");
   const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
   const [showErrors, setShowErrors] = useState(false);
+  const [review, setReview] = useState<ImportPreview | null>(null);
+  const [choices, setChoices] = useState<PreviewChoices>(initialChoices);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const { enabled: previewEnabled } = useFeatureFlag(IMPORT_PREVIEW_FLAG);
 
   const queryClient = useQueryClient();
   const { data: members = [] } = useTeamMembers();
-  const { parseCSV, importLeadsOnly, resetImport, progress, result, lastReport } = useImportLeads();
+  const { parseCSV, importLeadsOnly, previewLeadsOnly, resetImport, progress, result, lastReport } = useImportLeads();
   const { data: customFields = [] } = useLeadCustomFields();
   const { allowed: canImport, isLoading: permLoading } = useCanDo("import_leads");
   const customFieldNames = customFields.map((f) => f.field_name);
@@ -168,28 +183,52 @@ export function ImportLeadsContent({ onDone }: ImportLeadsContentProps) {
     e.preventDefault();
   }, []);
 
-  const handleImport = async () => {
+  const fullMapping = () => {
+    const mapping = { ...(previewResult?.suggestedMapping ?? {}), ...userColumnMapping };
+    return Object.keys(mapping).length ? mapping : undefined;
+  };
+
+  const handleImport = async (decisions?: RowDecision[]) => {
     if (!file) return;
+    const backTo: Step = decisions ? "review" : "preview";
     setStep("importing");
     try {
-      const fullMapping = { ...(previewResult?.suggestedMapping ?? {}), ...userColumnMapping };
       const metricsOpt = METRICS_PERIOD_OPTIONS.find((o) => o.value === selectedMetricsPeriod);
       await importLeadsOnly(file, {
         members: memberOptions,
-        userColumnMapping: Object.keys(fullMapping).length ? fullMapping : undefined,
+        userColumnMapping: fullMapping(),
         responsibleId: selectedResponsibleId === "none" ? undefined : selectedResponsibleId || undefined,
         metricsPeriodMonth: metricsOpt?.month,
         metricsPeriodYear: metricsOpt?.year,
         tagIds: selectedTagIds,
+        decisions,
       });
       setStep("complete");
       await queryClient.invalidateQueries({ queryKey: ["leads"] });
     } catch (error) {
       console.error("Import error:", error);
       notifyError(error, { fallback: "Não foi possível importar os leads." });
+      setStep(backTo);
+    }
+  };
+
+  /** Classifica as linhas na edge, sem gravar, e abre a revisão por grupos. */
+  const handleReview = async () => {
+    if (!file) return;
+    setStep("reviewing");
+    try {
+      const preview = await previewLeadsOnly(file, { members: memberOptions, userColumnMapping: fullMapping() });
+      setReview(preview);
+      setChoices(initialChoices());
+      setStep("review");
+    } catch (error) {
+      notifyError(error, { fallback: "Não foi possível revisar a planilha." });
       setStep("preview");
     }
   };
+
+  const decisions = review ? buildDecisions(review.rows, choices) : [];
+  const writes = countWrites(decisions);
 
   const handleClose = () => {
     setStep("upload");
@@ -202,6 +241,8 @@ export function ImportLeadsContent({ onDone }: ImportLeadsContentProps) {
     setSelectedResponsibleId("");
     setSelectedMetricsPeriod("current");
     setSelectedTagIds([]);
+    setReview(null);
+    setChoices(initialChoices());
     resetImport();
     onDone?.();
   };
@@ -435,8 +476,17 @@ export function ImportLeadsContent({ onDone }: ImportLeadsContentProps) {
             <Button variant="outline" onClick={() => setStep("upload")}>
               Voltar
             </Button>
-            <Button onClick={handleImport} disabled={!totalLeads || !canImport || permLoading}>
-              {permLoading ? "Verificando permissão..." : !canImport ? "Sem permissão" : `Importar ${totalLeads} leads`}
+            <Button
+              onClick={() => (previewEnabled ? handleReview() : handleImport())}
+              disabled={!totalLeads || !canImport || permLoading}
+            >
+              {permLoading
+                ? "Verificando permissão..."
+                : !canImport
+                  ? "Sem permissão"
+                  : previewEnabled
+                    ? `Revisar ${totalLeads} linhas`
+                    : `Importar ${totalLeads} leads`}
             </Button>
           </div>
           {!canImport && !permLoading && (
@@ -444,6 +494,52 @@ export function ImportLeadsContent({ onDone }: ImportLeadsContentProps) {
               Você não tem permissão para importar leads. Contate um administrador.
             </p>
           )}
+        </motion.div>
+      )}
+
+      {step === "reviewing" && (
+        <motion.div
+          key="reviewing"
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -10 }}
+          className="py-10 text-center"
+        >
+          <Loader2 className="w-10 h-10 mx-auto mb-4 text-primary animate-spin" />
+          <p className="font-medium">Conferindo a planilha com o CRM...</p>
+          <p className="text-sm text-muted-foreground mt-1">Nada é gravado nesta etapa.</p>
+        </motion.div>
+      )}
+
+      {step === "review" && review && (
+        <motion.div
+          key="review"
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -10 }}
+          className="space-y-4"
+        >
+          <div>
+            <p className="text-sm font-medium">
+              {review.rows.length} linhas conferidas — {writes} {writes === 1 ? "vai" : "vão"} ser gravadas
+            </p>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Nada foi gravado ainda. Escolha o que fazer com cada grupo e confirme.
+            </p>
+          </div>
+
+          <ScrollArea className="h-[52vh] max-h-[460px] pr-3">
+            <ImportPreviewReview preview={review} choices={choices} onChange={setChoices} />
+          </ScrollArea>
+
+          <div className="flex justify-end gap-2 pt-4 border-t">
+            <Button variant="outline" onClick={() => setStep("preview")}>
+              Voltar
+            </Button>
+            <Button onClick={() => handleImport(decisions)} disabled={writes === 0 || !canImport}>
+              {writes === 0 ? "Nada para gravar" : `Importar ${writes} ${writes === 1 ? "linha" : "linhas"}`}
+            </Button>
+          </div>
         </motion.div>
       )}
 
@@ -486,6 +582,9 @@ export function ImportLeadsContent({ onDone }: ImportLeadsContentProps) {
             )}
             <KpiTile label="Duplicados" value={result.duplicates} icon={AlertCircle} tone="neutral" />
             <KpiTile label="Inválidos" value={result.invalid} icon={XCircle} tone="bad" />
+            {(lastReport?.skipped ?? 0) > 0 && (
+              <KpiTile label="Pulados na revisão" value={lastReport?.skipped} icon={SkipForward} tone="neutral" />
+            )}
           </div>
 
           {lastReport && lastReport.errors.length > 0 && (
@@ -536,9 +635,11 @@ interface ImportLeadsModalProps {
 }
 
 export function ImportLeadsModal({ open, onOpenChange }: ImportLeadsModalProps) {
+  // A revisão por grupos precisa de mais largura que o fluxo antigo.
+  const { enabled: previewEnabled } = useFeatureFlag(IMPORT_PREVIEW_FLAG);
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg">
+      <DialogContent className={previewEnabled ? "max-w-2xl" : "max-w-lg"}>
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2.5">
             <IconChip icon={FileSpreadsheet} tone="gold" />

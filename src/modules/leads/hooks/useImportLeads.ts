@@ -7,6 +7,7 @@ import { withNameFallback } from "../lib/import-name";
 import { parsePhoneCell } from "../lib/import-phones";
 import { isBlankRow, markSourceRow, sourceRowOf } from "../lib/import-source-row";
 import { countDuplicates, type ImportReportError } from "../lib/import-errors";
+import type { ImportPreview, RowDecision } from "../lib/import-preview";
 /** Campos conhecidos do sistema (leads + UTM + funil). Custom fields são passados separadamente. */
 export const KNOWN_LEAD_FIELDS = [
   "name",
@@ -302,6 +303,17 @@ export interface EdgeFunctionReport {
   tags?: { leads: number; failed: number };
   /** Presente quando alguma linha trouxe mais de um número na célula de telefone. */
   extraPhones?: { added: number; failed: number };
+  /** Linhas puladas por decisão na prévia. */
+  skipped?: number;
+  /** Resultado de cada linha, quando a importação veio da prévia. */
+  rows?: ImportRowOutcome[];
+}
+
+export interface ImportRowOutcome {
+  row: number;
+  outcome: "criado" | "compartilhado" | "atualizado" | "vinculado" | "pulado" | "recusado";
+  reason?: string;
+  lead_id?: string;
 }
 
 interface ParsedLead {
@@ -399,6 +411,8 @@ export interface ImportLeadsOnlyOptions {
   metricsPeriodYear?: number;
   /** IDs das tags a aplicar aos leads importados. */
   tagIds?: string[];
+  /** Decisão por linha vinda da prévia (flag `importacao_previa`). */
+  decisions?: RowDecision[];
 }
 
 export interface ImportLeadsToFunnelOptions {
@@ -1179,6 +1193,15 @@ export function useImportLeads() {
     parsedLeads: ParsedLead[],
     payload: Record<string, unknown>,
   ): Promise<{ report: EdgeFunctionReport }> => {
+    const data = await postImportLeads(parsedLeads, payload);
+    return { report: data.report as EdgeFunctionReport };
+  };
+
+  /** POST na edge `import-leads`; devolve o corpo já validado como sucesso. */
+  const postImportLeads = async (
+    parsedLeads: ParsedLead[],
+    payload: Record<string, unknown>,
+  ): Promise<{ report?: unknown; preview?: unknown }> => {
     const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string;
     const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
     const functionUrl = `${supabaseUrl}/functions/v1/import-leads`;
@@ -1216,7 +1239,24 @@ export function useImportLeads() {
     }
 
     if (!data?.success) throw new Error(data?.error || "Erro desconhecido na importação");
-    return { report: data.report as EdgeFunctionReport };
+    return data;
+  };
+
+  /**
+   * Prévia da importação sem funil: classifica cada linha (novo, já é cliente, repetido…)
+   * e não grava nada. A importação de verdade relê o arquivo e manda as decisões.
+   */
+  const previewLeadsOnly = async (
+    file: File,
+    options: Pick<ImportLeadsOnlyOptions, "members" | "userColumnMapping"> = {},
+  ): Promise<ImportPreview> => {
+    if (!organizationId) throw new Error("Organização não encontrada");
+    const parsedLeads = await parseCSV(file, options.userColumnMapping);
+    if (parsedLeads.length === 0) throw new Error("Nenhum lead válido encontrado no arquivo");
+    const data = await postImportLeads(parsedLeads, { destination: "leads", mode: "preview", members: options.members });
+    const preview = data.preview as ImportPreview | undefined;
+    if (!preview || !Array.isArray(preview.rows)) throw new Error("Resposta inválida da prévia de importação");
+    return preview;
   };
 
   const importLeads = async (
@@ -1504,6 +1544,7 @@ export function useImportLeads() {
         metrics_period_month: options.metricsPeriodMonth,
         metrics_period_year: options.metricsPeriodYear,
         tag_ids: options.tagIds?.length ? options.tagIds : undefined,
+        decisions: options.decisions,
       });
 
       setLastReport(report);
@@ -1625,6 +1666,7 @@ export function useImportLeads() {
     importLeadsToCustomPipeline,
     importLeadsToPipeline,
     importLeadsOnly,
+    previewLeadsOnly,
     resetImport,
     fixExistingLeadNames,
     isImporting,
