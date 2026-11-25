@@ -109,7 +109,12 @@ function ctx(db: unknown): ToolContext {
 
 const VALID_ARGS: Record<string, Record<string, unknown>> = {
   "lead.get": { id: LEAD },
-  "lead.list": { query: "acme", pipeline_id: LEAD, stage_key: "novo" },
+  "lead.list": { query: "acme", pipeline_id: LEAD, stage_key: "novo", owner_id: LEAD },
+  "lead.timeline": { lead_id: LEAD },
+  "team.list": {},
+  "followup.list": { when: "overdue", mine: true },
+  "agenda.list": { from: "2026-11-24", to: "2026-11-30" },
+  "inbox.awaiting_reply": {},
   "pipeline.list": {},
   "stage.list": { pipeline_id: LEAD },
   "conversation.get": { phone: "+55 (11) 99999-8888" },
@@ -297,7 +302,8 @@ Deno.test("isolation: every tool filters by the TOKEN org on every table and RPC
     }
     for (const r of rpcArgs) {
       if (r.name === "fn_metric_catalog") continue; // global catalog, takes no org
-      const org = r.args.p_org_id;
+      // each RPC names its org parameter its own way; every one must carry the token org
+      const org = r.args.p_org_id ?? r.args.p_organization_id ?? r.args.p_org;
       assertEquals(org, ORG, `${t.name} → rpc ${r.name} is not called with the token org`);
     }
   }
@@ -325,6 +331,8 @@ Deno.test("anti-bypass: the RPC allowlist is exactly the reviewed set", () => {
     has_feature_permission: "definer:auth.uid",
     mover_negocio: "invoker",
     get_pipeline_stage_counts_by_id: "invoker",
+    get_agenda_events_scoped: "invoker",
+    get_comando_fila: "invoker",
   });
 });
 

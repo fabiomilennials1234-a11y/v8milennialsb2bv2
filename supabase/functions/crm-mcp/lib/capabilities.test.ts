@@ -28,7 +28,19 @@ Deno.test("missingScopeHint: names the option on the token screen; admin-only fo
 
 Deno.test("instructions: route each kind of question to its first tool", () => {
   const text = serverInstructions(["read"]);
-  for (const t of ["funnel.overview", "funnel.review", "metrics.catalog", "automation.get"]) {
+  for (
+    const t of [
+      "funnel.overview",
+      "funnel.review",
+      "metrics.catalog",
+      "automation.get",
+      "followup.list",
+      "agenda.list",
+      "inbox.awaiting_reply",
+      "lead.timeline",
+      "team.list",
+    ]
+  ) {
     assertStringIncludes(text, t);
   }
 });

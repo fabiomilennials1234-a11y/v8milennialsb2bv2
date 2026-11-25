@@ -29,14 +29,25 @@ import {
   customerFunnelOverviewTool,
   customerFunnelReviewTool,
 } from "./funnel.ts";
-import { customerLeadGetTool, customerLeadListTool } from "./lead.ts";
+import { customerLeadGetTool, customerLeadListTool, customerLeadTimelineTool } from "./lead.ts";
 import { customerMetricsCatalogTool, customerMetricsQueryTool } from "./metrics.ts";
 import { customerPipelineListTool, customerStageListTool } from "./pipeline.ts";
+import { customerTeamListTool } from "./team.ts";
 import { customerWhatsappStatusTool } from "./whatsapp.ts";
+import {
+  customerAgendaListTool,
+  customerFollowupListTool,
+  customerInboxAwaitingReplyTool,
+} from "./work.ts";
 
 export const CUSTOMER_TOOLS: ToolDef[] = [
   customerLeadGetTool,
   customerLeadListTool,
+  customerLeadTimelineTool,
+  customerTeamListTool,
+  customerFollowupListTool,
+  customerAgendaListTool,
+  customerInboxAwaitingReplyTool,
   customerPipelineListTool,
   customerStageListTool,
   customerConversationGetTool,

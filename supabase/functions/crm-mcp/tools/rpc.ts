@@ -32,6 +32,16 @@ export const RPC_ALLOWLIST = {
    * N+ days). Runs under the caller's RLS; p_org_id only narrows, it grants nothing.
    */
   get_pipeline_stage_counts_by_id: "invoker",
+  /**
+   * INVOKER — the Agenda screen's events. First statement refuses an org the caller is not a
+   * member of; then narrows to the caller's own events unless admin / agenda.view_all.
+   */
+  get_agenda_events_scoped: "invoker",
+  /**
+   * INVOKER — the Comando tab's "awaiting a human reply" queue. First statement is
+   * assert_org_access(p_org); only the WhatsApp numbers the caller may read are scanned.
+   */
+  get_comando_fila: "invoker",
 } as const;
 
 export type AllowedRpc = keyof typeof RPC_ALLOWLIST;

@@ -67,6 +67,21 @@ SELECT ok((SELECT bool_and(has_function_privilege('authenticated', oid, 'EXECUTE
                      AND NOT has_function_privilege('anon', oid, 'EXECUTE')) FROM pg_proc
             WHERE proname = 'get_pipeline_stage_counts_by_id' AND pronamespace = 'public'::regnamespace),
   'DEF8 get_pipeline_stage_counts_by_id: authenticated executa, anon não');
+SELECT ok(NOT (SELECT prosecdef FROM pg_proc WHERE oid = 'public.get_agenda_events_scoped(uuid,timestamptz,timestamptz)'::regprocedure),
+  'DEF9 get_agenda_events_scoped é INVOKER');
+SELECT ok((SELECT prosrc ~ 'get_my_organization_ids\(\)' AND prosrc ~ 'forbidden: org not accessible'
+             FROM pg_proc WHERE oid = 'public.get_agenda_events_scoped(uuid,timestamptz,timestamptz)'::regprocedure),
+  'DEF10 get_agenda_events_scoped recusa org de que o chamador não é membro antes de ler');
+SELECT ok(NOT (SELECT prosecdef FROM pg_proc WHERE oid = 'public.get_comando_fila(uuid,uuid[],integer,integer)'::regprocedure),
+  'DEF11 get_comando_fila é INVOKER');
+SELECT ok((SELECT prosrc ~ 'PERFORM\s+public\.assert_org_access\(p_org\)' AND prosrc ~ 'whatsapp_readable_instance_ids'
+             FROM pg_proc WHERE oid = 'public.get_comando_fila(uuid,uuid[],integer,integer)'::regprocedure),
+  'DEF12 get_comando_fila autoriza com assert_org_access e só lê os números que o chamador pode ler');
+SELECT ok((SELECT bool_and(has_function_privilege('authenticated', oid, 'EXECUTE')
+                     AND NOT has_function_privilege('anon', oid, 'EXECUTE')) FROM pg_proc
+            WHERE oid IN ('public.get_agenda_events_scoped(uuid,timestamptz,timestamptz)'::regprocedure,
+                          'public.get_comando_fila(uuid,uuid[],integer,integer)'::regprocedure)),
+  'DEF13 agenda e fila: authenticated executa, anon não');
 SELECT ok(has_function_privilege('authenticated', 'public.fn_metric_measure(uuid,jsonb,text,text,date,date,date,jsonb)', 'EXECUTE')
       AND has_function_privilege('authenticated', 'public.fn_metric_catalog()', 'EXECUTE')
       AND has_function_privilege('authenticated', 'public.has_feature_permission(text,uuid)', 'EXECUTE'),
