@@ -1,3 +1,4 @@
+import { useLayoutEffect, useRef } from "react";
 import { Check, Clock, Trophy, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { DealCardMove, DealCardStage } from "./types";
@@ -97,9 +98,10 @@ function Casa({
         disabled={!onMover || estado === "aqui" || bloqueado}
         onClick={() => onMover?.(etapa.chave)}
         title={estado === "aqui" ? etapa.nome : `Mover para ${etapa.nome}`}
+        data-aqui={estado === "aqui" || undefined}
         className={cn(
           "group flex flex-col items-center gap-1.5 rounded pt-0.5",
-          fixa ? "w-[76px] shrink-0" : "min-w-[64px] flex-1",
+          fixa ? "w-[76px] shrink-0" : "min-w-0 flex-1",
           "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-foreground/60",
           movivel ? "cursor-pointer" : "cursor-default",
           emTransito && "animate-pulse",
@@ -140,6 +142,7 @@ function Casa({
       disabled={!onMover || estado === "aqui" || bloqueado}
       onClick={() => onMover?.(etapa.chave)}
       title={estado === "aqui" ? etapa.nome : `Mover para ${etapa.nome}`}
+      data-aqui={estado === "aqui" || undefined}
       className={cn(
         "group flex flex-col items-center gap-1.5 rounded pt-0.5",
         fixa ? "w-[84px] shrink-0" : "min-w-0 flex-1",
@@ -194,6 +197,22 @@ function Casa({
   );
 }
 
+/**
+ * Piso de largura de cada casa aberta, em px.
+ *
+ * ── POR QUE O PISO MORA NO CONTAINER, NÃO NA CASA ─────────────────────────
+ * Antes o piso era `min-w-[64px]` na casa e o container das abertas era
+ * `min-w-0 flex-1` (a partir de `sm`). Com funil comprido (Improving: dez
+ * abertas) o container encolhia abaixo de 10 × 64 px, as casas transbordavam
+ * dele e duas coisas quebravam juntas: a linha — calculada em % do container —
+ * parava no meio da régua, e as terminais, posicionadas logo depois do
+ * container encolhido, caíam POR CIMA das últimas abertas ("Perda" sobre
+ * "Negociação"). Travar o mínimo no próprio container faz a régua inteira
+ * ficar mais larga que o cartão quando precisa — e aí ela rola, como já
+ * rolava no celular — em vez de se sobrepor.
+ */
+const PISO_CASA = { ouro: 72, cartao: 76 } as const;
+
 export function DealCardStages({
   etapas,
   atual,
@@ -223,6 +242,23 @@ export function DealCardStages({
   // funil custom é o slug, nunca o uuid que `chave` carrega.
   const indiceAtual = abertas.findIndex((e) => e.chaveEntry === atual);
   const bloqueado = !!movendo;
+  const trilhoRef = useRef<HTMLDivElement>(null);
+
+  // Régua que rola esconde a etapa atual se ela estiver no fim. Centraliza a
+  // casa atual na faixa visível — só na horizontal, mexendo no `scrollLeft`
+  // do próprio trilho (scrollIntoView arrastaria o modal junto).
+  useLayoutEffect(() => {
+    const trilho = trilhoRef.current;
+    if (!trilho || trilho.scrollWidth <= trilho.clientWidth) return;
+    const aqui = trilho.querySelector<HTMLElement>("[data-aqui]");
+    if (!aqui) return;
+    // Retângulos, não `offsetLeft`: o container das abertas é `relative` e
+    // vira o offsetParent da casa, então offsetLeft não mede contra o trilho.
+    const r = aqui.getBoundingClientRect();
+    const t = trilho.getBoundingClientRect();
+    const centro = r.left - t.left + trilho.scrollLeft + r.width / 2;
+    trilho.scrollLeft = Math.max(0, centro - trilho.clientWidth / 2);
+  }, [atual, etapas.length]);
 
   if (etapas.length === 0) {
     return (
@@ -252,11 +288,13 @@ export function DealCardStages({
     />
   );
 
-  // No celular a régua ROLA na horizontal em vez de espremer sete casas em
-  // 350 px até virar textura: cada casa tem piso de largura (`min-w`).
+  // Quando as casas não cabem no cartão (celular, ou funil com muitas etapas)
+  // a régua ROLA na horizontal em vez de espremer até virar textura ou
+  // sobrepor casas: o piso de cada casa é garantido pelo `minWidth` do
+  // container das abertas (ver `PISO_CASA`).
   return (
-    <div className="-mx-1 overflow-x-auto px-1 pb-0.5">
-    <div className="flex min-w-max items-start sm:min-w-0">
+    <div ref={trilhoRef} className="-mx-1 overflow-x-auto px-1 pb-0.5 [scrollbar-width:thin]">
+    <div className="flex items-start">
       {/* A linha que liga as casas vive no CONTAINER, não em cada casa: assim
           ela não aparece antes da primeira nem depois da última, que é onde a
           régua costuma vazar.
@@ -264,7 +302,10 @@ export function DealCardStages({
           uma casa de cada lado. Com um recuo fixo (era 12%) a conta só fechava
           para quatro casas: em sete, a linha começava depois do primeiro
           círculo e deixava um vão solto antes dele. */}
-      <div className="relative flex min-w-0 flex-1 items-start">
+      <div
+        className="relative flex flex-1 items-start"
+        style={{ minWidth: abertas.length * PISO_CASA[tom] }}
+      >
         <span
           className={cn(
             "pointer-events-none absolute h-px",
