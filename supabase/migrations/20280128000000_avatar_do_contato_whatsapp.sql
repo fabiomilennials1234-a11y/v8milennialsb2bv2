@@ -268,7 +268,7 @@ BEGIN
     SELECT coalesce(array_agg(x.id), ARRAY[]::uuid[]) INTO v_more FROM (
       SELECT a.id FROM public.whatsapp_contact_avatars a
       WHERE a.status <> 'pending'
-        AND a.avatar_updated_at < now() - interval '7 days'
+        AND a.avatar_updated_at < now() - interval '7 days'  -- metric-lint-allow: idade da foto, não métrica
         AND (a.claimed_until IS NULL OR a.claimed_until < now())
         AND NOT (a.id = ANY (coalesce(p_exclude, '{}')))
         AND EXISTS (

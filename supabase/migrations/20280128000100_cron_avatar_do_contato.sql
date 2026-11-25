@@ -40,7 +40,7 @@ BEGIN
        SELECT 1 FROM public.whatsapp_contact_avatars a
        WHERE (a.claimed_until IS NULL OR a.claimed_until < now())
          AND ((a.status = 'pending' AND (a.retry_after IS NULL OR a.retry_after <= now()))
-              OR (a.status <> 'pending' AND a.avatar_updated_at < now() - interval '7 days'))
+              OR (a.status <> 'pending' AND a.avatar_updated_at < now() - interval '7 days'))  -- metric-lint-allow: idade da foto, não métrica
          AND EXISTS (
            SELECT 1 FROM public.whatsapp_instances wi
            JOIN public.whatsapp_conversation_summary s

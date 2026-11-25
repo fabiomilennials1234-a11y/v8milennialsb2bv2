@@ -30,7 +30,8 @@ const cdn = (path: string) => `https://pps.whatsapp.net/v/t61/${path}?ccb=11-4&o
 const hits: string[] = [];
 let server: Server;
 let port = 0;
-const routes: Record<string, (res: import("node:http").ServerResponse) => void> = {
+type Route = (res: import("node:http").ServerResponse) => void;
+const routes = new Map<string, Route>(Object.entries({
   "ok.jpg": (r) => { r.writeHead(200, { "content-type": "image/jpeg" }); r.end(Buffer.from(JPEG)); },
   "ok.png": (r) => { r.writeHead(200, { "content-type": "image/png" }); r.end(Buffer.from(PNG)); },
   "zero.jpg": (r) => { r.writeHead(200, { "content-type": "image/jpeg" }); r.end(); },
@@ -45,7 +46,7 @@ const routes: Record<string, (res: import("node:http").ServerResponse) => void> 
   "redirect.jpg": (r) => { r.writeHead(302, { location: `http://127.0.0.1:${port}/ok.jpg` }); r.end(); },
   "403.jpg": (r) => { r.writeHead(403); r.end("URL signature expired"); },
   "500.jpg": (r) => { r.writeHead(500); r.end(); },
-};
+} satisfies Record<string, Route>));
 let finalUrlOverride: string | null = null;
 const rewriteFetch: typeof fetch = async (input, init) => {
   const u = new URL(String(input));
@@ -99,7 +100,7 @@ const gateCalls = async () => {
 };
 
 beforeAll(async () => {
-  server = createServer((req, res) => { const k = (req.url ?? "").slice(1); hits.push(k); (routes[k] ?? ((r) => { r.writeHead(404); r.end(); }))(res); });
+  server = createServer((req, res) => { const k = (req.url ?? "").slice(1); hits.push(k); (routes.get(k) ?? ((r: import("node:http").ServerResponse) => { r.writeHead(404); r.end(); }))(res); });
   await new Promise<void>((r) => server.listen(0, "127.0.0.1", () => r()));
   port = (server.address() as { port: number }).port;
   db = await makeAvatarDb();
