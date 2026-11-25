@@ -40,6 +40,14 @@ Deno.test("dispatch — initialize returns protocol + capabilities + serverInfo"
   assertEquals(typeof (result.capabilities as Record<string, unknown>).tools, "object");
 });
 
+Deno.test("dispatch — initialize carries the server's instructions only when it has them", async () => {
+  const init = { jsonrpc: "2.0" as const, id: 1, method: "initialize", params: {} };
+  const without = (await dispatch(init, ctx())) as JsonRpcSuccess;
+  assertEquals("instructions" in (without.result as Record<string, unknown>), false);
+  const withIt = (await dispatch(init, ctx({ instructions: "How to use me" }))) as JsonRpcSuccess;
+  assertEquals((withIt.result as Record<string, unknown>).instructions, "How to use me");
+});
+
 Deno.test("dispatch — initialize negotiates to the server's latest on an unsupported version", async () => {
   const res = await dispatch(
     { jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: "2024-11-05" } },

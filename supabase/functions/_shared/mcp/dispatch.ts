@@ -9,6 +9,11 @@ const LATEST_PROTOCOL_VERSION = SUPPORTED_PROTOCOL_VERSIONS[0];
 
 export interface DispatchContext {
   serverInfo: { name: string; version: string; project?: string };
+  /**
+   * Optional `instructions` for the initialize result (MCP spec): how to use this server.
+   * crm-mcp sends what the token can do and how to unlock what it cannot.
+   */
+  instructions?: string;
   tools: ToolDef[];
   allowMutations: boolean;
   /**
@@ -69,6 +74,7 @@ export async function dispatch(
         protocolVersion,
         capabilities: { tools: {} },
         serverInfo: ctx.serverInfo,
+        ...(ctx.instructions ? { instructions: ctx.instructions } : {}),
       });
     }
     case "tools/list": {

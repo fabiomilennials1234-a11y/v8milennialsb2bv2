@@ -19,7 +19,7 @@
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { ToolContext, ToolDef, ToolResult } from "../../_shared/mcp/types.ts";
-import { personalizationFirstName, personalizationName } from "../../_shared/lead-name.ts";
+import type { WorkflowDefinition } from "../../_shared/workflow-schema/definition.ts";
 import { resolveBlastMessage } from "../../_shared/quick-blast/message-resolver.ts";
 import {
   actionErrorMessage,
@@ -29,6 +29,8 @@ import {
   WRITE,
   writeContext,
 } from "./actions.ts";
+import { sendSteps, type StepMedia } from "./automation-steps.ts";
+import { leadVars, unsupportedVariables, unsupportedVariablesMessage } from "./message-vars.ts";
 import {
   dbErrorResult,
   errorResult,
@@ -135,18 +137,6 @@ export function shapeAudience(rows: EntryWithLead[]): {
   return { leads, excluded };
 }
 
-/** The variables the Disparos engine freezes per lead (blast-plan.ts snapshotVars). */
-export function leadVars(
-  l: { name: string | null; company?: string | null; segment?: string | null },
-) {
-  return {
-    nome: personalizationName(l.name),
-    primeiro_nome: personalizationFirstName(l.name),
-    empresa: l.company ?? "",
-    segmento: l.segment ?? "",
-  };
-}
-
 export function renderPreview(message: string, l: AudienceLead): string {
   return resolveBlastMessage(message, leadVars(l), () => 0);
 }
@@ -241,6 +231,120 @@ function edgeOf(ctx: ToolContext): EdgeInvoker | null {
   return (ctx.edge as EdgeInvoker | undefined) ?? null;
 }
 
+// --- what is sent: free text, or a step of an automation ---------------------------------
+
+export interface FromAutomation {
+  workflowId: string;
+  nodeId: string;
+}
+
+/** `from_automation` → ids, null when absent, or an error message. Pure. */
+export function parseFromAutomation(
+  v: unknown,
+): { ok: true; ref: FromAutomation | null } | { ok: false; message: string } {
+  if (v === undefined || v === null) return { ok: true, ref: null };
+  const a = v as Record<string, unknown>;
+  const nodeId = typeof a.node_id === "string" ? a.node_id.trim() : "";
+  if (!isUuid(a.workflow_id) || !nodeId || nodeId.length > 100) {
+    return {
+      ok: false,
+      message: "from_automation needs workflow_id (UUID) and node_id (from automation.get).",
+    };
+  }
+  return { ok: true, ref: { workflowId: a.workflow_id, nodeId } };
+}
+
+export interface BroadcastContent {
+  text: string;
+  media: StepMedia | null;
+  source: { workflow_id: string; node_id: string; automation: string; step: string | null } | null;
+}
+
+/**
+ * The text a broadcast checks before anything is stored: present, within the limit, and
+ * only with variables the engine fills. `hasMedia` changes the advice, not the rule — the
+ * engine refuses a plan without text, so an image with no caption needs one. Pure.
+ */
+export function checkBroadcastText(text: string, hasMedia: boolean): string | null {
+  if (!text) {
+    return hasMedia
+      ? "Esse passo não tem legenda, e o disparo exige um texto: passe message, que vai como legenda."
+      : "message is required.";
+  }
+  if (text.length > MESSAGE_MAX) return `message is limited to ${MESSAGE_MAX} characters.`;
+  const unsupported = unsupportedVariables(text);
+  return unsupported.length ? unsupportedVariablesMessage(unsupported) : null;
+}
+
+/**
+ * Resolve what goes out. From an automation, the server copies the step's text and media
+ * exactly as the engine would send them (automation-steps.ts) — the AI never retypes it;
+ * `message`, when also given, replaces only the text (it becomes the caption of a media).
+ */
+async function resolveContent(
+  db: SupabaseClient,
+  orgId: string,
+  ref: FromAutomation | null,
+  message: string,
+): Promise<{ ok: true; content: BroadcastContent } | { ok: false; result: ToolResult }> {
+  if (!ref) {
+    const bad = checkBroadcastText(message, false);
+    return bad
+      ? { ok: false, result: errorResult(bad) }
+      : { ok: true, content: { text: message, media: null, source: null } };
+  }
+  const { data, error } = await db
+    .from("workflows")
+    .select("id,name,definition")
+    .eq("organization_id", orgId)
+    .eq("id", ref.workflowId)
+    .maybeSingle();
+  if (error) return { ok: false, result: dbErrorResult(error) };
+  const wf = data as { id: string; name: string; definition: WorkflowDefinition | null } | null;
+  if (!wf) return { ok: false, result: errorResult("Automação não encontrada.") };
+  const step = sendSteps(wf.definition).find((s) => s.node_id === ref.nodeId);
+  if (!step) {
+    return {
+      ok: false,
+      result: errorResult(
+        "Esse passo não existe nesta automação ou não envia mensagem. Veja os node_id em automation.get.",
+      ),
+    };
+  }
+  if (step.blocked) return { ok: false, result: errorResult(step.blocked) };
+  const text = message || step.text.trim();
+  const bad = checkBroadcastText(text, step.media !== null);
+  if (bad) return { ok: false, result: errorResult(bad) };
+  return {
+    ok: true,
+    content: {
+      text,
+      media: step.media,
+      source: { workflow_id: wf.id, node_id: step.node_id, automation: wf.name, step: step.label },
+    },
+  };
+}
+
+/** The engine's attachment fields (blast-plan-create / blast-media.ts). Pure. */
+export function engineMedia(media: StepMedia | null): Record<string, string> {
+  if (!media) return {};
+  return {
+    media_url: media.url,
+    media_type: media.type,
+    ...(media.name ? { media_name: media.name } : {}),
+  };
+}
+
+const FROM_AUTOMATION_SCHEMA = {
+  type: "object",
+  properties: {
+    workflow_id: { type: "string", description: "Automation UUID (automation.list)" },
+    node_id: { type: "string", description: "The message step (automation.get → messages)" },
+  },
+  required: ["workflow_id", "node_id"],
+  additionalProperties: false,
+};
+
 // --- tools --------------------------------------------------------------------------------
 
 const AUDIENCE_SCHEMA = {
@@ -288,11 +392,15 @@ export const customerAudiencePreviewTool: ToolDef = {
 export const customerBroadcastPlanTool: ToolDef = {
   name: "broadcast.plan",
   description:
-    "Plan a WhatsApp broadcast to an audience (same filters as audience.preview). The message " +
-    "may use {{primeiro_nome}}, {{nome}}, {{empresa}}, {{segmento}} and spintax. Nothing is sent: " +
-    "returns 3 rendered examples, the numbers it will use, how many days the Disparos engine " +
-    "needs (daily limits and anti-ban spacing apply) and confirm_token. Use broadcast.test to " +
-    "send it to yourself first; only with the person's OK call broadcast.confirm.",
+    "Plan a WhatsApp broadcast to an audience (same filters as audience.preview). What is sent " +
+    "is either `message`, or a message step of an automation: `from_automation` " +
+    "{workflow_id, node_id} (from automation.get) copies that step's text and image/document " +
+    "exactly — do not retype it; a `message` given with it replaces only the text. Variables: " +
+    "only {{primeiro_nome}}, {{nome}}, {{empresa}}, {{segmento}} (plus spintax); any other is " +
+    "refused, because the engine would send it blank. Nothing is sent: returns 3 rendered " +
+    "examples, the numbers it will use, how many days the Disparos engine needs (daily limits " +
+    "and anti-ban spacing apply) and confirm_token. Use broadcast.test to send it to yourself " +
+    "first; only with the person's OK call broadcast.confirm.",
   readonly: false,
   customerExposed: true,
   requiredScope: "messages:send",
@@ -302,6 +410,7 @@ export const customerBroadcastPlanTool: ToolDef = {
     properties: {
       audience: AUDIENCE_SCHEMA,
       message: { type: "string", maxLength: MESSAGE_MAX },
+      from_automation: FROM_AUTOMATION_SCHEMA,
       instance_ids: {
         type: "array",
         items: { type: "string" },
@@ -314,7 +423,7 @@ export const customerBroadcastPlanTool: ToolDef = {
         description: "Default 7",
       },
     },
-    required: ["audience", "message"],
+    required: ["audience"],
     additionalProperties: false,
   },
   handler: async (args: Record<string, unknown>, ctx: ToolContext): Promise<ToolResult> => {
@@ -324,10 +433,12 @@ export const customerBroadcastPlanTool: ToolDef = {
     if (!w.ok) return w.result;
     const a = parseAudience(args.audience);
     if (!a.ok) return errorResult(a.message);
+    const from = parseFromAutomation(args.from_automation);
+    if (!from.ok) return errorResult(from.message);
     const message = typeof args.message === "string" ? args.message.trim() : "";
-    if (!message) return errorResult("message is required.");
-    if (message.length > MESSAGE_MAX) {
-      return errorResult(`message is limited to ${MESSAGE_MAX} characters.`);
+    if (!from.ref) {
+      const bad = checkBroadcastText(message, false);
+      if (bad) return errorResult(bad);
     }
     const excl = args.exclude_blasted_within_days === undefined
       ? 7
@@ -339,10 +450,13 @@ export const customerBroadcastPlanTool: ToolDef = {
     const db = ctx.db as SupabaseClient;
     if ((await memberships(db, ctx)) > 1) return errorResult(MULTI_ORG);
 
-    const [aud, inst] = await Promise.all([
+    const [content, aud, inst] = await Promise.all([
+      resolveContent(db, scope.orgId, from.ref, message),
       buildAudience(db, scope.orgId, a.filter),
       loadInstances(db, scope.orgId),
     ]);
+    if (!content.ok) return content.result;
+    const { text, media, source } = content.content;
     if ("error" in aud && aud.error) return dbErrorResult(aud.error);
     if (inst.error) return dbErrorResult(inst.error);
     const r = aud as Exclude<typeof aud, { error: unknown }>;
@@ -373,7 +487,8 @@ export const customerBroadcastPlanTool: ToolDef = {
     }
 
     const leadIds = r.leads.map((l) => l.id);
-    const summary = `Disparo para ${leadIds.length} lead(s) por ${chosen.length} número(s)`;
+    const summary = `Disparo para ${leadIds.length} lead(s) por ${chosen.length} número(s)` +
+      (source ? ` — mensagem da automação "${source.automation}"` : "");
     try {
       const { actionId, expiresAt } = await w.store.open(
         "broadcast.send",
@@ -381,10 +496,12 @@ export const customerBroadcastPlanTool: ToolDef = {
         summary,
         {
           lead_ids: leadIds,
-          message,
+          message: text,
+          media,
           instance_ids: chosen.map((i) => i.id),
           exclude_blasted_within_days: excl,
           audience: a.filter,
+          from_automation: source && { workflow_id: source.workflow_id, node_id: source.node_id },
         },
       );
       return jsonResult({
@@ -394,9 +511,11 @@ export const customerBroadcastPlanTool: ToolDef = {
         truncated_at_1000: r.truncated,
         excluded: r.excluded,
         numbers: chosen.map((i) => ({ id: i.id, name: i.instance_name, phone: i.phone_number })),
+        ...(source ? { from_automation: source } : {}),
+        media,
         examples: r.leads.slice(0, 3).map((l) => ({
           lead: l.name,
-          text: renderPreview(message, l),
+          text: renderPreview(text, l),
         })),
         estimated_days: estimateDays(leadIds.length, chosen.length),
         rules:
@@ -445,9 +564,10 @@ export const customerBroadcastTestTool: ToolDef = {
     type: "object",
     properties: {
       message: { type: "string", maxLength: MESSAGE_MAX },
+      from_automation: FROM_AUTOMATION_SCHEMA,
       instance_id: { type: "string", description: "Sending number (default: first eligible)" },
     },
-    required: ["message"],
+    required: [],
     additionalProperties: false,
   },
   handler: async (args: Record<string, unknown>, ctx: ToolContext): Promise<ToolResult> => {
@@ -457,19 +577,25 @@ export const customerBroadcastTestTool: ToolDef = {
     if (!w.ok) return w.result;
     const edge = edgeOf(ctx);
     if (!edge) return errorResult("Envio indisponível neste servidor.");
+    const from = parseFromAutomation(args.from_automation);
+    if (!from.ok) return errorResult(from.message);
     const message = typeof args.message === "string" ? args.message.trim() : "";
-    if (!message || message.length > MESSAGE_MAX) {
-      return errorResult(`message: 1–${MESSAGE_MAX} characters.`);
+    if (!from.ref) {
+      const bad = checkBroadcastText(message, false);
+      if (bad) return errorResult(bad);
     }
 
     const db = ctx.db as SupabaseClient;
-    const [me, inst] = await Promise.all([
+    const [content, me, inst] = await Promise.all([
+      resolveContent(db, scope.orgId, from.ref, message),
       db.from("team_members").select("name,phone").eq("organization_id", scope.orgId).eq(
         "user_id",
         ctx.userId,
       ).eq("is_active", true).maybeSingle(),
       loadInstances(db, scope.orgId),
     ]);
+    if (!content.ok) return content.result;
+    const { media } = content.content;
     if (me.error) return dbErrorResult(me.error);
     if (inst.error) return dbErrorResult(inst.error);
     const profile = me.data as { name: string | null; phone: string | null } | null;
@@ -483,27 +609,46 @@ export const customerBroadcastTestTool: ToolDef = {
       : eligible[0];
     if (!instance) return errorResult("Nenhum número conectado disponível para o teste.");
 
-    const text = renderPreview(message, {
+    const text = renderPreview(content.content.text, {
       id: "me",
       name: profile?.name ?? null,
       company: null,
       segment: null,
     });
     const number = phone.startsWith("55") ? phone : `55${phone}`;
+    // The test carries the attachment too: what the person checks is what the leads get.
+    const send = media
+      ? {
+        action: "sendMedia",
+        payload: {
+          number,
+          type: media.type,
+          file: media.url,
+          ...(media.name ? { filename: media.name } : {}),
+          caption: text,
+        },
+      }
+      : { action: "sendText", payload: { number, text } };
     const out = await auditNow(ctx, "broadcast.test", `Teste de disparo para o próprio número`, {
       instance_id: instance.id,
+      media_type: media?.type ?? null,
     }, async () => {
       const r = await edge("whatsapp-api-proxy", {
-        action: "sendText",
+        ...send,
         instance_id: instance.id,
         organization_id: scope.orgId,
-        payload: { number, text },
       });
       return { ok: r.status >= 200 && r.status < 300, result: { status: r.status } };
     });
     if ("error" in out) return errorResult(out.error);
     return out.ok
-      ? jsonResult({ sent: true, to: `…${number.slice(-4)}`, from: instance.instance_name, text })
+      ? jsonResult({
+        sent: true,
+        to: `…${number.slice(-4)}`,
+        from: instance.instance_name,
+        text,
+        media,
+      })
       : errorResult("O WhatsApp não aceitou o envio de teste. Confira se o número está conectado.");
   },
 };
@@ -552,17 +697,27 @@ export const customerBroadcastConfirmTool: ToolDef = {
     const plan = taken.plan as {
       lead_ids: string[];
       message: string;
+      media?: StepMedia | null;
       instance_ids: string[];
       exclude_blasted_within_days: number;
+      audience?: AudienceFilter;
+      from_automation?: { workflow_id: string; node_id: string } | null;
     };
     const r = await edge("blast-plan-create", {
       instance_ids: plan.instance_ids,
       lead_ids: plan.lead_ids,
       message: plan.message,
+      ...engineMedia(plan.media ?? null),
       exclude_blasted_within_days: plan.exclude_blasted_within_days,
       delay_min_ms: 5000,
       delay_max_ms: 30000,
-      source: { via: "crm-mcp", action_id: args.confirm_token },
+      source: {
+        via: "crm-mcp",
+        action_id: args.confirm_token,
+        // The engine records the audience's funnel from this (provenance, resolved in the org).
+        ...(plan.audience?.pipelineId ? { pipelineId: plan.audience.pipelineId } : {}),
+        ...(plan.from_automation ? { from_automation: plan.from_automation } : {}),
+      },
     });
     const ok = r.status === 200 && r.body?.ok === true && typeof r.body?.plan_id === "string";
     if (!ok) {

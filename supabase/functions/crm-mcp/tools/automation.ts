@@ -2,6 +2,7 @@
  * Recurring automation by AI (fatia 4 do v2) — "when a card stays N days in stage S, send X".
  *
  *   automation.list       — the org's automations (read);
+ *   automation.get        — one automation: trigger, flow, and every message it sends (read);
  *   automation.draft      — builds the automation and saves it INACTIVE;
  *   automation.activate   — two-phase: {workflow_id} → plan; {confirm_token} → turns it on;
  *   automation.deactivate — turns it off (always allowed to the scope; audited).
@@ -22,7 +23,10 @@ import {
   safeParseSpec,
   validateWorkflow,
 } from "../../_shared/workflow-schema/index.ts";
+import type { WorkflowDefinition } from "../../_shared/workflow-schema/definition.ts";
+import { missingScopeHint } from "../lib/capabilities.ts";
 import { actionErrorMessage, isUuid, PLAN, WRITE, writeContext } from "./actions.ts";
+import { asMessage, flowOverview, sendSteps } from "./automation-steps.ts";
 import { callerHasFeature } from "./rpc.ts";
 import {
   dbErrorResult,
@@ -151,7 +155,8 @@ async function audited(
 export const customerAutomationListTool: ToolDef = {
   name: "automation.list",
   description:
-    "List your organization's automations: name, whether it is on, its trigger and when it was created.",
+    "List your organization's automations: name, whether it is on, its trigger and when it was " +
+    "created. automation.get reads one, including the messages it sends.",
   readonly: true,
   customerExposed: true,
   annotations: { ...READ_ONLY, title: "List automations" },
@@ -167,6 +172,119 @@ export const customerAutomationListTool: ToolDef = {
       .limit(200);
     if (error) return dbErrorResult(error);
     return jsonResult({ count: (data ?? []).length, automations: data ?? [] });
+  },
+};
+
+interface StageRow {
+  id: string;
+  stage_key: string;
+  name: string;
+}
+
+/**
+ * The trigger in the person's words: funnel and stage names, plus — when it fires on stages
+ * of a funnel — the audience filter that reaches the cards ALREADY there. Lookups are
+ * best-effort (a missing funnel just stays unnamed); legacy triggers keep their raw refs.
+ */
+async function describeTrigger(
+  db: SupabaseClient,
+  orgId: string,
+  type: string,
+  config: unknown,
+) {
+  const cfg = (config ?? {}) as Record<string, unknown>;
+  const pipelineId = [cfg.pipeline_id, cfg.filter_pipeline_id].find(isUuid) ?? null;
+  const refs = [...(Array.isArray(cfg.stages) ? cfg.stages : []), cfg.to_stage]
+    .filter((s): s is string => typeof s === "string" && !!s.trim());
+  if (!pipelineId) {
+    return { type, pipeline: null, stages: refs.map((ref) => ({ ref })), audience: null };
+  }
+
+  const [p, st] = await Promise.all([
+    db.from("pipelines").select("id,name").eq("organization_id", orgId).eq("id", pipelineId)
+      .maybeSingle(),
+    db.from("pipeline_stages").select("id,stage_key,name").eq("organization_id", orgId)
+      .eq("pipeline_id", pipelineId).eq("is_active", true).limit(200),
+  ]);
+  const rows = (st.data ?? []) as StageRow[];
+  const stages = refs.map((ref) => rows.find((r) => r.id === ref || r.stage_key === ref) ?? null);
+  const found = stages.filter((s): s is StageRow => s !== null);
+  return {
+    type,
+    pipeline: { id: pipelineId, name: (p.data as { name?: string } | null)?.name ?? null },
+    stages: stages.map((s, i) =>
+      s ? { id: s.id, stage_key: s.stage_key, name: s.name } : { ref: refs[i] }
+    ),
+    audience: found.length && type === "stage_changed"
+      ? { pipeline_id: pipelineId, stage_keys: found.map((s) => s.stage_key) }
+      : null,
+  };
+}
+
+export const customerAutomationGetTool: ToolDef = {
+  name: "automation.get",
+  description:
+    "Read one automation (workflow_id from automation.list): its trigger (funnel and stage by " +
+    "name), the flow in order, and every message it sends — text, image/document, variables — " +
+    "each with a node_id and whether a broadcast can send it. To send one of these messages " +
+    "to the cards ALREADY in a stage (the automation only acts on cards that enter it later), " +
+    "use audience.preview and then broadcast.plan with from_automation {workflow_id, node_id}: " +
+    "the server copies the text and media, so never retype them.",
+  readonly: true,
+  customerExposed: true,
+  annotations: { ...READ_ONLY, title: "Read automation" },
+  inputSchema: {
+    type: "object",
+    properties: { workflow_id: { type: "string" } },
+    required: ["workflow_id"],
+    additionalProperties: false,
+  },
+  handler: async (args: Record<string, unknown>, ctx: ToolContext): Promise<ToolResult> => {
+    const scope = resolveOrgScope(args, ctx.orgId);
+    if (!scope.ok) return errorResult(scope.message);
+    if (!isUuid(args.workflow_id)) return errorResult("workflow_id must be a UUID.");
+    const db = ctx.db as SupabaseClient;
+    const { data, error } = await db
+      .from("workflows")
+      .select("id,name,description,is_active,trigger_type,trigger_config,definition,updated_at")
+      .eq("organization_id", scope.orgId)
+      .eq("id", args.workflow_id)
+      .maybeSingle();
+    if (error) return dbErrorResult(error);
+    if (!data) return errorResult("Automação não encontrada.");
+    const wf = data as {
+      id: string;
+      name: string;
+      description: string | null;
+      is_active: boolean;
+      trigger_type: string;
+      trigger_config: unknown;
+      definition: WorkflowDefinition | null;
+      updated_at: string | null;
+    };
+    const trigger = await describeTrigger(db, scope.orgId, wf.trigger_type, wf.trigger_config);
+    const messages = sendSteps(wf.definition).map(asMessage);
+    const canBroadcast = (ctx.scopes ?? []).includes("messages:send");
+    return jsonResult({
+      id: wf.id,
+      name: wf.name,
+      active: wf.is_active,
+      description: wf.description,
+      updated_at: wf.updated_at,
+      open_in_torque: `/automacoes/${wf.id}`,
+      trigger: { type: trigger.type, pipeline: trigger.pipeline, stages: trigger.stages },
+      messages,
+      flow: flowOverview(wf.definition),
+      to_cards_already_in_stage: !canBroadcast
+        ? missingScopeHint("messages:send")
+        : trigger.audience
+        ? {
+          audience: trigger.audience,
+          how:
+            "audience.preview with this audience → broadcast.plan with the same audience and from_automation {workflow_id, node_id} → broadcast.test → the person's OK → broadcast.confirm. One message per broadcast; the full sequence (waits, conditions) only runs for cards that enter the stage.",
+        }
+        : "Esta automação não dispara pela entrada numa etapa de funil; escolha o funil e a etapa (pipeline.list / stage.list) para montar a audiência.",
+    });
   },
 };
 

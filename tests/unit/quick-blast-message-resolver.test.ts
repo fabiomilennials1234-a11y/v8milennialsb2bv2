@@ -10,7 +10,7 @@
 
 import { describe, it, expect } from "vitest";
 
-const { resolveBlastMessage } = await import(
+const { resolveBlastMessage, templateVariables } = await import(
   "../../supabase/functions/_shared/quick-blast/message-resolver.ts"
 );
 
@@ -122,5 +122,20 @@ describe("resolveBlastMessage — double-brace variables ({{key}})", () => {
   it("resolves a {{key}} nested inside a spintax option", () => {
     const out = resolveBlastMessage("{oi {{primeiro_nome}}|e aí}", { primeiro_nome: "Pedro" }, first);
     expect(out).toBe("oi Pedro");
+  });
+});
+
+describe("templateVariables", () => {
+  it("lists the names the resolver would substitute, both spellings, first-seen, deduped", () => {
+    expect(templateVariables("Oi {{primeiro_nome}}, {empresa} — {{ primeiro_nome }} {{dia_reuniao}}"))
+      .toEqual(["primeiro_nome", "empresa", "dia_reuniao"]);
+  });
+
+  it("ignores spintax groups but sees a variable nested in one", () => {
+    expect(templateVariables("{Oi|Olá} {oi {{nome}}|e aí}")).toEqual(["nome"]);
+  });
+
+  it("returns nothing for plain text", () => {
+    expect(templateVariables("Tudo certo por aí?")).toEqual([]);
   });
 });

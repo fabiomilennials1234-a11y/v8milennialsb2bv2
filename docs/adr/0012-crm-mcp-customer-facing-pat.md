@@ -186,3 +186,37 @@ O spec passa pelo mesmo `safeParseSpec → compileWorkflow → validateWorkflow`
 - U8: com a automação ligada, um card entrando na etapa cria execução no **motor real**, então o gatilho gerado é aceito. U4: desligada, não cria.
 - Regressão: v1 31/31, métricas 12/12, funil 15/15, disparo 11/11.
 - Deno 84/84 no crm-mcp (282 no conjunto MCP + workflow-schema).
+
+---
+
+## Emenda 2026-11-24 (6) — fatia 5 do v2: mensagem de automação para quem já está na etapa
+
+**Origem:** um usuário de cliente pediu à IA para "mandar a mensagem da automação X para os clientes da etapa Y do funil Z". A IA respondeu que não conseguia. Três motivos:
+1. o token tinha só `read`, e uma tool de escrita sem escopo nem aparece em `tools/list`, então a IA não tinha como explicar o que faltava;
+2. `automation.list` não expõe o texto das mensagens;
+3. o motor de Disparos resolve só `{{nome}}`, `{{primeiro_nome}}`, `{{empresa}}` e `{{segmento}}`, e **apaga em silêncio** qualquer outra variável. As automações desse cliente usam também `{{saudacao}}`, `{{dia_reuniao}}`, `{{hora_reuniao}}`, `{{telefone}}` e `{{faturamento}}`, que chegariam em branco ao lead.
+
+**Decisão: o servidor copia a mensagem; a IA não a redigita.** `broadcast.plan` e `broadcast.test` aceitam `from_automation {workflow_id, node_id}`. O texto e a mídia saem do nó lido **pelos mesmos campos que o executor lê** (`automation-steps.ts`, espelho de `workflow-action-handler.ts` e `action-handlers/send-whatsapp*.ts`). Um ponto não óbvio: o nó de imagem envia `imageCaption`, não `messageTemplate`. `message`, quando vem junto, substitui só o texto, que vira a legenda da mídia. O plano guarda o vínculo, que segue para `blast_plans.source`.
+
+**Ferramentas:**
+- `automation.get` (leitura) devolve:
+  - o gatilho com nomes de funil e etapa;
+  - o fluxo em ordem (BFS a partir do gatilho);
+  - cada envio com `node_id`, tipo, texto, mídia, variáveis e se o disparo consegue enviá-lo (e por que não);
+  - a audiência pronta para quem **já** está na etapa.
+- Sem `messages:send`, a resposta diz exatamente como liberar.
+
+**Trava de variáveis (vale também para texto livre):** `broadcast.plan` e `broadcast.test` recusam qualquer variável que o motor não preenche, nomeando cada uma. Antes, o texto saía com o buraco.
+
+**Mídia:** só imagem e documento, que é o que o motor de Disparos envia (`blast-media.ts`), e só do bucket público `media` do projeto. Áudio, vídeo, figurinha, menu, Pix, template da Meta, texto gerado por IA e envios para a equipe aparecem em `automation.get` com o motivo de não serem disparáveis. Imagem sem legenda pede `message`, porque o motor exige texto. O `broadcast.test` manda a mídia de verdade (`sendMedia`).
+
+**O que o token pode:** o `initialize` passa a enviar `instructions` (campo do protocolo MCP). Elas dizem o que o token pode fazer e, para cada escopo ausente, quem pode liberar e onde (token novo em IA conectada; um token não pode ser ampliado). A IA deixa de responder só "não consigo".
+
+**Proveniência:** `broadcast.confirm` passa `source.pipelineId` (o funil da audiência), que o motor já usava para registrar a origem do disparo e que o MCP não mandava.
+
+**Fora desta fatia:** rodar a **sequência inteira** da automação (esperas, condições, várias mensagens) para os cards que já estão na etapa. Isso não existe nem no app. Criar execuções em massa contornaria o limite diário e o anti-ban do motor de Disparos. A fatia 6 candidata é um catálogo único de variáveis, para o Disparo preencher as mesmas da automação.
+
+**Evidência:**
+- Deno 163/163 no crm-mcp + `_shared/mcp`, com type-check dos testes; suíte edge do CI 1219/1219.
+- vitest do resolver 31/31; travas de tsc, lint e dep-cruise sem nada novo.
+- O canary da preview **não** rodou nesta fatia: a preview efêmera e o script não existem mais.

@@ -1,14 +1,20 @@
 import { assertEquals, assertMatch } from "@std/assert";
 import { textOf } from "../../_shared/mcp/content.ts";
 import type { ToolContext } from "../../_shared/mcp/types.ts";
+import type { WorkflowDefinition } from "../../_shared/workflow-schema/definition.ts";
 import {
+  checkBroadcastText,
   clock,
   customerBroadcastConfirmTool,
+  customerBroadcastPlanTool,
+  customerBroadcastTestTool,
   eligibleInstances,
+  engineMedia,
   estimateDays,
   idleOrFilter,
   inSendWindow,
   parseAudience,
+  parseFromAutomation,
   renderPreview,
   shapeAudience,
 } from "./broadcast.ts";
@@ -240,4 +246,297 @@ Deno.test("confirm: outside the send window nothing is consumed or sent", () =>
     assertEquals(res.isError, true);
     assertMatch(textOf(res), /janela de envio/);
     assertEquals([f.store.length, f.edgeCalls.length], [0, 0]);
+  }));
+
+// --- what is sent: free text or an automation step (fatia 5) ------------------------------
+
+const WF = "88888888-8888-4888-8888-888888888888";
+const INST = "99999999-9999-4999-8999-999999999999";
+const MEDIA = "https://proj.supabase.co/storage/v1/object/public/media/workflow-assets/org/a.jpeg";
+
+Deno.test("checkBroadcastText: present, within the limit, only variables the engine fills", () => {
+  assertEquals(
+    checkBroadcastText("Oi {{primeiro_nome}} da {{empresa}} ({segmento}) {a|b}", false),
+    null,
+  );
+  assertEquals(checkBroadcastText("", false), "message is required.");
+  assertMatch(checkBroadcastText("", true)!, /legenda/);
+  assertMatch(checkBroadcastText("x".repeat(1001), false)!, /1000/);
+  const bad = checkBroadcastText(
+    "{{saudacao}} {{nome}}, reunião {{dia_reuniao}} {{dia_reuniao}}",
+    false,
+  )!;
+  assertMatch(bad, /usa \{\{saudacao\}\}, \{\{dia_reuniao\}\}, que chegaria em branco/);
+});
+
+Deno.test("parseFromAutomation: absent is null; both ids required", () => {
+  assertEquals(parseFromAutomation(undefined), { ok: true, ref: null });
+  assertEquals(parseFromAutomation({ workflow_id: WF, node_id: " n7 " }), {
+    ok: true,
+    ref: { workflowId: WF, nodeId: "n7" },
+  });
+  assertEquals(parseFromAutomation({ workflow_id: "x", node_id: "n7" }).ok, false);
+  assertEquals(parseFromAutomation({ workflow_id: WF }).ok, false);
+  assertEquals(parseFromAutomation({ workflow_id: WF, node_id: "n".repeat(101) }).ok, false);
+});
+
+Deno.test("engineMedia: the attachment fields blast-plan-create validates", () => {
+  assertEquals(engineMedia(null), {});
+  assertEquals(engineMedia({ type: "image", url: MEDIA, name: null }), {
+    media_url: MEDIA,
+    media_type: "image",
+  });
+  assertEquals(engineMedia({ type: "document", url: MEDIA, name: "P.pdf" }), {
+    media_url: MEDIA,
+    media_type: "document",
+    media_name: "P.pdf",
+  });
+});
+
+/** An automation shaped like the ones the builder saves (trigger → wait → sends). */
+const AUTOMATION: WorkflowDefinition = {
+  nodes: [
+    { id: "n1", type: "trigger", data: { label: "Entrou em Follow-up" } },
+    { id: "n2", type: "delay", data: { label: "Esperar 1 dia" } },
+    {
+      id: "n3",
+      type: "action",
+      data: {
+        actionType: "send_whatsapp_message",
+        messageType: "texto",
+        messageTemplate: "Oi {{primeiro_nome}}, conseguiu ver minha mensagem?",
+        label: "Cobrar resposta",
+      },
+    },
+    {
+      id: "n4",
+      type: "action",
+      data: {
+        actionType: "send_whatsapp_image",
+        imageUrl: MEDIA,
+        imageCaption: "Esse é um dos anúncios que fizemos pra {{empresa}}",
+      },
+    },
+    { id: "n5", type: "action", data: { actionType: "send_whatsapp_image", imageUrl: MEDIA } },
+    { id: "n6", type: "action", data: { actionType: "send_whatsapp_audio", audioUrl: MEDIA } },
+    {
+      id: "n7",
+      type: "action",
+      data: { actionType: "send_whatsapp", messageTemplate: "Sua reunião é {{dia_reuniao}}" },
+    },
+  ],
+  edges: ["n1-n2", "n2-n3", "n3-n4", "n4-n5", "n5-n6", "n6-n7"].map((e, i) => {
+    const [source, target] = e.split("-");
+    return { id: String(i), source, target };
+  }),
+};
+
+/** Table-driven PostgREST stand-in + recording store/edge, for plan and test. */
+function contentFakes() {
+  const calls: Array<{ table: string; chain: Array<[string, unknown[]]> }> = [];
+  const opened: Array<{ tool: string; summary: string; plan: Record<string, unknown> }> = [];
+  const edgeCalls: Array<{ fn: string; body: Record<string, unknown> }> = [];
+  const rows = (table: string): unknown[] => {
+    switch (table) {
+      case "team_members":
+        return [{ organization_id: ORG, name: "Ana Souza", phone: "(11) 99999-0000" }];
+      case "workflows":
+        return [{ id: WF, name: "GPM · 2. Follow-up", definition: AUTOMATION }];
+      case "pipeline_entries":
+        return ["l1", "l2"].map((id) => ({
+          lead_id: id,
+          leads: {
+            id,
+            name: id === "l1" ? "Bruno Lima" : "Carla Dias",
+            company: "Acme",
+            segment: null,
+            normalized_phone: "5511988887777",
+            deleted_at: null,
+          },
+        }));
+      case "whatsapp_instances":
+        return [{
+          id: INST,
+          instance_name: "lucca",
+          phone_number: "5511900000000",
+          status: "connected",
+          provider: "uazapi",
+          reserved_for: null,
+        }];
+      default:
+        return [];
+    }
+  };
+  const db = {
+    from(table: string) {
+      const call = { table, chain: [] as Array<[string, unknown[]]> };
+      calls.push(call);
+      const p: unknown = new Proxy({}, {
+        get(_t, prop: string) {
+          if (prop === "then") {
+            return (res: (v: unknown) => unknown) =>
+              Promise.resolve({ data: rows(table), error: null }).then(res);
+          }
+          if (prop === "maybeSingle" || prop === "single") {
+            return () => Promise.resolve({ data: rows(table)[0] ?? null, error: null });
+          }
+          return (...args: unknown[]) => {
+            call.chain.push([prop, args]);
+            return p;
+          };
+        },
+      });
+      return p;
+    },
+  };
+  const ctx: ToolContext = {
+    db,
+    orgId: ORG,
+    userId: "u",
+    scopes: ["read", "messages:send"],
+    actions: {
+      open: (tool: string, _scope: string, summary: string, plan: Record<string, unknown>) => {
+        opened.push({ tool, summary, plan });
+        return Promise.resolve({ actionId: TOKEN, expiresAt: "2099-01-01T00:00:00Z" });
+      },
+      take: () => Promise.resolve({ tool: "broadcast.test", plan: null }),
+      finish: () => Promise.resolve(true),
+    },
+    edge: (fn: string, body: Record<string, unknown>) => {
+      edgeCalls.push({ fn, body });
+      return Promise.resolve({ status: 200, body: { ok: true } });
+    },
+  };
+  return { ctx, calls, opened, edgeCalls };
+}
+
+const AUDIENCE = { pipeline_id: PIPE, stage_keys: ["follow_up"] };
+async function planOf(args: Record<string, unknown>) {
+  const f = contentFakes();
+  const res = await customerBroadcastPlanTool.handler({ audience: AUDIENCE, ...args }, f.ctx);
+  return { f, res };
+}
+
+Deno.test("plan from_automation: the server copies the step's text and image — the AI never retypes it", async () => {
+  const { f, res } = await planOf({ from_automation: { workflow_id: WF, node_id: "n4" } });
+  const out = JSON.parse(textOf(res));
+  assertEquals(f.opened.length, 1);
+  const plan = f.opened[0].plan;
+  assertEquals(plan.message, "Esse é um dos anúncios que fizemos pra {{empresa}}");
+  assertEquals(plan.media, { type: "image", url: MEDIA, name: null });
+  assertEquals(plan.from_automation, { workflow_id: WF, node_id: "n4" });
+  assertMatch(f.opened[0].summary, /automação "GPM · 2\. Follow-up"/);
+  assertEquals(out.examples[0].text, "Esse é um dos anúncios que fizemos pra Acme");
+  assertEquals(out.from_automation.automation, "GPM · 2. Follow-up");
+  // the automation is read inside the token's org
+  const wf = f.calls.find((c) => c.table === "workflows")!;
+  assertEquals(
+    wf.chain.some(([m, a]) => m === "eq" && a[0] === "organization_id" && a[1] === ORG),
+    true,
+  );
+});
+
+Deno.test("plan from_automation: `message` replaces only the text; the media stays", async () => {
+  const { f } = await planOf({
+    from_automation: { workflow_id: WF, node_id: "n5" },
+    message: "Lembra desse anúncio, {{primeiro_nome}}?",
+  });
+  assertEquals(f.opened[0].plan.message, "Lembra desse anúncio, {{primeiro_nome}}?");
+  assertEquals((f.opened[0].plan.media as { url: string }).url, MEDIA);
+});
+
+Deno.test("plan from_automation: an image without caption asks for the text instead of failing in the engine", async () => {
+  const { f, res } = await planOf({ from_automation: { workflow_id: WF, node_id: "n5" } });
+  assertEquals(res.isError, true);
+  assertMatch(textOf(res), /legenda/);
+  assertEquals(f.opened.length, 0);
+});
+
+Deno.test("plan from_automation: steps the Disparo cannot send are refused with the reason", async () => {
+  const cases: Array<[string, RegExp]> = [
+    ["n6", /áudio/],
+    ["n7", /\{\{dia_reuniao\}\}/],
+    ["n2", /não envia mensagem/], // a wait, not a send
+    ["nope", /não existe/],
+  ];
+  for (const [node, why] of cases) {
+    const { f, res } = await planOf({ from_automation: { workflow_id: WF, node_id: node } });
+    assertEquals(res.isError, true, node);
+    assertMatch(textOf(res), why);
+    assertEquals(f.opened.length, 0, node);
+  }
+});
+
+Deno.test("plan: free text with a variable the engine would blank is refused before any query", async () => {
+  const f = contentFakes();
+  const res = await customerBroadcastPlanTool.handler(
+    { audience: AUDIENCE, message: "Oi {{saudacao}}" },
+    f.ctx,
+  );
+  assertEquals(res.isError, true);
+  assertMatch(textOf(res), /\{\{saudacao\}\}/);
+  assertEquals([f.calls.length, f.opened.length], [0, 0]);
+  // neither text nor automation → nothing to send
+  const none = await customerBroadcastPlanTool.handler({ audience: AUDIENCE }, f.ctx);
+  assertEquals(none.isError, true);
+});
+
+Deno.test("test from_automation: the image goes too, captioned for the caller", async () => {
+  const f = contentFakes();
+  const res = await customerBroadcastTestTool.handler(
+    { from_automation: { workflow_id: WF, node_id: "n4" } },
+    f.ctx,
+  );
+  assertEquals(res.isError, undefined);
+  assertEquals(f.edgeCalls.length, 1);
+  const { fn, body } = f.edgeCalls[0];
+  assertEquals(fn, "whatsapp-api-proxy");
+  assertEquals(body.action, "sendMedia");
+  assertEquals(body.payload, {
+    number: "5511999990000",
+    type: "image",
+    file: MEDIA,
+    caption: "Esse é um dos anúncios que fizemos pra ",
+  });
+});
+
+Deno.test("test: plain text still goes through sendText", async () => {
+  const f = contentFakes();
+  await customerBroadcastTestTool.handler({ message: "Oi {{primeiro_nome}}" }, f.ctx);
+  assertEquals(f.edgeCalls[0].body.action, "sendText");
+  assertEquals((f.edgeCalls[0].body.payload as { text: string }).text, "Oi Ana");
+});
+
+Deno.test("confirm: media, the audience's funnel and the automation reference reach the engine", () =>
+  atNoon(async () => {
+    const f = fakes({
+      plan: {
+        ...PLAN,
+        media: { type: "document", url: MEDIA, name: "Proposta.pdf" },
+        audience: { pipelineId: PIPE, stageKeys: ["follow_up"], idleDaysMin: 0 },
+        from_automation: { workflow_id: WF, node_id: "n4" },
+      },
+    });
+    await customerBroadcastConfirmTool.handler({ confirm_token: TOKEN }, f.ctx);
+    const body = f.edgeCalls[0].body as Record<string, unknown>;
+    assertEquals([body.media_url, body.media_type, body.media_name], [
+      MEDIA,
+      "document",
+      "Proposta.pdf",
+    ]);
+    assertEquals(body.source, {
+      via: "crm-mcp",
+      action_id: TOKEN,
+      pipelineId: PIPE,
+      from_automation: { workflow_id: WF, node_id: "n4" },
+    });
+  }));
+
+Deno.test("confirm: a plan stored before this change is sent exactly as before", () =>
+  atNoon(async () => {
+    const f = fakes({ plan: PLAN });
+    await customerBroadcastConfirmTool.handler({ confirm_token: TOKEN }, f.ctx);
+    const body = f.edgeCalls[0].body as Record<string, unknown>;
+    assertEquals("media_url" in body, false);
+    assertEquals(body.source, { via: "crm-mcp", action_id: TOKEN });
   }));

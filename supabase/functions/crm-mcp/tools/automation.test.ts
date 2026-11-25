@@ -5,6 +5,7 @@ import {
   buildIdleAutomation,
   customerAutomationActivateTool,
   customerAutomationDraftTool,
+  customerAutomationGetTool,
   idleAutomationSpec,
 } from "./automation.ts";
 
@@ -182,4 +183,151 @@ Deno.test("activate: an unknown/used/expired token turns nothing on", async () =
   const res = await customerAutomationActivateTool.handler({ confirm_token: TOKEN }, f.ctx);
   assertEquals(res.isError, true);
   assertEquals(f.updates.length, 0);
+});
+
+// --- automation.get (fatia 5) ---------------------------------------------------------------
+
+const MEDIA = "https://proj.supabase.co/storage/v1/object/public/media/workflow-assets/org/a.jpeg";
+
+/** Read fake: an automation shaped like production ones, firing on a stage by its id. */
+function readFakes(opts: { trigger?: Record<string, unknown>; triggerType?: string } = {}) {
+  const calls: Array<{ table: string; chain: Array<[string, unknown[]]> }> = [];
+  const rows = (table: string): unknown[] => {
+    if (table === "workflows") {
+      return [{
+        id: WF,
+        name: "GPM · 2. Follow-up (nunca respondeu)",
+        description: null,
+        is_active: true,
+        trigger_type: opts.triggerType ?? "stage_changed",
+        trigger_config: opts.trigger ?? { pipeline_id: PIPE, stages: [STAGE], to_stage: "" },
+        updated_at: "2026-11-20T12:00:00Z",
+        definition: {
+          nodes: [
+            { id: "n1", type: "trigger", data: { label: "Entrou em Follow-up" } },
+            {
+              id: "n2",
+              type: "action",
+              data: {
+                actionType: "send_whatsapp_message",
+                messageType: "texto",
+                messageTemplate: "Oi {{primeiro_nome}}, conseguiu ver minha mensagem?",
+              },
+            },
+            {
+              id: "n3",
+              type: "action",
+              data: { actionType: "send_whatsapp_image", imageUrl: MEDIA, imageCaption: "Olha" },
+            },
+          ],
+          edges: [
+            { id: "e1", source: "n1", target: "n2" },
+            { id: "e2", source: "n2", target: "n3" },
+          ],
+        },
+      }];
+    }
+    if (table === "pipelines") return [{ id: PIPE, name: "GPM" }];
+    if (table === "pipeline_stages") {
+      return [
+        { id: STAGE, stage_key: "follow_up", name: "Follow-up" },
+        { id: "x", stage_key: "novo", name: "Novo" },
+      ];
+    }
+    return [];
+  };
+  const db = {
+    from(table: string) {
+      const call = { table, chain: [] as Array<[string, unknown[]]> };
+      calls.push(call);
+      const p: unknown = new Proxy({}, {
+        get(_t, prop: string) {
+          if (prop === "then") {
+            return (res: (v: unknown) => unknown) =>
+              Promise.resolve({ data: rows(table), error: null }).then(res);
+          }
+          if (prop === "maybeSingle") {
+            return () => Promise.resolve({ data: rows(table)[0] ?? null, error: null });
+          }
+          return (...args: unknown[]) => {
+            call.chain.push([prop, args]);
+            return p;
+          };
+        },
+      });
+      return p;
+    },
+  };
+  return { db, calls };
+}
+
+const readCtx = (db: unknown, scopes: string[]): ToolContext => ({
+  db,
+  orgId: ORG,
+  userId: "u",
+  scopes,
+});
+
+async function getOf(db: unknown, scopes = ["read", "messages:send"]) {
+  return JSON.parse(
+    textOf(await customerAutomationGetTool.handler({ workflow_id: WF }, readCtx(db, scopes))),
+  );
+}
+
+Deno.test("automation.get: trigger by name, messages with node_id, and the audience for cards already there", async () => {
+  const f = readFakes();
+  const out = await getOf(f.db);
+  assertEquals(out.trigger.pipeline, { id: PIPE, name: "GPM" });
+  assertEquals(out.trigger.stages, [{ id: STAGE, stage_key: "follow_up", name: "Follow-up" }]);
+  assertEquals(out.messages.map((m: { node_id: string; kind: string }) => [m.node_id, m.kind]), [
+    ["n2", "texto"],
+    ["n3", "imagem"],
+  ]);
+  assertEquals(out.messages[0].broadcastable, true);
+  assertEquals(out.to_cards_already_in_stage.audience, {
+    pipeline_id: PIPE,
+    stage_keys: ["follow_up"],
+  });
+  // every table it reads is scoped to the token's org
+  for (const c of f.calls) {
+    assertEquals(
+      c.chain.some(([m, a]) => m === "eq" && a[0] === "organization_id" && a[1] === ORG),
+      true,
+      c.table,
+    );
+  }
+});
+
+Deno.test("automation.get: without messages:send it says exactly how to unlock the broadcast", async () => {
+  const out = await getOf(readFakes().db, ["read"]);
+  assertMatch(out.to_cards_already_in_stage, /"Enviar mensagens"/);
+  assertMatch(out.to_cards_already_in_stage, /admin/);
+  assertEquals(out.messages.length, 2); // reading is never gated
+});
+
+Deno.test("automation.get: a trigger that is not a funnel stage gets no audience", async () => {
+  const f = readFakes({
+    triggerType: "lead_created",
+    trigger: { filter_pipeline_id: PIPE, filter_pipe: "" },
+  });
+  const out = await getOf(f.db);
+  assertEquals(out.trigger.pipeline.name, "GPM");
+  assertEquals(typeof out.to_cards_already_in_stage, "string");
+});
+
+Deno.test("automation.get: a legacy trigger with no funnel keeps raw stage refs and reads nothing else", async () => {
+  const f = readFakes({ trigger: { pipe_type: "whatsapp", stages: ["respondeu"] } });
+  const out = await getOf(f.db);
+  assertEquals(out.trigger.pipeline, null);
+  assertEquals(out.trigger.stages, [{ ref: "respondeu" }]);
+  assertEquals(f.calls.map((c) => c.table), ["workflows"]);
+});
+
+Deno.test("automation.get: a malformed id is refused before any query", async () => {
+  const f = readFakes();
+  const bad = await customerAutomationGetTool.handler(
+    { workflow_id: "x" },
+    readCtx(f.db, ["read"]),
+  );
+  assertEquals([bad.isError, f.calls.length], [true, 0]);
 });

@@ -10,6 +10,7 @@ import {
   customerAutomationActivateTool,
   customerAutomationDeactivateTool,
   customerAutomationDraftTool,
+  customerAutomationGetTool,
   customerAutomationListTool,
 } from "./automation.ts";
 import {
@@ -52,6 +53,7 @@ export const CUSTOMER_TOOLS: ToolDef[] = [
   customerBroadcastConfirmTool,
   customerBroadcastCancelTool,
   customerAutomationListTool,
+  customerAutomationGetTool,
   customerAutomationDraftTool,
   customerAutomationActivateTool,
   customerAutomationDeactivateTool,
