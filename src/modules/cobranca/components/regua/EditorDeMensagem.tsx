@@ -11,8 +11,27 @@ import { useMemo, useRef, type ReactNode } from "react";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 
-import { VARIAVEIS_DA_REGUA, renderizarMensagem, variaveisDeExemplo, variaveisDesconhecidas } from "../../lib/regua";
+import {
+  VARIAVEIS_DA_REGUA,
+  VARIAVEIS_DO_TITULO,
+  renderizarMensagem,
+  variaveisDeExemplo,
+  variaveisDesconhecidas,
+} from "../../lib/regua";
 import { Campo } from "../dialogos";
+
+function Variavel({ chave, rotulo, onInserir }: { chave: string; rotulo: string; onInserir: (chave: string) => void }) {
+  return (
+    <button
+      type="button"
+      onClick={() => onInserir(chave)}
+      className="rounded-full border border-border bg-card px-2.5 py-1 text-[11.5px] font-semibold text-muted-foreground transition-colors hover:border-primary/50 hover:text-foreground"
+      title={`Insere {${chave}}`}
+    >
+      {rotulo}
+    </button>
+  );
+}
 
 /** Mensagem de coluna do fluxo. */
 export const LIMITE_DA_MENSAGEM = 2000;
@@ -84,16 +103,19 @@ export function EditorDeMensagem({
         </Campo>
         <div className="flex flex-wrap gap-1.5" aria-label="Variáveis">
           {VARIAVEIS_DA_REGUA.filter((v) => lembrete || !v.soLembrete).map((v) => (
-            <button
-              key={v.chave}
-              type="button"
-              onClick={() => inserir(v.chave)}
-              className="rounded-full border border-border bg-card px-2.5 py-1 text-[11.5px] font-semibold text-muted-foreground transition-colors hover:border-primary/50 hover:text-foreground"
-              title={`Insere {${v.chave}}`}
-            >
-              {v.rotulo}
-            </button>
+            <Variavel key={v.chave} chave={v.chave} rotulo={v.rotulo} onInserir={inserir} />
           ))}
+        </div>
+        <div className="space-y-1.5">
+          <p id={`${id}-por-titulo`} className="text-xs text-muted-foreground">
+            <span className="font-semibold">Por título</span> · a linha com estas variáveis se repete para cada título em
+            aberto
+          </p>
+          <div className="flex flex-wrap gap-1.5" aria-labelledby={`${id}-por-titulo`}>
+            {VARIAVEIS_DO_TITULO.map((v) => (
+              <Variavel key={v.chave} chave={v.chave} rotulo={v.rotulo} onInserir={inserir} />
+            ))}
+          </div>
         </div>
         {desconhecidas.length > 0 && (
           <p className="flex items-start gap-1.5 text-xs text-warning-strong">

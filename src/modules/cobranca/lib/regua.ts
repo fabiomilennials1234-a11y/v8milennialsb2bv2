@@ -190,8 +190,25 @@ export const VARIAVEIS_DA_REGUA: { chave: string; rotulo: string; exemplo: unkno
   { chave: "quando", rotulo: "Quando (hoje/amanhã)", exemplo: "amanhã", soLembrete: true },
 ];
 
-const DINHEIRO = new Set(["valor", "parcela_valor"]);
-const DATA = new Set(["vencimento", "parcela_vencimento", "prazo_data"]);
+/**
+ * Variáveis de UM título. A linha que usa uma delas se repete para cada título
+ * em aberto (`lista_titulos`, que o banco manda com no máximo 20 itens).
+ */
+export const VARIAVEIS_DO_TITULO: { chave: string; rotulo: string; campo: "vencimento" | "valor" | "numero" }[] = [
+  { chave: "titulo_vencimento", rotulo: "Vencimento", campo: "vencimento" },
+  { chave: "titulo_valor", rotulo: "Valor", campo: "valor" },
+  { chave: "titulo_numero", rotulo: "Número", campo: "numero" },
+];
+
+/** Os títulos do exemplo somam o {valor} e começam no {vencimento} de VARIAVEIS_DA_REGUA. */
+const TITULOS_DE_EXEMPLO = [
+  { vencimento: "2026-10-05", valor: 1380.5, numero: "NF 4821" },
+  { vencimento: "2026-10-20", valor: 460, numero: "NF 4907" },
+];
+
+const DINHEIRO = new Set(["valor", "parcela_valor", "titulo_valor"]);
+const DATA = new Set(["vencimento", "parcela_vencimento", "prazo_data", "titulo_vencimento"]);
+const MARCA_DE_TITULO = /\{titulo_(?:vencimento|valor|numero)\}/;
 
 export function formatarVariavel(chave: string, valor: unknown): string {
   if (valor === null || valor === undefined) return "";
@@ -208,21 +225,68 @@ export function formatarVariavel(chave: string, valor: unknown): string {
   return String(valor).trim();
 }
 
+/** A linha pronta, ou null quando ela ficou vazia por causa de variável (some). */
+function renderizarLinha(original: string, variaveis: Record<string, unknown>): string | null {
+  const linha = original
+    .replace(/\{([a-z_]+)\}/g, (_inteiro, chave: string) => formatarVariavel(chave, variaveis[chave]))
+    .replace(/[ \t]{2,}/g, " ")
+    .trim();
+  return linha === "" && original.trim() !== "" ? null : linha;
+}
+
+function titulosDaLista(variaveis: Record<string, unknown>): Record<string, unknown>[] {
+  const lista = variaveis.lista_titulos;
+  if (!Array.isArray(lista)) return [];
+  return lista
+    .filter((t): t is Record<string, unknown> => t !== null && typeof t === "object")
+    .map((t) => {
+      const v: Record<string, unknown> = { ...variaveis };
+      for (const { chave, campo } of VARIAVEIS_DO_TITULO) v[chave] = t[campo];
+      return v;
+    });
+}
+
+/**
+ * Linhas seguidas com variável de título formam um bloco que se repete por
+ * título: bloco de uma linha vira lista, de várias sai separado por linha em
+ * branco; sem título, some; lista cortada fecha com "E mais N títulos em aberto.".
+ */
 export function renderizarMensagem(modelo: string, variaveis: Record<string, unknown>): string {
+  const originais = modelo.replace(/\r\n?/g, "\n").split("\n");
+  const titulos = titulosDaLista(variaveis);
+  const total = Number(variaveis.titulos);
   const linhas: string[] = [];
-  for (const original of modelo.replace(/\r\n?/g, "\n").split("\n")) {
-    const linha = original
-      .replace(/\{([a-z_]+)\}/g, (_inteiro, chave: string) => formatarVariavel(chave, variaveis[chave]))
-      .replace(/[ \t]{2,}/g, " ")
-      .trim();
-    if (linha === "" && original.trim() !== "") continue;
-    linhas.push(linha);
+  const empurrar = (linha: string | null) => {
+    if (linha !== null) linhas.push(linha);
+  };
+
+  for (let i = 0; i < originais.length; ) {
+    if (!MARCA_DE_TITULO.test(originais[i])) {
+      empurrar(renderizarLinha(originais[i], variaveis));
+      i++;
+      continue;
+    }
+    let fim = i;
+    while (fim < originais.length && MARCA_DE_TITULO.test(originais[fim])) fim++;
+    const bloco = originais.slice(i, fim);
+    const separar = bloco.length > 1;
+    titulos.forEach((doTitulo, n) => {
+      if (separar && n > 0) linhas.push("");
+      for (const original of bloco) empurrar(renderizarLinha(original, doTitulo));
+    });
+    const resto = Number.isFinite(total) ? total - titulos.length : 0;
+    if (titulos.length > 0 && resto > 0) {
+      if (separar) linhas.push("");
+      linhas.push(`E mais ${resto} ${resto === 1 ? "título" : "títulos"} em aberto.`);
+    }
+    i = fim;
   }
   return linhas.join("\n").replace(/\n{3,}/g, "\n\n").trim();
 }
 
 export function variaveisDeExemplo(comoPagar: string | null, empresa?: string, diasDeAtraso?: number): Record<string, unknown> {
   const v: Record<string, unknown> = Object.fromEntries(VARIAVEIS_DA_REGUA.map((x) => [x.chave, x.exemplo]));
+  v.lista_titulos = TITULOS_DE_EXEMPLO;
   v.como_pagar = comoPagar ?? "";
   if (empresa) v.empresa = empresa;
   if (diasDeAtraso !== undefined) v.dias_atraso = diasDeAtraso;
@@ -231,7 +295,7 @@ export function variaveisDeExemplo(comoPagar: string | null, empresa?: string, d
 
 /** Chaves usadas no texto que não existem (erro de digitação vira texto sumido). */
 export function variaveisDesconhecidas(modelo: string): string[] {
-  const conhecidas = new Set(VARIAVEIS_DA_REGUA.map((x) => x.chave));
+  const conhecidas = new Set([...VARIAVEIS_DA_REGUA, ...VARIAVEIS_DO_TITULO].map((x) => x.chave));
   const usadas = [...modelo.matchAll(/\{([a-z_]+)\}/g)].map((m) => m[1]);
   return [...new Set(usadas.filter((u) => !conhecidas.has(u)))];
 }
