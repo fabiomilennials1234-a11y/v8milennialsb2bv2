@@ -62,4 +62,29 @@ describe("uploadSocialAttachment — o caminho que a RLS lê", () => {
     ).rejects.toThrow();
     expect(uploadMock).not.toHaveBeenCalled();
   });
+
+  it("publica o arquivo Opus com MIME genérico como áudio no WhatsApp oficial", async () => {
+    const audio = arquivo("WhatsApp Ptt.opus", "application/octet-stream");
+
+    const result = await uploadSocialAttachment(audio, ORG, "whatsapp_oficial");
+
+    expect(uploadMock).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({
+      type: "audio/ogg",
+      size: audio.size,
+      name: audio.name,
+    }), {
+      contentType: "audio/ogg",
+      upsert: false,
+    });
+    expect(result).toMatchObject({ type: "audio", mime: "audio/ogg", filename: audio.name });
+  });
+
+  it("mantém a informação de codec para identificar a nota de voz", async () => {
+    const audio = arquivo("gravacao.ogg", "audio/ogg;codecs=opus");
+
+    const result = await uploadSocialAttachment(audio, ORG, "whatsapp_oficial");
+
+    expect(uploadMock.mock.calls[0][2]).toMatchObject({ contentType: "audio/ogg" });
+    expect(result).toMatchObject({ type: "audio", mime: "audio/ogg;codecs=opus" });
+  });
 });

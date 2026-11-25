@@ -56,8 +56,10 @@ describe("shared attachment constants", () => {
     }
   });
 
-  it("accept list excludes audio (voice notes have their own flow)", () => {
-    expect(ATTACHMENT_ACCEPT).not.toContain("audio");
+  it("offers Ogg/Opus audio files without accepting all audio formats", () => {
+    const accepted = ATTACHMENT_ACCEPT.split(",");
+    expect(accepted.filter(token => token.startsWith("audio/"))).toEqual(["audio/ogg"]);
+    expect(accepted).toEqual(expect.arrayContaining([".ogg", ".oga", ".opus"]));
   });
 
   it("size cap is 16MB", () => {
@@ -70,8 +72,15 @@ describe("getAttachmentValidationError", () => {
     expect(getAttachmentValidationError({ size: 100, type })).toMatch(/Formato não aceito/);
   });
 
-  it.each(['application/pdf', 'IMAGE/PNG', 'video/mp4'])('accepts supported MIME %s', type => {
+  it.each(['application/pdf', 'IMAGE/PNG', 'video/mp4', 'audio/ogg;codecs=opus'])('accepts supported MIME %s', type => {
     expect(getAttachmentValidationError({ size: 100, type })).toBeNull();
+  });
+  it("accepts a WhatsApp audio file when the operating system reports a generic MIME", () => {
+    expect(getAttachmentValidationError({
+      size: 100,
+      type: "application/octet-stream",
+      name: "WhatsApp Ptt.ogg",
+    })).toBeNull();
   });
   it("rejects empty files (0 bytes)", () => {
     expect(getAttachmentValidationError({ size: 0 })).toMatch(/vazio/);

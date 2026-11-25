@@ -85,6 +85,23 @@ it("uploads a PDF with cancellable PUT, then sends the public media URL", async 
   expect(mock.invoke.mock.calls[0][1].body.payload.file).toContain("https://storage.invalid/whatsapp-media/org/");
   close();
 });
+it.each([
+  ["WhatsApp Ptt.ogg", "application/ogg"],
+  ["Áudio WhatsApp.OPUS", "application/octet-stream"],
+  ["WhatsApp Ptt.oga", ""],
+])("uploads %s as Ogg and sends the original filename as an attachment", async (fileName, mime) => {
+  const { result, close } = setup();
+  await act(async () => {
+    await result.current.mutateAsync({ ...variables, fileName, media: `data:${mime};base64,T2dnUw==` });
+  });
+  expect(mock.fetch.mock.calls[0][1]).toMatchObject({ method: "PUT", headers: { "Content-Type": "audio/ogg" } });
+  expect(mock.invoke).toHaveBeenCalledTimes(1);
+  expect(mock.invoke.mock.calls[0][1].body).toMatchObject({
+    action: "sendMedia",
+    payload: { type: "document", filename: fileName },
+  });
+  close();
+});
 it("times out stalled storage, keeps retryable attachment and never calls provider; retry succeeds", async () => {
   mock.fetch.mockReturnValueOnce(new Promise(() => {}));
   const { result, client, close } = setup();

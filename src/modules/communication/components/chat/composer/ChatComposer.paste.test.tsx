@@ -3,7 +3,7 @@
  * anexar (validação + preview "Enviar Imagem"), sem enviar nada sozinho.
  */
 import { describe, it, expect, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 
@@ -118,6 +118,18 @@ describe("ChatComposer — colar print (Ctrl+V)", () => {
     render(wrap(<ChatComposer {...base} />));
     paste(document.body, { files: [new File(["x"], "setup.exe", { type: "application/x-msdownload" })] });
     expect(screen.queryByRole("button", { name: /Enviar (Imagem|Arquivo|Vídeo)/ })).toBeNull();
+  });
+
+  it("aceita um áudio exportado do WhatsApp pelo clipe mesmo sem MIME", async () => {
+    const { container } = render(wrap(<ChatComposer {...base} />));
+    const input = container.querySelector<HTMLInputElement>('input[type="file"]')!;
+    expect(input.accept.split(",")).toContain(".ogg");
+
+    const audio = new File(["OggS"], "WhatsApp Ptt.ogg");
+    fireEvent.change(input, { target: { files: [audio] } });
+
+    expect(await screen.findByRole("button", { name: "Enviar Arquivo" })).toBeTruthy();
+    expect(screen.getByText("WhatsApp Ptt.ogg")).toBeTruthy();
   });
 
   it("sem permissão de responder, colar não anexa", () => {
