@@ -100,7 +100,7 @@ const gateCalls = async () => {
 };
 
 beforeAll(async () => {
-  server = createServer((req, res) => { const k = (req.url ?? "").slice(1); hits.push(k); (routes.get(k) ?? ((r: import("node:http").ServerResponse) => { r.writeHead(404); r.end(); }))(res); });
+  server = createServer((req, res) => { const k = (req.url ?? "").slice(1); hits.push(k); const route = routes.get(k); if (typeof route === "function") route(res); else { res.writeHead(404); res.end(); } });
   await new Promise<void>((r) => server.listen(0, "127.0.0.1", () => r()));
   port = (server.address() as { port: number }).port;
   db = await makeAvatarDb();
