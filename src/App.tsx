@@ -1117,7 +1117,7 @@ function RedirectPipeCustomParaFunil() {
  * identidade não mudar a cada render da raiz.
  */
 const renderLeadCallAction: LeadCallActionRenderer = (lead) => (
-  <VoiceCallButton variant="icon" leadId={lead.id} leadName={lead.nome} />
+  <VoiceCallButton variant={lead.variant ?? "icon"} leadId={lead.id} leadName={lead.nome} />
 );
 
 const App = () => {

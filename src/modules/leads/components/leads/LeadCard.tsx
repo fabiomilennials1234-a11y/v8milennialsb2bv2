@@ -4,7 +4,7 @@ import { memo, useState, useRef, useEffect, useCallback } from "react";
 import { motion } from "framer-motion";
 import {
   Building2, Clock, MoreVertical, Trash2, MessageCircle, Target, Video, Check,
-  Phone, NotebookPen, MoveRight, Users, Gem, Tag, CheckSquare, CalendarDays,
+  NotebookPen, MoveRight, Users, Gem, Tag, CheckSquare, CalendarDays,
   Wallet, XCircle,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -15,6 +15,7 @@ import {
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
+import { useLeadCallAction } from "@/shared/components/LeadCallActionSlot";
 import { ScheduleMessageModal } from "@/modules/communication/components/chat/ScheduleMessageModal";
 import { CreateMeetingDialog } from "@/modules/engagement";
 import { formatPhoneForWhatsApp } from "@/modules/communication/lib/whatsapp";
@@ -384,6 +385,7 @@ export const LeadCard = memo(function LeadCard({
   // Resiliente: `null` quando o card monta fora de um PipeOpsProvider — nesse
   // caso o item "Adicionar a funil" e o dialog simplesmente não aparecem.
   const pipeOps = usePipeOpsOptional();
+  const renderCallAction = useLeadCallAction();
   const [editingField, setEditingField] = useState<string | null>(null);
   const [editValue, setEditValue] = useState("");
   const editRef = useRef<HTMLInputElement>(null);
@@ -477,8 +479,6 @@ export const LeadCard = memo(function LeadCard({
   );
   const abrirFicha = (e: React.MouseEvent) => { e.stopPropagation(); onClick?.(); };
 
-  const telefoneNu = (lead.phone ?? "").replace(/\D/g, "");
-
   const itensDoMenuAdicionar = (
     <>
       <DropdownMenuLabel className="text-[10px] uppercase tracking-wide text-muted-foreground">
@@ -492,15 +492,7 @@ export const LeadCard = memo(function LeadCard({
       <DropdownMenuItem onClick={(e) => { e.stopPropagation(); setScheduleOpen(true); }}>
         <Clock className="w-4 h-4 mr-2" /> Agendar mensagem
       </DropdownMenuItem>
-      {/* "Ligar" é o único `real: false` do protótipo que dá para cumprir aqui
-          sem a ficha: é um `tel:`, igual ao LeadModalToolbar. */}
-      {telefoneNu && (
-        <DropdownMenuItem asChild>
-          <a href={`tel:${telefoneNu}`} onClick={(e) => e.stopPropagation()}>
-            <Phone className="w-4 h-4 mr-2" /> Ligar
-          </a>
-        </DropdownMenuItem>
-      )}
+      {hasPhone && lead.leadId && renderCallAction?.({ id: lead.leadId, nome: lead.name, variant: "menu-item" })}
       <DropdownMenuItem onClick={abrirFicha}>
         <NotebookPen className="w-4 h-4 mr-2" /> Registrar ligação {selo}
       </DropdownMenuItem>

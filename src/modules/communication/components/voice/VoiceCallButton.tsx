@@ -47,6 +47,7 @@ import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
@@ -63,8 +64,9 @@ interface VoiceCallButtonProps {
   /**
    * `default`: com o rótulo "Ligar", para o cabeçalho do chat.
    * `icon`: só o ícone, 32px, para o cabeçalho dos cards e o celular.
+   * `menu-item`: opção de ligar pelo número de voz selecionado.
    */
-  variant?: "default" | "icon";
+  variant?: "default" | "icon" | "menu-item";
 }
 
 type Voice = ReturnType<typeof useVoiceCallContext>;
@@ -131,10 +133,26 @@ export function VoiceCallButton({
   const titulo = voice.busy
     ? "Você já está em uma chamada"
     : `Ligar por ${voice.selected.instanceName}`;
+  const iniciarChamada = () => voice.startCall({ id: leadId, name: leadName });
   const discar = (e: React.MouseEvent) => {
     e.stopPropagation();
-    voice.startCall({ id: leadId, name: leadName });
+    iniciarChamada();
   };
+
+  if (variant === "menu-item") {
+    return (
+      <DropdownMenuItem
+        title={titulo}
+        disabled={voice.busy}
+        className={className}
+        onClick={(e) => e.stopPropagation()}
+        onSelect={iniciarChamada}
+      >
+        <PhoneCall className="mr-2 h-4 w-4" aria-hidden />
+        Ligar
+      </DropdownMenuItem>
+    );
+  }
   // O cabeçalho do chat é clicável inteiro, e o card do lead tem container
   // que abre a ficha; sem isto, ligar também abriria a conversa por baixo.
   const naoVazar = (e: React.PointerEvent) => e.stopPropagation();
