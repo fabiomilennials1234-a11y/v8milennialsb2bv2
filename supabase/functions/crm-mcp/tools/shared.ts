@@ -315,3 +315,26 @@ export async function memberNames(
     ((data ?? []) as Array<{ id: string; name: string | null }>).map((r) => [r.id, r.name ?? ""]),
   );
 }
+
+/** The org's timezone (default São Paulo), or the read error. */
+export async function readOrgTimezone(
+  db: SupabaseClient,
+  orgId: string,
+): Promise<{ tz: string } | { error: { message?: string; code?: string } }> {
+  const { data, error } = await db.from("organizations").select("timezone").eq("id", orgId)
+    .maybeSingle();
+  if (error) return { error };
+  return { tz: (data as { timezone?: string } | null)?.timezone || "America/Sao_Paulo" };
+}
+
+/** The caller's active team member id in the org, null when not a member, or the error. */
+export async function myMemberId(
+  db: SupabaseClient,
+  orgId: string,
+  userId: string,
+): Promise<{ id: string | null } | { error: { message?: string; code?: string } }> {
+  const { data, error } = await db.from("team_members").select("id").eq("organization_id", orgId)
+    .eq("user_id", userId).eq("is_active", true).maybeSingle();
+  if (error) return { error };
+  return { id: (data as { id: string } | null)?.id ?? null };
+}

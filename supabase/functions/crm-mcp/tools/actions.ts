@@ -86,3 +86,29 @@ export function actionErrorMessage(e: unknown): string {
   if (/token inválido/.test(msg)) return "Token inválido.";
   return "Não foi possível registrar a ação.";
 }
+
+/**
+ * A one-shot write (no separate plan step) recorded in crm_mcp_actions like every other
+ * write: open → take → run → finish(applied|failed). The audit row exists BEFORE the write,
+ * so a crash mid-write still leaves a trace an org admin can read.
+ */
+export async function auditedWrite(
+  ctx: ToolContext,
+  scope: WriteScope,
+  tool: string,
+  summary: string,
+  payload: unknown,
+  run: () => Promise<{ ok: boolean; result: unknown }>,
+): Promise<{ ok: boolean; result: unknown } | { error: string }> {
+  const w = writeContext(ctx, scope);
+  if (!w.ok) return { error: "sem escopo" };
+  try {
+    const { actionId } = await w.store.open(tool, scope, summary, payload);
+    if (!(await w.store.take(actionId))) return { error: "Não foi possível registrar a ação." };
+    const out = await run();
+    await w.store.finish(actionId, out.ok ? "applied" : "failed", out.result);
+    return out;
+  } catch (e) {
+    return { error: actionErrorMessage(e) };
+  }
+}

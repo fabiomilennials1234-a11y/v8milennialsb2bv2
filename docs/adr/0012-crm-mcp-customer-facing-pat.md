@@ -284,3 +284,46 @@ O spec passa pelo mesmo `safeParseSpec → compileWorkflow → validateWorkflow`
 **Evidência:**
 - Deno 199/199 no crm-mcp + `_shared/mcp`; suíte edge do CI 1254/1254.
 - Os 5 casos novos entram nos testes de superfície e de isolamento por org.
+
+---
+
+## Emenda 2026-11-25 (9) — fatia 8 do v2: a IA escreve no CRM
+
+**Escopos:** nenhum escopo novo. Notas, follow-ups, etiquetas e desfecho entram em `crm:write`. Para emitir esse escopo, a pessoa precisa ter `pipeline.move_cards`. A mensagem avulsa entra em `messages:send`, que só admin emite. Cada tool pede **também** a permissão da tela correspondente:
+- follow-ups: `followups.create` para criar e `followups.view` para concluir;
+- etiquetas: `leads.edit`. A barra de etiquetas do app não checa nada; aqui a regra é mais estrita de propósito;
+- desfecho: `pipeline.move_cards`, checada no plano e de novo na confirmação;
+- mensagem: `whatsapp.send_messages`, também no plano e na confirmação.
+
+**Visibilidade antes de gravar.** A RLS de `lead_comments`, `follow_ups` e `lead_tags` checa só a org. Por isso toda escrita carrega o lead (ou o card) por `leads` / `pipeline_entries`, sob a RLS de quem chama, antes de tocar na tabela-filha. `lead_tags` não tem `organization_id`; os testes de isolamento a isentam nominalmente, porque ela só é tocada para leads já lidos na org.
+
+**Com plano → confirmação** (dispara automação ou chega ao cliente):
+- **`lead.tag.plan` / `confirm`:**
+  - até 100 leads;
+  - etiqueta por nome ou id, e só as que já existem (criar etiqueta é de admin);
+  - só a mudança real entra no plano;
+  - o plano nomeia as automações `tag_added` que vão disparar, usando o mesmo matcher do motor (`matchesTriggerConfig`). Se a leitura das automações falhar, o plano falha;
+  - na confirmação: `ON CONFLICT DO NOTHING` em (lead_id, tag_id), e as remoções são agrupadas por etiqueta.
+- **`deal.outcome.plan` / `confirm`:**
+  - até 50 cards marcados como ganho, perdido ou reaberto, pela `definir_desfecho_da_entrada` — a mesma função dos botões Ganhou/Perdeu do card;
+  - ela é DEFINER e só checa a org do card. Por isso o plano lê cada card sob a RLS na org do token, e só esses chegam a ela (DEF14–DEF16 no pgTAP, conferidas em prod);
+  - venda sem valor em lugar nenhum gera **aviso**, não bloqueio. A trava do app recupera o `sale_value` do card e poupa algumas orgs, então só ela sabe recusar; a confirmação relata a recusa por card.
+- **`message.plan` / `confirm`:**
+  - uma mensagem para um lead, com o texto exato;
+  - variável que o disparo não preenche é recusada;
+  - sai do número em que o lead já conversa; senão, de um número conectado que não seja de setor;
+  - o envio usa `whatsapp-api-proxy` como o usuário — a mesma chamada do chat do app, com as mesmas travas (dono da conversa, número de setor).
+
+**Escrita direta** (registrada em `crm_mcp_actions` antes de executar):
+- `note.add`: autor = quem chama, que é a regra da policy de insert.
+- `followup.create`: responsável padrão = quem chama. Uma data sem hora vira 09:00 no fuso da org; passado e mais de 2 anos à frente são recusados.
+- `followup.complete`: só o follow-up de lead visível. Um UPDATE que não pega linha conta como falha.
+
+**Limitação do app que a IA herda:** em prod, a policy de `follow_ups` usa `get_user_organization_id()`, a 1ª org do usuário. Quem é de várias orgs não grava follow-up fora da primeira. A falha é segura: dá erro, não grava na org errada.
+
+**Refatoração:** um único `auditedWrite` em `actions.ts` substitui as duas cópias que havia em `broadcast.ts` e `automation.ts`.
+
+**Evidência:**
+- Deno 216/216 no crm-mcp + `_shared/mcp`; `writes.test.ts` traz 17 testes novos.
+- Todos os `select` novos passam do parse no schema de prod (validados pelo PostgREST com a chave anon).
+- DEF14–DEF16 retornam `true` em prod (transação só leitura).

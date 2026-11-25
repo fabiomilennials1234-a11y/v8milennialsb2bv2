@@ -104,15 +104,17 @@ export const WRITE_SCOPE_OPTIONS: ReadonlyArray<{
   {
     id: "crm:write",
     label: "Organizar o funil",
-    description: "Mover cards entre etapas. A IA monta um plano e só aplica depois que você confirmar.",
+    description:
+      "Mover cards, marcar negócio como ganho/perdido, adicionar notas, follow-ups e etiquetas. " +
+      "O que dispara automação a IA só aplica depois que você confirmar.",
   },
   {
     id: "messages:send",
     label: "Enviar mensagens",
     description:
-      "Disparos de WhatsApp para uma audiência — inclusive uma mensagem de automação para quem já " +
-      "está na etapa —, pelo motor de Disparos (limites e anti-ban valem). A IA testa no seu " +
-      "celular e só dispara com sua confirmação.",
+      "Mensagens de WhatsApp: uma para um lead, ou um disparo para uma audiência — inclusive uma " +
+      "mensagem de automação para quem já está na etapa — pelo motor de Disparos (limites e " +
+      "anti-ban valem). A IA mostra o texto e só envia com sua confirmação.",
     adminOnly: true,
   },
   {
