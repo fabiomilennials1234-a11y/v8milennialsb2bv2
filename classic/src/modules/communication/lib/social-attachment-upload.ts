@@ -7,7 +7,8 @@
  */
 import { supabase } from "@/integrations/supabase/client";
 
-import { classifyAttachment, type SocialAttachmentType } from "./social-attachment";
+import { resolveAttachmentMimeType } from "./attachment-media-type";
+import { classifyAttachment, isVoiceNoteMime, type SocialAttachmentType } from "./social-attachment";
 
 export interface UploadedAttachment {
   url: string;
@@ -41,8 +42,12 @@ export async function uploadSocialAttachment(
   // comum entregaria um quadrado com fundo branco no lugar do que o vendedor
   // escolheu. No Instagram continua sendo imagem: lá figurinha não existe.
   const ehFigurinha = canal === "whatsapp_oficial" && /^image\/webp$/i.test(file.type);
+  const mime = file.type || "application/octet-stream";
+  const contentType = canal === "whatsapp_oficial" && resolveAttachmentMimeType(file.type, file.name) === "audio/ogg"
+    ? "audio/ogg"
+    : mime;
 
-  const check = classifyAttachment(file.type, file.name, file.size, {
+  const check = classifyAttachment(contentType, file.name, file.size, {
     allowDocument: canal === "whatsapp_oficial",
     sticker: ehFigurinha,
     canal,
@@ -59,8 +64,11 @@ export async function uploadSocialAttachment(
   // (service_role bypassa RLS). Mover o segmento é o que faz o upload existir.
   const path = `notificame/${organizationId}/outbound/${crypto.randomUUID()}-${seguro}`;
 
-  const { error } = await supabase.storage.from("media").upload(path, file, {
-    contentType: file.type || "application/octet-stream",
+  const uploadFile = contentType === "audio/ogg" && file.type !== contentType
+    ? new File([file], file.name, { type: contentType, lastModified: file.lastModified })
+    : file;
+  const { error } = await supabase.storage.from("media").upload(path, uploadFile, {
+    contentType,
     upsert: false,
   });
   if (error) throw new Error(`Falha ao publicar o arquivo: ${error.message}`);
@@ -74,6 +82,7 @@ export async function uploadSocialAttachment(
     type: check.type,
     filename: file.name,
     sizeBytes: file.size,
-    mime: file.type || "application/octet-stream",
+    // O envio oficial só usa a rota de nota de voz quando o codec Opus é conhecido.
+    mime: isVoiceNoteMime(mime) ? mime : contentType,
   };
 }

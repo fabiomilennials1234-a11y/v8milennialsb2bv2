@@ -1,4 +1,5 @@
 import { providerSendStatus } from "@/modules/communication/lib/providerSendStatus";
+import { resolveAttachmentMimeType } from "@/modules/communication/lib/attachment-media-type";
 import { useRef } from "react";
 import { useChatReply } from "./useChatReply";
 /**
@@ -152,13 +153,19 @@ async function uploadMediaToStorage(
   organizationId: string,
   fileName?: string
 ): Promise<string> {
-  const matches = base64Data.match(/^data:([^;,]+)[^,]*;base64,(.+)$/);
+  const matches = base64Data.match(/^data:([^;,]*)[^,]*;base64,(.+)$/);
   if (!matches) {
     throw new Error("Formato de arquivo inválido");
   }
 
   const rawMimeType = matches[1];
-  const mimeType = normalizeMimeType(rawMimeType);
+  const attachmentMime = mediaType === "document"
+    ? resolveAttachmentMimeType(rawMimeType, fileName)
+    : rawMimeType;
+  if (!attachmentMime) {
+    throw new Error("Formato de arquivo inválido");
+  }
+  const mimeType = normalizeMimeType(attachmentMime);
   const base64 = matches[2];
 
   const byteCharacters = atob(base64);
