@@ -43,6 +43,15 @@ import {
   isErpClient,
   phoneKey,
 } from "./import-match.ts";
+import {
+  classifyRows,
+  countByGroup,
+  hideInvisible,
+  matchedLeadIds,
+  type PlannedRow,
+  planRows,
+  type PreviewInput,
+} from "./import-preview.ts";
 
 /**
  * Explica, na linha do relatório de importação, por que a linha não entrou no funil.
@@ -145,6 +154,19 @@ interface ImportPayload {
 
   /** Etiquetas para todos os leads do import. Não confiável até `resolveImportTagIds`. */
   tag_ids?: unknown;
+
+  /**
+   * "preview" classifica as linhas e não grava nada (flag `importacao_previa`).
+   * Ausente = importar.
+   */
+  mode?: "preview" | "commit";
+  /**
+   * Decisão por linha vinda da prévia: `[{ row, action }]`. Não confiável: a edge
+   * reclassifica e só aplica a ação que couber no grupo de agora.
+   */
+  decisions?: unknown;
+  /** Preenchido pela edge com o usuário do JWT; o corpo nunca decide isto. */
+  actor_user_id?: string;
 }
 
 /**
@@ -171,7 +193,67 @@ interface ImportReport {
   tags?: ImportTagsReport;
   /** Telefones extras da planilha gravados em `lead_phones`. Presente só quando alguma linha trouxe mais de um número. */
   extraPhones?: { added: number; failed: number };
+  /** Linhas puladas por decisão na prévia. */
+  skipped?: number;
+  /** Resultado de cada linha, quando a importação veio da prévia (planilha de resultado). */
+  rows?: RowOutcome[];
 }
+
+type RowOutcomeKind = "criado" | "compartilhado" | "atualizado" | "vinculado" | "pulado" | "recusado";
+
+interface RowOutcome {
+  row: number;
+  outcome: RowOutcomeKind;
+  reason?: string;
+  lead_id?: string;
+}
+
+/** Flag da prévia, em `organizations.feature_flags` (hoje só na Café Jurerê). */
+const PREVIEW_FLAG = "importacao_previa";
+
+async function orgFlagEnabled(
+  supabase: ReturnType<typeof createClient>,
+  organizationId: string,
+  key: string,
+): Promise<boolean> {
+  const { data, error } = await supabase
+    .from("organizations")
+    .select("feature_flags")
+    .eq("id", organizationId)
+    .maybeSingle();
+  if (error) return false;
+  const flags = (data as { feature_flags?: Record<string, unknown> } | null)?.feature_flags;
+  return flags?.[key] === true;
+}
+
+/** Ids, entre os pedidos, que o usuário enxerga pela RLS dele. Falha = nenhum (fecha). */
+async function visibleLeadIds(
+  userClient: ReturnType<typeof createClient>,
+  ids: string[],
+): Promise<Set<string>> {
+  const out = new Set<string>();
+  for (let i = 0; i < ids.length; i += 150) {
+    const { data, error } = await userClient.from("leads").select("id").in("id", ids.slice(i, i + 150));
+    if (error) return new Set();
+    for (const r of (data ?? []) as { id: string }[]) out.add(r.id);
+  }
+  return out;
+}
+
+/** Linha da planilha → entrada da classificação (o mesmo telefone formatado do motor). */
+function previewInputOf(lead: ParsedLead, index: number, invalid?: string | null): PreviewInput {
+  return {
+    row: reportRow(lead, index),
+    name: lead.name,
+    company: lead.company,
+    phone: lead.phone ? formatPhone(lead.phone) : undefined,
+    email: lead.email,
+    invalid: invalid ?? null,
+  };
+}
+
+const MOTIVO_MUDOU_DESDE_A_PREVIA =
+  "A linha mudou desde a prévia (alguém cadastrou o número nesse meio tempo) e não foi gravada. Revise e importe de novo.";
 
 // ─── Helpers ─────────────────────────────────────────────
 
@@ -940,6 +1022,21 @@ async function importToPipeline(
     leads.filter((l) => !l.phone).map((l) => l.email),
   );
 
+  // Veio da prévia: a decisão de cada linha vale contra a classificação de AGORA.
+  const plan: Map<number, PlannedRow> | null = payload.decisions !== undefined
+    ? planRows(classifyRows(leads.map((l, i) => previewInputOf(l, i)), existing), payload.decisions)
+    : null;
+  // A decisão acha a linha pelo número da planilha: número repetido no corpo faria uma
+  // decisão valer para duas linhas. Recusa antes de gravar qualquer coisa.
+  if (plan && plan.size !== leads.length) {
+    throw new Error("A planilha chegou com número de linha repetido; nada foi gravado. Envie o arquivo de novo.");
+  }
+  /** Linha que terminou gravada → resultado e lead (só com plano). */
+  const succeeded = new Map<number, { outcome: RowOutcomeKind; leadId: string }>();
+  const skippedRows = new Set<number>();
+  /** Leads criados com o telefone compartilhado por escolha na prévia. */
+  const sharedLeadIds = new Set<string>();
+
   /** Telefone já processado nesta execução → linha da planilha que o trouxe primeiro. */
   const processedPhones = new Map<string, number>();
   const createdLeadIds: string[] = [];
@@ -954,23 +1051,41 @@ async function importToPipeline(
       const rowNumber = reportRow(lead, rowIndex);
       const formattedPhone = lead.phone ? formatPhone(lead.phone) : undefined;
       const phoneId = phoneKey(formattedPhone);
+      const step = plan?.get(rowNumber);
 
-      if (phoneId && processedPhones.has(phoneId)) {
+      if (step?.action === "pular") {
+        if (step.mismatch) {
+          report.rejected++;
+          report.errors.push({ row: rowNumber, reason: MOTIVO_MUDOU_DESDE_A_PREVIA, kind: "falha" });
+        } else {
+          report.skipped = (report.skipped ?? 0) + 1;
+          skippedRows.add(rowNumber);
+        }
+        continue;
+      }
+
+      // Com plano, repetido e "outra empresa" já foram decididos na prévia.
+      if (!plan && phoneId && processedPhones.has(phoneId)) {
         report.rejected++;
         report.errors.push({ row: rowNumber, reason: `Telefone duplicado neste arquivo (mesmo número da linha ${processedPhones.get(phoneId)})`, kind: "duplicado" });
         continue;
       }
 
-      const existingLead: ExistingLead | null | undefined = phoneId
-        ? existing.byPhone.get(phoneId)
-        : lead.email
-          ? existing.byEmail.get(lead.email.toLowerCase().trim())
-          : null;
+      // "Criar com telefone compartilhado" é sempre um lead novo, mesmo com dono no CRM.
+      const sharePhone = step?.action === "criar_compartilhado";
+      const existingLead: ExistingLead | null | undefined = sharePhone
+        ? null
+        : phoneId
+          ? existing.byPhone.get(phoneId)
+          : lead.email
+            ? existing.byEmail.get(lead.email.toLowerCase().trim())
+            : null;
       const erpClient = !!existingLead && isErpClient(existingLead);
 
       try {
         let leadId: string;
         let leadWasCreated = false;
+        let rowOutcome: RowOutcomeKind = "criado";
 
         if (existingLead) {
           leadId = existingLead.id;
@@ -987,13 +1102,18 @@ async function importToPipeline(
           if (Object.keys(updates).length > 0) {
             await supabase.from("leads").update(updates).eq("id", existingLead.id);
             report.updated++;
+            rowOutcome = "atualizado";
           } else {
-            report.rejected++;
-            report.errors.push({
-              row: rowNumber,
-              reason: erpClient ? erpClientReason(existingLead) : "Lead já existe sem dados novos para atualizar",
-              kind: "ja_cadastrado",
-            });
+            rowOutcome = "vinculado";
+            // Com plano a pessoa escolheu vincular: não é erro.
+            if (!plan) {
+              report.rejected++;
+              report.errors.push({
+                row: rowNumber,
+                reason: erpClient ? erpClientReason(existingLead) : "Lead já existe sem dados novos para atualizar",
+                kind: "ja_cadastrado",
+              });
+            }
           }
         } else {
           const leadInsert: Record<string, unknown> = {
@@ -1015,17 +1135,46 @@ async function importToPipeline(
           };
           if (metricsPeriodAt != null) leadInsert.metrics_period_at = metricsPeriodAt;
 
-          const { data: newLead, error: leadError } = await supabase
+          let { data: newLead, error: leadError } = await supabase
             .from("leads").insert(leadInsert).select("id").single();
 
-          if (leadError) {
+          // O número já tem dono e a pessoa escolheu compartilhar: o lead nasce sem
+          // telefone e um UPDATE grava telefone + marca juntos — o caminho de
+          // `salvar_telefones_do_lead`. O gatilho `tg_leads_phone_compartilhado_guarda`
+          // exige um dono vivo e grava a trilha `phone_shared`.
+          let shareError: string | null = null;
+          if (leadError && sharePhone && isPhoneUniqueViolation(leadError)) {
+            ({ data: newLead, error: leadError } = await supabase
+              .from("leads").insert({ ...leadInsert, phone: undefined }).select("id").single());
+            if (!leadError && newLead) {
+              const { error: upErr } = await supabase
+                .from("leads").update({ phone: formattedPhone, phone_compartilhado: true }).eq("id", newLead.id);
+              if (upErr) shareError = upErr.message;
+              else {
+                rowOutcome = "compartilhado";
+                sharedLeadIds.add(newLead.id);
+              }
+            }
+          }
+
+          if (leadError || !newLead) {
             report.rejected++;
             report.errors.push({
-            row: rowNumber,
-            reason: await motivoFalhaDeInsercao(supabase, organizationId, leadError, formattedPhone),
-            kind: isPhoneUniqueViolation(leadError) ? "ja_cadastrado" : "falha",
-          });
+              row: rowNumber,
+              reason: leadError
+                ? await motivoFalhaDeInsercao(supabase, organizationId, leadError, formattedPhone)
+                : "Erro ao inserir lead: resposta vazia",
+              kind: leadError && isPhoneUniqueViolation(leadError) ? "ja_cadastrado" : "falha",
+            });
             continue;
+          }
+          if (shareError) {
+            // O lead existe, só sem o número: a pessoa completa depois.
+            report.errors.push({
+              row: rowNumber,
+              reason: `Lead criado sem telefone: não deu para compartilhar o número (${shareError.slice(0, 160)})`,
+              kind: "falha",
+            });
           }
           leadId = newLead.id;
           leadWasCreated = true;
@@ -1123,6 +1272,7 @@ async function importToPipeline(
         // campos personalizados; nenhum negócio foi aberto em nome dela.
         if (semFunil) {
           if (phoneId) processedPhones.set(phoneId, rowNumber);
+          succeeded.set(rowNumber, { outcome: rowOutcome, leadId });
           continue;
         }
 
@@ -1150,6 +1300,7 @@ async function importToPipeline(
               }
             }
             if (phoneId) processedPhones.set(phoneId, rowNumber);
+            succeeded.set(rowNumber, { outcome: rowOutcome, leadId });
             continue;
           }
         }
@@ -1190,6 +1341,7 @@ async function importToPipeline(
         }
 
         if (phoneId) processedPhones.set(phoneId, rowNumber);
+        succeeded.set(rowNumber, { outcome: rowOutcome, leadId });
       } catch (err) {
         report.rejected++;
         report.errors.push({ row: rowNumber, reason: `Erro inesperado: ${(err as Error).message}` });
@@ -1199,17 +1351,32 @@ async function importToPipeline(
 
   // Bulk insert lead_history for created leads
   if (createdLeadIds.length > 0) {
-    const historyRows = createdLeadIds.map((id) => ({
-      lead_id: id,
-      action: "lead_created",
-      description: semFunil
+    const historyRows = createdLeadIds.map((id) => {
+      const base = semFunil
         ? "Sistema: Lead importado por planilha (sem funil)"
         : payload.destination === "custom_pipeline"
           ? "Sistema: Lead importado via pipeline custom"
-          : "Sistema: Lead importado via funil",
-      created_by: null,
-    }));
+          : "Sistema: Lead importado via funil";
+      // Compartilhar o número é decisão de alguém: a trilha guarda quem.
+      const shared = sharedLeadIds.has(id);
+      return {
+        lead_id: id,
+        action: "lead_created",
+        description: shared ? `${base} — telefone compartilhado por escolha na prévia` : base,
+        created_by: shared ? payload.actor_user_id ?? null : null,
+      };
+    });
     await supabase.from("lead_history").insert(historyRows);
+  }
+
+  if (plan) {
+    const reasons = new Map<number, string>();
+    for (const e of report.errors) reasons.set(e.row, reasons.has(e.row) ? `${reasons.get(e.row)}; ${e.reason}` : e.reason);
+    report.rows = [...plan.keys()].sort((a, b) => a - b).map((row) => {
+      const ok = succeeded.get(row);
+      const outcome: RowOutcomeKind = ok ? ok.outcome : skippedRows.has(row) ? "pulado" : "recusado";
+      return { row, outcome, reason: reasons.get(row), lead_id: ok?.leadId };
+    });
   }
 }
 
@@ -1329,16 +1496,52 @@ Deno.serve(
     const validLeads: ParsedLead[] = [];
     const report: ImportReport = { total: body.leads.length, created: 0, updated: 0, rejected: 0, incomplete: 0, errors: [] };
 
+    const invalidByIndex = new Map<number, string>();
     for (let i = 0; i < body.leads.length; i++) {
       body.leads[i] = withNameFallback(body.leads[i]);
       const validationError = validateLead(body.leads[i], i);
       if (validationError) {
+        invalidByIndex.set(i, validationError);
         report.rejected++;
         report.errors.push({ row: reportRow(body.leads[i], i), reason: validationError, kind: "invalido" });
       } else {
         if (isIncomplete(body.leads[i])) report.incomplete++;
         validLeads.push(body.leads[i]);
       }
+    }
+
+    // 5b. Prévia e decisões por linha: só com a flag da org, e nunca para campanha.
+    const wantsPreview = body.mode === "preview";
+    if (wantsPreview || body.decisions !== undefined) {
+      if (!(await orgFlagEnabled(supabaseEarly, organizationId!, PREVIEW_FLAG))) {
+        return new Response(
+          JSON.stringify({ success: false, error: "A prévia da importação não está ligada para esta organização." }),
+          { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        );
+      }
+      if (body.destination === "campaign") {
+        return new Response(
+          JSON.stringify({ success: false, error: "A prévia não vale para importação em campanha." }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        );
+      }
+    }
+
+    if (wantsPreview) {
+      const inputs = body.leads.map((l, i) => previewInputOf(l, i, invalidByIndex.get(i)));
+      const existingForPreview = await findExistingLeads(
+        supabaseEarly,
+        organizationId!,
+        inputs.map((r) => r.phone),
+        inputs.filter((r) => !r.phone).map((r) => r.email),
+      );
+      const classified = classifyRows(inputs, existingForPreview);
+      const visible = await visibleLeadIds(supabaseUser, matchedLeadIds(classified));
+      const rows = hideInvisible(classified, visible);
+      return new Response(
+        JSON.stringify({ success: true, preview: { rows, counts: countByGroup(rows) } }),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
     }
 
     // 6. Process valid leads
@@ -1353,7 +1556,13 @@ Deno.serve(
         // funnel | custom_pipeline | pipeline — os três colapsam no motor
         // único por pipeline_id (SCRUM-635). "leads" entra no mesmo motor e
         // sai antes da escrita da entry.
-        await importToPipeline(supabase, validLeads, { ...body, organization_id: organizationId }, report, importedLeadIds);
+        await importToPipeline(
+          supabase,
+          validLeads,
+          { ...body, organization_id: organizationId, actor_user_id: userId },
+          report,
+          importedLeadIds,
+        );
       }
     } catch (err) {
       processingError = err as Error;
