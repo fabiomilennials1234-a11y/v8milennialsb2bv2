@@ -9418,6 +9418,51 @@ export type Database = {
           },
         ]
       }
+      import_tag_rules: {
+        Row: {
+          id: string
+          organization_id: string
+          source_column: string
+          source_value: string
+          tag_id: string
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          id?: string
+          organization_id: string
+          source_column: string
+          source_value: string
+          tag_id: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          id?: string
+          organization_id?: string
+          source_column?: string
+          source_value?: string
+          tag_id?: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "import_tag_rules_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "import_tag_rules_tag_id_fkey"
+            columns: ["tag_id"]
+            isOneToOne: false
+            referencedRelation: "tags"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       lead_comments: {
         Row: {
           author_team_member_id: string | null

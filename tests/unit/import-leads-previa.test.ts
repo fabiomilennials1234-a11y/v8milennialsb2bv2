@@ -138,3 +138,35 @@ describe("importLeadsOnly depois da revisão", () => {
     expect(semRevisao.decisions).toBeUndefined();
   });
 });
+
+describe("etiqueta por coluna", () => {
+  it("cada linha leva a etiqueta do seu segmento; segmento sem etiqueta não leva nada", async () => {
+    mockParse.mockImplementation((_file: unknown, opts: ParseOpts) => {
+      opts.complete({
+        data: [
+          { Empresa: "Le Bari Café", Telefone: "(54) 99931-6404", Segmento: "Cafeteria" },
+          { Empresa: "Hotel Pampas", Telefone: "(54) 3282-3433", Segmento: "Hotel e Pousada" },
+          { Empresa: "Livraria Empório Canela", Telefone: "(54) 3699-1121", Segmento: "Livraria" },
+        ],
+      });
+    });
+    fetchMock.mockResolvedValue({
+      ok: true,
+      json: async () => ({ success: true, report: { total: 3, created: 3, updated: 0, rejected: 0, errors: [] } }),
+    });
+    const { result } = renderHook(() => useImportLeads(), { wrapper: wrapper() });
+
+    await result.current.importLeadsOnly(new File(["x"], "rs.csv", { type: "text/csv" }), {
+      rowTagRule: { column: "Segmento", byValue: { cafeteria: "t-cafe", "hotel e pousada": "t-hotel" } },
+    });
+
+    const corpo = JSON.parse(fetchMock.mock.calls[0][1].body);
+    expect(corpo.leads.map((l: { row_tag_ids?: string[] }) => l.row_tag_ids ?? null)).toEqual([
+      ["t-cafe"],
+      ["t-hotel"],
+      null,
+    ]);
+    // As etiquetas "para todos" continuam separadas.
+    expect(corpo.tag_ids).toBeUndefined();
+  });
+});
