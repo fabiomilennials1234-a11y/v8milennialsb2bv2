@@ -26,6 +26,7 @@ import {
   customerDealMoveConfirmTool,
   customerDealMovePlanTool,
   customerDealMoveUndoTool,
+  customerFunnelOverviewTool,
   customerFunnelReviewTool,
 } from "./funnel.ts";
 import { customerLeadGetTool, customerLeadListTool } from "./lead.ts";
@@ -42,6 +43,7 @@ export const CUSTOMER_TOOLS: ToolDef[] = [
   customerWhatsappStatusTool,
   customerMetricsCatalogTool,
   customerMetricsQueryTool,
+  customerFunnelOverviewTool,
   customerFunnelReviewTool,
   customerDealMovePlanTool,
   customerDealMoveConfirmTool,

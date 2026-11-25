@@ -23,8 +23,11 @@ import {
   decodeCursor,
   encodeCursor,
   errorResult,
+  idleOrFilter,
+  isFromUs,
   jsonResult,
   keysetAfter,
+  mapLimit,
   optionalUuid,
   READ_ONLY,
   resolveOrgScope,
@@ -63,6 +66,7 @@ export function daysSince(iso: string | null | undefined, nowMs: number): number
 export const REVIEW_DEFAULT = 15;
 export const REVIEW_MAX = 25;
 const MSGS_PER_CARD = 6;
+export const MSGS_PER_CARD_MAX = 15;
 
 interface MessageLite {
   normalized_phone: string;
@@ -90,7 +94,7 @@ export function tailByPhone(
       phone,
       list.reverse().map((m) => ({
         at: m.timestamp,
-        from: m.direction === "outgoing" ? "us" : "contact",
+        from: isFromUs(m.direction) ? "us" : "contact",
         type: m.message_type ?? "text",
         text: clip(m.content ?? m.transcription_text, 400),
       })),
@@ -102,11 +106,13 @@ export function tailByPhone(
 export const customerFunnelReviewTool: ToolDef = {
   name: "funnel.review",
   description:
-    "Review the open cards of one funnel in batch, to decide where each should be. Returns the " +
-    "funnel's stages (in order, with their rules: which are won/lost, which require a sale " +
-    "value) and, per card: entry_id, lead, current stage, days in stage and the last " +
-    `${MSGS_PER_CARD} WhatsApp messages (oldest first), plus whether the contact is waiting for ` +
-    "a reply. Pages of up to 25 cards (use next_cursor). Then propose moves with deal.move.plan.",
+    "Read the open cards of ONE funnel in batch, to decide where each should be (for counts " +
+    "across all funnels use funnel.overview first). Returns the funnel's stages (in order, with " +
+    "their rules: which are won/lost, which require a sale value) and, per card: entry_id, " +
+    "lead, current stage, days in stage, the last messages_per_card WhatsApp messages (default " +
+    `${MSGS_PER_CARD}, 0 = none, oldest first) and whether the contact is waiting for a reply. ` +
+    "Filter by stage_keys and idle_days_min. Pages of up to 25 cards (next_cursor). Then " +
+    "propose moves with deal.move.plan.",
   readonly: true,
   customerExposed: true,
   annotations: { ...READ_ONLY, title: "Review funnel" },
@@ -115,6 +121,13 @@ export const customerFunnelReviewTool: ToolDef = {
     properties: {
       pipeline_id: { type: "string", description: "Funnel UUID (pipeline.list)" },
       stage_keys: { type: "array", items: { type: "string" }, description: "Only these stages" },
+      idle_days_min: {
+        type: "integer",
+        minimum: 0,
+        maximum: 365,
+        description: "Only cards stalled at least N days in their stage",
+      },
+      messages_per_card: { type: "integer", minimum: 0, maximum: MSGS_PER_CARD_MAX },
       limit: { type: "integer", minimum: 1, maximum: REVIEW_MAX },
       cursor: { type: "string" },
     },
@@ -135,6 +148,18 @@ export const customerFunnelReviewTool: ToolDef = {
         50,
       )
       : [];
+    const idleDays = args.idle_days_min === undefined ? 0 : Number(args.idle_days_min);
+    if (!Number.isInteger(idleDays) || idleDays < 0 || idleDays > 365) {
+      return errorResult("idle_days_min must be an integer between 0 and 365.");
+    }
+    const perCard = args.messages_per_card === undefined
+      ? MSGS_PER_CARD
+      : Number(args.messages_per_card);
+    if (!Number.isInteger(perCard) || perCard < 0 || perCard > MSGS_PER_CARD_MAX) {
+      return errorResult(
+        `messages_per_card must be an integer between 0 and ${MSGS_PER_CARD_MAX}.`,
+      );
+    }
 
     const db = ctx.db as SupabaseClient;
     const stagesQ = db
@@ -156,6 +181,9 @@ export const customerFunnelReviewTool: ToolDef = {
       .eq("pipeline_id", pipelineId)
       .is("closed_at", null);
     if (stageKeys.length) cardsQ = cardsQ.in("stage_key", stageKeys);
+    if (idleDays > 0) {
+      cardsQ = cardsQ.or(idleOrFilter(new Date(Date.now() - idleDays * DAY_MS).toISOString()));
+    }
     if (cursor) cardsQ = cardsQ.or(keysetAfter(cursor));
 
     const [stagesR, cardsR] = await Promise.all([
@@ -188,20 +216,24 @@ export const customerFunnelReviewTool: ToolDef = {
       ...new Set(cards.map((c) => c.leads?.normalized_phone).filter((p): p is string => !!p)),
     ];
     let tails = new Map<string, Array<Record<string, unknown>>>();
-    if (phones.length) {
+    if (phones.length && perCard > 0) {
+      // One small query PER PHONE: a shared limit let one chatty contact starve the others
+      // (their cards came back with no messages and awaiting_reply unknown).
       const since = new Date(Date.now() - 60 * DAY_MS).toISOString();
-      const { data, error } = await db
-        .from("whatsapp_messages")
-        .select("normalized_phone,timestamp,direction,message_type,content,transcription_text")
-        .eq("organization_id", scope.orgId)
-        .in("normalized_phone", phones)
-        .is("deleted_at", null)
-        .or("is_group.is.null,is_group.eq.false")
-        .gte("timestamp", since)
-        .order("timestamp", { ascending: false })
-        .limit(phones.length * 40);
-      if (error) return dbErrorResult(error);
-      tails = tailByPhone((data ?? []) as MessageLite[], MSGS_PER_CARD);
+      const results = await mapLimit(phones, 8, (phone) =>
+        db
+          .from("whatsapp_messages")
+          .select("normalized_phone,timestamp,direction,message_type,content,transcription_text")
+          .eq("organization_id", scope.orgId)
+          .eq("normalized_phone", phone)
+          .is("deleted_at", null)
+          .or("is_group.is.null,is_group.eq.false")
+          .gte("timestamp", since)
+          .order("timestamp", { ascending: false })
+          .limit(perCard));
+      const failed = results.find((r) => r.error);
+      if (failed?.error) return dbErrorResult(failed.error);
+      tails = tailByPhone(results.flatMap((r) => (r.data ?? []) as MessageLite[]), perCard);
     }
 
     const now = Date.now();
@@ -238,6 +270,145 @@ export const customerFunnelReviewTool: ToolDef = {
         ? encodeCursor({ createdAt: tail.created_at, id: tail.id })
         : null,
       cards: out,
+    });
+  },
+};
+
+// --- funnel.overview ------------------------------------------------------------------
+
+export const OVERVIEW_STALLED_DEFAULT = 7;
+const OVERVIEW_MAX_PIPELINES = 30;
+
+interface CountRow {
+  stage_key: string;
+  cnt: number | string;
+}
+
+/** stage_key → count, from the board's count RPC rows. Pure. */
+export function countsByStage(rows: CountRow[] | null): Map<string, number> {
+  const m = new Map<string, number>();
+  for (const r of rows ?? []) m.set(r.stage_key, (m.get(r.stage_key) ?? 0) + Number(r.cnt));
+  return m;
+}
+
+/** One funnel's stages with counts; stalled counts only for open stages. Pure. */
+export function shapeOverview(
+  pipeline: { id: string; name: string },
+  stages: StageRow[],
+  all: Map<string, number>,
+  stalled: Map<string, number>,
+) {
+  const rows = stages.map((s) => {
+    const kind = stageKind(s);
+    return {
+      key: s.stage_key,
+      name: s.name,
+      kind,
+      cards: all.get(s.stage_key) ?? 0,
+      ...(kind === "open" ? { stalled: stalled.get(s.stage_key) ?? 0 } : {}),
+    };
+  });
+  const open = rows.filter((r) => r.kind === "open");
+  return {
+    id: pipeline.id,
+    name: pipeline.name,
+    open_cards: open.reduce((n, r) => n + r.cards, 0),
+    stalled_open_cards: open.reduce((n, r) => n + (r.stalled ?? 0), 0),
+    won_cards: rows.filter((r) => r.kind === "won").reduce((n, r) => n + r.cards, 0),
+    lost_cards: rows.filter((r) => r.kind === "lost").reduce((n, r) => n + r.cards, 0),
+    stages: rows,
+  };
+}
+
+export const customerFunnelOverviewTool: ToolDef = {
+  name: "funnel.overview",
+  description:
+    "The state of every active funnel in one call (or of one, with pipeline_id): its stages in " +
+    "board order with how many cards each has, how many open cards are stalled at least " +
+    `stalled_days days (default ${OVERVIEW_STALLED_DEFAULT}), and the won/lost columns. Counts ` +
+    "are the funnel board's own. Start here to find volume and bottlenecks; then read the cards " +
+    "of one funnel/stage with funnel.review.",
+  readonly: true,
+  customerExposed: true,
+  annotations: { ...READ_ONLY, title: "Funnels overview" },
+  inputSchema: {
+    type: "object",
+    properties: {
+      pipeline_id: { type: "string", description: "Only this funnel (default: all active)" },
+      stalled_days: { type: "integer", minimum: 1, maximum: 365 },
+    },
+    required: [],
+    additionalProperties: false,
+  },
+  handler: async (args: Record<string, unknown>, ctx: ToolContext): Promise<ToolResult> => {
+    const scope = resolveOrgScope(args, ctx.orgId);
+    if (!scope.ok) return errorResult(scope.message);
+    const pipelineId = optionalUuid(args.pipeline_id);
+    if (pipelineId === "invalid") return errorResult("pipeline_id must be a UUID.");
+    const stalledDays = args.stalled_days === undefined
+      ? OVERVIEW_STALLED_DEFAULT
+      : Number(args.stalled_days);
+    if (!Number.isInteger(stalledDays) || stalledDays < 1 || stalledDays > 365) {
+      return errorResult("stalled_days must be an integer between 1 and 365.");
+    }
+
+    const db = ctx.db as SupabaseClient;
+    let pq = db.from("pipelines").select("id,name").eq("organization_id", scope.orgId)
+      .eq("is_active", true);
+    if (pipelineId) pq = pq.eq("id", pipelineId);
+    const { data: pData, error: pErr } = await pq
+      .order("display_order", { ascending: true, nullsFirst: false })
+      .order("name", { ascending: true })
+      .limit(OVERVIEW_MAX_PIPELINES + 1);
+    if (pErr) return dbErrorResult(pErr);
+    const all = (pData ?? []) as Array<{ id: string; name: string }>;
+    if (all.length === 0) {
+      return errorResult(pipelineId ? "Funil não encontrado ou inativo." : "Nenhum funil ativo.");
+    }
+    const pipelines = all.slice(0, OVERVIEW_MAX_PIPELINES);
+
+    const { data: sData, error: sErr } = await db
+      .from("pipeline_stages")
+      .select(
+        "id,stage_key,name,position,stage_role,requires_sale_value,is_final_positive,is_final_negative,pipeline_id",
+      )
+      .eq("organization_id", scope.orgId)
+      .in("pipeline_id", pipelines.map((p) => p.id))
+      .eq("is_active", true)
+      .order("position", { ascending: true })
+      .limit(1000);
+    if (sErr) return dbErrorResult(sErr);
+    const stages = (sData ?? []) as StageRow[];
+
+    // Two counts per funnel (all cards; stalled ones), from the board's own RPC.
+    const counts = await mapLimit(pipelines, 4, (p) =>
+      Promise.all([
+        callRpc<CountRow[]>(ctx, "get_pipeline_stage_counts_by_id", {
+          p_pipeline_id: p.id,
+          p_org_id: scope.orgId,
+        }),
+        callRpc<CountRow[]>(ctx, "get_pipeline_stage_counts_by_id", {
+          p_pipeline_id: p.id,
+          p_org_id: scope.orgId,
+          p_stalled_min_days: stalledDays,
+        }),
+      ]));
+    const failed = counts.flat().find((r) => r.error);
+    if (failed?.error) return dbErrorResult(failed.error);
+
+    return jsonResult({
+      stalled_days: stalledDays,
+      ...(all.length > OVERVIEW_MAX_PIPELINES
+        ? { truncated: true, note: `Só os ${OVERVIEW_MAX_PIPELINES} primeiros funis.` }
+        : {}),
+      pipelines: pipelines.map((p, i) =>
+        shapeOverview(
+          p,
+          stages.filter((s) => s.pipeline_id === p.id),
+          countsByStage(counts[i][0].data),
+          countsByStage(counts[i][1].data),
+        )
+      ),
     });
   },
 };
@@ -512,7 +683,7 @@ export const customerDealMovePlanTool: ToolDef = {
     const [wfR, ruleR] = await Promise.all([
       moves.length
         ? db.from("workflows").select("id,name,trigger_config").eq("organization_id", scope.orgId)
-          .eq("trigger_type", "stage_changed").eq("is_active", true).limit(200)
+          .eq("trigger_type", "stage_changed").eq("is_active", true).limit(1000)
         : Promise.resolve({ data: [], error: null }),
       targetStageIds.length
         ? db.from("pipe_dispatch_rules").select("id,pipeline_stage_id").eq(
@@ -524,6 +695,10 @@ export const customerDealMovePlanTool: ToolDef = {
         )
         : Promise.resolve({ data: [], error: null }),
     ]);
+    // The plan tells the person which automations a move fires; a failed lookup must not read
+    // as "none" — that would be approval obtained on a false premise.
+    if (wfR.error) return dbErrorResult(wfR.error);
+    if (ruleR.error) return dbErrorResult(ruleR.error);
     const workflows = (wfR.data ?? []) as WorkflowRow[];
     const rules = (ruleR.data ?? []) as Array<{ pipeline_stage_id: string }>;
     const effects = moves.map((m) => {

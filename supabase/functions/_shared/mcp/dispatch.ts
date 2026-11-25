@@ -37,8 +37,9 @@ function logToolCall(
   server: string,
   name: string,
   startedAt: number,
-  outcome: "ok" | "error",
+  outcome: "ok" | "error" | "unknown" | "hidden" | "invalid_args",
   logContext?: Record<string, string>,
+  extra?: Record<string, unknown>,
 ): void {
   console.log(JSON.stringify({
     ...logContext,
@@ -46,6 +47,7 @@ function logToolCall(
     tool: name,
     outcome,
     ms: Date.now() - startedAt,
+    ...extra,
   }));
 }
 
@@ -83,6 +85,8 @@ export async function dispatch(
         toolFilter: ctx.toolFilter,
       }).map((t) => ({
         name: t.name,
+        // top-level title (2025-06-18); clients that predate it read annotations.title
+        ...(t.annotations?.title ? { title: t.annotations.title } : {}),
         description: t.description,
         inputSchema: t.inputSchema,
         ...(t.annotations ? { annotations: t.annotations } : {}),
@@ -101,14 +105,29 @@ export async function dispatch(
         allowMutations: ctx.allowMutations,
         toolFilter: ctx.toolFilter,
       }).find((t) => t.name === name);
-      if (!tool) return err(id, -32602, `Unknown or unavailable tool: ${name}`);
+      const startedAt = Date.now();
+      if (!tool) {
+        // Logged (name only) so attempts at tools a token lacks — or that do not exist — show
+        // what people try to do; the answer stays indistinguishable for the caller.
+        const hidden = ctx.tools.some((t) => t.name === name);
+        logToolCall(
+          ctx.serverInfo.name,
+          String(name ?? "").slice(0, 80),
+          startedAt,
+          hidden ? "hidden" : "unknown",
+          ctx.logContext,
+        );
+        return err(id, -32602, `Unknown or unavailable tool: ${name}`);
+      }
 
       const missing = (tool.inputSchema.required ?? []).filter((k) => args[k] === undefined);
       if (missing.length > 0) {
+        logToolCall(ctx.serverInfo.name, tool.name, startedAt, "invalid_args", ctx.logContext, {
+          missing,
+        });
         return err(id, -32602, `Missing required argument(s): ${missing.join(", ")}`);
       }
 
-      const startedAt = Date.now();
       try {
         const result = await tool.handler(args, ctx.toolContext);
         const isError = (result as { isError?: boolean })?.isError === true;

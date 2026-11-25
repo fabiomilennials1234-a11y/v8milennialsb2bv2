@@ -15,6 +15,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { ToolContext, ToolDef, ToolResult } from "../../_shared/mcp/types.ts";
 import { callerHasFeature, callRpc } from "./rpc.ts";
 import {
+  createLimiter,
   dbErrorResult,
   errorResult,
   jsonResult,
@@ -426,6 +427,10 @@ interface EngineResult {
   [k: string]: unknown;
 }
 
+type Measured = { ok: true; data: EngineResult } | { ok: false; message: string };
+/** A measure call bound to this request (memoized and rate-limited by the handler). */
+type MeasureOf = (ref: unknown, recorte: string, p: EnginePeriod) => Promise<Measured>;
+
 async function measure(
   ctx: ToolContext,
   orgId: string,
@@ -451,8 +456,10 @@ async function measure(
 }
 
 const SERIES_KEYS = ["key", "id", "label", "name", "bucket", "value", "count"] as const;
+const MEASURE_CONCURRENCY = 6;
 const MAX_SERIES = 100;
 
+/** Up to MAX_SERIES points; the caller flags the cut (series_total) — never silent. */
 function shapeSeries(unit: string, series: unknown): Array<Record<string, unknown>> | null {
   if (!Array.isArray(series)) return null;
   return series.slice(0, MAX_SERIES).map((item) => {
@@ -470,6 +477,7 @@ async function cacFor(
   orgId: string,
   p: EnginePeriod,
   filters: Record<string, string>,
+  measureOf: MeasureOf,
 ): Promise<
   | {
     value: number | null;
@@ -488,14 +496,16 @@ async function cacFor(
     .eq("organization_id", orgId) // defense-in-depth on top of RLS
     .in("year", [...new Set(months.map((m) => m.year))]);
   if (filters.origin) q = q.eq("origin", filters.origin);
-  const { data, error } = await q.limit(1000);
+  // Investment and sales are independent: fetch both at once.
+  const [{ data, error }, sales] = await Promise.all([
+    q.limit(1000),
+    measureOf({ id: "num_vendas" }, "total", p),
+  ]);
   if (error) return { error: error.message };
+  if (!sales.ok) return { error: sales.message };
   const wanted = new Set(months.map((m) => `${m.year}-${m.month}`));
   const rows = ((data ?? []) as InvestmentRow[]).filter((r) => wanted.has(`${r.year}-${r.month}`));
   const investimento = proratedInvestment(rows, start, end);
-
-  const sales = await measure(ctx, orgId, { id: "num_vendas" }, "total", p, filters);
-  if (!sales.ok) return { error: sales.message };
   const vendas = typeof sales.data.value === "number" ? sales.data.value : null;
 
   if (investimento <= 0) {
@@ -613,21 +623,19 @@ export const customerMetricsQueryTool: ToolDef = {
     const f = parseFilters(args.filters);
     if (!f.ok) return errorResult(f.message);
 
-    const denied = await denyWithoutMetrics(ctx);
-    if (denied) return denied;
-
+    // Permission, timezone and catalog are independent: one round-trip instead of three.
     const db = ctx.db as SupabaseClient;
-    const { data: org, error: orgErr } = await db
-      .from("organizations")
-      .select("timezone")
-      .eq("id", orgId)
-      .maybeSingle();
-    if (orgErr) return dbErrorResult(orgErr);
-    const tz = (org as { timezone?: string } | null)?.timezone || "America/Sao_Paulo";
+    const [denied, orgR, catalog] = await Promise.all([
+      denyWithoutMetrics(ctx),
+      db.from("organizations").select("timezone").eq("id", orgId).maybeSingle(),
+      loadCatalog(ctx),
+    ]);
+    if (denied) return denied;
+    if (orgR.error) return dbErrorResult(orgR.error);
+    const tz = (orgR.data as { timezone?: string } | null)?.timezone || "America/Sao_Paulo";
     const per = resolvePeriod(args, todayIn(tz, new Date()));
     if (!per.ok) return errorResult(per.message);
 
-    const catalog = await loadCatalog(ctx);
     if ("error" in catalog) {
       return errorResult(`Catálogo de métricas indisponível: ${catalog.error}`);
     }
@@ -645,12 +653,29 @@ export const customerMetricsQueryTool: ToolDef = {
     }
     const compare = cut === "total" && args.compare_previous !== false;
 
+    // Per request: the same measure over the same period runs once (ticket médio, CAC and
+    // "nº de vendas" all need num_vendas), and at most MEASURE_CONCURRENCY engine calls run
+    // at a time — a burst of ~30 heavy statements is what timed out.
+    const run = createLimiter(MEASURE_CONCURRENCY);
+    const memo = new Map<string, Promise<Measured>>();
+    const measureOf: MeasureOf = (ref, recorte, p) => {
+      const key = JSON.stringify([ref, recorte, p]);
+      let hit = memo.get(key);
+      if (!hit) {
+        hit = run(() => measure(ctx, orgId, ref, recorte, p, f.filters));
+        memo.set(key, hit);
+      }
+      return hit;
+    };
+
     const results = await Promise.all(resolved.map(async (m) => {
       const base = { id: m.id, label: m.label, unit: m.unit, cut, definition: m.definition };
       if (m.kind === "cac") {
-        const now = await cacFor(ctx, orgId, per.current, f.filters);
+        const [now, prev] = await Promise.all([
+          cacFor(ctx, orgId, per.current, f.filters, measureOf),
+          compare ? cacFor(ctx, orgId, per.previous, f.filters, measureOf) : null,
+        ]);
         if ("error" in now) return { ...base, error: now.error };
-        const prev = compare ? await cacFor(ctx, orgId, per.previous, f.filters) : null;
         const prevValue = prev && !("error" in prev) ? prev.value : null;
         return {
           ...base,
@@ -660,14 +685,21 @@ export const customerMetricsQueryTool: ToolDef = {
           ...(now.empty_reason ? { empty_reason: now.empty_reason } : {}),
           ...(compare
             ? {
-              previous: { value: prevValue, display: formatValue("currency", prevValue) },
+              previous: {
+                value: prevValue,
+                display: formatValue("currency", prevValue),
+                ...(prev && "error" in prev ? { error: prev.error } : {}),
+              },
               change_pct: changePct(now.value, prevValue),
             }
             : {}),
         };
       }
 
-      const now = await measure(ctx, orgId, m.ref, cut, per.current, f.filters);
+      const [now, prev] = await Promise.all([
+        measureOf(m.ref, cut, per.current),
+        compare ? measureOf(m.ref, "total", per.previous) : null,
+      ]);
       if (!now.ok) return { ...base, error: now.message };
       const unit = typeof now.data.unit === "string" ? now.data.unit : m.unit;
       const value = typeof now.data.value === "number" ? now.data.value : null;
@@ -677,15 +709,20 @@ export const customerMetricsQueryTool: ToolDef = {
         out.display = formatValue(unit, value);
       } else {
         out.series = shapeSeries(unit, now.data.series);
+        const total = Array.isArray(now.data.series) ? now.data.series.length : 0;
+        if (total > MAX_SERIES) out.series_total = total; // the series was cut to MAX_SERIES
       }
       if (now.data.empty_reason) out.empty_reason = now.data.empty_reason;
       for (const k of Object.keys(now.data)) {
         if (k.startsWith("coverage")) out[k] = now.data[k];
       }
-      if (compare) {
-        const prev = await measure(ctx, orgId, m.ref, "total", per.previous, f.filters);
+      if (prev) {
         const pv = prev.ok && typeof prev.data.value === "number" ? prev.data.value : null;
-        out.previous = { value: pv, display: formatValue(unit, pv) };
+        out.previous = {
+          value: pv,
+          display: formatValue(unit, pv),
+          ...(prev.ok ? {} : { error: prev.message }), // a failed comparison is not "no data"
+        };
         out.change_pct = changePct(value, pv);
       }
       return out;

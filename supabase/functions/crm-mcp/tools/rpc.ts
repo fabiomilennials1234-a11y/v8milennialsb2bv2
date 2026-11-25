@@ -27,6 +27,11 @@ export const RPC_ALLOWLIST = {
    * Runs under the caller's RLS (pipeline.view_all / strict-owner regimes apply).
    */
   mover_negocio: "invoker",
+  /**
+   * INVOKER — the funnel board's own count of cards per column (optionally only those stalled
+   * N+ days). Runs under the caller's RLS; p_org_id only narrows, it grants nothing.
+   */
+  get_pipeline_stage_counts_by_id: "invoker",
 } as const;
 
 export type AllowedRpc = keyof typeof RPC_ALLOWLIST;

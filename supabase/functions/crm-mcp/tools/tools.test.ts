@@ -116,6 +116,7 @@ const VALID_ARGS: Record<string, Record<string, unknown>> = {
   "whatsapp.instance_status": {},
   "metrics.catalog": {},
   "metrics.query": { metrics: ["receita", "ticket_medio", "cac"], period: "month" },
+  "funnel.overview": {},
   "funnel.review": { pipeline_id: LEAD },
   "deal.move.plan": {
     moves: [{ entry_id: LEAD, to_stage_key: "proposta", reason: "pediu proposta" }],
@@ -323,6 +324,7 @@ Deno.test("anti-bypass: the RPC allowlist is exactly the reviewed set", () => {
     fn_metric_measure: "definer:assert_org_access",
     has_feature_permission: "definer:auth.uid",
     mover_negocio: "invoker",
+    get_pipeline_stage_counts_by_id: "invoker",
   });
 });
 
