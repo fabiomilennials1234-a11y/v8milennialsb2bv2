@@ -4,7 +4,7 @@ import {
   availableFunnelsToAdd,
   type FunnelCardRow,
 } from "./contextPanelFunnelHelpers";
-import type { PipelineStatus } from "@/modules/leads";
+import type { PipelineStatus } from "@/contracts/pipe/negocios-do-lead";
 
 describe("terminalKind", () => {
   it("ganho pelo papel; perda pelo predicado único (lost OU is_final_negative)", () => {

@@ -47,6 +47,8 @@ import { CHAT_GANHO_PERDA_FLAG } from "@/modules/communication/lib/fechar-negoci
 import { IR_PARA_NEGOCIO_FLAG } from "@/contracts/pipe/negocio-no-funil";
 import { GanhoPerdaDoNegocio } from "./GanhoPerdaDoNegocio";
 import { IrParaNegocio } from "./IrParaNegocio";
+import { useFeaturePermission } from "@/modules/identity";
+import { ContextPanelFunnelActions } from "./ContextPanelFunnelActions";
 
 interface ContextPanelFunnelsProps {
   leadId: string;
@@ -68,6 +70,7 @@ export function ContextPanelFunnels({ leadId }: ContextPanelFunnelsProps) {
   // Mesma permissão do kanban (paridade — nada burla o gate no chat).
   const gates = useLeadActionGates(leadId);
   const canMove = gates.canMoveMeeting.allowed;
+  const { allowed: canRemove } = useFeaturePermission("pipeline.delete_cards");
   // Ganho/Perda abaixo de cada negócio: piloto por org (Café Jurerê).
   const { enabled: comGanhoPerda } = useFeatureFlag(CHAT_GANHO_PERDA_FLAG);
   // "Ir para o negócio" (leva ao card no board): piloto por org (Café Jurerê).
@@ -338,6 +341,17 @@ export function ContextPanelFunnels({ leadId }: ContextPanelFunnelsProps) {
                 </Popover>
               </div>
             </div>
+            {((canMove && !row.isClosed) || canRemove) && (
+              <ContextPanelFunnelActions
+                row={row}
+                leadId={leadId}
+                available={available}
+                canMove={canMove}
+                canRemove={canRemove}
+                busy={isMoving}
+                moveEntry={moveEntry.mutateAsync}
+              />
+            )}
           </div>
           {comGanhoPerda && (
             <GanhoPerdaDoNegocio

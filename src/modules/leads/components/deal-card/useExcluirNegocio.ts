@@ -59,10 +59,11 @@ import { prepararDissolucao } from "../../lib/card-effects";
 export interface NegocioAExcluir {
   entryId: string;
   leadId: string;
+  pipelineId?: string;
   /** `true` = funil de sistema. Ver o bloco do discriminador acima. */
   ehSystem: boolean;
   /** Só para o registro no histórico do lead. */
-  titulo: string;
+  titulo?: string;
   funil: string;
 }
 
@@ -126,7 +127,7 @@ export function useExcluirNegocio(): UseExcluirNegocioResult {
 
   const excluir = useCallback(
     async (negocio: NegocioAExcluir): Promise<ResultadoExclusao> => {
-      const { entryId, leadId, ehSystem } = negocio;
+      const { entryId, leadId, pipelineId, ehSystem } = negocio;
 
       setExcluindo(true);
       // Cópia do card ANTES do DELETE: depois, o refetch pode já tê-lo tirado
@@ -136,31 +137,39 @@ export function useExcluirNegocio(): UseExcluirNegocioResult {
         if (!organizationId) {
           throw new Error("Organização ativa não encontrada");
         }
-        const { data: apagadas, error } = await supabase
+        const remover = supabase
           .from("pipeline_entries")
           .delete()
           .eq("id", entryId)
-          .eq("organization_id", organizationId)
-          .select("id");
+          .eq("organization_id", organizationId);
+        if (pipelineId) remover.eq("pipeline_id", pipelineId).eq("lead_id", leadId);
+        const { data: apagadas, error } = await remover.select("id");
 
         if (error) throw error;
 
         if (!apagadas || apagadas.length === 0) {
-          const { data: aindaLa } = await supabase
+          const { data: aindaLa, error: erroDeLeitura } = await supabase
             .from("pipeline_entries")
-            .select("id")
+            .select("pipeline_id, lead_id")
             .eq("id", entryId)
             .eq("organization_id", organizationId)
             .maybeSingle();
+          if (erroDeLeitura) throw erroDeLeitura;
 
           if (!aindaLa) {
             // Alguém chegou antes — outra aba, outro usuário, o ⋯ do kanban.
             // O desfecho que o usuário queria já aconteceu: tratar como
             // sucesso e deixar o painel fechar é o que não o prende num
             // negócio inexistente, tentando de novo para sempre.
-            toast.info("Este negócio já havia sido excluído.");
+            toast.info(pipelineId ? "Este negócio não está mais disponível no painel." : "Este negócio já havia sido excluído.");
             invalidar(qc, leadId);
             return "ja-nao-existia";
+          }
+
+          if (pipelineId && (aindaLa.pipeline_id !== pipelineId || aindaLa.lead_id !== leadId)) {
+            toast.error("Este negócio mudou desde que você abriu o painel.");
+            invalidar(qc, leadId);
+            return "erro";
           }
 
           toast.error("Você não tem permissão para excluir este negócio.");
@@ -182,7 +191,7 @@ export function useExcluirNegocio(): UseExcluirNegocioResult {
         registrar({
           leadId,
           action: "pipe_removed",
-          description: `Negócio "${negocio.titulo}" excluído do funil "${negocio.funil}"`,
+          description: `Negócio${negocio.titulo ? ` "${negocio.titulo}"` : ""} excluído do funil "${negocio.funil}"`,
           metadata: {
             entry_id: entryId,
             funil: negocio.funil,

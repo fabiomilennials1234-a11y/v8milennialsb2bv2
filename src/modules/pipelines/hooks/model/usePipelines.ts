@@ -4,6 +4,7 @@ import { isLeadJaNoFunil } from "@/integrations/supabase/pipeline-entry-rpc";
 import { useOrganization } from "@/modules/identity";
 import { useRealtimeSubscription } from "@/shared/realtime/useRealtimeSubscription";
 import { invalidateAfterMove } from "../../lib/moverNegocio";
+import { isEtapaDePerda } from "@/contracts/pipe/perda";
 
 export interface Pipeline {
   id: string;
@@ -201,9 +202,13 @@ export function useUpdatePipelineEntry() {
 
 export function useMovePipelineEntry() {
   const queryClient = useQueryClient();
+  const { organizationId } = useOrganization();
 
   return useMutation({
-    mutationFn: async ({ id, ...stage }: { id: string } & (
+    mutationFn: async ({ id, transfer, ...stage }: {
+      id: string;
+      transfer?: { fromPipelineId: string; toPipelineId: string; leadId: string };
+    } & (
       { stageId: string; stageKey?: never } | { stageKey: string; stageId?: never }
     )) => {
       // Quem manda `stage_id` manda `stage_key` junto: os gatilhos que fecham o
@@ -212,7 +217,24 @@ export function useMovePipelineEntry() {
       // SET, não o valor que o espelho copia. Só `stage_id` moveu o card e
       // calou os três (Café Jurerê, 09/2026: "Perdido" sem `closed_at`).
       let stageCols: { stage_id: string; stage_key: string } | { stage_key: string };
-      if (stage.stageKey !== undefined) {
+      if (transfer) {
+        if (!organizationId) throw new Error("Organização ativa não encontrada");
+        const targetStage = supabase
+          .from("pipeline_stages")
+          .select("id, stage_key, stage_role, is_final_negative, destino:pipelines!pipeline_stages_pipeline_id_fkey!inner(id)")
+          .eq("organization_id", organizationId)
+          .eq("pipeline_id", transfer.toPipelineId)
+          .eq("destino.is_active", true)
+          .eq("is_active", true);
+        if (stage.stageId !== undefined) targetStage.eq("id", stage.stageId);
+        else targetStage.eq("stage_key", stage.stageKey);
+        const { data: target, error: stageError } = await targetStage.maybeSingle();
+        if (stageError) throw stageError;
+        if (!target || target.stage_role === "won" || isEtapaDePerda(target)) {
+          throw new Error("Escolha uma etapa ativa que mantenha o negócio aberto.");
+        }
+        stageCols = { stage_id: target.id, stage_key: target.stage_key };
+      } else if (stage.stageKey !== undefined) {
         stageCols = { stage_key: stage.stageKey };
       } else {
         const { data: target, error: stageError } = await supabase
@@ -224,15 +246,27 @@ export function useMovePipelineEntry() {
         stageCols = { stage_id: stage.stageId, stage_key: target.stage_key };
       }
 
-      const { data, error } = await (supabase.from as any)("pipeline_entries")
+      const update = supabase.from("pipeline_entries")
         .update({
           ...stageCols,
+          ...(transfer && { pipeline_id: transfer.toPipelineId }),
           stage_changed_at: new Date().toISOString(),
         })
-        .eq("id", id)
-        .select()
-        .single();
+        .eq("id", id);
 
+      if (transfer) {
+        // Mantém a entrada original. Se o destino já tiver um card sem negócio,
+        // o índice rejeita a troca sem fundir os dois.
+        update.eq("organization_id", organizationId!)
+          .eq("lead_id", transfer.leadId)
+          .eq("pipeline_id", transfer.fromPipelineId)
+          .is("closed_at", null);
+      }
+      const { data, error } = await update.select().single();
+      if (isLeadJaNoFunil(error)) throw new Error("Este lead já tem um negócio aberto no funil de destino.");
+      if (transfer && error?.code === "PGRST116") {
+        throw new Error("O negócio mudou ou você não tem permissão para movê-lo.");
+      }
       if (error) throw error;
       return data as PipelineEntry;
     },

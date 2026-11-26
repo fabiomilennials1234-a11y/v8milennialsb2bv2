@@ -3,9 +3,8 @@ import type {
   PipelineStatus,
   StandardPipelineStatus,
 } from "../../../../hooks/useLeadAllPipelines";
-import { funisSemNegocioAberto } from "../../../../lib/negocio-aberto";
+import { etapaDoLeadEhDePerda, funisSemNegocioAberto } from "@/contracts/pipe/negocios-do-lead";
 import type { NewDealOption } from "./NewDealDialog";
-import { etapaDoLeadEhDePerda } from "../../../../lib/etapa-de-perda";
 
 /**
  * O construtor das opções de "Novo negócio" — **fora do painel**.

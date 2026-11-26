@@ -77,7 +77,7 @@ export {
   useRemoveLeadFromStandardPipe,
 } from "./hooks/useLeadAllPipelines";
 export { etapaDoLeadEhDePerda } from "./lib/etapa-de-perda";
-export { temNegocioAberto, funisSemNegocioAberto } from "./lib/negocio-aberto";
+export { temNegocioAberto, funisSemNegocioAberto } from "@/contracts/pipe/negocios-do-lead";
 export type {
   StandardPipelineStatus,
   CustomPipelineStatus,
@@ -294,6 +294,7 @@ export { useDealSheet } from "./components/deal-detail/deal-sheet-context";
 // proíbe entre módulos. Replicar aquele import em mais três páginas seria
 // multiplicar a violação por quatro em vez de fechá-la.
 export { DealCardPanel } from "./components/deal-card/DealCardPanel";
+export { useExcluirNegocio } from "./components/deal-card/useExcluirNegocio";
 export { LeadCardPanel } from "./components/lead-card/LeadCardPanel";
 // Mesma criação no card do lead e no painel do chat; consultas só ao abrir.
 export { LeadCardNewDeal as LeadNewDealDialog } from "./components/lead-card/LeadCardNewDeal";
