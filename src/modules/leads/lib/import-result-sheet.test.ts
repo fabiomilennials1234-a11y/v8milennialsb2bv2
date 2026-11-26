@@ -12,7 +12,7 @@ const PREVIEW: ImportPreview = {
       row: 15,
       group: "cliente_erp",
       name: "Santo Bistrô",
-      match: { origem: "crm", lead_id: "erp-1", label: "SANTO CAFFE", erp_code: "10088", visible: true },
+      match: { origem: "crm", lead_id: "erp-1", label: "SANTO CAFFE", erp_code: "10088", erp_situacao: "1", visible: true },
     },
     {
       row: 17,
@@ -41,7 +41,7 @@ describe("resultLines", () => {
     expect(lines.get(2)).toEqual({ resultado: "Importado", motivo: "", link: `${ORIGIN}/leads?lead=l-2`, tone: "ok" });
     expect(lines.get(15)).toMatchObject({
       resultado: "Pulado na revisão",
-      motivo: "Cliente do ERP cód 10088 — SANTO CAFFE",
+      motivo: "Cliente do ERP cód 10088 — SANTO CAFFE · Situação no ERP: Inativo",
       link: null,
     });
     expect(lines.get(17)).toMatchObject({

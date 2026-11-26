@@ -43,7 +43,7 @@ function memoryDb(tables: Record<string, Row[]>, opts: { failOn?: string } = {})
   return { db: db as unknown as SupabaseClient, queries };
 }
 
-function lead(over: Partial<ExistingLead> & { id: string }): Row {
+function lead(over: Partial<ExistingLead> & Row & { id: string }): Row {
   return {
     organization_id: ORG,
     deleted_at: null,
@@ -183,4 +183,83 @@ Deno.test("fieldsToFill — valor vazio da planilha nunca apaga", () => {
 Deno.test("erpClientReason — diz código e nome do cadastro do ERP", () => {
   const msg = erpClientReason(ERP);
   assertEquals(msg, "Já é cliente do ERP — cód 10088, SANTO CAFFE. O cadastro do ERP não é alterado pela planilha.");
+});
+
+Deno.test("erpClientReason — com a situação, diz se o cliente está ativo, inativo…", () => {
+  assertEquals(
+    erpClientReason({ ...ERP, erp_situacao: "1" }),
+    "Já é cliente do ERP — cód 10088, SANTO CAFFE. Situação no ERP: Inativo. O cadastro do ERP não é alterado pela planilha.",
+  );
+  assertEquals(erpClientReason({ ...ERP, erp_situacao: "2" }).includes("Situação no ERP: Bloqueado."), true);
+  // Consultado e o ERP não informou ≠ não deu para consultar.
+  assertEquals(erpClientReason({ ...ERP, erp_situacao: null }).includes("Situação no ERP: não informada."), true);
+  assertEquals(erpClientReason({ ...ERP, erp_situacao: undefined }).includes("Situação"), false);
+});
+
+/**
+ * `upsell_clients` como o PostgREST devolve o select de `attachErpSituations`: os
+ * caminhos JSON chegam com o apelido (`situacao_cadastro`, `situacao_metadata`).
+ */
+function erpClient(over: Row & { external_id: string }): Row {
+  return {
+    organization_id: ORG,
+    external_source: "toth",
+    erp_status: null,
+    situacao_cadastro: null,
+    situacao_metadata: null,
+    ...over,
+  };
+}
+
+Deno.test("findExistingLeads — traz a situação do cliente do ERP pelo código", async () => {
+  const { db } = memoryDb({
+    leads: [lead({ id: "erp-10088", normalized_phone: "54981448969", erp_code: " 10088 ", company: "SANTO CAFFE" })],
+    upsell_clients: [
+      erpClient({ external_id: "10088", erp_status: "0" }),
+      erpClient({ external_id: "10088", erp_status: "2", organization_id: "org-x" }),
+      erpClient({ external_id: "10088", erp_status: "2", external_source: "omie" }),
+    ],
+  });
+  const found = await findExistingLeads(db, ORG, ["5554981448969"], []);
+  assertEquals(found.byPhone.get("54981448969")?.erp_situacao, "0");
+});
+
+Deno.test("findExistingLeads — o cadastro do ERP vence a coluna congelada pelo recorte", async () => {
+  // 26/11/2026: 31 clientes com a coluna em Ativo/Inconsistente e o cadastro em Inativo.
+  const { db } = memoryDb({
+    leads: [lead({ id: "erp-1", normalized_phone: "54981448969", erp_code: "11233" })],
+    upsell_clients: [erpClient({ external_id: "11233", erp_status: "0", situacao_cadastro: "1" })],
+  });
+  const found = await findExistingLeads(db, ORG, ["5554981448969"], []);
+  assertEquals(found.byPhone.get("54981448969")?.erp_situacao, "1");
+});
+
+Deno.test("findExistingLeads — cliente do ERP sem situação na carteira fica null (não informada)", async () => {
+  const { db } = memoryDb({
+    leads: [
+      lead({ id: "erp-crua", normalized_phone: "54981448969", erp_code: "9001" }),
+      lead({ id: "erp-sem-carteira", normalized_phone: "51981340007", erp_code: "9002" }),
+    ],
+    upsell_clients: [erpClient({ external_id: "9001" })],
+  });
+  const found = await findExistingLeads(db, ORG, ["5554981448969", "5551981340007"], []);
+  assertEquals(found.byPhone.get("54981448969")?.erp_situacao, null);
+  assertEquals(found.byPhone.get("51981340007")?.erp_situacao, null);
+});
+
+Deno.test("findExistingLeads — sem cliente do ERP não consulta a carteira", async () => {
+  const { db, queries } = memoryDb({ leads: [lead({ id: "karmel", normalized_phone: "51981340007" })] });
+  const found = await findExistingLeads(db, ORG, ["5551981340007"], []);
+  assertEquals(found.byPhone.get("51981340007")?.erp_situacao, undefined);
+  assertEquals(queries.some((q) => q.table === "upsell_clients"), false);
+});
+
+Deno.test("findExistingLeads — carteira fora do ar deixa a situação em branco, sem derrubar", async () => {
+  const { db } = memoryDb(
+    { leads: [lead({ id: "erp-10088", normalized_phone: "54981448969", erp_code: "10088" })] },
+    { failOn: "upsell_clients" },
+  );
+  const found = await findExistingLeads(db, ORG, ["5554981448969"], []);
+  assertEquals(found.byPhone.get("54981448969")?.id, "erp-10088");
+  assertEquals(found.byPhone.get("54981448969")?.erp_situacao, undefined);
 });

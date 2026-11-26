@@ -17,6 +17,7 @@
 
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { normalizeBrazilianPhone } from "../_shared/erp/phone.ts";
+import { tothSituacao, tothSituacaoLabel } from "../_shared/erp/toth-situacao.ts";
 
 /** Colunas do lead que o import lê para decidir e completar. */
 export const EXISTING_LEAD_COLUMNS =
@@ -41,6 +42,12 @@ export interface ExistingLead {
   utm_content: string | null;
   utm_term: string | null;
   created_at: string | null;
+  /**
+   * Situação do cliente no ERP (código cru do Toth: "0" ativo, "1" inativo…). Não é
+   * coluna de `leads`: `findExistingLeads` lê de `upsell_clients` pelo código.
+   * `null` = consultado, o ERP não informou; ausente = não deu para consultar.
+   */
+  erp_situacao?: string | null;
 }
 
 export interface ExistingLeads {
@@ -158,7 +165,57 @@ export async function findExistingLeads(
     }
   }
 
+  await attachErpSituations(db, organizationId, [...new Set([...byPhone.values(), ...byEmail.values()])]);
   return { byPhone, byEmail };
+}
+
+/**
+ * Situação no ERP de cada cliente casado, para o relatório dizer "Inativo" em vez de só
+ * "já é cliente". Pelo código (`upsell_clients.external_id`), não por `lead_id`: em
+ * 26/11/2026 todo `erp_code` vivo da Café Jurerê tinha cliente pelo código, e 59 não
+ * tinham pelo `lead_id`.
+ *
+ * Só explica a linha — não decide nada. Erro de leitura deixa a situação em branco
+ * em vez de derrubar a importação.
+ */
+export async function attachErpSituations(
+  db: SupabaseClient,
+  organizationId: string,
+  leads: Pick<ExistingLead, "erp_code" | "erp_situacao">[],
+): Promise<void> {
+  const byCode = new Map<string, Pick<ExistingLead, "erp_code" | "erp_situacao">[]>();
+  for (const lead of leads) {
+    const code = lead.erp_code?.trim();
+    if (!code) continue;
+    byCode.set(code, [...(byCode.get(code) ?? []), lead]);
+  }
+
+  for (const part of chunks([...byCode.keys()], PHONES_PER_REQUEST)) {
+    const { data, error } = await db
+      .from("upsell_clients")
+      .select(
+        "external_id, erp_status, situacao_cadastro:erp_metadata->cadastro->>situacaoParceiro, situacao_metadata:erp_metadata->>situacaoParceiro",
+      )
+      .eq("organization_id", organizationId)
+      .eq("external_source", "toth")
+      .in("external_id", part);
+    if (error) {
+      console.warn("[import-leads] situação do ERP indisponível:", error.message);
+      return;
+    }
+    for (const code of part) for (const lead of byCode.get(code) ?? []) lead.erp_situacao = null;
+    for (const c of (data ?? []) as ErpClientSituationRow[]) {
+      const situacao = tothSituacao(c.situacao_cadastro, c.situacao_metadata, c.erp_status);
+      for (const lead of byCode.get(c.external_id) ?? []) lead.erp_situacao = situacao;
+    }
+  }
+}
+
+interface ErpClientSituationRow {
+  external_id: string;
+  erp_status: string | null;
+  situacao_cadastro: string | null;
+  situacao_metadata: string | null;
 }
 
 /** Lead mantido pelo ERP: a planilha não escreve nele. */
@@ -222,7 +279,11 @@ export function fieldsToFill(existing: ExistingLead, incoming: IncomingLeadField
 }
 
 /** Motivo do relatório para a linha que casou com cliente do ERP. */
-export function erpClientReason(lead: Pick<ExistingLead, "erp_code" | "company" | "name">): string {
+export function erpClientReason(
+  lead: Pick<ExistingLead, "erp_code" | "company" | "name" | "erp_situacao">,
+): string {
   const who = lead.company?.trim() || lead.name?.trim() || "sem nome";
-  return `Já é cliente do ERP — cód ${lead.erp_code!.trim()}, ${who}. O cadastro do ERP não é alterado pela planilha.`;
+  const situacao = lead.erp_situacao === null ? "não informada" : tothSituacaoLabel(lead.erp_situacao);
+  const status = situacao ? ` Situação no ERP: ${situacao}.` : "";
+  return `Já é cliente do ERP — cód ${lead.erp_code!.trim()}, ${who}.${status} O cadastro do ERP não é alterado pela planilha.`;
 }

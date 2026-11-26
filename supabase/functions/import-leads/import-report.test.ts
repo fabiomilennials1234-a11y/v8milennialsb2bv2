@@ -25,24 +25,31 @@ interface Chain {
   select: () => Chain;
   eq: () => Chain;
   is: () => Chain;
+  in: () => Chain;
   limit: () => Chain;
   maybeSingle: () => Promise<{ data: unknown }>;
+  then: (resolve: (v: { data: unknown; error: null }) => void) => void;
 }
 
-function fakeDb(opts: { norm?: unknown; dono?: unknown; rpcThrows?: boolean }): SupabaseClient {
-  const chain: Chain = {
-    select: () => chain,
-    eq: () => chain,
-    is: () => chain,
-    limit: () => chain,
-    maybeSingle: () => Promise.resolve({ data: opts.dono ?? null }),
+function fakeDb(opts: { norm?: unknown; dono?: unknown; clientes?: unknown[]; rpcThrows?: boolean }): SupabaseClient {
+  const chain = (table: string): Chain => {
+    const c: Chain = {
+      select: () => c,
+      eq: () => c,
+      is: () => c,
+      in: () => c,
+      limit: () => c,
+      maybeSingle: () => Promise.resolve({ data: opts.dono ?? null }),
+      then: (resolve) => resolve({ data: table === "upsell_clients" ? opts.clientes ?? [] : [], error: null }),
+    };
+    return c;
   };
   const db = {
     rpc: () => {
       if (opts.rpcThrows) throw new Error("rpc fora do ar");
       return Promise.resolve({ data: opts.norm ?? null });
     },
-    from: () => chain,
+    from: (table: string) => chain(table),
   };
   return db as unknown as SupabaseClient;
 }
@@ -62,6 +69,19 @@ Deno.test("motivoFalhaDeInsercao — índice do telefone vira 'já existe' com o
     "554733682067",
   );
   assertEquals(msg, `Já existe um lead com este telefone: "Hotel D'Luz"`);
+});
+
+Deno.test("motivoFalhaDeInsercao — dono cliente do ERP: código, nome e situação", async () => {
+  const db = fakeDb({
+    norm: "54981448969",
+    dono: { name: "DEITOS & ZANATTA CAFFE LTDA", company: "SANTO CAFFE", erp_code: "10088" },
+    clientes: [{ external_id: "10088", erp_status: "1", situacao_cadastro: null, situacao_metadata: null }],
+  });
+  const msg = await motivoFalhaDeInsercao(db, "org", { code: "23505" }, "5554981448969");
+  assertEquals(
+    msg,
+    "Já é cliente do ERP — cód 10088, SANTO CAFFE. Situação no ERP: Inativo. O cadastro do ERP não é alterado pela planilha.",
+  );
 });
 
 Deno.test("motivoFalhaDeInsercao — sem achar o dono ou com RPC falhando, ainda diz 'já existe'", async () => {

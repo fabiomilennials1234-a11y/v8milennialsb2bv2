@@ -7,6 +7,8 @@
  * reclassifica antes de gravar: o que esta tela manda é pedido, não ordem.
  */
 
+import { ERP_SITUACAO_NAO_INFORMADA, erpSituacao, type ErpSituacao } from "./erp-situacao";
+
 /** Flag da org (`organizations.feature_flags`) que liga a prévia — hoje só na Café Jurerê. */
 export const IMPORT_PREVIEW_FLAG = "importacao_previa";
 
@@ -27,6 +29,11 @@ export interface PreviewMatch {
   lead_id?: string;
   label: string | null;
   erp_code?: string | null;
+  /**
+   * Situação no ERP, código cru do Toth ("0" ativo, "1" inativo…). `null` = o ERP não
+   * informou; ausente = edge antiga ou carteira fora do ar (a tela não diz nada).
+   */
+  erp_situacao?: string | null;
   visible: boolean;
 }
 
@@ -173,4 +180,22 @@ export function matchSentence(row: PreviewRow): string | null {
   if (!m.visible) return "Já cadastrado na empresa";
   if (m.erp_code) return `Cliente do ERP cód ${m.erp_code} — ${m.label ?? "sem nome"}`;
   return `Já cadastrado como ${m.label ?? "sem nome"}`;
+}
+
+/** Situação no ERP do cliente que já tem o número; só quando a pessoa enxerga o cadastro. */
+export function matchErpSituacao(row: PreviewRow): ErpSituacao | null {
+  const m = row.match;
+  if (!m || m.origem !== "crm" || !m.visible || !m.erp_code || m.erp_situacao === undefined) return null;
+  return erpSituacao(m.erp_situacao) ?? ERP_SITUACAO_NAO_INFORMADA;
+}
+
+/**
+ * De quem é o número, com a situação no ERP — para o texto corrido (planilha de
+ * resultado). A tela mostra a situação num selo ao lado, não na frase.
+ */
+export function matchDetail(row: PreviewRow): string | null {
+  const sentence = matchSentence(row);
+  const situacao = matchErpSituacao(row);
+  if (!sentence || !situacao) return sentence;
+  return situacao.code ? `${sentence} · Situação no ERP: ${situacao.label}` : `${sentence} · Situação no ERP não informada`;
 }

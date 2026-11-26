@@ -1,5 +1,6 @@
 import type { LeadCardField, LeadCardFieldGroup } from "../components/lead-card/types";
 import { sanitizeErpDocument } from "./document";
+import { ERP_SITUACAO_LABEL } from "./erp-situacao";
 
 type Row = Record<string, unknown>;
 const record = (value: unknown): Row => value && typeof value === "object" && !Array.isArray(value) ? value as Row : {};
@@ -50,7 +51,7 @@ export function aplicarCadastroCafeJurere(
       erp("razao", "Razão social", value("razaoSocial", client.name)),
       erp("fantasia", "Nome fantasia", value("nomeFantasia", client.company)),
       erp("pessoa", "Tipo de pessoa", label(value("tipoPessoa"), { J: "Jurídica", F: "Física" })),
-      erp("situacao", "Situação no ERP", label(value("situacaoParceiro", client.erp_status), { "0": "Ativo", "1": "Inativo", "2": "Bloqueado", "3": "Inconsistente" })),
+      erp("situacao", "Situação no ERP", label(value("situacaoParceiro", client.erp_status), ERP_SITUACAO_LABEL)),
       erp("cadastro", "Data de cadastro", date(value("dataCadastro", client.erp_registered_at))),
       erp("mercado", "Tipo de mercado", value("descricaoTipoMercado", client.erp_segment)),
       erp("mercado_codigo", "Código do mercado", value("codigoTipoMercado")),
