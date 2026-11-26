@@ -6,7 +6,7 @@
  * `useLeadAllPipelines` (standard + custom); os rótulos de funis de sistema vêm
  * de `usePipelineDisplayConfig` (customizável por org — grill 2026-07-27).
  */
-import { etapaDoLeadEhDePerda, funisSemNegocioAberto, type PipelineStatus } from "@/modules/leads";
+import { etapaDoLeadEhDePerda, funisSemNegocioAberto, type PipelineStatus } from "@/contracts/pipe/negocios-do-lead";
 
 export interface FunnelStageView {
   key: string;
@@ -28,6 +28,8 @@ export interface FunnelCardRow {
   entryId: string;
   /** pipelines.id — o board do negócio ("Ir para o negócio"). */
   pipelineId: string;
+  isSystem: boolean;
+  isClosed: boolean;
   label: string;
   color: string;
   currentStageKey: string | null;
@@ -60,6 +62,25 @@ export interface AddableFunnel {
   /** primeira etapa do funil (destino do lead ao entrar). */
   firstStageKey: string;
   firstStageId?: string;
+  stages: FunnelStageView[];
+}
+
+function funnelStages(pipeline: PipelineStatus): FunnelStageView[] {
+  if (pipeline.type === "standard") {
+    return pipeline.stages.map((stage) => ({
+      key: stage.id,
+      label: stage.label,
+      role: stage.role ?? null,
+      isLoss: etapaDoLeadEhDePerda(stage),
+    }));
+  }
+  return pipeline.stages.map((stage) => ({
+    key: stage.id,
+    stageId: stage.id,
+    label: stage.name,
+    role: stage.role ?? null,
+    isLoss: etapaDoLeadEhDePerda(stage),
+  }));
 }
 
 /**
@@ -89,6 +110,7 @@ export function availableFunnelsToAdd(
         label: cfg?.display_name ?? p.label,
         color: p.color,
         firstStageKey,
+        stages: funnelStages(p),
       });
     } else {
       out.push({
@@ -97,6 +119,7 @@ export function availableFunnelsToAdd(
         color: p.pipelineColor,
         firstStageKey,
         firstStageId: firstStageKey,
+        stages: funnelStages(p),
       });
     }
   }
@@ -125,15 +148,12 @@ export function toFunnelRows(
         key: p.pipeId,
         entryId: p.pipeId,
         pipelineId: p.pipelineDbId,
+        isSystem: true,
+        isClosed: p.closedAt != null,
         label: labelByType.get(p.pipeType) ?? p.label,
         color: p.color,
         currentStageKey: p.currentStage,
-        stages: p.stages.map((s) => ({
-          key: s.id,
-          label: s.label,
-          role: s.role ?? null,
-          isLoss: etapaDoLeadEhDePerda(s),
-        })),
+        stages: funnelStages(p),
       });
     } else {
       if (!p.entryId) continue;
@@ -141,16 +161,12 @@ export function toFunnelRows(
         key: p.entryId,
         entryId: p.entryId,
         pipelineId: p.pipelineId,
+        isSystem: false,
+        isClosed: p.closedAt != null,
         label: p.pipelineName,
         color: p.pipelineColor,
         currentStageKey: p.currentStageId,
-        stages: p.stages.map((s) => ({
-          key: s.id,
-          stageId: s.id,
-          label: s.name,
-          role: s.role ?? null,
-          isLoss: etapaDoLeadEhDePerda(s),
-        })),
+        stages: funnelStages(p),
       });
     }
   }

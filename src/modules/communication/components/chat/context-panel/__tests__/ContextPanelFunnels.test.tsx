@@ -1,7 +1,8 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { CustomPipelineStatus, PipelineStatus } from "@/modules/leads/hooks/useLeadAllPipelines";
+import type { CustomPipelineStatus, PipelineStatus } from "@/contracts/pipe/negocios-do-lead";
 
 const state = vi.hoisted(() => ({
   pipelines: undefined as unknown,
@@ -9,33 +10,35 @@ const state = vi.hoisted(() => ({
   isError: false,
   refetch: vi.fn(),
   move: vi.fn(),
+  transfer: vi.fn(),
+  remove: vi.fn(),
+  canMove: true,
+  canRemove: true,
   capturar: vi.fn(),
   ganhoPerda: false,
   irParaNegocio: false,
 }));
 
 vi.mock("@/integrations/supabase/client", () => ({ supabase: { from: () => ({}) } }));
-vi.mock("@/modules/leads", async () => {
-  const { funisSemNegocioAberto } = await import("@/modules/leads/lib/negocio-aberto");
-  const { etapaDoLeadEhDePerda } = await import("@/modules/leads/lib/etapa-de-perda");
-  return {
-    funisSemNegocioAberto,
-    etapaDoLeadEhDePerda,
-    useLossReasonGate: () => ({ capturarMotivoDaPerda: state.capturar, requestLossReason: vi.fn() }),
-    useLeadAllPipelines: () => ({
-      data: state.pipelines,
-      isLoading: state.isLoading,
-      isError: state.isError,
-      refetch: state.refetch,
-    }),
-    useLeadActionGates: () => ({
-      canMoveMeeting: { allowed: true },
-      canAddToPipe: { allowed: true },
-    }),
-  };
-});
+vi.mock("@/modules/leads", () => ({
+  useExcluirNegocio: () => ({ excluir: state.remove, excluindo: false }),
+  useLossReasonGate: () => ({ capturarMotivoDaPerda: state.capturar, requestLossReason: vi.fn() }),
+  useLeadAllPipelines: () => ({
+    data: state.pipelines,
+    isLoading: state.isLoading,
+    isError: state.isError,
+    refetch: state.refetch,
+  }),
+  useLeadActionGates: () => ({
+    canMoveMeeting: { allowed: state.canMove },
+    canAddToPipe: { allowed: true },
+  }),
+}));
+vi.mock("@/modules/identity", () => ({
+  useFeaturePermission: () => ({ allowed: state.canRemove }),
+}));
 vi.mock("@/modules/pipelines", () => ({
-  useMovePipelineEntry: () => ({ mutate: state.move, isPending: false }),
+  useMovePipelineEntry: () => ({ mutate: state.move, mutateAsync: state.transfer, isPending: false }),
   useCreatePipelineEntry: () => ({ mutate: vi.fn(), isPending: false }),
   usePipelineDisplayConfig: () => ({ data: [] }),
 }));
@@ -96,6 +99,10 @@ beforeEach(() => {
   state.isError = false;
   state.refetch.mockReset();
   state.move.mockReset();
+  state.transfer.mockReset().mockResolvedValue({});
+  state.remove.mockReset().mockResolvedValue("excluido");
+  state.canMove = true;
+  state.canRemove = true;
   state.capturar.mockReset();
   state.ganhoPerda = false;
   state.irParaNegocio = false;
@@ -204,6 +211,71 @@ describe("ContextPanelFunnels — card Funis do lead no chat", () => {
     expect(screen.getByRole("button", { name: "Etapa em Envase: Em andamento" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Adicionar a um funil" })).toBeInTheDocument();
     expect(screen.queryByTestId("chat-funis-erro")).not.toBeInTheDocument();
+  });
+
+  it("move o negócio escolhido para a etapa de outro funil sem criar um card", async () => {
+    state.pipelines = [
+      ...COM_NEGOCIO,
+      { ...COM_NEGOCIO[0], pipelineId: "pipe-vendas", pipelineName: "Vendas", entryId: "entry-2" },
+    ];
+    const user = userEvent.setup();
+    renderCard();
+
+    await user.click(screen.getByRole("button", { name: "Ações do negócio em Envase" }));
+    await user.click(screen.getByRole("menuitem", { name: "Mover para outro funil" }));
+    const funnel = screen.getByRole("combobox", { name: "Funil de destino" });
+    expect(screen.queryByRole("option", { name: "Vendas" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("option", { name: "Envase" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Mover negócio" })).toBeDisabled();
+    await user.selectOptions(funnel, "pipe-cafe");
+    await user.selectOptions(screen.getByRole("combobox", { name: "Etapa de destino" }), "stage-3");
+    await user.click(screen.getByRole("button", { name: "Mover negócio" }));
+
+    expect(state.transfer).toHaveBeenCalledExactlyOnceWith({
+      id: "entry-1",
+      transfer: { fromPipelineId: "pipe-envase", toPipelineId: "pipe-cafe", leadId: "lead-1" },
+      stageId: "stage-3",
+    });
+    expect(state.remove).not.toHaveBeenCalled();
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  it("pede confirmação e remove apenas a entrada do menu selecionado", async () => {
+    state.pipelines = [
+      COM_NEGOCIO[0],
+      { ...COM_NEGOCIO[0], pipelineId: "pipe-opala", pipelineName: "Opala", entryId: "entry-opala" },
+    ];
+    const user = userEvent.setup();
+    renderCard();
+
+    const openRemoval = async () => {
+      await user.click(screen.getByRole("button", { name: "Ações do negócio em Opala" }));
+      await user.click(screen.getByRole("menuitem", { name: "Remover do funil" }));
+    };
+    await openRemoval();
+    await user.click(screen.getByRole("button", { name: "Cancelar" }));
+    expect(state.remove).not.toHaveBeenCalled();
+
+    await openRemoval();
+    await user.click(screen.getByRole("button", { name: "Remover negócio" }));
+    expect(state.remove).toHaveBeenCalledExactlyOnceWith({
+      entryId: "entry-opala",
+      leadId: "lead-1",
+      pipelineId: "pipe-opala",
+      ehSystem: false,
+      funil: "Opala",
+    });
+    expect(screen.getByText("Envase")).toBeInTheDocument();
+  });
+
+  it("respeita separadamente as permissões de movimentar e remover negócios", async () => {
+    state.pipelines = COM_NEGOCIO;
+    state.canRemove = false;
+    const user = userEvent.setup();
+    renderCard();
+    await user.click(screen.getByRole("button", { name: "Ações do negócio em Envase" }));
+    expect(screen.getByRole("menuitem", { name: "Mover para outro funil" })).toBeInTheDocument();
+    expect(screen.queryByRole("menuitem", { name: "Remover do funil" })).not.toBeInTheDocument();
   });
 
   describe("mover para etapa de perda pede o motivo (porta única)", () => {

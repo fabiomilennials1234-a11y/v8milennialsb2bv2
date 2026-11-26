@@ -4,43 +4,9 @@ import { useCurrentTeamMember, isVirtualTeamMember } from "@/modules/identity";
 import { usePipeOps } from "../pipe-ops";
 import { nomeDoFunil, type SystemPipeDisplay } from "@/contracts/pipe";
 import { updateSystemPipelineEntry } from "@/integrations/supabase/pipeline-entry-rpc";
+import type { PipelineStatus } from "@/contracts/pipe/negocios-do-lead";
 
-// ─── Types ───────────────────────────────────────────────────
-
-export interface StandardPipelineStatus {
-  type: "standard";
-  pipeType: "whatsapp" | "confirmacao" | "propostas" | "upsell";
-  label: string;
-  color: string;
-  /** id do pipeline (tabela pipelines) — alvo do add. Null p/ upsell (legacy). */
-  pipelineDbId: string | null;
-  pipeId: string | null;
-  /**
-   * `pipeline_entries.closed_at` do negócio desta linha. Negócio fechado
-   * (ganho/perdido) não impede abrir outro no mesmo funil — é a recompra.
-   * Ausente = trate como aberto (é o lado seguro: não oferece duplicata).
-   */
-  closedAt?: string | null;
-  currentStage: string | null;
-  currentStageLabel: string | null;
-  stages: { id: string; label: string; color: string; role?: string | null; isFinalNegative?: boolean }[];
-}
-
-export interface CustomPipelineStatus {
-  type: "custom";
-  pipelineId: string;
-  pipelineName: string;
-  pipelineColor: string;
-  pipelineIcon: string;
-  entryId: string | null;
-  /** Ver `StandardPipelineStatus.closedAt`. */
-  closedAt?: string | null;
-  currentStageId: string | null;
-  currentStageName: string | null;
-  stages: { id: string; name: string; color: string; position: number; role?: string | null; isFinalNegative?: boolean }[];
-}
-
-export type PipelineStatus = StandardPipelineStatus | CustomPipelineStatus;
+export type { StandardPipelineStatus, CustomPipelineStatus, PipelineStatus } from "@/contracts/pipe/negocios-do-lead";
 
 /**
  * SCRUM-637: `pipeType` de funil de sistema É o slug (`pipelines.slug`) — o
