@@ -119,8 +119,14 @@
   function fill(s) { return s.replace(/\{nome\}/g, esc(S.primeiro)); }
   function el(tag, cls) { var e = doc.createElement(tag); if (cls) e.className = cls; return e; }
   function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 8); }
-  function cookie(n) { var m = doc.cookie.match(new RegExp("(?:^|; )" + n + "=([^;]*)")); return m ? decodeURIComponent(m[1]) : ""; }
-  function typingTime(html) { var n = html.replace(/<[^>]+>/g, "").length; return Math.max(650, Math.min(1900, 380 + n * 12)); }
+  /* Cookie malformado não pode travar o envio do lead. */
+  function cookie(n) {
+    var m = doc.cookie.match(new RegExp("(?:^|; )" + n + "=([^;]*)"));
+    if (!m) return "";
+    try { return decodeURIComponent(m[1]); } catch (e) { return ""; }
+  }
+  /* Tempo do "digitando…" proporcional ao tamanho da mensagem (as poucas tags de ênfase não mudam o ritmo). */
+  function typingTime(html) { return Math.max(650, Math.min(1900, 380 + html.length * 12)); }
 
   function scrollToEnd() {
     requestAnimationFrame(function () {
