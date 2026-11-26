@@ -36,7 +36,7 @@ function existingLead(over: Partial<ExistingLead> & { id: string }): ExistingLea
 /** O CRM da Café Jurerê nos números que a planilha de 25/11 tocou. */
 const CRM: ExistingLeads = {
   byPhone: new Map([
-    ["54981448969", existingLead({ id: "erp-10088", erp_code: "10088", name: "DEITOS & ZANATTA CAFFE LTDA", company: "SANTO CAFFE" })],
+    ["54981448969", existingLead({ id: "erp-10088", erp_code: "10088", name: "DEITOS & ZANATTA CAFFE LTDA", company: "SANTO CAFFE", erp_situacao: "1" })],
     ["51981340007", existingLead({ id: "karmel", name: "Karmel Café", company: "Karmel Café" })],
     ["54996161459", existingLead({ id: "ruppenthal", name: "Pousada Ruppenthal", company: "Pousada Ruppenthal" })],
   ]),
@@ -73,6 +73,8 @@ Deno.test("classifyRows — os grupos da planilha do RS (25/11)", () => {
   // Cliente do ERP com outro nome na planilha: é cliente, não "outra empresa".
   assertEquals(byRow.get(15)?.group, "cliente_erp");
   assertEquals(byRow.get(15)?.match?.erp_code, "10088");
+  assertEquals(byRow.get(15)?.match?.erp_situacao, "1");
+  assertEquals(byRow.get(60)?.match?.erp_situacao, null);
   // Mesmo fixo, outra empresa: aponta a primeira linha que trouxe o número.
   assertEquals(byRow.get(17)?.group, "outra_empresa");
   assertEquals(byRow.get(17)?.match, { origem: "arquivo", row: 16, label: "Café Colonial Bela Vista", visible: true });
@@ -101,7 +103,7 @@ Deno.test("classifyRows — os grupos da planilha do RS (25/11)", () => {
   assertEquals(matchedLeadIds(rows).sort(), ["erp-10088", "karmel", "por-email", "ruppenthal"]);
 });
 
-Deno.test("hideInvisible — quem não enxerga o lead vê só 'já cadastrado'", () => {
+Deno.test("hideInvisible — quem não enxerga o lead vê só 'já cadastrado' (nem a situação no ERP)", () => {
   const rows = classifyRows([row(15, "Santo Bistrô", "5554981448969"), row(22, "É de Chocolate", "5551981340007")], CRM);
   const out = hideInvisible(rows, new Set(["karmel"]));
   assertEquals(out[0].match, { origem: "crm", label: null, erp_code: null, visible: false });

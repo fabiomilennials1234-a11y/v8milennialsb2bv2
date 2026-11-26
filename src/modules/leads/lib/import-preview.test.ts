@@ -5,6 +5,8 @@ import {
   GROUP_META,
   groupAction,
   initialChoices,
+  matchDetail,
+  matchErpSituacao,
   matchSentence,
   type PreviewRow,
 } from "./import-preview";
@@ -60,5 +62,45 @@ describe("matchSentence", () => {
     expect(matchSentence({ ...rows[1], match: { origem: "crm", label: null, erp_code: null, visible: false } })).toBe(
       "Já cadastrado na empresa",
     );
+  });
+});
+
+describe("situação no ERP", () => {
+  const inativo: PreviewRow = { ...rows[1], match: { ...rows[1].match!, erp_situacao: "1" } };
+
+  it("o cliente do ERP diz se está ativo, inativo, bloqueado…", () => {
+    expect(matchErpSituacao(inativo)).toEqual({ code: "1", label: "Inativo", tone: "neutral" });
+    expect(matchDetail(inativo)).toBe("Cliente do ERP cód 10088 — SANTO CAFFE · Situação no ERP: Inativo");
+  });
+
+  it("edge antiga (sem o campo): a frase fica como era, sem selo", () => {
+    expect(matchErpSituacao(rows[1])).toBeNull();
+    expect(matchDetail(rows[1])).toBe("Cliente do ERP cód 10088 — SANTO CAFFE");
+  });
+
+  it("o ERP não informou: diz que não informou", () => {
+    const crua: PreviewRow = { ...rows[1], match: { ...rows[1].match!, erp_situacao: null } };
+    expect(matchErpSituacao(crua)).toEqual({ code: "", label: "Situação não informada", tone: "neutral" });
+    expect(matchDetail(crua)).toBe("Cliente do ERP cód 10088 — SANTO CAFFE · Situação no ERP não informada");
+  });
+
+  it("nunca para quem não enxerga o cadastro, nem para linha da própria planilha", () => {
+    const oculto: PreviewRow = {
+      ...rows[1],
+      match: { origem: "crm", label: null, erp_code: "10088", erp_situacao: "1", visible: false },
+    };
+    expect(matchErpSituacao(oculto)).toBeNull();
+    expect(matchDetail(oculto)).toBe("Já cadastrado na empresa");
+    expect(matchErpSituacao(rows[2])).toBeNull();
+  });
+
+  it("lead comum (sem código do ERP) não ganha selo", () => {
+    const lead: PreviewRow = {
+      row: 22,
+      group: "ja_lead",
+      name: "Karmel",
+      match: { origem: "crm", lead_id: "k", label: "Karmel", erp_code: null, erp_situacao: "0", visible: true },
+    };
+    expect(matchErpSituacao(lead)).toBeNull();
   });
 });

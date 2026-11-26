@@ -11,7 +11,28 @@ const PREVIEW: ImportPreview = {
       group: "cliente_erp",
       name: "Santo Bistrô",
       phone: "5554981448969",
-      match: { origem: "crm", lead_id: "l1", label: "SANTO CAFFE", erp_code: "10088", visible: true },
+      match: { origem: "crm", lead_id: "l1", label: "SANTO CAFFE", erp_code: "10088", erp_situacao: "1", visible: true },
+    },
+    {
+      row: 19,
+      group: "cliente_erp",
+      name: "Hotel Serrano",
+      phone: "5554996161459",
+      match: { origem: "crm", lead_id: "l2", label: "HOTEL SERRANO", erp_code: "11711", erp_situacao: "0", visible: true },
+    },
+    {
+      row: 21,
+      group: "cliente_erp",
+      name: "Café da carga antiga",
+      phone: "5554996161411",
+      match: { origem: "crm", lead_id: "l3", label: "CAFE ANTIGO", erp_code: "9001", erp_situacao: null, visible: true },
+    },
+    {
+      row: 20,
+      group: "cliente_erp",
+      name: "Pousada sem acesso",
+      phone: "5554996161400",
+      match: { origem: "crm", label: null, erp_code: null, visible: false },
     },
     {
       row: 17,
@@ -28,7 +49,7 @@ const PREVIEW: ImportPreview = {
       match: { origem: "arquivo", row: 6, label: "Karmel Café", visible: true },
     },
   ],
-  counts: { novo: 1, cliente_erp: 1, ja_lead: 0, repetido: 0, outra_empresa: 2, sem_telefone: 0, invalido: 0 },
+  counts: { novo: 1, cliente_erp: 4, ja_lead: 0, repetido: 0, outra_empresa: 2, sem_telefone: 0, invalido: 0 },
 };
 
 function setup(choices: PreviewChoices = initialChoices()) {
@@ -46,6 +67,22 @@ describe("ImportPreviewReview", () => {
     // "Novos" fica fechado: só a contagem e o título.
     expect(screen.getByText("Novos")).toBeInTheDocument();
     expect(screen.queryByText("Le Bari Café")).not.toBeInTheDocument();
+  });
+
+  it("cliente do ERP mostra código, nome e a situação no ERP; o grupo resume", () => {
+    setup();
+    const grupo = screen.getByRole("region", { name: "Já são clientes do ERP" });
+    const santo = within(grupo).getByText(/Cliente do ERP cód 10088 — SANTO CAFFE/).closest("li")!;
+    expect(within(santo).getByText("Inativo")).toBeInTheDocument();
+    const serrano = within(grupo).getByText(/Cliente do ERP cód 11711 — HOTEL SERRANO/).closest("li")!;
+    expect(within(serrano).getByText("Ativo")).toBeInTheDocument();
+    // O ERP não informou: a linha diz isso, em vez de calar.
+    const antigo = within(grupo).getByText(/Cliente do ERP cód 9001 — CAFE ANTIGO/).closest("li")!;
+    expect(within(antigo).getByText("Situação não informada")).toBeInTheDocument();
+    expect(within(grupo).getByText("1 ativo · 1 inativo · 1 sem situação")).toBeInTheDocument();
+    // Quem não enxerga o cadastro não ganha selo.
+    const oculto = within(grupo).getByText(/Já cadastrado na empresa/).closest("li")!;
+    expect(within(oculto).queryByText(/^(Ativo|Inativo)$/)).not.toBeInTheDocument();
   });
 
   it("marcar uma linha pede telefone compartilhado só para ela", () => {

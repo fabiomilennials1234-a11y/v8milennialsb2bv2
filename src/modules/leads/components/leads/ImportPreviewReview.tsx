@@ -5,6 +5,9 @@
  * primeiro e expandidos; o resto fica fechado com a contagem à vista. Em dois grupos a
  * decisão é por linha: marcar a linha = "criar como lead próprio, com o telefone
  * compartilhado". É um clique explícito por linha — a regra do telefone N:N exige isso.
+ *
+ * Cliente do ERP mostra a situação dele no ERP (Ativo, Inativo, Bloqueado…) num selo
+ * na linha, e o grupo resume quantos há de cada.
  */
 import { useMemo, useState } from "react";
 import { ChevronDown } from "lucide-react";
@@ -12,10 +15,12 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import { cn } from "@/lib/utils";
 import { formatPhoneBR } from "@/shared/format/phone";
+import { erpSituacaoResumo, type ErpSituacaoTone } from "../../lib/erp-situacao";
 import {
   GROUP_META,
   GROUP_ORDER,
   groupAction,
+  matchErpSituacao,
   matchSentence,
   type ImportPreview,
   type PreviewChoices,
@@ -24,7 +29,7 @@ import {
   type RowAction,
 } from "../../lib/import-preview";
 
-const TONE: Record<(typeof GROUP_META)[PreviewGroup]["tone"], string> = {
+const TONE: Record<(typeof GROUP_META)[PreviewGroup]["tone"] | ErpSituacaoTone, string> = {
   good: "bg-success/10 text-success-strong",
   info: "bg-insights/10 text-insights",
   warn: "bg-warning/15 text-warning-strong",
@@ -105,6 +110,10 @@ function GroupSection({ group, rows, action, shared, open, onToggleOpen, onActio
   const markedHere = rows.filter((r) => shared.has(r.row)).length;
   const allMarked = markedHere === rows.length;
   const headingId = `import-preview-${group}`;
+  const situacoes = useMemo(
+    () => erpSituacaoResumo(rows.map(matchErpSituacao)),
+    [rows],
+  );
 
   return (
     <section className="rounded-xl border bg-card" aria-labelledby={headingId}>
@@ -128,6 +137,12 @@ function GroupSection({ group, rows, action, shared, open, onToggleOpen, onActio
               {meta.title}
             </span>
             <span className="block text-xs text-muted-foreground">{meta.hint}</span>
+            {situacoes && (
+              <span className="mt-0.5 block text-xs tabular-nums text-foreground/80">
+                <span className="sr-only">Situação no ERP: </span>
+                {situacoes}
+              </span>
+            )}
           </span>
           <ChevronDown
             aria-hidden
@@ -161,6 +176,7 @@ function GroupSection({ group, rows, action, shared, open, onToggleOpen, onActio
           <ul className="max-h-56 divide-y overflow-y-auto">
             {rows.map((r) => {
               const detail = [r.phone ? formatPhoneBR(r.phone) : null, matchSentence(r) ?? r.reason].filter(Boolean).join(" · ");
+              const situacao = matchErpSituacao(r);
               const checkboxId = `import-preview-share-${r.row}`;
               return (
                 <li key={r.row} className="flex items-start gap-3 px-3 py-2">
@@ -181,6 +197,17 @@ function GroupSection({ group, rows, action, shared, open, onToggleOpen, onActio
                     </span>
                     {detail && <span className="block truncate text-xs text-muted-foreground">{detail}</span>}
                   </label>
+                  {situacao && (
+                    <span
+                      className={cn(
+                        "mt-px shrink-0 rounded-md px-1.5 py-0.5 text-xs font-medium",
+                        TONE[situacao.tone],
+                      )}
+                    >
+                      {situacao.code && <span className="sr-only">Situação no ERP: </span>}
+                      {situacao.label}
+                    </span>
+                  )}
                 </li>
               );
             })}

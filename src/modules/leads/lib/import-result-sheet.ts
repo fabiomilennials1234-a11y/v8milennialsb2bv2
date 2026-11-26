@@ -7,7 +7,7 @@
  * que é quando a edge devolve o resultado de cada linha.
  */
 import type { Workbook, Worksheet } from "exceljs";
-import { GROUP_META, matchSentence, type ImportPreview } from "./import-preview";
+import { GROUP_META, matchDetail, type ImportPreview } from "./import-preview";
 import { isBlankRow } from "./import-source-row";
 
 export interface ImportRowOutcomeLike {
@@ -50,7 +50,7 @@ export function resultLines(
 
   for (const o of report.rows ?? []) {
     const p = previewByRow.get(o.row);
-    const contexto = p ? matchSentence(p) : null;
+    const contexto = p ? matchDetail(p) : null;
     switch (o.outcome) {
       case "criado":
         lines.set(o.row, { resultado: "Importado", motivo: o.reason ?? "", link: link(o.lead_id), tone: "ok" });

@@ -3,6 +3,7 @@
  */
 
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { attachErpSituations, erpClientReason, type ExistingLead, isErpClient } from "./import-match.ts";
 
 function truncateErr(msg: string | undefined | null, max = 200): string {
   if (!msg) return "erro desconhecido";
@@ -20,16 +21,16 @@ export function reportRow(lead: { source_row?: number }, index: number): number 
   return typeof r === "number" && Number.isInteger(r) && r > 0 ? r : index + 1;
 }
 
-/**
- * Motivo legível para o INSERT do lead que falhou. A violação do índice único do
- * telefone vira "já existe" (com o nome de quem segura o número, quando dá para achar);
- * o resto segue como erro truncado.
- */
 /** O INSERT bateu no índice único do telefone (outro lead vivo já é dono do número). */
 export function isPhoneUniqueViolation(err: { message?: string; code?: string }): boolean {
   return err.code === "23505" || /idx_leads_org_phone_unique/.test(err.message ?? "");
 }
 
+/**
+ * Motivo legível para o INSERT do lead que falhou. A violação do índice único do
+ * telefone vira "já existe" (com o nome de quem segura o número, quando dá para achar;
+ * com código e situação, quando o dono é cliente do ERP); o resto segue como erro truncado.
+ */
 export async function motivoFalhaDeInsercao(
   supabase: SupabaseClient,
   organizationId: string,
@@ -48,15 +49,19 @@ export async function motivoFalhaDeInsercao(
       if (typeof norm === "string" && norm) {
         const { data: dono } = await supabase
           .from("leads")
-          .select("name, company")
+          .select("name, company, erp_code")
           .eq("organization_id", organizationId)
           .eq("normalized_phone", norm)
           .is("deleted_at", null)
           .eq("phone_compartilhado", false)
           .limit(1)
           .maybeSingle();
-        const nome = (dono as { name?: string | null; company?: string | null } | null);
-        const quem = nome?.company || nome?.name;
+        const owner = dono as Pick<ExistingLead, "name" | "company" | "erp_code" | "erp_situacao"> | null;
+        if (owner && isErpClient(owner)) {
+          await attachErpSituations(supabase, organizationId, [owner]);
+          return erpClientReason(owner);
+        }
+        const quem = owner?.company || owner?.name;
         if (quem) return `Já existe um lead com este telefone: "${quem}"`;
       }
     }

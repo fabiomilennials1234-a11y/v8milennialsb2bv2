@@ -43,6 +43,8 @@ export interface PreviewMatch {
   /** Nome do cadastro; `null` quando a pessoa não enxerga o lead. */
   label: string | null;
   erp_code?: string | null;
+  /** Situação no ERP, código cru do Toth ("0" ativo, "1" inativo…); a tela traduz. */
+  erp_situacao?: string | null;
   visible: boolean;
 }
 
@@ -74,6 +76,7 @@ function crmMatch(lead: ExistingLead): PreviewMatch {
     lead_id: lead.id,
     label: lead.company?.trim() || lead.name?.trim() || null,
     erp_code: lead.erp_code,
+    erp_situacao: lead.erp_situacao ?? null,
     visible: true,
   };
 }
@@ -123,7 +126,7 @@ export function classifyRows(rows: PreviewInput[], existing: ExistingLeads): Pre
 }
 
 /**
- * Esconde nome, código e link dos leads que a pessoa não enxerga (RLS dela). A prévia
+ * Esconde nome, código, situação e link dos leads que a pessoa não enxerga (RLS dela). A prévia
  * diz só "já cadastrado na empresa" — o import não pode virar um jeito de ler cadastro.
  */
 export function hideInvisible(rows: PreviewRow[], visibleLeadIds: Set<string>): PreviewRow[] {
