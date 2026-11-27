@@ -14,22 +14,22 @@ import { notifyError } from "@/shared/errors";
 import { zonedDayStartOfYMD } from "@/shared/time/zoned-day";
 
 const RIOFIX_ORG_ID = "36971ff5-fd73-4f30-a733-04bf8c90e5b6";
-const MUSTANG_PIPELINE_ID = "a9a2f3cb-63fe-4ca1-a453-f27002cc4944";
 const SEM_VENDEDOR = "sem-vendedor";
 const TODOS = "todos";
 const BATCH_SIZE = 250;
 const PAGE_SIZE = 10;
 
 type Venda = { id: string; title: string; value: number | null; closed_at: string | null; owner_id: string | null };
+type FunilDaVenda = { pipelineId: string; pipelineName: string };
 
-export function VendaAvulsaButton({ pipelineId }: { pipelineId: string }) {
+export function VendaAvulsaButton(funil: FunilDaVenda) {
   const { organizationId } = useOrganization();
-  if (organizationId !== RIOFIX_ORG_ID || pipelineId !== MUSTANG_PIPELINE_ID) return null;
+  if (organizationId !== RIOFIX_ORG_ID) return null;
 
-  return <VendaAvulsaAction />;
+  return <VendaAvulsaAction {...funil} />;
 }
 
-function VendaAvulsaAction() {
+function VendaAvulsaAction(funil: FunilDaVenda) {
   const { user } = useAuth();
   const { allowed, isLoading } = useFeaturePermission("pipeline.move_cards");
   const [open, setOpen] = useState(false);
@@ -43,6 +43,7 @@ function VendaAvulsaAction() {
       </Button>
       {open && (
         <VendaAvulsaDialog
+          {...funil}
           actorId={canRegister ? user.id : null}
           onClose={() => setOpen(false)}
         />
@@ -51,7 +52,12 @@ function VendaAvulsaAction() {
   );
 }
 
-function VendaAvulsaDialog({ actorId, onClose }: { actorId: string | null; onClose: () => void }) {
+function VendaAvulsaDialog({
+  pipelineId,
+  pipelineName,
+  actorId,
+  onClose,
+}: FunilDaVenda & { actorId: string | null; onClose: () => void }) {
   const { timezone, teamMemberId } = useOrganization();
   const { allowed: canViewAll, isLoading: loadingVisibility } = useFeaturePermission("pipeline.view_all");
   const { data: members = [] } = useTeamMembers();
@@ -77,7 +83,7 @@ function VendaAvulsaDialog({ actorId, onClose }: { actorId: string | null; onClo
     : teamMemberId;
   const canRegister = !!actorId && !loadingVisibility && (!!seller || canViewAll);
   const ownerFilter = canViewAll ? sellerFilter : teamMemberId;
-  const queryKey = ["vendas-avulsas", RIOFIX_ORG_ID, MUSTANG_PIPELINE_ID] as const;
+  const queryKey = ["vendas-avulsas", RIOFIX_ORG_ID, pipelineId] as const;
 
   const sales = useQuery({
     queryKey: [...queryKey, selectedMonth, tz, ownerFilter],
@@ -92,7 +98,7 @@ function VendaAvulsaDialog({ actorId, onClose }: { actorId: string | null; onClo
           .select("id, title, value, closed_at, owner_id")
           .eq("organization_id", RIOFIX_ORG_ID)
           .eq("metadata->>venda_avulsa", "true")
-          .eq("metadata->>pipeline_id", MUSTANG_PIPELINE_ID)
+          .eq("metadata->>pipeline_id", pipelineId)
           .eq("outcome", "won")
           .eq("currency", "BRL")
           .is("source_lead_id", null)
@@ -147,7 +153,7 @@ function VendaAvulsaDialog({ actorId, onClose }: { actorId: string | null; onClo
         closed_at: closedAt,
         outcome_at: closedAt,
         outcome_source: "ui",
-        metadata: { venda_avulsa: true, pipeline_id: MUSTANG_PIPELINE_ID },
+        metadata: { venda_avulsa: true, pipeline_id: pipelineId },
       }, { onConflict: "id", ignoreDuplicates: true });
       if (error) throw error;
 
@@ -177,7 +183,7 @@ function VendaAvulsaDialog({ actorId, onClose }: { actorId: string | null; onClo
       <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>{canRegister ? "Registrar venda avulsa" : "Vendas avulsas"}</DialogTitle>
-          <DialogDescription>Funil Mustang · Controle separado do faturamento oficial</DialogDescription>
+          <DialogDescription>{pipelineName} · Controle separado do faturamento oficial</DialogDescription>
         </DialogHeader>
         {canRegister && (
           <form className="space-y-4" onSubmit={(event) => void submit(event)}>
