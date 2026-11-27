@@ -26,25 +26,33 @@ export const OPCOES_PERIODO: ReadonlyArray<{ value: Periodo; label: string }> = 
  * Cor por tipo: mensagem azul, reunião amarela (pedido da Café). O próximo
  * contato fica neutro — as cores azul/amarelo/vermelho dele eram de SITUAÇÃO e
  * passariam a significar duas coisas na mesma lista.
+ *
+ * `linha` tinge a linha inteira do evento (pedido da Café: a cor no fundo, não
+ * só no filete). O tom é o mais forte que ainda deixa o texto secundário
+ * (`text-muted-foreground`) em ≥4,5:1 no claro. O azul pesa mais que o amarelo
+ * à vista: entra mais leve no claro e sobe no escuro, onde sumiria no preto.
  */
-export const TOM_TIPO: Record<TipoItem, { rotulo: string; chip: string; dot: string; filete: string }> = {
+export const TOM_TIPO: Record<TipoItem, { rotulo: string; chip: string; dot: string; filete: string; linha: string }> = {
   mensagem: {
     rotulo: "Mensagem",
     chip: "bg-scheduled/10 text-scheduled-ink ring-1 ring-inset ring-scheduled/25",
     dot: "bg-scheduled",
     filete: "bg-scheduled",
+    linha: "bg-scheduled/[0.08] hover:bg-scheduled/[0.12] dark:bg-scheduled/[0.12] dark:hover:bg-scheduled/[0.17]",
   },
   reuniao: {
     rotulo: "Reunião",
     chip: "bg-warning/15 text-warning-strong ring-1 ring-inset ring-warning/35",
     dot: "bg-warning",
     filete: "bg-warning",
+    linha: "bg-warning/[0.12] hover:bg-warning/[0.18]",
   },
   contato: {
     rotulo: "Contato",
     chip: "bg-muted text-foreground/80 ring-1 ring-inset ring-border",
     dot: "bg-muted-foreground/60",
     filete: "bg-muted-foreground/40",
+    linha: "hover:bg-muted/30",
   },
 };
 
