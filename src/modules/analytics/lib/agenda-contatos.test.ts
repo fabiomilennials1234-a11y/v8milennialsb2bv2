@@ -159,4 +159,35 @@ describe("paraClienteAgenda", () => {
   it("sem lead_phones, cai no telefone do próprio lead", () => {
     expect(paraClienteAgenda({ ...base, phone: "5548999991234", lead_phones: null }).telefones).toEqual(["5548999991234"]);
   });
+
+  it("contatos: cada linha de lead_phones vira uma opção — principal, com nome (A–Z), sem nome", () => {
+    const c = paraClienteAgenda({
+      ...base,
+      lead_phones: [
+        { id: "p-sem", phone: "554833330000", label: "  ", is_primary: false, created_at: null },
+        { id: "p-ze", phone: "5548977770000", label: "Zé - Expedição", is_primary: false, created_at: null },
+        { id: "p-ana", phone: "5548988880000", label: "Ana - Financeiro", is_primary: false, created_at: null },
+        { id: "p-princ", phone: "5548999990000", label: "Carlos - Compras", is_primary: true, created_at: null },
+      ],
+    });
+    expect(c.contatos).toEqual([
+      { id: "p-princ", nome: "Carlos - Compras", telefone: "5548999990000", principal: true },
+      { id: "p-ana", nome: "Ana - Financeiro", telefone: "5548988880000", principal: false },
+      { id: "p-ze", nome: "Zé - Expedição", telefone: "5548977770000", principal: false },
+      { id: "p-sem", nome: null, telefone: "554833330000", principal: false },
+    ]);
+  });
+
+  it("contatos: linha sem id ou sem número não vira opção; o telefone do lead sozinho também não", () => {
+    const c = paraClienteAgenda({
+      ...base,
+      phone: "5548999991234",
+      lead_phones: [
+        { phone: "5548911110000", label: "Sem id", is_primary: false, created_at: null },
+        { id: "p-vazio", phone: " ", label: "Vazio", is_primary: false, created_at: null },
+      ],
+    });
+    // Sem `lead_phones.id` não há o que gravar em `lead_phone_id`.
+    expect(c.contatos).toEqual([]);
+  });
 });

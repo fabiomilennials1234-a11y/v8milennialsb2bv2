@@ -40,3 +40,28 @@ export function useBuscaClientes(termo: string) {
     },
   });
 }
+
+/**
+ * O mesmo cliente da busca, por id — para quem abre o diálogo já sabendo o
+ * lead (card do funil, ficha): sem isto o modal não saberia os contatos dele.
+ */
+export function useClienteParaAgenda(leadId: string | null) {
+  const { organizationId } = useOrganization();
+  return useQuery({
+    queryKey: ["agendamento", "cliente", organizationId, leadId],
+    enabled: !!organizationId && !!leadId,
+    staleTime: 30_000,
+    queryFn: async (): Promise<ClienteBuscado | null> => {
+      const { data, error } = await supabase
+        .from("leads")
+        .select(SELECT_BUSCA_CLIENTE)
+        .eq("organization_id", organizationId as string)
+        .eq("id", leadId as string)
+        .is("deleted_at", null)
+        .is("lead_phones.deleted_at", null)
+        .maybeSingle();
+      if (error) throw error;
+      return data ? paraClienteAgenda(data as unknown as LinhaBuscaCliente) : null;
+    },
+  });
+}

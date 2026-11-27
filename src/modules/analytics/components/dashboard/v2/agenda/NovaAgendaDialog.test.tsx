@@ -21,6 +21,7 @@ const cliente = (over: Partial<ClienteParaAgenda> = {}): ClienteParaAgenda => ({
   cidade: "Florianópolis",
   representante: "Carlos",
   telefones: ["5548999991234", "554833334444"],
+  contatos: [],
   ...over,
 });
 

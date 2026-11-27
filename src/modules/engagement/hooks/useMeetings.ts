@@ -49,6 +49,12 @@ export interface Meeting {
    * "esquecer" de semeá-la e apagar o vínculo no primeiro Salvar.
    */
   deal_id: string | null;
+  /**
+   * Contato do cliente com quem é a reunião (`lead_phones.id`, migration
+   * 20280130000000). Opcional no tipo: a edição não o envia, e trocar o lead
+   * o limpa no banco — o contato antigo não é do cliente novo.
+   */
+  lead_phone_id?: string | null;
   created_by: string;
   google_event_id: string | null;
   meet_link: string | null;
@@ -106,6 +112,11 @@ export interface CreateMeetingInput {
    * sem os dois ele não tem do que ser derivado nem o que significar.
    */
   deal_id?: string | null;
+  /**
+   * Contato do cliente com quem é a reunião (`lead_phones.id`). O banco
+   * recusa contato que não seja deste lead (`fn_lead_phone_do_mesmo_lead`).
+   */
+  lead_phone_id?: string | null;
   google_event_id?: string | null;
   meet_link?: string | null;
   color?: string | null;

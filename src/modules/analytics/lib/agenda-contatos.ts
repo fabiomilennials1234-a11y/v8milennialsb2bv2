@@ -33,6 +33,14 @@ export interface AgendaContato {
   observacao: string | null;
   situacao: SituacaoAgenda;
   created_at: string;
+  /**
+   * Contato escolhido no "Nova agenda" (migration 20280130000000). Nulo sem
+   * escolha ou com o contato apagado depois — a tela cai no telefone principal.
+   * Opcionais: o banco antes da migration não devolve estas colunas.
+   */
+  lead_phone_id?: string | null;
+  contato_nome?: string | null;
+  contato_telefone?: string | null;
 }
 
 export interface ResumoAgendaLinha {
