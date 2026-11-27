@@ -270,6 +270,31 @@ export function filtrarPorTipo(itens: ItemAgenda[], filtro: FiltroTipo): ItemAge
   return filtro === "todos" ? itens : itens.filter((i) => i.tipo === filtro);
 }
 
+/**
+ * O que a linha da reunião oferece no par ✓ compareceu / ✗ não compareceu.
+ *
+ * Toda reunião mostra o par. Antes só a ATRASADA mostrava: a de hoje ficava sem
+ * botão até virar o dia, e quem não tinha atrasada não via botão nenhum.
+ *
+ *   - aberta, de hoje ou de antes → `marcar`;
+ *   - aberta, de dia futuro → `aguarda`: o par aparece desligado. O desfecho
+ *     grava `meeting_held`/`meeting_no_show` com a data da reunião
+ *     (`fn_meeting_outcome_to_events`); marcar antes lançaria comparecimento
+ *     num dia que ainda não chegou;
+ *   - com desfecho → `compareceu` | `faltou`, só para ler.
+ */
+export type Comparecimento = "marcar" | "aguarda" | "compareceu" | "faltou";
+
+export function comparecimentoDaReuniao(
+  item: Pick<ItemAgenda, "tipo" | "status" | "dia">,
+  hoje: string,
+): Comparecimento | null {
+  if (item.tipo !== "reuniao") return null;
+  if (item.status === "completed") return "compareceu";
+  if (item.status === "no_show") return "faltou";
+  return item.dia > hoje ? "aguarda" : "marcar";
+}
+
 export function contarAtrasados(itens: ItemAgenda[]): number {
   return itens.filter((i) => i.atrasada).length;
 }

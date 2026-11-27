@@ -16,6 +16,7 @@ import {
   OPCOES_PERIODO,
   TOM_ATRASADO,
   TOM_TIPO,
+  comparecimentoDaReuniao,
   contarAtrasados,
   contarPorTipo,
   filtrarPorTipo,
@@ -45,8 +46,9 @@ interface CardAgendaUnificadaProps {
 /**
  * Agenda do Comando como máscara de TODOS os agendamentos (flag
  * `agenda_unificada`): reunião em amarelo, mensagem agendada em azul e o
- * próximo contato em neutro, no período Hoje / Semana / Mês. Só o próximo
- * contato tem o X — reunião e mensagem se gerenciam onde sempre se gerenciaram.
+ * próximo contato em neutro, no período Hoje / Semana / Mês. O próximo contato
+ * fecha pelo X; toda reunião traz o par compareceu / não compareceu
+ * (`comparecimentoDaReuniao`); mensagem se gerencia onde sempre se gerenciou.
  */
 export function CardAgendaUnificada({ periodo, onPeriodo, tipo, onTipo }: CardAgendaUnificadaProps) {
   const navigate = useNavigate();
@@ -145,7 +147,7 @@ export function CardAgendaUnificada({ periodo, onPeriodo, tipo, onTipo }: CardAg
                   <th scope="col" className={TH}>Cidade</th>
                   <th scope="col" className={TH}>Representante</th>
                   <th scope="col" className={cn(TH, "text-center")}>Contato</th>
-                  <th scope="col" className="border-b border-border/60 py-2 pl-1 pr-4"><span className="sr-only">Fechar agenda</span></th>
+                  <th scope="col" className="border-b border-border/60 py-2 pl-1 pr-4"><span className="sr-only">Ações</span></th>
                 </tr>
               </thead>
               <tbody>
@@ -221,7 +223,7 @@ function Linha({
   onAbrirLead: () => void;
   onRemarcar: (dia: string) => void;
   onConcluir: () => void;
-  /** Reunião atrasada: registra o desfecho (`completed` | `no_show`). */
+  /** Reunião aberta: registra o desfecho (`completed` | `no_show`). */
   onDesfecho: (status: "completed" | "no_show") => void;
 }) {
   const celula = "border-b border-border/50 px-2.5 py-2.5 align-middle";
@@ -230,7 +232,7 @@ function Linha({
   // Reunião/mensagem atrasada: vermelho + a cor do tipo. O contato atrasado já
   // se diz vermelho pela data (AgendaDataPill) e segue neutro no chip.
   const atrasoDeEvento = i.atrasada && i.tipo !== "contato" ? TOM_ATRASADO[i.tipo] : null;
-  const reuniaoAberta = i.tipo === "reuniao" && i.atrasada;
+  const comparecimento = comparecimentoDaReuniao(i, hoje);
   const codigo = c?.lead_erp_code ?? cliente?.erpCode ?? null;
   // Contato escolhido no "Nova agenda" vence o principal do lead: é com ele
   // que se fala, e é o número que o "Entrar em contato" abre.
@@ -335,37 +337,22 @@ function Linha({
         )}
       </td>
       <td className="border-b border-border/50 py-2.5 pl-1 pr-4 text-right align-middle">
-        {reuniaoAberta && (
+        {(comparecimento === "marcar" || comparecimento === "aguarda") && (
           <span className="inline-flex items-center gap-1">
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <button
-                  type="button"
-                  onClick={() => onDesfecho("completed")}
-                  disabled={ocupada}
-                  aria-label={`Compareceu: reunião com ${i.leadName || "cliente"}`}
-                  className="grid h-8 w-8 place-items-center rounded-full bg-success/15 text-emerald-800 ring-1 ring-inset ring-success/40 transition-colors hover:bg-success/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50 dark:text-emerald-200"
-                >
-                  <Check aria-hidden className="h-4 w-4" />
-                </button>
-              </TooltipTrigger>
-              <TooltipContent>Compareceu</TooltipContent>
-            </Tooltip>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <button
-                  type="button"
-                  onClick={() => onDesfecho("no_show")}
-                  disabled={ocupada}
-                  aria-label={`Não compareceu: reunião com ${i.leadName || "cliente"}`}
-                  className="grid h-8 w-8 place-items-center rounded-full bg-destructive/15 text-red-800 ring-1 ring-inset ring-destructive/40 transition-colors hover:bg-destructive/30 dark:text-red-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
-                >
-                  <X aria-hidden className="h-4 w-4" />
-                </button>
-              </TooltipTrigger>
-              <TooltipContent>Não compareceu</TooltipContent>
-            </Tooltip>
+            {(["completed", "no_show"] as const).map((d) => (
+              <BotaoDesfecho
+                key={d}
+                desfecho={d}
+                cliente={i.leadName || "cliente"}
+                aguarda={comparecimento === "aguarda"}
+                ocupada={ocupada}
+                onClick={() => onDesfecho(d)}
+              />
+            ))}
           </span>
+        )}
+        {(comparecimento === "compareceu" || comparecimento === "faltou") && (
+          <SeloDesfecho desfecho={comparecimento === "compareceu" ? "completed" : "no_show"} />
         )}
         {c && (
           <Tooltip>
@@ -385,5 +372,73 @@ function Linha({
         )}
       </td>
     </tr>
+  );
+}
+
+const DESFECHO = {
+  completed: {
+    rotulo: "Compareceu",
+    Icone: Check,
+    tom: "bg-success/15 text-emerald-800 ring-success/40 dark:text-emerald-200",
+    hover: "hover:bg-success/30",
+  },
+  no_show: {
+    rotulo: "Não compareceu",
+    Icone: X,
+    tom: "bg-destructive/15 text-red-800 ring-destructive/40 dark:text-red-200",
+    hover: "hover:bg-destructive/30",
+  },
+} as const;
+
+/**
+ * ✓ ou ✗ de uma reunião. Na reunião de dia futuro aparece, mas não grava: fica
+ * `aria-disabled` (e não `disabled`) para o foco e a dica continuarem dizendo
+ * quando dá para marcar.
+ */
+function BotaoDesfecho({
+  desfecho,
+  cliente,
+  aguarda,
+  ocupada,
+  onClick,
+}: {
+  desfecho: keyof typeof DESFECHO;
+  cliente: string;
+  aguarda: boolean;
+  ocupada: boolean;
+  onClick: () => void;
+}) {
+  const { rotulo, Icone, tom, hover } = DESFECHO[desfecho];
+  const bloqueado = aguarda || ocupada;
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <button
+          type="button"
+          onClick={bloqueado ? undefined : onClick}
+          aria-disabled={bloqueado || undefined}
+          aria-label={`${rotulo}: reunião com ${cliente}${aguarda ? " (marque no dia da reunião)" : ""}`}
+          className={cn(
+            "grid h-8 w-8 place-items-center rounded-full ring-1 ring-inset transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+            tom,
+            bloqueado ? "cursor-not-allowed opacity-40" : hover,
+          )}
+        >
+          <Icone aria-hidden className="h-4 w-4" />
+        </button>
+      </TooltipTrigger>
+      <TooltipContent>{aguarda ? `${rotulo} · marque no dia da reunião` : rotulo}</TooltipContent>
+    </Tooltip>
+  );
+}
+
+/** O desfecho já registrado, para ler na linha. */
+function SeloDesfecho({ desfecho }: { desfecho: keyof typeof DESFECHO }) {
+  const { rotulo, Icone, tom } = DESFECHO[desfecho];
+  return (
+    <span className={cn("inline-flex h-6 items-center gap-1 whitespace-nowrap rounded-full px-2.5 text-[11px] font-semibold ring-1 ring-inset", tom)}>
+      <Icone aria-hidden className="h-3.5 w-3.5" />
+      {rotulo}
+    </span>
   );
 }
