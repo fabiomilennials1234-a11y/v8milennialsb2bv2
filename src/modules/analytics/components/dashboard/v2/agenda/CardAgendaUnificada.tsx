@@ -244,17 +244,18 @@ function Linha({
   const nome = i.leadName || (i.tipo === "mensagem" ? "Sem cliente vinculado" : "Sem nome");
 
   return (
-    <tr className={cn("group transition-colors hover:bg-muted/30", (ocupada || i.encerrada) && "opacity-60")}>
+    <tr className={cn("group transition-colors", tom.linha, (ocupada || i.encerrada) && "opacity-60")}>
       <td className={cn(celula, "relative pl-5")}>
+        {/* Filete na altura toda: é a borda do evento tingido, não um traço solto nele. */}
         {atrasoDeEvento ? (
-          <span aria-hidden className="absolute inset-y-2 left-0 flex w-[3px] flex-col overflow-hidden rounded-r-full">
+          <span aria-hidden className="absolute inset-y-0 left-0 flex w-[3px] flex-col">
             <span className={cn("flex-1", atrasoDeEvento.filete[0])} />
             <span className={cn("flex-1", atrasoDeEvento.filete[1])} />
           </span>
         ) : (
-          <span aria-hidden className={cn("absolute inset-y-2 left-0 w-[3px] rounded-r-full", tom.filete)} />
+          <span aria-hidden className={cn("absolute inset-y-0 left-0 w-[3px]", tom.filete)} />
         )}
-        <span className={cn("inline-flex h-6 items-center gap-1 rounded-full px-2.5 text-[11px] font-semibold", atrasoDeEvento ? atrasoDeEvento.chip : tom.chip)}>
+        <span className={cn("inline-flex h-6 items-center gap-1 whitespace-nowrap rounded-full px-2.5 text-[11px] font-semibold", atrasoDeEvento ? atrasoDeEvento.chip : tom.chip)}>
           {tom.rotulo}
           {atrasoDeEvento && <span className="font-bold">· atrasada</span>}
         </span>
