@@ -27,6 +27,55 @@ export interface ClienteDaAgenda {
 
 const LOTE = 100;
 
+/** Contato escolhido na reunião, por `meetings.id`. */
+export interface ContatoDaReuniao {
+  nome: string | null;
+  telefone: string;
+}
+
+type LinhaContatoDaReuniao = {
+  id: string;
+  lead_phones: { label: string | null; phone: string | null; deleted_at: string | null } | Array<{ label: string | null; phone: string | null; deleted_at: string | null }> | null;
+};
+
+/**
+ * Com quem é cada reunião (`meetings.lead_phone_id`, migration 20280130000000)
+ * — o nome e o número que a linha mostra e que o "Entrar em contato" abre. A
+ * RLS de `lead_phones` recorta o que a pessoa pode ver. Leitura à parte e sem
+ * insistir: se falhar (coluna ainda fora do banco), a linha fica no telefone
+ * principal, como sempre esteve.
+ */
+function useContatosDasReunioes(meetingIds: string[]) {
+  const { organizationId } = useOrganization();
+  const chave = useMemo(() => [...meetingIds].sort().join(","), [meetingIds]);
+  return useQuery({
+    queryKey: ["comando", "agenda-unificada", "contatos-reunioes", organizationId, chave],
+    enabled: !!organizationId && meetingIds.length > 0,
+    staleTime: 60_000,
+    retry: false,
+    queryFn: async (): Promise<Map<string, ContatoDaReuniao>> => {
+      const mapa = new Map<string, ContatoDaReuniao>();
+      for (let i = 0; i < meetingIds.length; i += LOTE) {
+        const ids = meetingIds.slice(i, i + LOTE);
+        const { data, error } = await supabase
+          .from("meetings" as "leads")
+          .select("id, lead_phones(label, phone, deleted_at)")
+          .eq("organization_id", organizationId as string)
+          .in("id", ids)
+          .not("lead_phone_id" as never, "is", null);
+        if (error) throw error;
+        for (const m of (data ?? []) as unknown as LinhaContatoDaReuniao[]) {
+          const p = Array.isArray(m.lead_phones) ? m.lead_phones[0] : m.lead_phones;
+          const telefone = p?.phone?.trim();
+          if (!p || p.deleted_at || !telefone) continue;
+          mapa.set(m.id, { nome: p.label?.trim() || null, telefone });
+        }
+      }
+      return mapa;
+    },
+  });
+}
+
 /**
  * Cód., telefone, cidade e representante dos clientes das reuniões e mensagens
  * — as mesmas colunas que o próximo contato já mostra. Em lotes: 100 ids por
@@ -140,11 +189,14 @@ export function useAgendaUnificada(periodo: Periodo) {
     [itens],
   );
   const clientes = useClientesDaAgenda(leadIds);
+  const reuniaoIds = useMemo(() => itens.filter((i) => i.tipo === "reuniao").map((i) => i.origemId), [itens]);
+  const contatosDasReunioes = useContatosDasReunioes(reuniaoIds);
 
   return {
     hoje,
     itens,
     clientes: clientes.data ?? new Map<string, ClienteDaAgenda>(),
+    contatosDasReunioes: contatosDasReunioes.data ?? new Map<string, ContatoDaReuniao>(),
     isLoading: eventos.isLoading || contatos.isLoading,
     // Uma fonte fora do ar não derruba a lista: só é erro quando AS DUAS falham.
     // O que faltou vem em `indisponiveis`, para a tela avisar em vez de calar.

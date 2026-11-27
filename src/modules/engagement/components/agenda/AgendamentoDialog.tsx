@@ -15,9 +15,10 @@ import { ClienteAgendaInfo } from "@/shared/components/ClienteAgendaInfo";
 import { useDebounce } from "@/shared/hooks/useDebounce";
 import { useTeamMembers } from "@/modules/identity";
 import { isPipelineVisible, sortPipelinesForNavigation, usePipelines } from "@/modules/pipelines/funis-da-agenda";
-import { useBuscaClientes, type ClienteBuscado } from "@/modules/engagement/hooks/useBuscaClientes";
+import { useBuscaClientes, useClienteParaAgenda, type ClienteBuscado } from "@/modules/engagement/hooks/useBuscaClientes";
 import { useCreateMeeting } from "@/modules/engagement/hooks/useMeetings";
 import type { AgendamentoExtras, TipoAgendamento } from "@/modules/engagement/lib/agendamento-tipos";
+import { ContatoDoClientePicker } from "./ContatoDoClientePicker";
 
 export type { TipoAgendamento };
 
@@ -72,6 +73,10 @@ export interface AgendamentoDialogProps extends AgendamentoExtras {
  *
  * Reunião não trava dia passado (lançar o que já aconteceu é uso legítimo);
  * próximo contato continua só para frente.
+ *
+ * Cliente com 2+ contatos (linhas de `lead_phones`) pede o CONTATO antes de
+ * salvar, nos dois tipos: sem pré-seleção, a escolha é do vendedor (mesma regra
+ * do "Novo negócio"). Com um só, ele vai junto sem perguntar.
  */
 export function AgendamentoDialog({
   open,
@@ -89,6 +94,10 @@ export function AgendamentoDialog({
   const [busca, setBusca] = useState("");
   const termo = useDebounce(busca, 250);
   const [cliente, setCliente] = useState<ClienteBuscado | null>(null);
+  // Cliente que veio pronto do chamador (card do lead) ainda não tem os
+  // contatos: eles chegam por `useClienteParaAgenda`.
+  const [semeadoId, setSemeadoId] = useState<string | null>(null);
+  const [contatoId, setContatoId] = useState("");
   const [dia, setDia] = useState<string>(() => paraDia(initialStart ?? new Date()));
   const [hora, setHora] = useState("09:00");
   const [duracao, setDuracao] = useState("60");
@@ -98,6 +107,7 @@ export function AgendamentoDialog({
   const [salvandoContato, setSalvandoContato] = useState(false);
 
   const resultados = useBuscaClientes(termo);
+  const semeado = useClienteParaAgenda(semeadoId);
   const criarReuniao = useCreateMeeting();
   const { data: membros = [] } = useTeamMembers();
   const { data: funisRaw } = usePipelines();
@@ -116,9 +126,11 @@ export function AgendamentoDialog({
     setBusca("");
     setCliente(
       initialLeadId
-        ? { id: initialLeadId, name: initialLeadName ?? null, company: null, erp_code: null, uf: null, cidade: null, representante: null, telefones: [] }
+        ? { id: initialLeadId, name: initialLeadName ?? null, company: null, erp_code: null, uf: null, cidade: null, representante: null, telefones: [], contatos: [] }
         : null,
     );
+    setSemeadoId(initialLeadId ?? null);
+    setContatoId("");
     setDia(paraDia(inicio));
     setHora(`${p2(inicio.getHours())}:${p2(inicio.getMinutes())}`);
     setDuracao("60");
@@ -133,8 +145,24 @@ export function AgendamentoDialog({
     return Number.isNaN(d.getTime()) ? null : d;
   }, [dia, hora]);
 
+  const escolherCliente = (c: ClienteBuscado) => {
+    setCliente(c);
+    setSemeadoId(null);
+    setContatoId("");
+  };
+
+  // Semeado: vale o que o banco devolveu (com nome e contatos) assim que chegar.
+  const clienteAtual = semeadoId && semeado.data?.id === semeadoId ? { ...semeado.data, name: semeado.data.name ?? cliente?.name ?? null } : cliente;
+  const contatos = clienteAtual?.contatos ?? [];
+  const carregandoContatos = !!semeadoId && semeado.isLoading;
+  // Falha ao ler os contatos não trava a agenda: ela sai sem contato, com aviso.
+  const contatosIndisponiveis = !!semeadoId && semeado.isError;
+  const precisaEscolherContato = contatos.length >= 2;
+  const contato = precisaEscolherContato ? (contatos.find((c) => c.id === contatoId) ?? null) : (contatos[0] ?? null);
+
   const pendente = criarReuniao.isPending || salvandoContato;
-  const podeSalvar = !!cliente && !pendente && (!ehReuniao || !!inicioIso);
+  const podeSalvar =
+    !!cliente && !pendente && (!ehReuniao || !!inicioIso) && !carregandoContatos && (!precisaEscolherContato || !!contato);
 
   const salvar = async () => {
     if (!cliente || !podeSalvar) return;
@@ -142,13 +170,16 @@ export function AgendamentoDialog({
       const fim = addMinutes(inicioIso, Number(duracao));
       try {
         await criarReuniao.mutateAsync({
-          title: `Reunião - ${cliente.name?.trim() || "cliente"}`,
+          title: `Reunião - ${clienteAtual?.name?.trim() || "cliente"}`,
           description: observacao.trim() || null,
           start_at: inicioIso.toISOString(),
           end_at: fim.toISOString(),
           all_day: false,
           event_type: "meeting",
           lead_id: cliente.id,
+          // Só com contato: sem a coluna (migration fora de ordem) o INSERT
+          // de quem não tem contato segue passando.
+          ...(contato ? { lead_phone_id: contato.id } : {}),
           pipeline_id: funil === SEM_FUNIL ? null : funil,
           participant_ids: participantes.length > 0 ? participantes : undefined,
         });
@@ -161,7 +192,7 @@ export function AgendamentoDialog({
     if (!onMarcarContato) return;
     setSalvandoContato(true);
     try {
-      await onMarcarContato({ leadId: cliente.id, dia, observacao: observacao.trim() || null });
+      await onMarcarContato({ leadId: cliente.id, dia, observacao: observacao.trim() || null, leadPhoneId: contato?.id ?? null });
       onOpenChange(false);
     } catch {
       /* a mutation avisa */
@@ -171,6 +202,9 @@ export function AgendamentoDialog({
   };
 
   const diaPorExtenso = format(diaLocal(dia), "EEE, dd 'de' MMM", { locale: ptBR });
+  // Só nomeia o contato quando houve escolha: com um contato só, o nome dele
+  // é ruído na frase.
+  const comQuem = precisaEscolherContato && contato ? <> · <b className="text-foreground">{contato.nome ?? "contato sem nome"}</b></> : null;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -212,7 +246,7 @@ export function AgendamentoDialog({
             {cliente && (
               <p className="flex items-center gap-1.5 rounded-lg bg-primary-soft/60 px-3 py-1.5 text-[12px] text-primary-soft-foreground">
                 <Check aria-hidden className="h-3.5 w-3.5 shrink-0" />
-                <span className="truncate font-semibold">{cliente.name || "Sem nome"}</span>
+                <span className="truncate font-semibold">{clienteAtual?.name || "Sem nome"}</span>
               </p>
             )}
             <ul role="listbox" aria-label="Clientes encontrados" className="max-h-[220px] min-h-[96px] overflow-y-auto rounded-xl border border-border">
@@ -235,7 +269,7 @@ export function AgendamentoDialog({
                         <HoverCardTrigger asChild>
                           <button
                             type="button"
-                            onClick={() => setCliente(c)}
+                            onClick={() => escolherCliente(c)}
                             className={cn(
                               "flex w-full items-center gap-3 border-b border-border/60 px-3 py-2 text-left last:border-b-0 hover:bg-muted/50 focus-visible:bg-muted/50 focus-visible:outline-none",
                               escolhido && "bg-primary-soft/60 hover:bg-primary-soft/60",
@@ -281,6 +315,18 @@ export function AgendamentoDialog({
             </div>
           </div>
         </div>
+
+        {carregandoContatos ? (
+          <p className="flex items-center gap-2 text-[12px] text-muted-foreground">
+            <Loader2 aria-hidden className="h-3.5 w-3.5 animate-spin" /> Carregando os contatos do cliente…
+          </p>
+        ) : contatosIndisponiveis ? (
+          <p role="status" className="text-[11.5px] text-warning-strong">
+            Não deu para carregar os contatos deste cliente. A agenda sai sem contato escolhido.
+          </p>
+        ) : precisaEscolherContato ? (
+          <ContatoDoClientePicker contatos={contatos} value={contatoId} onChange={setContatoId} />
+        ) : null}
 
         {ehReuniao && (
           <>
@@ -353,10 +399,12 @@ export function AgendamentoDialog({
           <p className="text-[11.5px] text-muted-foreground">
             {!cliente ? (
               "Escolha um cliente na lista."
+            ) : precisaEscolherContato && !contato ? (
+              `Escolha com quem é: este cliente tem ${contatos.length} contatos.`
             ) : ehReuniao ? (
-              <>Reunião com <b className="text-foreground">{cliente.name || "o cliente"}</b> em <b className="text-foreground">{diaPorExtenso}</b>{inicioIso ? <> às <b className="text-foreground">{hora}</b></> : null}.</>
+              <>Reunião com <b className="text-foreground">{clienteAtual?.name || "o cliente"}</b>{comQuem} em <b className="text-foreground">{diaPorExtenso}</b>{inicioIso ? <> às <b className="text-foreground">{hora}</b></> : null}.</>
             ) : (
-              <>Próximo contato com <b className="text-foreground">{cliente.name}</b> em <b className="text-foreground">{diaPorExtenso}</b>. Se já houver agenda dele com você, a data é trocada.</>
+              <>Próximo contato com <b className="text-foreground">{clienteAtual?.name}</b>{comQuem} em <b className="text-foreground">{diaPorExtenso}</b>. Se já houver agenda dele com você, a data é trocada.</>
             )}
           </p>
           <div className="flex gap-2">

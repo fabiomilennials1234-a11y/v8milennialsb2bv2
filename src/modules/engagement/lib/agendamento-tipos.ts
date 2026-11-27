@@ -9,6 +9,9 @@ export type TipoAgendamento = "reuniao" | "contato";
 export interface AgendamentoExtras {
   /** Tipos que a pessoa pode marcar. Com um só, o seletor some. */
   tipos?: TipoAgendamento[];
-  /** Marcar o próximo contato (só para `tipos` com "contato"). */
-  onMarcarContato?: (input: { leadId: string; dia: string; observacao: string | null }) => Promise<unknown>;
+  /**
+   * Marcar o próximo contato (só para `tipos` com "contato"). `leadPhoneId` é
+   * o contato escolhido (`lead_phones.id`); `null` quando o cliente não tem.
+   */
+  onMarcarContato?: (input: { leadId: string; dia: string; observacao: string | null; leadPhoneId: string | null }) => Promise<unknown>;
 }

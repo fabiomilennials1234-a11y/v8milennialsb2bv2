@@ -10,7 +10,7 @@ import { AbrirConversaButton } from "@/modules/communication/components/chat/Abr
 import { CreateMeetingDialog, useUpdateMeeting } from "@/modules/engagement";
 import { OPCOES_VISAO_AGENDA, useEscopoAgenda } from "@/modules/analytics/hooks/useEscopoAgenda";
 import { useConcluirAgendaContato, useMarcarAgendaContato } from "@/modules/analytics/hooks/useAgendaContatos";
-import { useAgendaUnificada, type ClienteDaAgenda } from "@/modules/analytics/hooks/useAgendaUnificada";
+import { useAgendaUnificada, type ClienteDaAgenda, type ContatoDaReuniao } from "@/modules/analytics/hooks/useAgendaUnificada";
 import { dataComSemana, distanciaRelativa } from "@/modules/analytics/lib/agenda-contatos";
 import {
   OPCOES_PERIODO,
@@ -154,6 +154,7 @@ export function CardAgendaUnificada({ periodo, onPeriodo, tipo, onTipo }: CardAg
                     key={i.chave}
                     item={i}
                     cliente={i.leadId ? agenda.clientes.get(i.leadId) : undefined}
+                    contatoDaReuniao={i.tipo === "reuniao" ? agenda.contatosDasReunioes.get(i.origemId) : undefined}
                     hoje={agenda.hoje}
                     mostrarDono={escopo.vendoEquipe}
                     ocupada={ocupadaId === i.chave}
@@ -172,7 +173,7 @@ export function CardAgendaUnificada({ periodo, onPeriodo, tipo, onTipo }: CardAg
         open={novaAberta}
         onOpenChange={setNovaAberta}
         tipos={["reuniao", "contato"]}
-        onMarcarContato={({ leadId, dia, observacao }) => marcar.mutateAsync({ leadId, dia, observacao })}
+        onMarcarContato={({ leadId, dia, observacao, leadPhoneId }) => marcar.mutateAsync({ leadId, dia, observacao, leadPhoneId })}
       />
     </>
   );
@@ -201,6 +202,7 @@ const VAZIO = <span className="text-muted-foreground/50">—</span>;
 function Linha({
   item: i,
   cliente,
+  contatoDaReuniao,
   hoje,
   mostrarDono,
   ocupada,
@@ -211,6 +213,8 @@ function Linha({
 }: {
   item: ItemAgenda;
   cliente?: ClienteDaAgenda;
+  /** Contato escolhido na reunião; o próximo contato traz o seu em `item.contato`. */
+  contatoDaReuniao?: ContatoDaReuniao;
   hoje: string;
   mostrarDono: boolean;
   ocupada: boolean;
@@ -228,7 +232,10 @@ function Linha({
   const atrasoDeEvento = i.atrasada && i.tipo !== "contato" ? TOM_ATRASADO[i.tipo] : null;
   const reuniaoAberta = i.tipo === "reuniao" && i.atrasada;
   const codigo = c?.lead_erp_code ?? cliente?.erpCode ?? null;
-  const telefone = c?.lead_phone ?? cliente?.phone ?? null;
+  // Contato escolhido no "Nova agenda" vence o principal do lead: é com ele
+  // que se fala, e é o número que o "Entrar em contato" abre.
+  const contatoNome = c?.contato_telefone ? (c.contato_nome ?? null) : (contatoDaReuniao?.nome ?? null);
+  const telefone = c?.contato_telefone ?? contatoDaReuniao?.telefone ?? c?.lead_phone ?? cliente?.phone ?? null;
   const cidade = c?.lead_cidade ?? cliente?.cidade ?? null;
   const uf = c?.lead_uf ?? cliente?.uf ?? null;
   const representante = c?.erp_representante ?? cliente?.representante ?? null;
@@ -272,7 +279,14 @@ function Linha({
           </Tooltip>
         )}
       </td>
-      <td className={cn(celula, "whitespace-nowrap text-[12px] tabular-nums")}>{telefone ? formatPhoneBR(telefone) : VAZIO}</td>
+      <td className={cn(celula, "max-w-[170px]")}>
+        {telefone ? (
+          <>
+            <span className="block whitespace-nowrap text-[12px] tabular-nums">{formatPhoneBR(telefone)}</span>
+            {contatoNome && <span className="block truncate text-[11px] text-muted-foreground">{contatoNome}</span>}
+          </>
+        ) : VAZIO}
+      </td>
       <td className={celula}>
         {c ? (
           <AgendaDataPill dia={c.data_agenda} situacao={c.situacao} hoje={hoje} onRemarcar={onRemarcar} disabled={ocupada} neutro />
@@ -308,13 +322,13 @@ function Linha({
                   size="icon"
                   variant="ghost"
                   className="h-8 w-8 rounded-full bg-primary-soft text-primary-soft-foreground hover:bg-primary hover:text-primary-foreground"
-                  aria-label={`Entrar em contato com ${i.leadName || "o cliente"}`}
+                  aria-label={`Entrar em contato com ${contatoNome || i.leadName || "o cliente"}`}
                 >
                   <MessageCircle aria-hidden className="h-4 w-4" />
                 </AbrirConversaButton>
               </span>
             </TooltipTrigger>
-            <TooltipContent>Entrar em contato</TooltipContent>
+            <TooltipContent>{contatoNome ? `Falar com ${contatoNome}` : "Entrar em contato"}</TooltipContent>
           </Tooltip>
         ) : (
           <span className="text-[11px] text-muted-foreground/70">Sem telefone</span>

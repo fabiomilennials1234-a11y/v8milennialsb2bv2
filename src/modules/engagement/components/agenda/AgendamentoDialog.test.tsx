@@ -4,6 +4,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   criar: vi.fn(),
   busca: { data: [] as Array<Record<string, unknown>>, isLoading: false, isError: false },
+  semeado: { data: undefined as Record<string, unknown> | null | undefined, isLoading: false, isError: false },
+  semeadoId: [] as Array<string | null>,
 }));
 
 vi.mock("@/modules/engagement/hooks/useMeetings", () => ({
@@ -11,6 +13,10 @@ vi.mock("@/modules/engagement/hooks/useMeetings", () => ({
 }));
 vi.mock("@/modules/engagement/hooks/useBuscaClientes", () => ({
   useBuscaClientes: () => mocks.busca,
+  useClienteParaAgenda: (id: string | null) => {
+    mocks.semeadoId.push(id);
+    return id ? mocks.semeado : { data: undefined, isLoading: false, isError: false };
+  },
 }));
 vi.mock("@/modules/identity", () => ({
   useTeamMembers: () => ({ data: [{ id: "tm1", name: "Ana" }, { id: "tm2", name: "Bia" }] }),
@@ -24,7 +30,9 @@ vi.mock("@/shared/hooks/useDebounce", () => ({ useDebounce: <T,>(v: T) => v }));
 
 import { AgendamentoDialog } from "./AgendamentoDialog";
 
-const CLIENTE = { id: "l1", name: "Padaria Sol", company: "Sol Ltda", erp_code: "123", uf: "SC", cidade: "Itajaí", representante: "Carlos", telefones: ["48999990000"] };
+const CLIENTE = { id: "l1", name: "Padaria Sol", company: "Sol Ltda", erp_code: "123", uf: "SC", cidade: "Itajaí", representante: "Carlos", telefones: ["48999990000"], contatos: [] };
+const CARLOS = { id: "ph1", nome: "Carlos - Compras", telefone: "5548999990000", principal: true };
+const ANA = { id: "ph2", nome: "Ana - Financeiro", telefone: "5548988880000", principal: false };
 
 function abrir(props: Partial<React.ComponentProps<typeof AgendamentoDialog>> = {}) {
   const onOpenChange = vi.fn();
@@ -41,6 +49,8 @@ describe("AgendamentoDialog", () => {
   beforeEach(() => {
     mocks.criar.mockReset().mockResolvedValue({ id: "m1" });
     mocks.busca = { data: [CLIENTE], isLoading: false, isError: false };
+    mocks.semeado = { data: undefined, isLoading: false, isError: false };
+    mocks.semeadoId = [];
   });
 
   it("reunião: sem cliente o botão fica travado", () => {
@@ -107,5 +117,103 @@ describe("AgendamentoDialog", () => {
   it("'contato' sem onMarcarContato não é oferecido", () => {
     abrir({ tipos: ["reuniao", "contato"] });
     expect(screen.queryByRole("radiogroup", { name: "Tipo de agendamento" })).toBeNull();
+  });
+});
+
+describe("AgendamentoDialog — contato do cliente", () => {
+  beforeEach(() => {
+    mocks.criar.mockReset().mockResolvedValue({ id: "m1" });
+    mocks.busca = { data: [CLIENTE], isLoading: false, isError: false };
+    mocks.semeado = { data: undefined, isLoading: false, isError: false };
+    mocks.semeadoId = [];
+  });
+
+  it("com 2+ contatos pede o contato e trava o salvar até escolher", async () => {
+    mocks.busca = { data: [{ ...CLIENTE, contatos: [CARLOS, ANA] }], isLoading: false, isError: false };
+    abrir();
+    await escolherCliente();
+
+    const grupo = screen.getByRole("radiogroup", { name: "Contato" });
+    expect(screen.getByRole("radio", { name: /Carlos - Compras/ })).toHaveAttribute("aria-checked", "false");
+    expect(screen.getByRole("radio", { name: /Ana - Financeiro/ })).toHaveAttribute("aria-checked", "false");
+    expect(grupo).toBeInTheDocument();
+    // Sem pré-seleção: a escolha é do vendedor.
+    expect(screen.getByRole("button", { name: "Marcar reunião" })).toBeDisabled();
+    expect(screen.getByText("Escolha com quem é: este cliente tem 2 contatos.")).toBeInTheDocument();
+  });
+
+  it("reunião grava o contato escolhido em lead_phone_id", async () => {
+    mocks.busca = { data: [{ ...CLIENTE, contatos: [CARLOS, ANA] }], isLoading: false, isError: false };
+    abrir();
+    await escolherCliente();
+    fireEvent.click(screen.getByRole("radio", { name: /Ana - Financeiro/ }));
+    expect(screen.getByRole("radio", { name: /Ana - Financeiro/ })).toHaveAttribute("aria-checked", "true");
+    fireEvent.click(screen.getByRole("button", { name: "Marcar reunião" }));
+
+    await waitFor(() => expect(mocks.criar).toHaveBeenCalledTimes(1));
+    expect(mocks.criar.mock.calls[0][0]).toMatchObject({ lead_id: "l1", lead_phone_id: "ph2" });
+  });
+
+  it("próximo contato manda o contato escolhido para onMarcarContato", async () => {
+    mocks.busca = { data: [{ ...CLIENTE, contatos: [CARLOS, ANA] }], isLoading: false, isError: false };
+    const onMarcarContato = vi.fn().mockResolvedValue(undefined);
+    abrir({ tipos: ["reuniao", "contato"], tipoInicial: "contato", onMarcarContato });
+    await escolherCliente();
+    expect(screen.getByRole("button", { name: "Salvar agenda" })).toBeDisabled();
+    fireEvent.click(screen.getByRole("radio", { name: /Carlos - Compras/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Salvar agenda" }));
+
+    await waitFor(() => expect(onMarcarContato).toHaveBeenCalledTimes(1));
+    expect(onMarcarContato.mock.calls[0][0]).toMatchObject({ leadId: "l1", leadPhoneId: "ph1" });
+  });
+
+  it("com um contato só não pergunta e grava ele", async () => {
+    mocks.busca = { data: [{ ...CLIENTE, contatos: [CARLOS] }], isLoading: false, isError: false };
+    abrir();
+    await escolherCliente();
+    expect(screen.queryByRole("radiogroup", { name: "Contato" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Marcar reunião" }));
+    await waitFor(() => expect(mocks.criar).toHaveBeenCalledTimes(1));
+    expect(mocks.criar.mock.calls[0][0]).toMatchObject({ lead_phone_id: "ph1" });
+  });
+
+  it("sem contato nenhum não manda lead_phone_id", async () => {
+    abrir();
+    await escolherCliente();
+    expect(screen.queryByRole("radiogroup", { name: "Contato" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Marcar reunião" }));
+    await waitFor(() => expect(mocks.criar).toHaveBeenCalledTimes(1));
+    expect(mocks.criar.mock.calls[0][0]).not.toHaveProperty("lead_phone_id");
+  });
+
+  it("trocar de cliente zera o contato escolhido", async () => {
+    const outro = { ...CLIENTE, id: "l2", name: "Padaria Lua", contatos: [{ ...CARLOS, id: "ph3" }, { ...ANA, id: "ph4" }] };
+    mocks.busca = { data: [{ ...CLIENTE, contatos: [CARLOS, ANA] }, outro], isLoading: false, isError: false };
+    abrir();
+    await escolherCliente();
+    fireEvent.click(screen.getByRole("radio", { name: /Ana - Financeiro/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Padaria Lua/ }));
+    expect(screen.getByRole("radio", { name: /Ana - Financeiro/ })).toHaveAttribute("aria-checked", "false");
+    expect(screen.getByRole("button", { name: "Marcar reunião" })).toBeDisabled();
+  });
+
+  it("aberto pelo card do lead: busca os contatos e espera por eles", () => {
+    mocks.semeado = { data: undefined, isLoading: true, isError: false };
+    const { rerender } = render(<AgendamentoDialog open onOpenChange={vi.fn()} initialLeadId="l9" initialLeadName="Mercado Norte" />);
+    expect(mocks.semeadoId).toContain("l9");
+    expect(screen.getByText(/Carregando os contatos do cliente/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Marcar reunião" })).toBeDisabled();
+
+    mocks.semeado = { data: { ...CLIENTE, id: "l9", name: "Mercado Norte", contatos: [CARLOS, ANA] }, isLoading: false, isError: false };
+    rerender(<AgendamentoDialog open onOpenChange={vi.fn()} initialLeadId="l9" initialLeadName="Mercado Norte" />);
+    expect(screen.getByRole("radiogroup", { name: "Contato" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Marcar reunião" })).toBeDisabled();
+  });
+
+  it("aberto pelo card do lead: falha ao ler contatos avisa e não trava", () => {
+    mocks.semeado = { data: undefined, isLoading: false, isError: true };
+    abrir({ initialLeadId: "l9", initialLeadName: "Mercado Norte" });
+    expect(screen.getByRole("status")).toHaveTextContent("Não deu para carregar os contatos deste cliente");
+    expect(screen.getByRole("button", { name: "Marcar reunião" })).toBeEnabled();
   });
 });

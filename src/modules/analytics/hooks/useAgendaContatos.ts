@@ -82,12 +82,16 @@ function useInvalidar() {
   return () => qc.invalidateQueries({ queryKey: CHAVE });
 }
 
-/** Marca (ou remarca, se o cliente já tem agenda aberta com o mesmo dono). */
+/**
+ * Marca (ou remarca, se o cliente já tem agenda aberta com o mesmo dono).
+ * `leadPhoneId` é o contato escolhido; sem ele, remarcar MANTÉM o contato que
+ * a agenda já tinha (a pílula de data não sabe o contato e não o apaga).
+ */
 export function useMarcarAgendaContato() {
   const { organizationId } = useOrganization();
   const invalidar = useInvalidar();
   return useMutation({
-    mutationFn: async (input: { leadId: string; dia: string; observacao?: string | null; ownerId?: string | null }) => {
+    mutationFn: async (input: { leadId: string; dia: string; observacao?: string | null; ownerId?: string | null; leadPhoneId?: string | null }) => {
       if (!organizationId) throw new Error("Organização não carregada.");
       const { data, error } = await supabase.rpc("agenda_contato_marcar" as never, {
         p_org: organizationId,
@@ -95,6 +99,9 @@ export function useMarcarAgendaContato() {
         p_data: input.dia,
         p_observacao: input.observacao ?? null,
         p_owner: input.ownerId ?? null,
+        // Só com contato: o remarcar segue casando a assinatura antiga se a
+        // migration 20280130000000 ainda não estiver no banco.
+        ...(input.leadPhoneId ? { p_lead_phone: input.leadPhoneId } : {}),
       } as never);
       if (error) throw error;
       return data as unknown as string;
