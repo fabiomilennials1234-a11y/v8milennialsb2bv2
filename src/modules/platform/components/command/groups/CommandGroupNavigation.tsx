@@ -26,6 +26,7 @@ import { cn } from "@/lib/utils";
 import { useAuth } from "@/modules/identity";
 import { useOrgFeaturesOptional } from "@/contexts/OrgFeaturesContext";
 import { SIDEBAR_FEATURE_MAP } from "@/modules/platform/lib/feature-registry";
+import { useAgendaSoNoComando } from "@/modules/platform/hooks/useAgendaSoNoComando";
 import { pushRecent } from "../recentCommands";
 
 interface CommandGroupNavigationProps {
@@ -52,6 +53,9 @@ export function CommandGroupNavigation({ onClose }: CommandGroupNavigationProps)
   const navigate = useNavigate();
   const { user } = useAuth();
   const orgFeatures = useOrgFeaturesOptional();
+  // Org sem a tela Agenda (`agenda_so_no_comando`): a agenda mora no Comando.
+  const { ativa: agendaOculta } = useAgendaSoNoComando();
+  const itens = agendaOculta ? NAV_ITEMS.filter((i) => i.id !== "nav-agenda") : NAV_ITEMS;
 
   // Plan gating — item bloqueado mostra cadeado e navega pro estado
   // bloqueado da rota (FeatureRoute), sem entrar nos recentes.
@@ -72,7 +76,7 @@ export function CommandGroupNavigation({ onClose }: CommandGroupNavigationProps)
       heading="Navegação"
       className="[&_[cmdk-group-heading]]:text-[11px] [&_[cmdk-group-heading]]:font-bold [&_[cmdk-group-heading]]:uppercase [&_[cmdk-group-heading]]:tracking-[.06em] [&_[cmdk-group-heading]]:text-muted-foreground [&_[cmdk-group-heading]]:px-3 [&_[cmdk-group-heading]]:py-1.5"
     >
-      {NAV_ITEMS.map(({ id, label, path, Icon }) => {
+      {itens.map(({ id, label, path, Icon }) => {
         const locked = isItemLocked(path);
         return (
           <CommandItem

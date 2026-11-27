@@ -35,6 +35,7 @@ import {
 } from "@/modules/platform/lib/navigation-model";
 import { SETTINGS_BASE_PATH } from "@/modules/platform/lib/settings-tabs";
 import { useFeatureFlag } from "@/modules/platform/hooks/useFeatureFlag";
+import { useAgendaSoNoComando } from "@/modules/platform/hooks/useAgendaSoNoComando";
 import { useLeadsLabel } from "@/modules/platform/hooks/useLeadsLabel";
 import {
   filterByGate,
@@ -53,6 +54,12 @@ export interface NavigationModel {
   pitstopGroups: PitstopGroup[];
   /** Agenda e Pitstop vivem no rodapé — `null` quando a permissão nega. */
   agenda: NavNode | null;
+  /**
+   * A org desligou a tela Agenda (`agenda_so_no_comando`): a porta some da
+   * lateral, da gaveta e da barra do celular. Enquanto a flag carrega, fica
+   * `false` — nenhuma org vê a porta piscar.
+   */
+  agendaOculta: boolean;
   pitstop: NavNode | null;
   isOutboundMember: boolean;
   /** Rota bloqueada por plano (não por permissão) — abre o modal de upgrade. */
@@ -90,6 +97,8 @@ export function useNavigationModel(): NavigationModel {
   const { enabled: crmMcp } = useFeatureFlag("crm_mcp");
   // Hotfix Café Jurerê: "Leads" vira "Ficha do Parceiro" só com a flag da org.
   const leadsLabel = useLeadsLabel();
+  // Café Jurerê: a agenda vive só no Comando; a porta da tela some.
+  const { ativa: agendaOculta } = useAgendaSoNoComando();
 
   const canViewRoute = useMemo(
     () => makeCanViewRoute({ isMaster, isAdmin, featurePerms, permissionsLoading }),
@@ -217,7 +226,8 @@ export function useNavigationModel(): NavigationModel {
   return {
     primary,
     pitstopGroups,
-    agenda: canViewRoute(SIDEBAR_AGENDA.path) && !isOutboundMember ? SIDEBAR_AGENDA : null,
+    agenda: canViewRoute(SIDEBAR_AGENDA.path) && !isOutboundMember && !agendaOculta ? SIDEBAR_AGENDA : null,
+    agendaOculta,
     pitstop: canViewRoute(SIDEBAR_PITSTOP.path) && !isOutboundMember ? SIDEBAR_PITSTOP : null,
     isOutboundMember,
     isLocked,
