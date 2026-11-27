@@ -20,7 +20,8 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link rel="preconnect" href="https://app.cal.com" />
   <link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..900&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="css/chat.css?v=20261126" />
+  <link rel="preload" as="image" href="assets/avatar.jpg" />
+  <link rel="stylesheet" href="css/chat.css?v=20261127" />
   <script>document.documentElement.classList.add("js");</script>
 </head>
 <body>
@@ -46,7 +47,7 @@
         <svg width="20" height="20"><use href="#i-back"/></svg>
       </a>
       <div class="bar__id">
-        <span class="bar__av"><img src="assets/torque-icone-192.png" width="40" height="35" alt="" /></span>
+        <span class="bar__av"><img src="assets/avatar.jpg" width="44" height="44" alt="" /></span>
         <span class="bar__name">
           <b>Torque</b>
           <small><i class="bar__dot" aria-hidden="true"></i><span id="status">online agora</span></small>
@@ -63,7 +64,7 @@
     <ol class="thread" id="thread" role="log" aria-live="polite" aria-label="Conversa com o Torque"></ol>
 
     <div class="row row--bot row--typing" id="typing" hidden aria-hidden="true">
-      <span class="row__av"><img src="assets/torque-icone-192.png" width="28" height="25" alt="" /></span>
+      <span class="row__av"><img src="assets/avatar.jpg" width="34" height="34" alt="" /></span>
       <div class="bubble bubble--typing"><i></i><i></i><i></i></div>
     </div>
 
@@ -80,6 +81,6 @@
   <noscript><img height="1" width="1" style="display:none" alt="" src="https://www.facebook.com/tr?id=1588170885997511&amp;ev=PageView&amp;noscript=1"></noscript>
   <script src="../_shared/pixel.js?v=20261113a" defer></script>
   <script src="../_shared/cal-metadata.js?v=20261113a" defer></script>
-  <script src="js/chat.js?v=20261126" defer></script>
+  <script src="js/chat.js?v=20261127" defer></script>
 </body>
 </html>

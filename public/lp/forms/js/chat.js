@@ -104,7 +104,7 @@
   var thread = doc.getElementById("thread");
   var answer = doc.getElementById("answer");
   var typing = doc.getElementById("typing");
-  var AV = '<span class="row__av" aria-hidden="true"><img src="assets/torque-icone-192.png" width="28" height="25" alt="" /></span>';
+  var AV = '<span class="row__av" aria-hidden="true"><img src="assets/avatar.jpg" width="34" height="34" alt="" /></span>';
 
   var S = {
     nome: "", primeiro: "", whatsapp: "", email: "",
