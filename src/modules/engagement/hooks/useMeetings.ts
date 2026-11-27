@@ -296,6 +296,27 @@ function invalidarFunil(queryClient: ReturnType<typeof useQueryClient>) {
   }
 }
 
+/**
+ * As leituras de reunião do COMANDO que não passam por `agenda-events`:
+ *
+ *   - `["comando", "agenda"]` — o "Reuniões hoje" (`useComandoAgenda`);
+ *   - `["comando", "agenda-unificada", "atrasados"]` — as reuniões abertas de
+ *     dias anteriores que o "Hoje" da Agenda busca à parte (`useAgendaUnificada`).
+ *
+ * Sem a segunda, marcar compareceu/não compareceu numa atrasada deixava a
+ * linha na tela, com os botões, até a pessoa recarregar.
+ */
+const CHAVES_DO_COMANDO = [
+  ["comando", "agenda"],
+  ["comando", "agenda-unificada", "atrasados"],
+] as const;
+
+function invalidarComando(queryClient: ReturnType<typeof useQueryClient>) {
+  for (const queryKey of CHAVES_DO_COMANDO) {
+    queryClient.invalidateQueries({ queryKey: [...queryKey] });
+  }
+}
+
 /** Create a meeting with optional participant IDs */
 export function useCreateMeeting() {
   const queryClient = useQueryClient();
@@ -353,6 +374,7 @@ export function useCreateMeeting() {
       // Com `deal_id`, o espelho já reescreveu a projeção do funil. Ver
       // `CHAVES_DO_FUNIL`.
       invalidarFunil(queryClient);
+      invalidarComando(queryClient);
       toast.success("Reunião criada com sucesso");
     },
     onError: (error: Error) => {
@@ -395,6 +417,7 @@ export function useUpdateMeeting() {
       // Remarcar, trocar de negócio ou cancelar reescreve (ou limpa) a projeção
       // do funil pelo espelho. Ver `CHAVES_DO_FUNIL`.
       invalidarFunil(queryClient);
+      invalidarComando(queryClient);
       toast.success("Reunião atualizada");
     },
     onError: (error: Error) => {
@@ -447,6 +470,7 @@ export function useDeleteMeeting() {
       // Apagar limpa a projeção da entrada carimbada por esta reunião. Ver
       // `CHAVES_DO_FUNIL`.
       invalidarFunil(queryClient);
+      invalidarComando(queryClient);
       toast.success("Reunião excluída");
     },
     onError: (error: Error) => {

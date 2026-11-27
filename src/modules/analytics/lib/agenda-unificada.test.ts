@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { AgendaContato } from "./agenda-contatos";
 import {
+  comparecimentoDaReuniao,
   contarAtrasados,
   contarPorTipo,
   filtrarPorTipo,
@@ -219,5 +220,49 @@ describe("atrasados abertos no Hoje", () => {
       contatos: [contato({ id: "a", data_agenda: "2026-11-10", situacao: "atrasada" }), contato({ id: "b", data_agenda: "2026-11-17", situacao: "hoje" })],
     });
     expect(contarAtrasados(itens)).toBe(1);
+  });
+});
+
+describe("comparecimentoDaReuniao", () => {
+  const hoje = "2026-11-17";
+  const reuniao = (p: Partial<EventoDaAgenda> = {}) => {
+    const it = itemDoEvento(evento(p), TZ, hoje);
+    if (!it) throw new Error("evento de teste não virou item");
+    return it;
+  };
+
+  it("reunião de hoje ainda aberta pode ser marcada — antes ficava sem botão até virar o dia", () => {
+    expect(comparecimentoDaReuniao(reuniao({ start_at: "2026-11-17T13:00:00Z" }), hoje)).toBe("marcar"); // 10:00
+  });
+
+  it("reunião de hoje com a hora ainda por vir também pode ser marcada", () => {
+    expect(comparecimentoDaReuniao(reuniao({ start_at: "2026-11-17T22:00:00Z" }), hoje)).toBe("marcar"); // 19:00
+  });
+
+  it("reunião atrasada e aberta pode ser marcada", () => {
+    expect(comparecimentoDaReuniao(reuniao({ start_at: "2026-11-14T17:00:00Z" }), hoje)).toBe("marcar");
+  });
+
+  it("reunião de dia futuro mostra os botões, mas aguarda o dia", () => {
+    expect(comparecimentoDaReuniao(reuniao({ start_at: "2026-11-18T13:00:00Z" }), hoje)).toBe("aguarda");
+  });
+
+  it("o dia é o do fuso da org: 22:30 de hoje em Brasília (01:30 UTC de amanhã) já pode", () => {
+    expect(comparecimentoDaReuniao(reuniao({ start_at: "2026-11-18T01:30:00Z" }), hoje)).toBe("marcar");
+  });
+
+  it("com desfecho, mostra qual foi", () => {
+    expect(comparecimentoDaReuniao(reuniao({ status: "completed" }), hoje)).toBe("compareceu");
+    expect(comparecimentoDaReuniao(reuniao({ status: "no_show" }), hoje)).toBe("faltou");
+  });
+
+  it("o status vem em qualquer caixa do banco", () => {
+    expect(comparecimentoDaReuniao(reuniao({ status: "COMPLETED" }), hoje)).toBe("compareceu");
+  });
+
+  it("mensagem e próximo contato não têm comparecimento", () => {
+    expect(comparecimentoDaReuniao(reuniao({ source: "scheduled_message" }), hoje)).toBeNull();
+    const [c] = montarAgenda({ hoje, timezone: TZ, periodo: "hoje", eventos: [], contatos: [contato({})] });
+    expect(comparecimentoDaReuniao(c, hoje)).toBeNull();
   });
 });
