@@ -75,6 +75,7 @@ vi.mock("../../supabase/functions/_shared/copilot/context-extractor.ts", () => (
 }));
 
 const { AgentEngine } = await import("../../supabase/functions/agent-message/agent-engine.ts");
+const { loadPipelineStages } = await import("../../supabase/functions/agent-message/engine/load-context.ts");
 
 // ── Fake Supabase ────────────────────────────────────────────────────────────
 const ORG = "org-macerados";
@@ -500,6 +501,35 @@ describe("AgentEngine — mídia × handoff do MESMO turno", () => {
     const r = await run([{ content: "Oi!", tools: [UPD] }]);
     expect((r.out as any).same_turn_handoff).toBeNull();
     expect(r.fake.ops.filter((o) => o.table === "phone_ai_preferences")).toHaveLength(0);
+  });
+});
+
+describe("AgentEngine — movimentação explícita por agente", () => {
+  const capabilities = baseCaps({
+    active_pipes: [PIPE_ID],
+    can_move_cards: true,
+    intent_detection: { automatic_stage_progression: false },
+  });
+
+  it("mantém a etapa do negócio em turnos sem ferramenta de movimentação", async () => {
+    const turn = [{ content: "Oi! É com você que falo sobre a seleção de produtos?" }];
+    const explicit = await run(turn, { caps: capabilities });
+    const defaultProgression = await run(turn, { caps: { ...capabilities, intent_detection: null } });
+
+    expect(explicit.queued("update_pipeline_stage")).toHaveLength(0);
+    expect(explicit.transfers).toHaveLength(0);
+    expect(defaultProgression.queued("update_pipeline_stage")).toHaveLength(1);
+  });
+
+  it("carrega as etapas e executa advance_stage mesmo com a qualificação desativada", async () => {
+    vi.mocked(loadPipelineStages).mockClear();
+    const close = tc("advance_stage", { target_stage: "inativo", target_pipe: "vendas" }, 1);
+    const result = await run([{ content: "Entendi, obrigada por avisar. Tudo de bom!", tools: [close] }], { caps: capabilities });
+
+    expect(loadPipelineStages).toHaveBeenCalledOnce();
+    expect(result.queued("advance_stage")[0]?.payload).toMatchObject({ target_stage: "inativo", target_pipe: "vendas" });
+    expect(result.queued("update_pipeline_stage")).toHaveLength(0);
+    expect(result.transfers).toHaveLength(0);
   });
 });
 

@@ -239,6 +239,11 @@ export class AgentEngine {
       throw new Error('No active agent found for organization');
     }
     console.log('[AgentEngine] Capabilities loaded:', { agentId: capabilities.id, agentName: capabilities.name });
+    const intentDetection = capabilities.intent_detection as {
+      automatic_stage_progression?: boolean;
+      stage_handoff?: unknown;
+    } | null | undefined;
+    const explicitStageMovement = intentDetection?.automatic_stage_progression === false;
 
     // 1.5. OUT-OF-HOURS CHECK — item #15 (síncrono, instant)
     const outOfHoursReply = checkOutOfHours(capabilities);
@@ -274,7 +279,9 @@ export class AgentEngine {
       this.retrieveSemanticContext(userMessage, capabilities.id),
       this.retrieveLongTermMemories(userMessage, leadId),
       this.loadOrgCustomFields(),
-      capabilities.can_qualify_lead ? this.loadPipelineStages() : Promise.resolve([]),
+      capabilities.can_qualify_lead || (explicitStageMovement && capabilities.can_move_cards)
+        ? this.loadPipelineStages()
+        : Promise.resolve([]),
       this.loadProductCatalog(),
     ]);
 
@@ -803,7 +810,7 @@ export class AgentEngine {
     const notifyAllowlist = handoffAllowlist(capabilities);
     const { plan, synthesized } = applyStageHandoff(
       planTurnActions(turnCalls),
-      parseStageHandoffPolicy((capabilities.intent_detection as { stage_handoff?: unknown } | null)?.stage_handoff),
+      parseStageHandoffPolicy(intentDetection?.stage_handoff),
       {
         organizationId: this.organizationId,
         userMessage,
@@ -876,15 +883,17 @@ export class AgentEngine {
     });
 
     // 11. Enqueue Pipeline Stage Update (Funil WhatsApp)
-    console.log('[AgentEngine] Step 12: Enqueuing pipeline stage update...');
-    await enqueuePipelineStageUpdateExternal(
-      this.supabase,
-      this.organizationId,
-      leadId,
-      conversation.turn_count,
-      stageAnchor(plan),
-      capabilities,
-    );
+    if (!explicitStageMovement) {
+      console.log('[AgentEngine] Step 12: Enqueuing pipeline stage update...');
+      await enqueuePipelineStageUpdateExternal(
+        this.supabase,
+        this.organizationId,
+        leadId,
+        conversation.turn_count,
+        stageAnchor(plan),
+        capabilities,
+      );
+    }
 
     // 12. Enqueue Automation Actions (if configured) — para CADA estado distinto
     // visitado no turno: [qualify, transfer] precisa disparar onQualify E
