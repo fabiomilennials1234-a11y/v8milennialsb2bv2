@@ -1068,7 +1068,7 @@ function FunilPageInner() {
         }
         primaryAction={
           <>
-            <VendaAvulsaButton key={pipeline.id} pipelineId={pipeline.id} />
+            <VendaAvulsaButton key={pipeline.id} pipelineId={pipeline.id} pipelineName={pipeline.name} />
             {primaryAction}
           </>
         }

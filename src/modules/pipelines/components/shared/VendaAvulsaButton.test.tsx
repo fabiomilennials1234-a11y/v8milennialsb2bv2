@@ -4,6 +4,7 @@ import { VendaAvulsaButton } from "./VendaAvulsaButton";
 
 const RIOFIX = "36971ff5-fd73-4f30-a733-04bf8c90e5b6";
 const MUSTANG = "a9a2f3cb-63fe-4ca1-a453-f27002cc4944";
+const BALCAO = "a6d30017-e163-40df-b862-a8043bda5f30";
 
 const { from, upsert, notifyError, identity } = vi.hoisted(() => ({
   from: vi.fn(),
@@ -21,11 +22,11 @@ vi.mock("@/modules/identity", () => ({
   useTeamMembers: () => ({ data: [{ id: "seller-1", name: "Ana", is_active: true }] }),
 }));
 
-function openButton(pipelineId = MUSTANG) {
+function openButton(pipelineId = MUSTANG, pipelineName = "Funil Mustang") {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={client}>
-      <VendaAvulsaButton pipelineId={pipelineId} />
+      <VendaAvulsaButton pipelineId={pipelineId} pipelineName={pipelineName} />
     </QueryClientProvider>,
   );
 }
@@ -53,9 +54,9 @@ beforeEach(() => {
 
 afterEach(cleanup);
 
-it("exibe a ação só no Funil Mustang da Riofix", () => {
-  const view = openButton("outro-funil");
-  expect(screen.queryByRole("button", { name: "Registrar venda avulsa" })).not.toBeInTheDocument();
+it("exibe a ação também no Balcão e restringe o acesso à Riofix", () => {
+  const view = openButton(BALCAO, "Balcão");
+  expect(screen.getByRole("button", { name: "Registrar venda avulsa" })).toBeInTheDocument();
   view.unmount();
   identity.organizationId = "outra-org";
   openButton();
@@ -63,10 +64,13 @@ it("exibe a ação só no Funil Mustang da Riofix", () => {
   expect(from).not.toHaveBeenCalled();
 });
 
-it("grava em negócios sem lead e reaproveita o id ao repetir um envio", async () => {
+it("usa o funil aberto para consultar e gravar sem duplicar um reenvio", async () => {
   upsert.mockResolvedValueOnce({ error: new Error("Conexão interrompida") });
-  openButton();
+  openButton(BALCAO, "Balcão");
   fireEvent.click(screen.getByRole("button", { name: "Registrar venda avulsa" }));
+  expect(screen.getByText("Balcão · Controle separado do faturamento oficial")).toBeInTheDocument();
+  await waitFor(() => expect(salesQuery.eq).toHaveBeenCalledWith("metadata->>pipeline_id", BALCAO));
+  expect(salesQuery.eq).not.toHaveBeenCalledWith("metadata->>pipeline_id", MUSTANG);
   fireEvent.change(screen.getByLabelText("Nome da venda"), { target: { value: "Venda de balcão" } });
   fireEvent.change(screen.getByLabelText("Valor (R$)"), { target: { value: "123456" } });
   fireEvent.change(screen.getByLabelText("Data da venda"), { target: { value: "2026-01-10" } });
@@ -77,7 +81,7 @@ it("grava em negócios sem lead e reaproveita o id ao repetir um envio", async (
     id: expect.any(String),
     organization_id: RIOFIX,
     created_by: "user-1",
-    metadata: { venda_avulsa: true, pipeline_id: MUSTANG },
+    metadata: { venda_avulsa: true, pipeline_id: BALCAO },
     title: "Venda de balcão",
     value: 1234.56,
     source_lead_id: null,
