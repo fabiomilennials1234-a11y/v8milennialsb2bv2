@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content" />
+  <!-- Google Tag Manager (mesmo contêiner das LPs de anúncio) -->
+  <script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
+  new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
+  j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
+  'https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);
+  })(window,document,'script','dataLayer','GTM-PZCHCKMC');</script>
+  <title>Agende sua apresentação · Torque</title>
+  <meta name="description" content="Cadastro interativo do Torque: responda algumas perguntas e agende uma apresentação gratuita das inteligências artificiais para indústrias e distribuidoras." />
+  <meta name="robots" content="noindex, nofollow" />
+  <meta name="theme-color" content="#0E0D10" />
+  <link rel="icon" type="image/png" href="assets/torque-icone-64.png" />
+  <link rel="apple-touch-icon" href="assets/torque-icone-192.png" />
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="preconnect" href="https://app.cal.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..900&display=swap" rel="stylesheet" />
+  <link rel="preload" as="image" href="assets/avatar.jpg" />
+  <link rel="stylesheet" href="css/chat.css?v=20261127" />
+  <script>document.documentElement.classList.add("js");</script>
+</head>
+<body>
+  <noscript><iframe src="https://www.googletagmanager.com/ns.html?id=GTM-PZCHCKMC" height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+    <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-back" viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="M5 12.5l4.2 4.2L19 7" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-cal" viewBox="0 0 24 24"><path d="M4 7.5A2.5 2.5 0 0 1 6.5 5h11A2.5 2.5 0 0 1 20 7.5v10a2.5 2.5 0 0 1-2.5 2.5h-11A2.5 2.5 0 0 1 4 17.5zM4 10h16M8.5 3v4M15.5 3v4" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-chat" viewBox="0 0 24 24"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3h11A2.5 2.5 0 0 1 20 5.5v8a2.5 2.5 0 0 1-2.5 2.5H10l-4.5 4v-4A1.5 1.5 0 0 1 4 14.5z" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"/></symbol>
+    <symbol id="i-lock" viewBox="0 0 24 24"><path d="M6.5 10.5h11v9h-11zM8.5 10.5V8a3.5 3.5 0 0 1 7 0v2.5" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"/></symbol>
+  </svg>
+
+  <div class="bg" aria-hidden="true">
+    <div class="bg__glow"></div>
+    <div class="bg__grid"></div>
+    <svg class="bg__hex" viewBox="0 0 200 200"><path d="M100 6l81.4 47v94L100 194l-81.4-47V53z"/><path d="M100 34l57.2 33v66L100 166l-57.2-33V67z"/></svg>
+  </div>
+
+  <header class="bar">
+    <div class="bar__in">
+      <a class="bar__back" href="../iaparab2b/" id="backLink" aria-label="Voltar para a página do Torque">
+        <svg width="20" height="20"><use href="#i-back"/></svg>
+      </a>
+      <div class="bar__id">
+        <span class="bar__av"><img src="assets/avatar.jpg" width="44" height="44" alt="" /></span>
+        <span class="bar__name">
+          <b>Gabriel Gipp</b>
+          <small>Torque <span aria-hidden="true">·</span><i class="bar__dot" aria-hidden="true"></i><span id="status">online agora</span></small>
+        </span>
+      </div>
+      <span class="bar__step" aria-hidden="true"><b id="stepNow">1</b><span>/8</span></span>
+    </div>
+    <div class="progress" role="progressbar" aria-label="Progresso do cadastro" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" id="progress"><i id="progressFill"></i></div>
+  </header>
+
+  <main class="chat" id="conteudo">
+    <h1 class="sr-only">Cadastro e agendamento da apresentação gratuita do Torque</h1>
+    <div class="chat__day" aria-hidden="true"><span>Hoje</span></div>
+    <ol class="thread" id="thread" role="log" aria-live="polite" aria-label="Conversa com Gabriel Gipp, do Torque"></ol>
+
+    <div class="row row--bot row--typing" id="typing" hidden aria-hidden="true">
+      <span class="row__av"><img src="assets/avatar.jpg" width="34" height="34" alt="" /></span>
+      <div class="bubble bubble--typing"><i></i><i></i><i></i></div>
+    </div>
+
+    <div class="answer" id="answer"></div>
+
+    <p class="legal"><svg width="14" height="14" aria-hidden="true"><use href="#i-lock"/></svg>Ao enviar seus dados, você concorda com a <a href="https://torquecrm.com.br/privacidade" target="_blank" rel="noopener">Política de Privacidade</a> do Torque.</p>
+
+    <noscript>
+      <p class="noscript">Para fazer seu cadastro, ative o JavaScript do navegador.</p>
+    </noscript>
+  </main>
+
+  <!-- Compartilhados das LPs: Meta Pixel e atribuição na reserva do Cal (/lp/_shared/) -->
+  <noscript><img height="1" width="1" style="display:none" alt="" src="https://www.facebook.com/tr?id=1588170885997511&amp;ev=PageView&amp;noscript=1"></noscript>
+  <script src="../_shared/pixel.js?v=20261113a" defer></script>
+  <script src="../_shared/cal-metadata.js?v=20261113a" defer></script>
+  <script src="js/chat.js?v=20261127b" defer></script>
+</body>
+</html>
