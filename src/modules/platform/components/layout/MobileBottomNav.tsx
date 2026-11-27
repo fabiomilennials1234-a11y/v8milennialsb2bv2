@@ -52,7 +52,9 @@ export function MobileBottomNav() {
   if (!isMobile) return null;
   if (isChatThreadOpen) return null;
 
-  const isAnyTabActive = TABS.some((t) => isTabActive(t, location.pathname));
+  // Org que desligou a tela Agenda (`agenda_so_no_comando`) não tem a aba.
+  const tabs = model.agendaOculta ? TABS.filter((t) => t.id !== "agenda") : TABS;
+  const isAnyTabActive = tabs.some((t) => isTabActive(t, location.pathname));
 
   // "Mais" abre a gaveta de navegação (SidebarMobileDrawer) — fonte única,
   // já filtrada por permissão + OrgSwitcher p/ master).
@@ -71,7 +73,7 @@ export function MobileBottomNav() {
       aria-label="Navegação principal mobile"
     >
       <div className="flex items-center justify-around h-14">
-        {TABS.map((tab) => {
+        {tabs.map((tab) => {
           const active = isTabActive(tab, location.pathname);
           return (
             <button

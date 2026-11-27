@@ -11,6 +11,7 @@ import {
 } from "@/modules/analytics/hooks/useComandoAgenda";
 import { ComandoCard } from "./ComandoCard";
 import { agendaAttributionLabel } from "@/modules/engagement";
+import { ROTA_AGENDA, useAgendaSoNoComando } from "@/modules/platform/feature-flags";
 
 /** Os próximos cinco compromissos — pedido do CTO em 2026-09-04. */
 const MOSTRAR = 5;
@@ -64,6 +65,9 @@ function rotuloDoDia(inicio: Date): string {
  */
 export function CardProximasAgendas() {
   const navigate = useNavigate();
+  // Org sem a tela Agenda (`agenda_so_no_comando`): este card JÁ é a agenda;
+  // "Ver agenda" e o clique na linha levariam de volta para cá.
+  const { ativa: semTelaAgenda } = useAgendaSoNoComando();
 
   // A janela é derivada uma vez POR DIA. Recriar `new Date()` a cada render
   // trocaria a queryKey em todo ciclo e a query nunca sairia de `fetching`;
@@ -107,7 +111,7 @@ export function CardProximasAgendas() {
       title="Próximas agendas"
       count={eventos.length}
       scopeHint={isAdmin ? "Equipe" : undefined}
-      action={{ label: "Ver agenda", to: "/agenda" }}
+      action={semTelaAgenda ? undefined : { label: "Ver agenda", to: ROTA_AGENDA }}
       isLoading={isLoading}
       isError={isError}
       isEmpty={visiveis.length === 0}
@@ -140,8 +144,9 @@ export function CardProximasAgendas() {
             <li key={`${e.source}:${e.id}`} className="relative">
               <button
                 type="button"
-                onClick={() => navigate("/agenda")}
-                className="flex w-full items-start gap-3 rounded-2xl py-2 pr-2 text-left transition-colors hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                onClick={() => navigate(ROTA_AGENDA)}
+                disabled={semTelaAgenda}
+                className="flex w-full items-start gap-3 rounded-2xl py-2 pr-2 text-left transition-colors enabled:hover:bg-muted/40 disabled:cursor-default focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
                 <span
                   aria-hidden

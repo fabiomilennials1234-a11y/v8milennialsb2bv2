@@ -18,6 +18,7 @@ import {
   Wallet,
 } from "lucide-react";
 import { CommandGroup, CommandItem } from "cmdk";
+import { useAgendaSoNoComando } from "@/modules/platform/hooks/useAgendaSoNoComando";
 import { useTheme } from "next-themes";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/modules/identity";
@@ -68,13 +69,15 @@ export function CommandGroupRecents({ onClose }: CommandGroupRecentsProps) {
   const { user } = useAuth();
   const { theme, setTheme } = useTheme();
   const { data: recentEntities } = useRecentItems(5);
+  // Org sem a tela Agenda (`agenda_so_no_comando`): o atalho antigo some dos recentes.
+  const { ativa: agendaOculta } = useAgendaSoNoComando();
 
   if (!user?.id) return null;
 
   const recentIds = getRecent(user.id);
   const validRecents = recentIds
     .map((id) => ({ id, config: ITEM_MAP[id] }))
-    .filter((r) => !!r.config)
+    .filter((r) => !!r.config && !(agendaOculta && r.id === "nav-agenda"))
     .slice(0, 5);
 
   const hasCommands = validRecents.length > 0;

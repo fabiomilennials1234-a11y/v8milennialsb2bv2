@@ -23,6 +23,7 @@ import { PermissionProtectedRoute } from "@/modules/identity/permissions";
 import { CobrancaRoute } from "@/modules/cobranca";
 import { ListaFriaRoute } from "@/modules/lista-fria";
 import { IaConectadaRoute } from "@/modules/platform/components/IaConectadaRoute";
+import { AgendaRoute } from "@/modules/platform/components/AgendaRoute";
 import { MainLayout } from "@/modules/platform/components/layout/MainLayout";
 import { TorqueIntro } from "@/modules/platform/components/layout/TorqueIntro";
 import { BoasVindasSemanaGate } from "@/modules/platform/components/boas-vindas-semana/BoasVindasSemanaGate";
@@ -910,15 +911,19 @@ function AppRoutes() {
           </ProtectedRoute>
         }
       />
+      {/* Org com `agenda_so_no_comando` (Café Jurerê) não tem mais a tela:
+          `AgendaRoute` manda para o Comando antes de baixar o chunk. */}
       <Route
         path="/agenda"
         element={
           <ProtectedRoute>
-            <LayoutWrapper>
-              <PermissionProtectedRoute featureKey="agenda.view">
-                <Agenda />
-              </PermissionProtectedRoute>
-            </LayoutWrapper>
+            <AgendaRoute>
+              <LayoutWrapper>
+                <PermissionProtectedRoute featureKey="agenda.view">
+                  <Agenda />
+                </PermissionProtectedRoute>
+              </LayoutWrapper>
+            </AgendaRoute>
           </ProtectedRoute>
         }
       />

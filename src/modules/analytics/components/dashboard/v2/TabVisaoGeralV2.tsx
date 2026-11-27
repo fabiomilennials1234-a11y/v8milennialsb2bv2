@@ -18,6 +18,7 @@ import { TrapezoidFunnel } from "./TrapezoidFunnel";
 import { OraculoBriefing } from "./OraculoBriefing";
 import { LiveOpsFeed } from "./LiveOpsFeed";
 import { Button } from "@/components/ui/button";
+import { ROTA_AGENDA, ROTA_COMANDO, useAgendaSoNoComando } from "@/modules/platform/feature-flags";
 import { cn } from "@/lib/utils";
 
 interface TabVisaoGeralV2Props {
@@ -85,6 +86,8 @@ function businessDaysLeft(month: number, year: number, referenceDay?: number): n
 
 function TabVisaoGeralV2Base({ period, month, year, range, monthlyRange, onAskOraculo, section, filterMemberId }: TabVisaoGeralV2Props) {
   const show = (id: TabVisaoGeralV2Props["section"]) => !section || section === id;
+  // Org sem a tela Agenda (`agenda_so_no_comando`): "Reuniões marcadas" leva ao Comando.
+  const { ativa: semTelaAgenda } = useAgendaSoNoComando();
   // KPIs respeitam o filtro automático (membro vê o seu, admin vê total)
   const { data: metrics, isLoading, isError, refetch } = useCommandMetrics({ start: range.start, end: range.end }, filterMemberId);
   // Mesmo período e pessoa dos KPIs. O Estúdio compartilhado passa null
@@ -244,7 +247,8 @@ function TabVisaoGeralV2Base({ period, month, year, range, monthlyRange, onAskOr
           label="Reuniões marcadas" icon={CalendarCheck} tone="info" value={m?.reunioesMarcadas ?? 0} format="int"
           delta={m && p ? deltaBadge(m.reunioesMarcadas, p.reunioesMarcadas) : undefined}
           caption={`${p?.reunioesMarcadas ?? 0} ${range.prevLabel} · ${filterMemberId ? "Pessoa selecionada" : "Equipe"}`}
-          quickActionLabel="Abrir agenda →" quickActionTo="/agenda" delay={0.18}
+          quickActionLabel={semTelaAgenda ? "Abrir Comando →" : "Abrir agenda →"}
+          quickActionTo={semTelaAgenda ? ROTA_COMANDO : ROTA_AGENDA} delay={0.18}
         />
       </div>
       <div className={kpiCol}>
