@@ -154,7 +154,7 @@
     return wait(typingTime(html)).then(function () {
       typing.hidden = true;
       var li = el("li", "row row--bot is-new" + (first ? " is-first" : ""));
-      li.innerHTML = AV + '<div class="bubble"><span class="sr-only">Torque: </span>' + html + "</div>";
+      li.innerHTML = AV + '<div class="bubble"><span class="sr-only">Gabriel Gipp: </span>' + html + "</div>";
       thread.appendChild(li);
       if (!opt.noScroll) scrollToEnd();
       return wait(260);
